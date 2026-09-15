@@ -1,0 +1,139 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --tv-color-bg: #ffffff;
+  --tv-color-pane-bg: #ffffff;
+  --tv-color-border: #e0e3eb;
+  --tv-color-text: #131722;
+  --tv-color-text-muted: #787b86;
+  --tv-color-accent: #2962ff;
+  --tv-color-accent-hover: #1e53e5;
+  --tv-color-item-hover: #f0f3fa;
+  --tv-color-item-active: #e3ebf6;
+  --tv-color-bg-hover: #f0f3fa;
+  --tv-color-bull: #089981;
+  --tv-color-bear: #f23645;
+  --tv-header-height: 38px;
+  --tv-left-toolbar-width: 46px;
+  --tv-right-toolbar-width: 320px;
+  --tv-right-sidebar-width: 46px;
+  --tv-bottom-toolbar-height: 32px;
+}
+
+[data-theme="dark"] {
+  --tv-color-bg: #131722;
+  --tv-color-pane-bg: #131722;
+  --tv-color-border: #2a2e39;
+  --tv-color-text: #d1d4dc;
+  --tv-color-text-muted: #787b86;
+  --tv-color-accent: #2962ff;
+  --tv-color-accent-hover: #1e53e5;
+  --tv-color-item-hover: #2a2e39;
+  --tv-color-item-active: #2a2e39;
+  --tv-color-bg-hover: #1e222d;
+  --tv-color-bull: #089981;
+  --tv-color-bear: #f23645;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background-color: var(--tv-color-bg);
+  color: var(--tv-color-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  padding: 0;
+}
+
+ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Base interactive icon button — compact like TradingView */
+.tv-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  color: var(--tv-color-text-muted);
+  transition: color 0.08s ease, background-color 0.08s ease;
+}
+
+.tv-icon-btn:hover {
+  background-color: var(--tv-color-item-hover);
+  color: var(--tv-color-text);
+}
+
+.tv-icon-btn.active {
+  color: var(--tv-color-accent);
+}
+
+.tv-icon-btn.active:hover {
+  color: var(--tv-color-accent-hover);
+}
+
+/* Tooltips */
+.tv-tooltip-container {
+  position: relative;
+}
+
+.tv-tooltip {
+  position: absolute;
+  background: var(--tv-color-text);
+  color: var(--tv-color-bg);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+  z-index: 1000;
+}
+
+.tv-tooltip-container:hover .tv-tooltip {
+  opacity: 1;
+  transition-delay: 0.5s;
+}
+
+/* Divider */
+.tv-divider-v {
+  width: 1px;
+  height: 20px;
+  background-color: var(--tv-color-border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.tv-divider-h {
+  height: 1px;
+  width: 100%;
+  background-color: var(--tv-color-border);
+  margin: 4px 0;
+}

@@ -1,0 +1,74 @@
+.layout {
+  display: grid;
+  grid-template-columns: var(--tv-left-toolbar-width) 1fr var(--tv-right-toolbar-width) var(--tv-right-sidebar-width);
+  grid-template-rows: var(--tv-header-height) 1fr var(--tv-bottom-toolbar-height);
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--tv-color-bg);
+  color: var(--tv-color-text);
+}
+
+.topbar {
+  grid-column: 1 / 5;
+  grid-row: 1 / 2;
+  border-bottom: 1px solid var(--tv-color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  background-color: var(--tv-color-bg);
+  z-index: 2000;
+}
+
+.leftToolbar {
+  grid-column: 1 / 2;
+  grid-row: 2 / 4;
+  border-right: 1px solid var(--tv-color-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 4px;
+  gap: 1px;
+  overflow-y: visible; /* Changed from auto so dropdowns can overflow visually, though this shouldn't affect stacking */
+  overflow-x: visible;
+  z-index: 2000;
+}
+
+.mainChart {
+  grid-column: 2 / 3;
+  grid-row: 2 / 3;
+  position: relative;
+  background-color: var(--tv-color-pane-bg);
+  overflow: hidden;
+}
+
+.rightToolbar {
+  grid-column: 3 / 4;
+  grid-row: 2 / 4;
+  border-left: 1px solid var(--tv-color-border);
+  background-color: var(--tv-color-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.rightSidebar {
+  grid-column: 4 / 5;
+  grid-row: 2 / 4;
+  border-left: 1px solid var(--tv-color-border);
+  background-color: var(--tv-color-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 4px;
+  gap: 2px;
+}
+
+.bottomPanel {
+  grid-column: 2 / 3;
+  grid-row: 3 / 4;
+  border-top: 1px solid var(--tv-color-border);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  z-index: 2000;
+}
