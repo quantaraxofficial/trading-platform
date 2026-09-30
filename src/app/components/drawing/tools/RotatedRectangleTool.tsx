@@ -10,6 +10,7 @@ interface RotatedRectangleToolProps {
   stroke: string;
   strokeWidth: number;
   isSelected: boolean;
+  isHovering?: boolean;
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   onSelect: () => void;
@@ -18,9 +19,9 @@ interface RotatedRectangleToolProps {
   backgroundVisible?: boolean;
 }
 
-export function RotatedRectangleTool({ 
-  id, points, stroke, strokeWidth, isSelected, chart, series, onSelect, onUpdatePoints,
-  fill, backgroundVisible 
+export function RotatedRectangleTool({
+  id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints,
+  fill, backgroundVisible
 }: RotatedRectangleToolProps) {
   useChartTick(chart);
   if (!chart || !series || points.length < 2) return null;
@@ -100,7 +101,7 @@ export function RotatedRectangleTool({
   };
 
   return (
-    <Group id={id} draggable={isSelected} onDragEnd={handleDragEnd} onClick={(e) => { e.cancelBubble = true; onSelect(); }} onTap={(e) => { e.cancelBubble = true; onSelect(); }}>
+    <Group id={id} draggable={isSelected || isHovering} onDragEnd={handleDragEnd} onClick={(e) => { e.cancelBubble = true; onSelect(); }} onTap={(e) => { e.cancelBubble = true; onSelect(); }}>
       <Line
         points={flatPoints}
         stroke={color}
@@ -108,7 +109,7 @@ export function RotatedRectangleTool({
         fill={bgColor}
         closed={true}
       />
-      {isSelected && (
+      {(isSelected || isHovering) && (
         <>
           {/* Main define points */}
           <Circle x={c1x} y={c1y} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} draggable onDragMove={(e) => handleHandleDrag(0, e)} />

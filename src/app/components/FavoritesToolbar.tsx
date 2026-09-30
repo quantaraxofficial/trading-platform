@@ -1,90 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { useDrawing, DrawingType } from "./drawing/core/DrawingContext";
-import {
-  TrendingUp,
-  AlignJustify,
-  PenTool,
-  Square,
-  Circle,
-  Triangle,
-  Type,
-  MousePointer2,
-  Eraser,
-  PlayCircle,
-  Wand2,
-} from "lucide-react";
-import {
-  TVCrosshairIcon,
-  TVTrendlineIcon,
-  TVFibonacciIcon,
-  TVBrushIcon,
-  TVLongPositionIcon,
-  TVShortPositionIcon,
-} from "./icons/TVIcons";
-
-// Map drawing types to their icons
-const toolIconMap: Record<string, (size: number) => React.ReactNode> = {
-  cross: (s) => <TVCrosshairIcon size={s} />,
-  dot: (s) => <Circle size={s} fill="currentColor" />,
-  arrow_cursor: (s) => <MousePointer2 size={s} style={{ transform: "rotate(-45deg)" }} />,
-  demonstration: (s) => <PlayCircle size={s} />,
-  magic: (s) => <Wand2 size={s} />,
-  eraser: (s) => <Eraser size={s} />,
-  trendline: (s) => <TVTrendlineIcon size={s} />,
-  fibonacci: (s) => <TVFibonacciIcon size={s} />,
-  brush: (s) => <TVBrushIcon size={s} />,
-  highlighter: (s) => <PenTool size={s} strokeWidth={2} opacity={0.5} />,
-  arrow_marker: (s) => <MousePointer2 size={s} strokeWidth={2} />,
-  arrow: (s) => <MousePointer2 size={s} strokeWidth={2} style={{ transform: "rotate(-45deg)" }} />,
-  arrow_mark_up: (s) => <TrendingUp size={s} strokeWidth={2} />,
-  arrow_mark_down: (s) => <TrendingUp size={s} strokeWidth={2} style={{ transform: "scaleY(-1)" }} />,
-  rectangle: (s) => <Square size={s} strokeWidth={2} />,
-  rotated_rectangle: (s) => <Square size={s} strokeWidth={2} style={{ transform: "rotate(45deg)" }} />,
-  path: (s) => <AlignJustify size={s} strokeWidth={2} />,
-  circle: (s) => <Circle size={s} strokeWidth={2} />,
-  ellipse: (s) => <Circle size={s} strokeWidth={2} style={{ transform: "scaleY(0.7)" }} />,
-  polyline: (s) => <AlignJustify size={s} strokeWidth={2} />,
-  triangle: (s) => <Triangle size={s} strokeWidth={2} />,
-  arc: (s) => <Circle size={s} strokeWidth={2} />,
-  curve: (s) => <Circle size={s} strokeWidth={2} />,
-  double_curve: (s) => <Circle size={s} strokeWidth={2} />,
-  text: (s) => <Type size={s} strokeWidth={2} />,
-  long_position: (s) => <TVLongPositionIcon size={s} />,
-  short_position: (s) => <TVShortPositionIcon size={s} />,
-};
-
-// Friendly display name map
-const toolNameMap: Record<string, string> = {
-  cross: "Cross",
-  dot: "Dot",
-  arrow_cursor: "Arrow",
-  demonstration: "Demonstration",
-  magic: "Magic",
-  eraser: "Eraser",
-  trendline: "Trend Line",
-  fibonacci: "Fibonacci Retracement",
-  brush: "Brush",
-  highlighter: "Highlighter",
-  arrow_marker: "Arrow Marker",
-  arrow: "Arrow",
-  arrow_mark_up: "Arrow Mark Up",
-  arrow_mark_down: "Arrow Mark Down",
-  rectangle: "Rectangle",
-  rotated_rectangle: "Rotated Rectangle",
-  path: "Path",
-  circle: "Circle",
-  ellipse: "Ellipse",
-  polyline: "Polyline",
-  triangle: "Triangle",
-  arc: "Arc",
-  curve: "Curve",
-  double_curve: "Double Curve",
-  text: "Text",
-  long_position: "Long Position",
-  short_position: "Short Position",
-};
+import { useDrawing } from "./drawing/core/DrawingContext";
+import { DRAWING_TOOL_BY_TYPE } from "./drawing/toolCatalog";
 
 export default function FavoritesToolbar() {
   const { favoriteTools, activeTool, setActiveTool, isFavoritesToolbarVisible } = useDrawing();
@@ -202,10 +120,10 @@ export default function FavoritesToolbar() {
 
       {/* Favorite tool buttons */}
       {favoriteTools.map((toolType) => {
-        const iconFn = toolIconMap[toolType];
+        const tool = DRAWING_TOOL_BY_TYPE[toolType];
         const isActive = activeTool === toolType;
-        const name = toolNameMap[toolType] || toolType;
-        if (!iconFn) return null;
+        if (!tool) return null;
+        const name = tool.label;
 
         return (
           <div key={toolType} className="tv-tooltip-container" style={{ position: "relative" }}>
@@ -223,7 +141,7 @@ export default function FavoritesToolbar() {
               onClick={() => setActiveTool(toolType)}
               title={name}
             >
-              {iconFn(18)}
+              {tool.icon()}
             </button>
             <div
               className="tv-tooltip"

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { X, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock } from "lucide-react";
+import { useEscapeClose } from "../lib/useEscapeClose";
 
 interface GoToModalProps {
   onClose: () => void;
@@ -12,6 +13,7 @@ interface GoToModalProps {
 }
 
 export default function GoToModal({ onClose, selectedDate, setSelectedDate, selectedTime, setSelectedTime }: GoToModalProps) {
+  useEscapeClose(onClose);
   const [activeTab, setActiveTab] = useState<"date" | "custom">("date");
   
   // Current view state for the calendar - initialize to the selected date's month

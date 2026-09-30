@@ -1,9 +1,9 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-export type DrawingType = 
-  | 'trendline' | 'horizontal_line' | 'text' | 'rectangle' | 'fibonacci'
+export type DrawingType =
+  | 'trendline' | 'horizontal_line' | 'horizontal_ray' | 'text' | 'rectangle' | 'fibonacci'
   | 'brush' | 'highlighter' | 'arrow_marker' | 'arrow' | 'arrow_mark_up' | 'arrow_mark_down'
   | 'rotated_rectangle' | 'path' | 'circle' | 'ellipse' | 'polyline' | 'triangle' 
   | 'arc' | 'curve' | 'double_curve' | 'measure' | 'long_position' | 'short_position' | 'emoji'
@@ -62,6 +62,10 @@ export interface BaseDrawing {
   showBorder?: boolean;
   borderColor?: string;
   textWrap?: boolean;
+  // Horizontal Ray specific
+  priceLabel?: boolean;
+  textVAlign?: 'Top' | 'Middle' | 'Bottom';
+  textHAlign?: 'Left' | 'Center' | 'Right';
   // Long Position specific
   accountSize?: number;
   accountSizeCurrency?: string;
@@ -117,14 +121,20 @@ interface DrawingContextType {
   setIsFavoritesToolbarVisible: (visible: boolean) => void;
   magnetMode: 'off' | 'weak' | 'strong';
   setMagnetMode: (mode: 'off' | 'weak' | 'strong') => void;
+  // "Keep drawing": the tool stays active after a drawing is finished
+  keepDrawing: boolean;
+  setKeepDrawing: (on: boolean) => void;
   defaultSettings: Partial<Record<DrawingType, Partial<BaseDrawing>>>;
   updateDefaultSettings: (type: DrawingType, settings: Partial<BaseDrawing>) => void;
   allDrawingsLocked: boolean;
   toggleLockAllDrawings: () => void;
+  allDrawingsHidden: boolean;
+  toggleHideAllDrawings: () => void;
 }
 
 import { useAuth } from '@/context/AuthContext';
 import { useTelemetry } from '@/context/TelemetryContext';
+import { isTypingTarget } from '../../../lib/isTypingTarget';
 
 const DrawingContext = createContext<DrawingContextType | undefined>(undefined);
 
@@ -137,10 +147,21 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
   const [drawings, setDrawings] = useState<BaseDrawing[]>([]);
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
   const [selectedShapeIds, setSelectedShapeIds] = useState<Set<string>>(new Set());
+  // Read-only view for debugging and automated checks, like window.__chartFullData
+  useEffect(() => { (window as any).__drawings = drawings; }, [drawings]);
+  useEffect(() => { (window as any).__selectedDrawingId = selectedShapeId; }, [selectedShapeId]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [favoriteTools, setFavoriteTools] = useState<DrawingType[]>([]);
   const [isFavoritesToolbarVisible, setIsFavoritesToolbarVisible] = useState(true);
   const [magnetMode, setMagnetMode] = useState<'off' | 'weak' | 'strong'>('off');
+  const [keepDrawing, setKeepDrawingState] = useState(false);
+  useEffect(() => {
+    try { setKeepDrawingState(localStorage.getItem('tv:keepDrawing') === '1'); } catch { /* ignore */ }
+  }, []);
+  const setKeepDrawing = useCallback((on: boolean) => {
+    setKeepDrawingState(on);
+    try { localStorage.setItem('tv:keepDrawing', on ? '1' : '0'); } catch { /* ignore */ }
+  }, []);
   
   const [history, setHistory] = useState<BaseDrawing[][]>([[]]);
   const [historyIndex, setHistoryIndex] = useState(0);
@@ -383,6 +404,14 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     logAction('DRAWINGS_LOCK_TOGGLED', { locked: nextLocked });
   };
 
+  const allDrawingsHidden = drawings.length > 0 && drawings.every(d => d.visible === false);
+
+  const toggleHideAllDrawings = () => {
+    const nextHidden = !allDrawingsHidden;
+    setDrawings(prev => prev.map(d => ({ ...d, visible: !nextHidden })));
+    logAction('DRAWINGS_VISIBILITY_TOGGLED', { hidden: nextHidden });
+  };
+
   const addToSelection = (id: string) => {
     setSelectedShapeIds(prev => new Set(prev).add(id));
     setSelectedShapeId(null); // Clear single selection when multi-selecting
@@ -423,11 +452,31 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
 
   // Keyboard shortcuts
   useEffect(() => {
+    // Paste the drawing clipboard (Ctrl+C, or a drawing's More → Copy), a few bars to the
+    // right of the originals; also run by the chart's right-click "Paste"
+    const pasteCopiedDrawings = () => {
+      const copied = (window as any).__copiedDrawings;
+      if (!copied || !Array.isArray(copied) || copied.length === 0) return false;
+      const newDrawings = copied.map((d: any) => ({
+        ...d,
+        id: Math.random().toString(36).substring(2, 9),
+        points: d.points.map((p: any) => ({ ...p, logical: p.logical + 5, price: p.price }))
+      }));
+      setDrawings(prev => [...prev, ...newDrawings]);
+      // Select the pasted drawings
+      setSelectedShapeIds(new Set(newDrawings.map((d: any) => d.id)));
+      setSelectedShapeId(null);
+      pushToHistory([...drawings, ...newDrawings]);
+      return true;
+    };
+    const handlePasteRequest = () => { pasteCopiedDrawings(); };
+    window.addEventListener('tv:paste-drawings', handlePasteRequest);
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if user is typing in an input, textarea, or a contenteditable
       // area (e.g. the CodeMirror-based Pine Editor)
       const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+      if (isTypingTarget(target)) return;
 
       // --- Ctrl/Cmd shortcuts ---
       if (e.ctrlKey || e.metaKey) {
@@ -446,8 +495,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
         // Ctrl+Alt+H = Hide all drawings (toggle visibility)
         if (e.altKey && (e.key === 'h' || e.key === 'H')) {
           e.preventDefault();
-          const allVisible = drawings.every(d => d.visible !== false);
-          setDrawings(prev => prev.map(d => ({ ...d, visible: !allVisible })));
+          toggleHideAllDrawings();
           return;
         }
         // Ctrl+C = Copy selected drawings
@@ -463,20 +511,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
         }
         // Ctrl+V = Paste copied drawings
         if (e.key === 'v' && !e.altKey) {
-          const copied = (window as any).__copiedDrawings;
-          if (copied && Array.isArray(copied) && copied.length > 0) {
-            e.preventDefault();
-            const newDrawings = copied.map((d: any) => ({
-              ...d,
-              id: Math.random().toString(36).substring(2, 9),
-              points: d.points.map((p: any) => ({ ...p, logical: p.logical + 5, price: p.price }))
-            }));
-            setDrawings(prev => [...prev, ...newDrawings]);
-            // Select the pasted drawings
-            setSelectedShapeIds(new Set(newDrawings.map((d: any) => d.id)));
-            setSelectedShapeId(null);
-            pushToHistory([...drawings, ...newDrawings]);
-          }
+          if (pasteCopiedDrawings()) e.preventDefault();
           return;
         }
         return;
@@ -490,6 +525,8 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
         if (key === 't' && !e.shiftKey) { e.preventDefault(); setActiveTool('trendline'); return; }
         // Alt+H = Horizontal Line
         if (key === 'h' && !e.shiftKey) { e.preventDefault(); setActiveTool('horizontal_line'); return; }
+        // Alt+J = Horizontal Ray
+        if (key === 'j' && !e.shiftKey) { e.preventDefault(); setActiveTool('horizontal_ray'); return; }
         // Alt+V = Vertical Line (we don't have vertical_line yet, use crossline)
         if (key === 'v' && !e.shiftKey) { e.preventDefault(); setActiveTool('cross'); return; }
         // Alt+C = Crossline
@@ -515,16 +552,20 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
         }
         return;
       }
-      // Escape = Cancel tool / deselect
+      // Escape = Cancel tool / deselect, and dismiss a finished measurement (it's temporary)
       if (e.key === 'Escape') {
         setActiveTool(null);
         setSelectedShapeId(null);
         setSelectedShapeIds(new Set());
+        if (drawings.some(d => d.type === 'measure')) setDrawings(prev => prev.filter(d => d.type !== 'measure'));
         return;
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('tv:paste-drawings', handlePasteRequest);
+    };
   }, [historyIndex, history, selectedShapeId, selectedShapeIds, drawings]);
 
   const contextValue = React.useMemo(() => ({
@@ -539,9 +580,11 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     favoriteTools, toggleFavoriteTool,
     isFavoritesToolbarVisible, setIsFavoritesToolbarVisible,
     magnetMode, setMagnetMode,
+    keepDrawing, setKeepDrawing,
     defaultSettings, updateDefaultSettings,
-    allDrawingsLocked, toggleLockAllDrawings
-  }), [activeTool, activeEmoji, drawings, selectedShapeId, selectedShapeIds, historyIndex, history, symbol, favoriteTools, isFavoritesToolbarVisible, magnetMode, defaultSettings, allDrawingsLocked]);
+    allDrawingsLocked, toggleLockAllDrawings,
+    allDrawingsHidden, toggleHideAllDrawings
+  }), [activeTool, activeEmoji, drawings, selectedShapeId, selectedShapeIds, historyIndex, history, symbol, favoriteTools, isFavoritesToolbarVisible, magnetMode, keepDrawing, setKeepDrawing, defaultSettings, allDrawingsLocked, allDrawingsHidden]);
 
   return (
     <DrawingContext.Provider value={contextValue}>

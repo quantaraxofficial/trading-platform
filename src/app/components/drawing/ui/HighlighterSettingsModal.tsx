@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useDrawing } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
-import { ColorPickerDropdown } from './ColorPickerDropdown';
-import { COLOR_PALETTE } from './ColorPalette';
+import { ColorPickerPopup } from './ColorPickerPopup';
+import { useEscapeClose } from "../../../lib/useEscapeClose";
 
 interface HighlighterSettingsModalProps {
   onClose: () => void;
@@ -45,6 +45,7 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
 const THICKNESS_OPTIONS = ['8px', '12px', '20px', '32px', '48px', '64px', '80px', '96px'];
 
 export function HighlighterSettingsModal({ onClose }: HighlighterSettingsModalProps) {
+  useEscapeClose(onClose);
   const { selectedShapeId, drawings, updateDrawing } = useDrawing();
   const selectedShape = drawings.find((d: any) => d.id === selectedShapeId);
 
@@ -168,16 +169,12 @@ export function HighlighterSettingsModal({ onClose }: HighlighterSettingsModalPr
                   <div style={{ position: 'absolute', inset: 0, backgroundColor: selectedShape?.stroke || '#ff0000' }}></div>
                 </div>
                 {showColorPicker && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 1000 }}>
-                    <ColorPickerDropdown 
-                      color={selectedShape?.stroke || '#ff0000'}
-                      onChange={(color) => {
-                        updateProp('stroke', color);
-                        setShowColorPicker(false);
-                      }}
-                      onClose={() => setShowColorPicker(false)}
-                    />
-                  </div>
+                  <ColorPickerPopup
+                    colorStr={selectedShape?.stroke || '#ff0000'}
+                    onChange={(color) => updateProp('stroke', color)}
+                    onClose={() => setShowColorPicker(false)}
+                    style={{ top: '100%', left: 0, marginTop: '8px' }}
+                  />
                 )}
               </div>
             </div>

@@ -231,9 +231,11 @@ const ICONS = [
 
 interface EmojiPickerProps {
   onSelect: (emoji: string) => void;
+  // Lets the toolbar that opens it position the picker (e.g. fixed beside its button)
+  popupRef?: (el: HTMLDivElement | null) => void;
 }
 
-export function EmojiGridPicker({ onSelect }: EmojiPickerProps) {
+export function EmojiGridPicker({ onSelect, popupRef }: EmojiPickerProps) {
   const [activeTab, setActiveTab] = useState('Emojis');
   const [activeEmojiNav, setActiveEmojiNav] = useState('recent');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -563,7 +565,8 @@ export function EmojiGridPicker({ onSelect }: EmojiPickerProps) {
   };
 
   return (
-    <div 
+    <div
+      ref={popupRef}
       onClick={(e) => e.stopPropagation()}
       style={{
         position: 'absolute',

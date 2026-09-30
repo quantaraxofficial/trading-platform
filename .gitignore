@@ -29,3 +29,6 @@ backend/db.sqlite3
 # OS
 .DS_Store
 Thumbs.db
+
+# Chart snapshot images uploaded via the Snapshot menu
+.snapshots/

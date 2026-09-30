@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { X, ChevronDown, Plus, Activity } from "lucide-react";
 import { DualRangeSlider } from "./drawing/ui/DualRangeSlider";
+import { useEscapeClose } from "../lib/useEscapeClose";
 
 function CheckBox({ checked, onChange, label, subtext, labelStyle }: any) {
   return (
@@ -107,6 +108,7 @@ interface EmaSettingsModalProps {
 }
 
 export default function EmaSettingsModal({ onClose, theme, config, onChangeConfig }: EmaSettingsModalProps) {
+  useEscapeClose(onClose);
   const [activeTab, setActiveTab] = useState<"Inputs" | "Style" | "Visibility">("Inputs");
   
   const isDark = theme === "dark";

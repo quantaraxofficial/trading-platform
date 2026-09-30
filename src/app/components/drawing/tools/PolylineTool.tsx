@@ -10,6 +10,7 @@ interface PolylineToolProps {
   stroke: string;
   strokeWidth: number;
   isSelected: boolean;
+  isHovering?: boolean;
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   onSelect: () => void;
@@ -21,17 +22,21 @@ interface PolylineToolProps {
   backgroundVisible?: boolean;
 }
 
-export function PolylineTool({ 
-  id, points, stroke, strokeWidth, isSelected, chart, series, 
+export function PolylineTool({
+  id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series,
   onSelect, onUpdatePoints, lineStyle, lineStartStyle, lineEndStyle,
   fill, backgroundVisible
 }: PolylineToolProps) {
   useChartTick(chart);
+  // shadowBlur is a real per-pixel blur convolution that Konva redraws every frame of any
+  // native drag (move or handle resize) regardless of React re-renders — expensive enough
+  // to feel like lag, so it's switched off for the duration of a drag.
+  const [isDragging, setIsDragging] = useState(false);
   if (!chart || !series || points.length < 2) return null;
 
   const flattenedPoints: number[] = [];
   const pixelPoints: {x: number, y: number}[] = [];
-  
+
   points.forEach(p => {
     const x = logicalToPixel(chart, p.logical);
     const y = priceToPixel(series, p.price);
@@ -41,7 +46,10 @@ export function PolylineTool({
     }
   });
 
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+
   const handleDragEnd = (e: any) => {
+    setIsDragging(false);
     if (!onUpdatePoints) return;
     const node = e.target;
     if (node.className !== 'Circle') {
@@ -57,7 +65,7 @@ export function PolylineTool({
     }
   };
 
-  const handleCircleDragEnd = (index: number) => (e: any) => {
+  const handleCircleDragMove = (index: number) => (e: any) => {
     e.cancelBubble = true;
     if (!onUpdatePoints) return;
     const logical = pixelToLogical(chart, e.target.x());
@@ -69,8 +77,13 @@ export function PolylineTool({
     }
   };
 
+  const handleCircleDragEnd = (index: number) => (e: any) => {
+    handleCircleDragMove(index)(e);
+    setIsDragging(false);
+  };
+
   return (
-    <Group id={id} draggable={isSelected} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
+    <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
       <Line
         points={flattenedPoints}
         stroke="transparent"
@@ -84,12 +97,12 @@ export function PolylineTool({
         fill={backgroundVisible !== false ? fill : 'transparent'}
         closed={!!fill && fill !== 'transparent'}
         shadowColor={isSelected ? stroke : 'transparent'}
-        shadowBlur={isSelected ? 4 : 0}
+        shadowBlur={isSelected && !isDragging ? 4 : 0}
         dash={lineStyle === 'Dashed' ? [5, 5] : lineStyle === 'Dotted' ? [2, 2] : undefined}
         listening={false}
       />
-      {isSelected && pixelPoints.map((pt, i) => (
-        <Circle key={i} x={pt.x} y={pt.y} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragMove={(e) => e.cancelBubble = true} onDragEnd={handleCircleDragEnd(i)} />
+      {(isSelected || isHovering) && pixelPoints.map((pt, i) => (
+        <Circle key={i} x={pt.x} y={pt.y} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(i)} onDragEnd={handleCircleDragEnd(i)} />
       ))}
       {pixelPoints.length >= 2 && lineEndStyle === 'Arrow' && (() => {
         const last = pixelPoints[pixelPoints.length - 1];

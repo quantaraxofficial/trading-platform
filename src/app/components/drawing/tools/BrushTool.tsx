@@ -19,6 +19,10 @@ interface BrushToolProps {
 
 export function BrushTool({ id, points, stroke, strokeWidth, isSelected, chart, series, onSelect, onUpdatePoints, isLocked = false }: BrushToolProps) {
   useChartTick(chart);
+  // shadowBlur is a real per-pixel blur convolution that Konva redraws every frame of any
+  // native drag regardless of React re-renders — expensive enough to feel like lag, so it's
+  // switched off for the duration of a drag.
+  const [isDragging, setIsDragging] = useState(false);
   if (!chart || !series || points.length < 2) return null;
 
   // Flatten points for Konva Line [x1, y1, x2, y2, ...]
@@ -32,7 +36,10 @@ export function BrushTool({ id, points, stroke, strokeWidth, isSelected, chart, 
     }
   });
 
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+
   const handleDragEnd = (e: any) => {
+    setIsDragging(false);
     if (!onUpdatePoints) return;
     const node = e.target;
     
@@ -72,6 +79,7 @@ export function BrushTool({ id, points, stroke, strokeWidth, isSelected, chart, 
     <Group 
       id={id}
       draggable={isSelected && !isLocked}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
       {/* Invisible thicker line for easier selection */}
@@ -94,7 +102,7 @@ export function BrushTool({ id, points, stroke, strokeWidth, isSelected, chart, 
         lineCap="round"
         lineJoin="round"
         shadowColor={isSelected ? stroke : 'transparent'}
-        shadowBlur={isSelected ? 4 : 0}
+        shadowBlur={isSelected && !isDragging ? 4 : 0}
         listening={false}
       />
     </Group>

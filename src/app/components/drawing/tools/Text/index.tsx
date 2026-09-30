@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Text as KonvaText, Group, Rect } from 'react-konva';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../../core/coordinates';
+import { useChartTick } from '../../core/useChartTick';
 
 interface TextToolProps {
   id: string;
@@ -53,6 +54,7 @@ export function TextTool({
   borderColor = '#b2b5be',
   textWrap = false
 }: TextToolProps) {
+  useChartTick(chart);
   if (points.length < 1) return null;
 
   const [p1] = points;

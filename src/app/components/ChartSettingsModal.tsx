@@ -1,10 +1,13 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { statusLine, LEGEND_TITLE_MODES, type StatusLineSettings, type LegendTitleMode } from "../lib/statusLine";
 import { X, HelpCircle, ChevronDown, Menu, Move, Edit2, Activity, Clock, Calendar, BarChart2 } from 'lucide-react';
 import ColorPicker from './ColorPicker';
 import { useAuth } from '@/context/AuthContext';
 import SaveTemplateModal from './SaveTemplateModal';
+import { tradingSettings, TradingSettings, PnlMode } from '@/app/trading/settings';
+import { EXECUTION_SOUNDS, playExecutionSound } from '@/app/trading/sounds';
 
 export interface CandleColors {
   upColor: string;
@@ -34,10 +37,15 @@ interface ChartSettingsModalProps {
   onSaveColors?: (colors: CandleColors) => void;
   canvasColors?: CanvasColors;
   onSaveCanvasColors?: (colors: CanvasColors) => void;
+  initialTab?: string;
 }
 
-export default function ChartSettingsModal({ theme, onClose, candleColors, onSaveColors, canvasColors, onSaveCanvasColors }: ChartSettingsModalProps) {
-  const [activeTab, setActiveTab] = useState('symbol');
+export default function ChartSettingsModal({ theme, onClose, candleColors, onSaveColors, canvasColors, onSaveCanvasColors, initialTab }: ChartSettingsModalProps) {
+  useEscapeClose(onClose);
+  const [activeTab, setActiveTab] = useState(initialTab || 'symbol');
+  // Trading tab edits a draft that Ok applies (Cancel drops it)
+  const [tradingDraft, setTradingDraft] = useState<TradingSettings>(() => tradingSettings.get());
+  const [statusDraft, setStatusDraft] = useState<StatusLineSettings>(() => statusLine.get());
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStartPos = useRef({ x: 0, y: 0 });
@@ -86,6 +94,8 @@ export default function ChartSettingsModal({ theme, onClose, candleColors, onSav
   const handleSave = () => {
     onSaveColors?.(colors);
     onSaveCanvasColors?.(canvasColorsState);
+    tradingSettings.set(tradingDraft);
+    statusLine.set(statusDraft);
     onClose();
   };
 
@@ -225,10 +235,10 @@ export default function ChartSettingsModal({ theme, onClose, candleColors, onSav
         {/* Content */}
         <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
           {activeTab === 'symbol' && <SymbolTab isDark={isDark} border={border} theme={theme} colors={colors} setColors={setColors} />}
-          {activeTab === 'status' && <StatusTab isDark={isDark} border={border} />}
+          {activeTab === 'status' && <StatusTab border={border} value={statusDraft} onChange={patch => setStatusDraft(d => ({ ...d, ...patch }))} />}
           {activeTab === 'scales' && <ScalesTab isDark={isDark} border={border} />}
           {activeTab === 'canvas' && <CanvasTab isDark={isDark} border={border} theme={theme} colors={canvasColorsState} setColors={setCanvasColorsState} />}
-          {activeTab === 'trading' && <TradingTab isDark={isDark} border={border} />}
+          {activeTab === 'trading' && <TradingTab border={border} value={tradingDraft} onChange={patch => setTradingDraft(d => ({ ...d, ...patch }))} />}
           {activeTab === 'alerts' && <AlertsTab isDark={isDark} border={border} />}
           {activeTab === 'events' && <EventsTab isDark={isDark} border={border} />}
         </div>
@@ -331,6 +341,7 @@ const DropdownRow = ({ label, options, border }: { label: string, options: strin
 );
 
 import { createPortal } from 'react-dom';
+import { useEscapeClose } from "../lib/useEscapeClose";
 
 const ColorPickerBox = ({ color, onChange, theme, bg }: { color?: string, onChange?: (c: string) => void, theme?: string, bg?: string }) => {
   const [show, setShow] = useState(false);
@@ -421,38 +432,50 @@ const SymbolTab = ({ border, theme, colors, setColors }: { isDark: boolean, bord
   </div>
 );
 
-const StatusTab = ({ border }: { isDark: boolean, border: string }) => (
-  <div>
-    <SectionHeader title="Instrument" />
-    <CheckboxRow label="Logo" />
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+const StatusTab = ({ border, value: v, onChange }: { border: string, value: StatusLineSettings, onChange: (p: Partial<StatusLineSettings>) => void }) => {
+  // Plain functions, not components: a component defined in here would remount (and drop a
+  // slider mid-drag) on every change
+  const check = (label: string, k: keyof StatusLineSettings, children?: React.ReactNode) => (
+    <div key={k} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '24px', marginBottom: '16px' }}>
       <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-        <input type="checkbox" defaultChecked style={{ width: '16px', height: '16px' }} />
-        <span style={{ fontSize: '14px' }}>Title</span>
+        <input type="checkbox" checked={!!v[k]} onChange={e => onChange({ [k]: e.target.checked } as Partial<StatusLineSettings>)} style={{ width: '16px', height: '16px', accentColor: '#131722' }} />
+        <span style={{ fontSize: '14px' }}>{label}</span>
       </label>
-      <select style={{ padding: '6px 32px 6px 12px', borderRadius: '6px', border: `1px solid ${border}`, background: 'transparent', color: 'inherit', fontSize: '14px' }}>
-        <option>Name</option>
-      </select>
+      {children}
     </div>
-    <CheckboxRow label="Chart values" />
-    <CheckboxRow label="Bar change values" />
-    <label style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', cursor: 'pointer' }}>
-      <input type="checkbox" style={{ width: '16px', height: '16px' }} />
-      <span style={{ fontSize: '14px' }}>Volume</span>
-    </label>
-    <label style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', cursor: 'pointer' }}>
-      <input type="checkbox" style={{ width: '16px', height: '16px' }} />
-      <span style={{ fontSize: '14px' }}>Last day change values</span>
-    </label>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '16px' }}>
-      <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-        <input type="checkbox" defaultChecked style={{ width: '16px', height: '16px' }} />
-        <span style={{ fontSize: '14px' }}>Background</span>
-      </label>
-      <input type="range" min="0" max="100" defaultValue="50" style={{ flex: 1 }} />
+  );
+  const opacity = (k: 'backgroundOpacity' | 'indBackgroundOpacity', enabledBy: keyof StatusLineSettings) => (
+    <input type="range" min={0} max={100} value={v[k]} disabled={!v[enabledBy]} aria-label="Background opacity"
+      onChange={e => onChange({ [k]: Number(e.target.value) } as Partial<StatusLineSettings>)}
+      style={{ flex: 1, maxWidth: '180px', accentColor: '#131722', opacity: v[enabledBy] ? 1 : 0.45 }} />
+  );
+  return (
+    <div>
+      <SectionHeader title="Instrument" />
+      {check("Logo", "logo")}
+      {check("Title", "title", (
+        <select value={v.titleMode} disabled={!v.title} aria-label="Title" onChange={e => onChange({ titleMode: e.target.value as LegendTitleMode })} style={{
+          width: 190, padding: '6px 28px 6px 10px', borderRadius: '6px', border: `1px solid ${border}`, background: 'transparent', color: 'inherit', fontSize: '14px',
+          opacity: v.title ? 1 : 0.45,
+        }}>
+          {LEGEND_TITLE_MODES.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+      ))}
+      {check("Open market status", "marketStatus")}
+      {check("Chart values", "chartValues")}
+      {check("Bar change values", "barChange")}
+      {check("Volume", "volume")}
+      {check("Last day change values", "lastDayChange")}
+      {check("Background", "background", opacity("backgroundOpacity", "background"))}
+
+      <SectionHeader title="Indicators" />
+      {check("Titles", "indTitles")}
+      {check("Inputs", "indInputs")}
+      {check("Values", "indValues")}
+      {check("Background", "indBackground", opacity("indBackgroundOpacity", "indBackground"))}
     </div>
-  </div>
-);
+  );
+};
 
 const ScalesTab = ({ border }: { isDark: boolean, border: string }) => (
   <div>
@@ -563,63 +586,86 @@ const CanvasTab = ({ border, theme, colors, setColors }: { isDark: boolean, bord
   </div>
 );
 
-const TradingTab = ({ border }: { isDark: boolean, border: string }) => (
-  <div>
-    <SectionHeader title="General" />
-    <CheckboxRow label="Buy/sell buttons" />
-    <p style={{ fontSize: '12px', color: '#787b86', marginTop: '-12px', marginLeft: '28px', marginBottom: '16px' }}>Displays buy and sell buttons directly on the chart</p>
-    
-    <label style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', cursor: 'pointer' }}>
-      <input type="checkbox" style={{ width: '16px', height: '16px' }} />
-      <span style={{ fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>One-click trading <HelpCircle size={14} color="#b2b5be" /></span>
+// Settings → Trading: every option drives the paper-trading UI (buttons, one-click trading,
+// sounds, notifications, how positions/orders/executions are drawn, snapshots)
+const TradingTab = ({ border, value: v, onChange }: { border: string, value: TradingSettings, onChange: (p: Partial<TradingSettings>) => void }) => {
+  const Check = ({ label, k, disabled, help }: { label: string, k: keyof TradingSettings, disabled?: boolean, help?: string }) => (
+    <label style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: help ? '4px' : '16px', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1 }}>
+      <input type="checkbox" checked={!!v[k]} disabled={disabled} onChange={e => onChange({ [k]: e.target.checked } as Partial<TradingSettings>)} style={{ width: '16px', height: '16px', accentColor: '#131722' }} />
+      <span style={{ fontSize: '14px' }}>{label}</span>
     </label>
-    <p style={{ fontSize: '12px', color: '#787b86', marginTop: '-12px', marginLeft: '28px', marginBottom: '16px' }}>Instantly place, edit, cancel orders, or close positions without confirmation</p>
+  );
+  const Help = ({ children, indent = 28 }: { children: React.ReactNode, indent?: number }) => (
+    <p style={{ fontSize: '12px', color: '#787b86', margin: `0 0 16px ${indent}px` }}>{children}</p>
+  );
+  const Select = ({ value, options, onPick, disabled, width = 120 }: { value: string, options: readonly string[], onPick: (o: string) => void, disabled?: boolean, width?: number }) => (
+    <select value={value} disabled={disabled} onChange={e => onPick(e.target.value)} style={{
+      width, padding: '6px 28px 6px 10px', borderRadius: '6px', border: `1px solid ${border}`, background: 'transparent', color: 'inherit', fontSize: '14px',
+      opacity: disabled ? 0.45 : 1, appearance: 'none',
+      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23787b86' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+      backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center', backgroundSize: '16px',
+    }}>
+      {options.map(o => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+  const pnlModes: PnlMode[] = ['Money', 'Ticks', 'Percentage'];
+  return (
+    <div>
+      <SectionHeader title="General" />
+      <Check label="Buy/sell buttons" k="buySellButtons" help="x" />
+      <Help>Displays buy and sell buttons directly on the chart</Help>
+      <Check label="One-click trading" k="oneClickTrading" help="x" />
+      <Help>Instantly place, edit, cancel orders, or close positions without confirmation</Help>
 
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-      <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-        <input type="checkbox" style={{ width: '16px', height: '16px' }} />
-        <span style={{ fontSize: '14px' }}>Execution sound</span>
-      </label>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <input type="range" min="0" max="100" defaultValue="50" style={{ width: '150px' }} />
-        <select style={{ padding: '6px 12px', borderRadius: '6px', border: `1px solid ${border}`, background: 'transparent' }}><option>Alarm Clock</option></select>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px', gap: 16 }}>
+        <Check label="Execution sound" k="executionSound" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+          <input type="range" min={0} max={100} value={v.executionSoundVolume} disabled={!v.executionSound} aria-label="Execution sound volume"
+            onChange={e => onChange({ executionSoundVolume: Number(e.target.value) })}
+            onMouseUp={() => v.executionSound && playExecutionSound(v.executionSoundName, v.executionSoundVolume)}
+            style={{ width: '150px', accentColor: '#131722', opacity: v.executionSound ? 1 : 0.45 }} />
+          <Select value={v.executionSoundName} options={EXECUTION_SOUNDS} disabled={!v.executionSound} width={150}
+            onPick={o => { onChange({ executionSoundName: o }); playExecutionSound(o, v.executionSoundVolume); }} />
+        </div>
       </div>
-    </div>
+      <Check label="Show only rejection notifications" k="onlyRejectionNotifications" />
 
-    <SectionHeader title="Appearance" />
-    <CheckboxRow label="Positions and orders" hasIcon />
-    <div style={{ marginLeft: '28px' }}>
-      <CheckboxRow label="Reverse position button" />
-      <p style={{ fontSize: '12px', color: '#787b86', marginTop: '-12px', marginLeft: '28px', marginBottom: '16px' }}>Adds the reverse button next to the open position on the chart</p>
-    </div>
-    
-    <label style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', cursor: 'pointer' }}>
-      <input type="checkbox" style={{ width: '16px', height: '16px' }} />
-      <span style={{ fontSize: '14px' }}>Project order for market orders</span>
-    </label>
-    
-    <CheckboxRow label="Profit and loss value" hasIcon />
-    <div style={{ marginLeft: '28px', display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <CheckboxRow label="Positions" />
-        <select style={{ padding: '6px 12px', borderRadius: '6px', border: `1px solid ${border}`, background: 'transparent' }}><option>Money</option></select>
+      <SectionHeader title="Appearance" />
+      <Check label="Positions and orders" k="positionsAndOrders" />
+      <div style={{ marginLeft: '28px' }}>
+        <Check label="Reverse position button" k="reversePositionButton" disabled={!v.positionsAndOrders} help="x" />
+        <Help>Adds the reverse button next to the open position on the chart</Help>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <CheckboxRow label="Brackets" />
-        <select style={{ padding: '6px 12px', borderRadius: '6px', border: `1px solid ${border}`, background: 'transparent' }}><option>Money</option></select>
-      </div>
-    </div>
-    
-    <CheckboxRow label="Execution marks" hasIcon />
-    <div style={{ marginLeft: '28px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', cursor: 'pointer' }}>
-      <input type="checkbox" style={{ width: '16px', height: '16px' }} />
-      <span style={{ fontSize: '14px' }}>Execution labels</span>
-    </div>
+      <Check label="Project order for market orders" k="projectOrderForMarket" help="x" />
+      <Help>Shows a project order on the chart before sending a market order</Help>
 
-    <CheckboxRow label="Extended price lines across the entire chart width" />
-    <DropdownRow label="Order and position alignment" options={['Right']} border={border} />
-  </div>
-);
+      <Check label="Profit and loss value" k="pnlValue" />
+      <div style={{ marginLeft: '28px', display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}>
+        {([['Positions', 'pnlPositions', 'pnlPositionsMode'], ['Brackets', 'pnlBrackets', 'pnlBracketsMode']] as const).map(([label, k, mk]) => (
+          <div key={k} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Check label={label} k={k} disabled={!v.pnlValue} />
+            <div style={{ marginBottom: 16 }}>
+              <Select value={v[mk]} options={pnlModes} disabled={!v.pnlValue || !v[k]} onPick={o => onChange({ [mk]: o as PnlMode } as Partial<TradingSettings>)} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <Check label="Execution marks" k="executionMarks" />
+      <div style={{ marginLeft: '28px' }}>
+        <Check label="Execution labels" k="executionLabels" disabled={!v.executionMarks} />
+      </div>
+
+      <Check label="Extended price lines across the entire chart width" k="extendedPriceLines" />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+        <span style={{ fontSize: '14px' }}>Order and position alignment</span>
+        <Select value={v.alignment} options={['Left', 'Right']} onPick={o => onChange({ alignment: o as 'Left' | 'Right' })} />
+      </div>
+      <Check label="Orders, executions, and positions in chart snapshots" k="tradesInSnapshots" help="x" />
+      <Help>Shows your trades on the chart in snapshots</Help>
+    </div>
+  );
+};
 
 const AlertsTab = ({ border }: { isDark: boolean, border: string }) => (
   <div>

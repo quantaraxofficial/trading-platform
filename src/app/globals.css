@@ -15,11 +15,51 @@
   --tv-color-bg-hover: #f0f3fa;
   --tv-color-bull: #089981;
   --tv-color-bear: #f23645;
-  --tv-header-height: 38px;
-  --tv-left-toolbar-width: 46px;
+  /* Grid tracks include the 4px gap TradingView leaves between its panels */
+  --tv-header-height: 42px;
+  --tv-left-toolbar-width: 56px;
   --tv-right-toolbar-width: 320px;
-  --tv-right-sidebar-width: 46px;
-  --tv-bottom-toolbar-height: 32px;
+  --tv-right-sidebar-width: 50px;
+  /* The bottom rows' total height (date ranges, plus the trading panel while a broker is
+     connected); BottomPanel keeps it current */
+  --tv-bottom-toolbar-height: 39px;
+  /* TradingView's neutral chrome: header/toolbar text, hover and active chips, panel gaps */
+  --tv-hdr-text: #0f0f0f;
+  --tv-hover-neutral: #ebebeb;
+  --tv-active-neutral: #ebebeb;
+  --tv-active-neutral-hover: #dbdbdb;
+  --tv-color-gap: #ebebeb;
+  --tv-tooltip-bg: #2e2e2e;
+  --tv-trade-pill-border: #dbdbdb;
+  --tv-publish-bg: #2e2e2e;
+  --tv-panel-strip: #f9f9f9;
+  --tv-legend-args: #787b86;
+  --tv-legend-muted: #b2b5be;
+  --tv-color-live: #089981;
+  /* Paper trading (order ticket, chart order lines, account manager) */
+  --tv-trade-panel-bg: #ffffff;
+  --tv-trade-field-border: #d1d4dc;
+  --tv-trade-subtle-bg: #f8f9fd;
+  --tv-trade-seg-bg: #f0f3fa;
+  --tv-trade-muted: #6a6d78;
+  --tv-trade-faint: #b2b5be;
+  --tv-trade-toggle-on: #131722;
+  --tv-trade-toggle-off: #b2b5be;
+  --tv-trade-buy: #2962ff;
+  --tv-trade-buy-hover: #1e53e5;
+  --tv-trade-buy-soft: #bbd9fb;
+  --tv-trade-sell: #f23645;
+  --tv-trade-sell-hover: #e0313f;
+  --tv-trade-sell-soft: #f7c9ce;
+  --tv-trade-tp: #089981;
+  --tv-trade-sl: #ff9800;
+  --tv-trade-tooltip-bg: #2e2e2e;
+  --tv-trade-dark-btn: #2a2e39;
+  --tv-trade-dark-btn-text: #ffffff;
+  --tv-trade-line-box-bg: #ffffff;
+  --tv-trade-logo-bg: #131722;
+  --tv-trade-logo-fg: #ffffff;
+  --tv-trade-shadow: 0 2px 4px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.16);
 }
 
 [data-theme="dark"] {
@@ -35,6 +75,35 @@
   --tv-color-bg-hover: #1e222d;
   --tv-color-bull: #089981;
   --tv-color-bear: #f23645;
+  --tv-hdr-text: #d1d4dc;
+  --tv-hover-neutral: #2a2e39;
+  --tv-active-neutral: #2a2e39;
+  --tv-active-neutral-hover: #363a45;
+  --tv-color-gap: #2a2e39;
+  --tv-tooltip-bg: #363a45;
+  --tv-trade-pill-border: #434651;
+  --tv-publish-bg: #d1d4dc;
+  --tv-panel-strip: #1a1e29;
+  --tv-legend-args: #868993;
+  --tv-legend-muted: #50535e;
+  --tv-color-live: #22ab94;
+  --tv-trade-panel-bg: #1e222d;
+  --tv-trade-field-border: #434651;
+  --tv-trade-subtle-bg: #2a2e39;
+  --tv-trade-seg-bg: #2a2e39;
+  --tv-trade-muted: #9598a1;
+  --tv-trade-faint: #50535e;
+  --tv-trade-toggle-on: #d1d4dc;
+  --tv-trade-toggle-off: #50535e;
+  --tv-trade-buy-soft: rgba(41, 98, 255, 0.35);
+  --tv-trade-sell-soft: rgba(242, 54, 69, 0.35);
+  --tv-trade-tooltip-bg: #363a45;
+  --tv-trade-dark-btn: #d1d4dc;
+  --tv-trade-dark-btn-text: #131722;
+  --tv-trade-line-box-bg: #1e222d;
+  --tv-trade-logo-bg: #d1d4dc;
+  --tv-trade-logo-fg: #131722;
+  --tv-trade-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
 html, body {
@@ -105,11 +174,11 @@ ul {
 
 .tv-tooltip {
   position: absolute;
-  background: var(--tv-color-text);
-  color: var(--tv-color-bg);
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 11px;
+  background: var(--tv-tooltip-bg);
+  color: #ffffff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
@@ -120,6 +189,84 @@ ul {
 .tv-tooltip-container:hover .tv-tooltip {
   opacity: 1;
   transition-delay: 0.5s;
+}
+
+/* Right toolbar button (TradingView's): a 44px hit area whose hover / selected state is
+   a rounded 38px square behind the icon */
+.tv-rt-btn {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--tv-color-text);
+  cursor: pointer;
+}
+
+.tv-rt-btn::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 8px;
+  transition: background-color 0.08s ease;
+}
+
+.tv-rt-btn:hover::before,
+.tv-rt-btn.active::before {
+  background-color: var(--tv-color-item-hover);
+}
+
+.tv-rt-btn > * {
+  position: relative;
+}
+
+/* ---- Responsive header, following TradingView's chart page ----
+   ≤1150px: Indicators / Alert / Replay drop their labels (icon only)
+   ≤1000px: only the current interval stays in the header (the rest are in its dropdown)
+   ≤700px : the avatar gives way to the menu button that replaces the right-hand panels */
+.tv-narrow-only { display: none !important; }
+
+@media (max-width: 1150px) {
+  .tv-topbar-label { display: none; }
+  .tv-topbar-labeled { padding: 0 3px !important; }
+}
+
+@media (max-width: 1000px) {
+  .tv-tf-fav:not(.active) { display: none !important; }
+}
+
+/* The same, when the layout itself is narrow but the window isn't (Pine Editor in split view):
+   the page marks the layout by its own width */
+.tv-lw-1150 .tv-topbar-label { display: none; }
+.tv-lw-1150 .tv-topbar-labeled { padding: 0 3px !important; }
+.tv-lw-1000 .tv-tf-fav:not(.active) { display: none !important; }
+
+@media (max-width: 700px) {
+  .tv-narrow-only { display: flex !important; }
+  .tv-wide-only { display: none !important; }
+}
+
+/* Keyboard-shortcut badge inside a tooltip, e.g. "Go to  [Alt] + [G]" */
+.tv-tooltip-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+}
+
+.tv-kbd {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, currentColor 22%, transparent);
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
 }
 
 /* Divider */
@@ -137,3 +284,333 @@ ul {
   background-color: var(--tv-color-border);
   margin: 4px 0;
 }
+
+/* TradingView header buttons: near-black text/icons, a neutral rounded chip on hover and for
+   the selected item (not the accent colour) */
+.tv-hdr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0 5px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tv-hdr-text);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.tv-hdr-btn:hover { background: var(--tv-hover-neutral); }
+.tv-hdr-btn.active { background: var(--tv-active-neutral); }
+.tv-hdr-btn.active:hover { background: var(--tv-active-neutral-hover); }
+.tv-hdr-btn:disabled { color: var(--tv-trade-faint); background: transparent; cursor: default; }
+.tv-hdr-sep {
+  width: 1px;
+  height: 24px;
+  background: var(--tv-active-neutral);
+  margin: 0 5px;
+  flex-shrink: 0;
+}
+
+/* The symbol in a grey pill, and the black Publish pill */
+.tv-hdr-sym {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  max-width: 180px;
+  padding: 0 12px;
+  margin: 0 2px;
+  border: none;
+  border-radius: 16px;
+  background: var(--tv-active-neutral);
+  color: var(--tv-hdr-text);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+.tv-hdr-sym:hover { background: var(--tv-active-neutral-hover); }
+.tv-hdr-publish {
+  height: 28px;
+  padding: 0 12px;
+  margin-left: 6px;
+  border: none;
+  border-radius: 14px;
+  background: var(--tv-publish-bg);
+  color: var(--tv-color-pane-bg);
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.tv-hdr-publish:hover { opacity: 0.85; }
+
+/* Bottom rows (date ranges, clock, trading panel tab row): neutral 32px chips */
+.tv-bb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  min-width: 24px;
+  padding: 0 5px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tv-hdr-text);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.tv-bb-btn:hover { background: var(--tv-hover-neutral); }
+.tv-bb-btn.active { background: var(--tv-active-neutral); }
+.tv-bb-btn.active:hover { background: var(--tv-active-neutral-hover); }
+
+/* Chart legend buttons (indicator row actions, the fold arrow) */
+.tv-legend-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tv-hdr-text);
+  font-family: inherit;
+  cursor: pointer;
+}
+.tv-legend-btn:hover { background: var(--tv-hover-neutral); }
+
+/* Menu rows (profile menu): 40px, icon + label + optional right-hand control */
+.tv-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: none;
+  background: transparent;
+  color: var(--tv-hdr-text);
+  font-size: 14px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tv-menu-row:hover { background: var(--tv-hover-neutral); }
+
+/* TradingView drawing-toolbar buttons: 34px chips 38px apart, the flyout arrow only on hover */
+.tv-lt-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tv-hdr-text);
+  cursor: pointer;
+  padding: 0;
+}
+.tv-lt-btn:hover { background: var(--tv-hover-neutral); }
+.tv-lt-btn.active { background: var(--tv-active-neutral); }
+.tv-lt-btn.active:hover { background: var(--tv-active-neutral-hover); }
+.tv-lt-item { position: relative; display: flex; justify-content: center; width: 100%; }
+.tv-lt-arrow {
+  position: absolute;
+  left: calc(50% + 17px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tv-hdr-text);
+  opacity: 0;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.tv-lt-item:hover .tv-lt-arrow { opacity: 0.8; }
+.tv-lt-arrow:hover { background: var(--tv-hover-neutral); opacity: 1 !important; }
+.tv-lt-sep { width: 36px; height: 1px; background: var(--tv-active-neutral); margin: 6px 0; flex-shrink: 0; }
+
+/* ---------------------------------------------------------------- Strategy report (bottom panel)
+   TradingView's strategy report: light values are TradingView's own, dark ones follow this app's
+   dark palette */
+:root {
+  --st-text: #0f0f0f;
+  --st-text-secondary: #707070;
+  --st-text-tertiary: #4a4a4a;
+  --st-icon-muted: #b8b8b8;
+  --st-bg: #ffffff;
+  --st-fill: #f2f2f2;
+  --st-fill-strong: #ebebeb;
+  --st-fill-active: #ffffff;
+  --st-seg-shadow: 0 0 6px 0 #ebebeb;
+  --st-row-border: #f2f2f2;
+  --st-invert-bg: #2e2e2e;
+  --st-invert-text: #ffffff;
+  --st-pos: #06806b;
+  --st-neg: #cc2f3c;
+  --st-long: #2962ff;
+  --st-short: #cc2f3c;
+  --st-counter-bg: #000000;
+  --st-counter-text: #ffffff;
+  --st-menu-bg: #ffffff;
+  --st-menu-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.2);
+  --st-scroll-thumb: #dbdbdb;
+  --st-input-border: #dbdbdb;
+  --st-tooltip-bg: #2e2e2e;
+  --st-chart-grid: #f2f2f2;
+  --st-chart-zero: #707070;
+  --st-bar-green: #22ab94;
+  --st-bar-red: #f7525f;
+  --st-bar-red-soft: #faa1a4;
+  --st-bar-green-faint: #daf2ee;
+  --st-bar-red-faint: #ffebec;
+  --st-exc-green: #42bda8;
+  --st-exc-green-soft: #ace5dc;
+  --st-exc-red: #f77c80;
+  --st-exc-red-soft: #fccbcd;
+  --st-line-green: #089981;
+  --st-line-red: #f23645;
+  --st-area-green: rgba(8, 153, 129, 0.05);
+  --st-area-red: rgba(242, 54, 69, 0.05);
+  --st-band-green: #83ccc0;
+  --st-band-red: #f89aa2;
+  --st-bench-blue: #3179f5;
+  --st-bench-gray: #c9c9c9;
+  --st-pnl-loss-sum: #faa1a4;
+  --st-pnl-net-loss: #f23645;
+  --st-pnl-profit-sum: #70ccbd;
+  --st-pnl-net-profit: #089981;
+  --st-pnl-commission: #ffcc80;
+  --st-donut-win: #089981;
+  --st-donut-loss: #f23645;
+  --st-donut-even: #ff9800;
+}
+[data-theme="dark"] {
+  --st-text: #d1d4dc;
+  --st-text-secondary: #8c8c8c;
+  --st-text-tertiary: #b2b5be;
+  --st-icon-muted: #50535e;
+  --st-bg: #131722;
+  --st-fill: #2a2e39;
+  --st-fill-strong: #363a45;
+  --st-fill-active: #434651;
+  --st-seg-shadow: 0 0 6px 0 rgba(0, 0, 0, 0.4);
+  --st-row-border: #2a2e39;
+  --st-invert-bg: #d1d4dc;
+  --st-invert-text: #131722;
+  --st-pos: #22ab94;
+  --st-neg: #f7525f;
+  --st-long: #3179f5;
+  --st-short: #f7525f;
+  --st-counter-bg: #d1d4dc;
+  --st-counter-text: #131722;
+  --st-menu-bg: #1e222d;
+  --st-menu-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.4);
+  --st-scroll-thumb: #363a45;
+  --st-input-border: #434651;
+  --st-tooltip-bg: #363a45;
+  --st-chart-grid: #1e222d;
+  --st-chart-zero: #787b86;
+  --st-bar-red-soft: rgba(247, 82, 95, 0.55);
+  --st-bar-green-faint: rgba(34, 171, 148, 0.2);
+  --st-bar-red-faint: rgba(247, 82, 95, 0.2);
+  --st-exc-green: rgba(34, 171, 148, 0.8);
+  --st-exc-green-soft: rgba(34, 171, 148, 0.35);
+  --st-exc-red: rgba(247, 82, 95, 0.8);
+  --st-exc-red-soft: rgba(247, 82, 95, 0.35);
+  --st-line-green: #22ab94;
+  --st-line-red: #f7525f;
+  --st-area-green: rgba(34, 171, 148, 0.08);
+  --st-area-red: rgba(247, 82, 95, 0.08);
+  --st-band-green: rgba(34, 171, 148, 0.6);
+  --st-band-red: rgba(247, 82, 95, 0.6);
+  --st-bench-gray: #5d606b;
+  --st-pnl-loss-sum: rgba(247, 82, 95, 0.45);
+  --st-pnl-profit-sum: rgba(34, 171, 148, 0.45);
+}
+.st-root { color: var(--st-text); background: var(--st-bg); font-size: 14px; font-feature-settings: "lnum", "tnum"; }
+.st-root button { font-family: inherit; }
+.st-scroll { scrollbar-width: thin; scrollbar-color: var(--st-scroll-thumb) transparent; }
+.st-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.st-scroll::-webkit-scrollbar-thumb { background: var(--st-scroll-thumb); border-radius: 4px; border: 2px solid transparent; background-clip: content-box; }
+.st-scroll::-webkit-scrollbar-track { background: transparent; }
+/* Toolbar pills (ghost buttons with an icon, a label and a caret) */
+.st-pill { display: flex; align-items: center; height: 34px; border: none; border-radius: 8px; background: transparent; color: var(--st-text); cursor: default; padding: 0 8px; white-space: nowrap; flex-shrink: 0; font-size: 14px; line-height: 18px; }
+.st-pill:hover { background: var(--st-fill); }
+.st-pill.open { background: var(--st-fill-strong); }
+.st-pill.icon-only { width: 34px; justify-content: center; padding: 0; }
+.st-pill:disabled { opacity: 0.5; }
+/* Metrics / Trades switch */
+.st-lighttabs { display: inline-grid; grid-template-columns: 28px 28px; gap: 3px; padding: 3px; border-radius: 8px; background: var(--st-fill); }
+.st-lighttab { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 5px; background: var(--st-fill); color: var(--st-text); cursor: default; padding: 0; }
+.st-lighttab:hover { background: var(--st-fill-strong); }
+.st-lighttab.selected { background: var(--st-fill-active); }
+/* Round tabs (Breakdown / Periodical / ...) */
+.st-roundtab { height: 28px; padding: 0 11px; border-radius: 14px; border: 1px solid var(--st-fill); background: var(--st-fill); color: var(--st-text); font-size: 14px; line-height: 18px; white-space: nowrap; cursor: default; }
+.st-roundtab + .st-roundtab { margin-left: 4px; }
+.st-roundtab:hover { background: var(--st-fill-strong); border-color: var(--st-fill-strong); }
+.st-roundtab.selected { background: var(--st-invert-bg); border-color: var(--st-invert-bg); color: var(--st-invert-text); }
+/* Segmented control (By signals / By side, Daily / Weekly, ...) */
+.st-seg { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; padding: 3px; border-radius: 8px; background: var(--st-fill); }
+.st-seg-btn { height: 28px; padding: 0 12px; border: none; border-radius: 5px; background: var(--st-fill); color: var(--st-text-tertiary); font-size: 14px; font-weight: 500; line-height: 18px; white-space: nowrap; cursor: default; }
+.st-seg-btn:hover { color: var(--st-text); }
+.st-seg-btn.checked { background: var(--st-fill-active); color: var(--st-text); box-shadow: var(--st-seg-shadow); }
+/* Small bordered icon buttons (chart actions, download, columns) */
+.st-lightbtn { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--st-fill-strong); border-radius: 8px; background: transparent; color: var(--st-text); cursor: default; }
+.st-lightbtn:hover { background: var(--st-fill); }
+.st-lightbtn.active { background: var(--st-fill-strong); }
+/* Popovers (Testing period, Initial capital, Bar detalization, Script execution, columns) */
+.st-popover { position: fixed; z-index: 10050; background: var(--st-menu-bg); color: var(--st-text); border-radius: 10px; box-shadow: var(--st-menu-shadow); padding: 6px; font-size: 14px; line-height: 18px; }
+.st-pop-head { display: flex; align-items: center; gap: 4px; padding: 2px 4px; min-height: 40px; }
+.st-pop-title { flex: 1; display: flex; align-items: center; gap: 4px; margin-left: 4px; font-weight: 600; }
+.st-pop-reset { border: none; background: none; padding: 0 8px 0 0; color: var(--st-text); font-size: 14px; cursor: default; }
+.st-pop-reset:disabled { color: var(--st-icon-muted); }
+.st-pop-divider { padding: 6px 0; }
+.st-pop-divider > div { height: 1px; background: var(--st-fill-strong); }
+.st-pop-item { display: flex; align-items: center; width: 100%; min-height: 32px; padding: 2px 8px; border: none; border-radius: 6px; background: transparent; color: var(--st-text); font-size: 14px; text-align: left; cursor: default; gap: 8px; }
+.st-pop-item:hover { background: var(--st-fill); }
+.st-pop-item.selected { background: var(--st-invert-bg); color: var(--st-invert-text); }
+.st-pop-item:disabled { opacity: 0.5; }
+.st-pop-item:disabled:hover { background: transparent; }
+.st-pop-item .st-pop-right { margin-left: auto; font-size: 12px; color: var(--st-text-secondary); white-space: nowrap; }
+.st-pop-item.selected .st-pop-right { color: var(--st-invert-text); font-weight: 600; }
+.st-check { width: 18px; height: 18px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--st-invert-bg); border-radius: 3px; color: var(--st-invert-text); }
+.st-check.checked { background: var(--st-invert-bg); }
+.st-input { height: 34px; border: 1px solid var(--st-input-border); border-radius: 8px; background: transparent; color: var(--st-text); font-size: 14px; padding: 0 8px; outline: none; font-family: inherit; }
+.st-input:focus { border-color: var(--tv-color-accent); }
+/* Profit and loss rows */
+.st-pnl-row:hover > .st-pnl-cell { background: var(--st-fill); }
+/* List of trades */
+.st-table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 18px; }
+.st-table th { position: sticky; top: 0; z-index: 1; height: 40px; padding: 0 12px; border-bottom: 1px solid var(--st-fill-strong); background: var(--st-bg); color: var(--st-text-secondary); font-weight: 400; white-space: nowrap; text-align: left; cursor: default; }
+.st-table th.end { text-align: right; }
+.st-table th:first-child, .st-table td:first-child { padding-left: 20px; }
+.st-table tbody tr { border-bottom: 1px solid var(--st-row-border); }
+.st-table tbody tr:hover { background: var(--st-fill); }
+.st-table tbody tr:hover .st-target { opacity: 1; }
+.st-table td { padding: 0 12px; vertical-align: middle; white-space: nowrap; }
+.st-table td.double { padding: 0; }
+.st-dcell { position: relative; height: 49px; display: flex; align-items: center; padding: 0 12px; }
+.st-dcell.first::after { content: ""; position: absolute; left: 12px; right: -12px; bottom: 0; border-bottom: 1px solid var(--st-fill-strong); }
+.st-dcell.last-col.first::after { right: 12px; }
+.st-target { opacity: 0; }
+.st-iconbtn { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--st-text-secondary); padding: 0; cursor: default; }
+.st-iconbtn:hover { background: var(--st-fill-strong); color: var(--st-text); }

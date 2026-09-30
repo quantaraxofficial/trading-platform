@@ -14,9 +14,12 @@ export function useChartTick(chart: any) {
     const update = () => setTick(t => t + 1);
     chart.timeScale().subscribeVisibleLogicalRangeChange(update);
     chart.timeScale().subscribeVisibleTimeRangeChange(update);
+    // The chart resized (its pixel mapping changed even if the visible range didn't)
+    chart.timeScale().subscribeSizeChange(update);
     return () => {
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(update);
       chart.timeScale().unsubscribeVisibleTimeRangeChange(update);
+      try { chart.timeScale().unsubscribeSizeChange(update); } catch { /* chart already removed */ }
     };
   }, [chart]);
 }

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { GripVertical, Pencil, PaintBucket, Type, Settings, Lock, Unlock, Trash2, MoreHorizontal, Layers, Copy, EyeOff, ChevronRight } from 'lucide-react';
 import { useDrawing } from '../core/DrawingContext';
-import { ColorPickerDropdown } from './ColorPickerDropdown';
+import { ColorPickerPopup } from './ColorPickerPopup';
 import { MultiSelectSettingsModal } from './MultiSelectSettingsModal';
 
 const LINE_WIDTHS = [1, 2, 3, 4];
@@ -351,13 +351,12 @@ export function MultiSelectSubBar() {
           }} />
         </button>
         {showColorPicker && (
-          <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', zIndex: 300 }}>
-            <ColorPickerDropdown
-              color={currentColor}
-              onChange={handleColorChange}
-              onClose={() => setShowColorPicker(false)}
-            />
-          </div>
+          <ColorPickerPopup
+            colorStr={currentColor}
+            onChange={handleColorChange}
+            onClose={() => setShowColorPicker(false)}
+            style={{ top: '100%', left: 0, marginTop: '8px' }}
+          />
         )}
       </div>
 
@@ -389,13 +388,12 @@ export function MultiSelectSubBar() {
           }} />
         </button>
         {showFillColorPicker && (
-          <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', zIndex: 300 }}>
-            <ColorPickerDropdown
-              color={currentFillColor}
-              onChange={handleFillColorChange}
-              onClose={() => setShowFillColorPicker(false)}
-            />
-          </div>
+          <ColorPickerPopup
+            colorStr={currentFillColor}
+            onChange={handleFillColorChange}
+            onClose={() => setShowFillColorPicker(false)}
+            style={{ top: '100%', left: 0, marginTop: '8px' }}
+          />
         )}
       </div>
 
@@ -428,13 +426,12 @@ export function MultiSelectSubBar() {
           }} />
         </button>
         {showTextColorPicker && (
-          <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', zIndex: 300 }}>
-            <ColorPickerDropdown
-              color={currentTextColor}
-              onChange={handleTextColorChange}
-              onClose={() => setShowTextColorPicker(false)}
-            />
-          </div>
+          <ColorPickerPopup
+            colorStr={currentTextColor}
+            onChange={handleTextColorChange}
+            onClose={() => setShowTextColorPicker(false)}
+            style={{ top: '100%', left: 0, marginTop: '8px' }}
+          />
         )}
       </div>
 

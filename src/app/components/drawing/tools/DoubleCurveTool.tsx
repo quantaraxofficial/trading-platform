@@ -10,6 +10,7 @@ interface DoubleCurveToolProps {
   stroke: string;
   strokeWidth: number;
   isSelected: boolean;
+  isHovering?: boolean;
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   onSelect: () => void;
@@ -21,8 +22,12 @@ interface DoubleCurveToolProps {
   lineEndStyle?: string;
 }
 
-export function DoubleCurveTool({ id, points, stroke, strokeWidth, isSelected, chart, series, onSelect, onUpdatePoints, lineStyle, fill, fillEnabled, lineStartStyle, lineEndStyle }: DoubleCurveToolProps) {
+export function DoubleCurveTool({ id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints, lineStyle, fill, fillEnabled, lineStartStyle, lineEndStyle }: DoubleCurveToolProps) {
   useChartTick(chart);
+  // shadowBlur is a real per-pixel blur convolution that Konva redraws every frame of any
+  // native drag (move or handle resize) regardless of React re-renders — expensive enough
+  // to feel like lag, so it's switched off for the duration of a drag.
+  const [isDragging, setIsDragging] = useState(false);
   if (!chart || !series || points.length < 2) return null;
 
   const pixelPoints = points.map(p => ({
@@ -34,7 +39,10 @@ export function DoubleCurveTool({ id, points, stroke, strokeWidth, isSelected, c
 
   const flattenedPoints = pixelPoints.flatMap(pt => [pt.x, pt.y]);
 
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+
   const handleDragEnd = (e: any) => {
+    setIsDragging(false);
     if (!onUpdatePoints) return;
     const node = e.target;
     if (node.className !== 'Circle') {
@@ -63,19 +71,12 @@ export function DoubleCurveTool({ id, points, stroke, strokeWidth, isSelected, c
   };
 
   const handleCircleDragEnd = (index: number) => (e: any) => {
-    e.cancelBubble = true;
-    if (!onUpdatePoints) return;
-    const logical = pixelToLogical(chart, e.target.x());
-    const price = pixelToPrice(series, e.target.y());
-    if (logical !== null && price !== null) {
-      const newPoints = [...points];
-      newPoints[index] = { logical, price };
-      onUpdatePoints(newPoints);
-    }
+    handleCircleDragMove(index)(e);
+    setIsDragging(false);
   };
 
   return (
-    <Group id={id} draggable={isSelected} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
+    <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
       <Line
         points={flattenedPoints}
         stroke={isSelected ? '#2962ff' : stroke}
@@ -86,7 +87,7 @@ export function DoubleCurveTool({ id, points, stroke, strokeWidth, isSelected, c
         lineCap="round"
         lineJoin="round"
         shadowColor={isSelected ? stroke : 'transparent'}
-        shadowBlur={isSelected ? 4 : 0}
+        shadowBlur={isSelected && !isDragging ? 4 : 0}
         hitStrokeWidth={10}
       />
       {/* Arrowheads */}
@@ -100,7 +101,7 @@ export function DoubleCurveTool({ id, points, stroke, strokeWidth, isSelected, c
         />
       )}
       {/* Note: Simplified arrowhead for DoubleCurve for now as it uses Konva Line with tension */}
-      {isSelected && pixelPoints.map((pt, i) => (
+      {(isSelected || isHovering) && pixelPoints.map((pt, i) => (
         <Circle
           key={i}
           x={pt.x}
@@ -110,6 +111,7 @@ export function DoubleCurveTool({ id, points, stroke, strokeWidth, isSelected, c
           stroke="#2962ff"
           strokeWidth={2}
           draggable
+          onDragStart={handleDragStart}
           onDragMove={handleCircleDragMove(i)}
           onDragEnd={handleCircleDragEnd(i)}
         />

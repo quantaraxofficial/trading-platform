@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDrawing } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
+import { useEscapeClose } from "../../../lib/useEscapeClose";
 
 interface MultiSelectSettingsModalProps {
   onClose: () => void;
@@ -42,6 +43,7 @@ function LocalNumberInput({ value, onChange, style, placeholder }: { value: stri
 }
 
 export function MultiSelectSettingsModal({ onClose, initialPosition }: MultiSelectSettingsModalProps) {
+  useEscapeClose(onClose);
   const { drawings, selectedShapeIds, updateMultipleDrawings } = useDrawing();
   const ids = Array.from(selectedShapeIds);
   const selectedDrawings = drawings.filter((d: any) => selectedShapeIds.has(d.id));

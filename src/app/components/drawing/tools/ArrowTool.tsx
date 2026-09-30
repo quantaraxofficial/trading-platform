@@ -1,5 +1,5 @@
-import React from 'react';
-import { Arrow, Group, Circle } from 'react-konva';
+import React, { useState } from 'react';
+import { Line, Group, Circle } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
@@ -13,6 +13,7 @@ interface ArrowToolProps {
   extendLeft?: boolean;
   extendRight?: boolean;
   isSelected: boolean;
+  isHovering?: boolean;
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   onSelect: () => void;
@@ -20,9 +21,13 @@ interface ArrowToolProps {
 }
 
 export function ArrowTool({
-  id, points, stroke, strokeWidth, lineStyle = 'Solid', extendLeft = false, extendRight = false, isSelected, chart, series, onSelect, onUpdatePoints
+  id, points, stroke, strokeWidth, lineStyle = 'Solid', extendLeft = false, extendRight = false, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints
 }: ArrowToolProps) {
   useChartTick(chart);
+  // shadowBlur is a real per-pixel blur convolution that Konva redraws every frame of any
+  // native drag (move or handle resize) regardless of React re-renders — expensive enough
+  // to feel like lag, so it's switched off for the duration of a drag.
+  const [isDragging, setIsDragging] = useState(false);
   if (!chart || !series || points.length < 2) return null;
 
   const p1 = points[0];
@@ -38,8 +43,10 @@ export function ArrowTool({
   const color = stroke || '#2962ff';
   const width = strokeWidth || 2;
 
-  // Arrow head size scales subtly with stroke width
+  // Open V arrowhead (two strokes, no fill), like TradingView's Arrow tool — wing length
+  // scales subtly with stroke width.
   const headSize = Math.max(12, width * 4);
+  const wingAngle = Math.PI / 5;
 
   const dash = lineStyle === 'Dashed' ? [10, 10] : lineStyle === 'Dotted' ? [2, 4] : [];
 
@@ -55,7 +62,18 @@ export function ArrowTool({
     if (extendRight) { rx2 = x2 + ux * 10000; ry2 = y2 + uy * 10000; }
   }
 
+  // The head always sits on the real tip point, even when the line is extended past it
+  const dirAngle = Math.atan2(dy, dx);
+  const headPoints = [
+    x2 - headSize * Math.cos(dirAngle - wingAngle), y2 - headSize * Math.sin(dirAngle - wingAngle),
+    x2, y2,
+    x2 - headSize * Math.cos(dirAngle + wingAngle), y2 - headSize * Math.sin(dirAngle + wingAngle),
+  ];
+
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+
   const handleGroupDragEnd = (e: any) => {
+    setIsDragging(false);
     if (!onUpdatePoints) return;
     const node = e.target;
     if (node.className === 'Circle') return;
@@ -70,7 +88,7 @@ export function ArrowTool({
     node.position({ x: 0, y: 0 });
   };
 
-  const handleCircleDragEnd = (index: number) => (e: any) => {
+  const handleCircleDragMove = (index: number) => (e: any) => {
     e.cancelBubble = true;
     if (!onUpdatePoints) return;
     const logical = pixelToLogical(chart, e.target.x());
@@ -82,40 +100,56 @@ export function ArrowTool({
     }
   };
 
+  const handleCircleDragEnd = (index: number) => (e: any) => {
+    handleCircleDragMove(index)(e);
+    setIsDragging(false);
+  };
+
   return (
     <Group
       id={id}
-      draggable={isSelected}
+      draggable={isSelected || isHovering}
+      onDragStart={handleDragStart}
       onDragEnd={handleGroupDragEnd}
       onClick={(e) => { e.cancelBubble = true; onSelect(); }}
       onTap={(e)  => { e.cancelBubble = true; onSelect(); }}
     >
-      {/* Thin line with a proper arrowhead — classic TradingView arrow style */}
-      <Arrow
+      <Line
         points={[rx1, ry1, rx2, ry2]}
         stroke={color}
         strokeWidth={width}
         dash={dash}
-        fill={color}
-        pointerLength={headSize}
-        pointerWidth={headSize * 0.7}
         hitStrokeWidth={14}
         shadowColor={isSelected ? '#2962ff' : 'transparent'}
-        shadowBlur={isSelected ? 5 : 0}
+        shadowBlur={isSelected && !isDragging ? 5 : 0}
         shadowOpacity={0.35}
         lineCap="round"
         lineJoin="round"
       />
+      {length > 0 && (
+        <Line
+          points={headPoints}
+          stroke={color}
+          strokeWidth={width}
+          hitStrokeWidth={14}
+          shadowColor={isSelected ? '#2962ff' : 'transparent'}
+          shadowBlur={isSelected && !isDragging ? 5 : 0}
+          shadowOpacity={0.35}
+          lineCap="round"
+          lineJoin="round"
+        />
+      )}
 
       {/* Selection handles at tail and tip */}
-      {isSelected && (
+      {(isSelected || isHovering) && (
         <>
           <Circle
             x={x1} y={y1}
             radius={6}
             fill="white" stroke="#2962ff" strokeWidth={2}
             draggable
-            onDragMove={(e) => e.cancelBubble = true}
+            onDragStart={handleDragStart}
+            onDragMove={handleCircleDragMove(0)}
             onDragEnd={handleCircleDragEnd(0)}
           />
           <Circle
@@ -123,7 +157,8 @@ export function ArrowTool({
             radius={6}
             fill="white" stroke="#2962ff" strokeWidth={2}
             draggable
-            onDragMove={(e) => e.cancelBubble = true}
+            onDragStart={handleDragStart}
+            onDragMove={handleCircleDragMove(points.length - 1)}
             onDragEnd={handleCircleDragEnd(points.length - 1)}
           />
         </>

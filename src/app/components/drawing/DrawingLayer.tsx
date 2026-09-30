@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { Stage, Layer, Rect as KonvaRect } from 'react-konva';
 import { useDrawing } from './core/DrawingContext';
 import { pixelToLogical, pixelToPrice, logicalToPixel, priceToPixel } from './core/coordinates';
@@ -15,6 +15,7 @@ import { RotatedRectangleTool } from './tools/RotatedRectangleTool';
 import { PathTool } from './tools/PathTool';
 import { PolylineTool } from './tools/PolylineTool';
 import { CircleTool } from './tools/CircleTool';
+import { HorizontalRayTool } from './tools/HorizontalRayTool';
 import { EllipseTool } from './tools/EllipseTool';
 import { TriangleTool } from './tools/TriangleTool';
 import { ArcTool } from './tools/ArcTool';
@@ -25,8 +26,11 @@ import { ArrowMarkerTool } from './tools/ArrowMarkerTool';
 import { ArrowTool } from './tools/ArrowTool';
 import { ArrowIconTool } from './tools/ArrowIconTool';
 import { LongPositionTool, ShortPositionTool } from './tools';
+import AxisHighlights from './AxisHighlights';
+import { POSITION_TARGET_FILL, POSITION_STOP_FILL } from './tools/PositionTool';
 import { EmojiTool } from './tools/EmojiTool';
 import { TextEditorOverlay } from './ui/TextEditorOverlay';
+import { isTypingTarget } from '../../lib/isTypingTarget';
 
 interface DrawingLayerProps {
   chart: any;
@@ -35,10 +39,183 @@ interface DrawingLayerProps {
   height: number;
 }
 
+// lightweight-charts' own candle body width, in device pixels (optimalCandlestickWidth)
+function optimalCandlestickWidth(barSpacing: number, pixelRatio: number): number {
+  if (barSpacing >= 2.5 && barSpacing <= 4) return Math.floor(3 * pixelRatio);
+  const coeff = 1 - 0.2 * Math.atan(Math.max(4, barSpacing) - 4) / (Math.PI * 0.5);
+  const res = Math.floor(barSpacing * coeff * pixelRatio);
+  const scaled = Math.floor(barSpacing * pixelRatio);
+  return Math.max(Math.floor(pixelRatio), Math.min(res, scaled));
+}
+
 export default function DrawingLayer({ chart, series, width, height }: DrawingLayerProps) {
-  const { activeTool, setActiveTool, drawings, setDrawings, addDrawing, selectedShapeId, setSelectedShapeId, updateDrawing, deleteDrawing, activeEmoji, selectedShapeIds, setSelectedShapeIds, clearSelection, magnetMode, defaultSettings } = useDrawing();
+  const { activeTool, setActiveTool, drawings, setDrawings, addDrawing, selectedShapeId, setSelectedShapeId, updateDrawing, deleteDrawing, activeEmoji, selectedShapeIds, setSelectedShapeIds, clearSelection, magnetMode, defaultSettings, keepDrawing, allDrawingsHidden } = useDrawing();
+  // Once a drawing is finished the tool goes back to the cursor, unless "Keep drawing" is on
+  const finishActiveTool = () => { if (!keepDrawing) setActiveTool(null); };
+  // Clicking a drawing selects it — or, with the Eraser active, removes it. (The chart-level
+  // click handler below can't do this on its own: a hovered drawing makes this layer capture
+  // the click, so it never reaches the chart.)
+  const selectDrawing = (id: string) => {
+    if (activeTool === 'eraser') { deleteDrawing(id); return; }
+    setSelectedShapeId(id);
+  };
   const stageRef = useRef<any>(null);
+  const layerRef = useRef<any>(null);
+  // The drawing being worked on (selected or hovered). As on TradingView, it's drawn on top of
+  // the candles, so the candle cut-out below leaves its area alone.
+  const activeDrawingIdsRef = useRef<string[]>([]);
+
+  // Drawings sit on a canvas ABOVE the chart, so by default they paint over candle
+  // bodies. The rule here is that shapes may cross a candle's thin wick but never its
+  // body, so after Konva paints the layer, every visible candle body rectangle is
+  // punched out of it (destination-out) — the real candle underneath then shows
+  // through, which reads as the shape passing behind it. Selection handles are
+  // redrawn afterwards so they stay grabbable even when they sit on a body.
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!layer || !chart || !series) return;
+
+    const isHandle = (n: any) => {
+      const a = n.attrs;
+      return a && a.fill === 'white' && a.stroke === '#2962ff' && (n.className === 'Circle' || n.className === 'Rect');
+    };
+
+    const cutCandleBodies = () => {
+      const fullData: any[] = (window as any).__chartFullData || [];
+      if (fullData.length === 0) return;
+      const ts = chart.timeScale();
+      const range = ts.getVisibleLogicalRange();
+      if (!range) return;
+      const opts: any = series.options();
+      const cutoff = (window as any).__replayVisibleCutoff;
+
+      const barSpacing = Math.abs((ts.logicalToCoordinate(1) ?? 0) - (ts.logicalToCoordinate(0) ?? 0)) || 6;
+      const start = Math.max(0, Math.floor(range.from) - 1);
+      let end = Math.min(fullData.length - 1, Math.ceil(range.to) + 1);
+      if (cutoff !== null && cutoff !== undefined) end = Math.min(end, cutoff);
+
+      const ctx: CanvasRenderingContext2D = layer.getContext()._context;
+      ctx.save();
+      // Keep the selected / hovered drawing whole (it sits above the candles, like TradingView's).
+      // Its box is left out of the cut; overlapping boxes are merged first, since the even-odd
+      // clip would otherwise flip back the parts where two of them overlap.
+      const boxes: { x: number; y: number; width: number; height: number }[] = Array.from(new Set(activeDrawingIdsRef.current))
+        .map(id => layer.findOne('#' + id))
+        .filter(Boolean)
+        .map((n: any) => { const b = n.getClientRect({ skipShadow: true }); return { x: b.x - 2, y: b.y - 2, width: b.width + 4, height: b.height + 4 }; });
+      for (let merged = true; merged;) {
+        merged = false;
+        for (let i = 0; i < boxes.length && !merged; i++) {
+          for (let j = i + 1; j < boxes.length && !merged; j++) {
+            const a = boxes[i], b = boxes[j];
+            if (a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height) {
+              const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
+              boxes[i] = { x, y, width: Math.max(a.x + a.width, b.x + b.width) - x, height: Math.max(a.y + a.height, b.y + b.height) - y };
+              boxes.splice(j, 1);
+              merged = true;
+            }
+          }
+        }
+      }
+      if (boxes.length) {
+        ctx.beginPath();
+        ctx.rect(0, 0, layer.width(), layer.height());
+        boxes.forEach(b => ctx.rect(b.x, b.y, b.width, b.height));
+        ctx.clip('evenodd');
+      }
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = '#000';
+      // Cut exactly the pixels the chart paints for each body: lightweight-charts draws them in
+      // device pixels (its candlestick renderer), so the holes are computed the same way there —
+      // anything rounder in CSS pixels leaves a rim of chart background around the candles.
+      // The clip above is already set, so switching to device pixels here doesn't move it.
+      const kpr = layer.getCanvas().getPixelRatio();
+      const paneCanvas: HTMLCanvasElement | null = chart.chartElement?.()?.querySelector('td canvas') ?? null;
+      const hpr = paneCanvas && paneCanvas.clientWidth ? paneCanvas.width / paneCanvas.clientWidth : kpr;
+      const vpr = paneCanvas && paneCanvas.clientHeight ? paneCanvas.height / paneCanvas.clientHeight : kpr;
+      const sx = kpr / hpr, sy = kpr / vpr;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      let barWidth = optimalCandlestickWidth(barSpacing, hpr);
+      if (barWidth >= 2 && (Math.floor(hpr) % 2) !== (barWidth % 2)) barWidth--;
+      const borderVisible = opts.borderVisible !== false;
+      let borderWidth = Math.floor(hpr);
+      if (barWidth <= 2 * borderWidth) borderWidth = Math.floor((barWidth - 1) * 0.5);
+      borderWidth = Math.max(Math.floor(hpr), borderWidth);
+      if (barWidth <= borderWidth * 2) borderWidth = Math.max(Math.floor(hpr), Math.floor(hpr));
+      const cut = (l: number, t: number, w: number, h: number) => { if (w > 0 && h > 0) ctx.fillRect(l * sx, t * sy, w * sx, h * sy); };
+      let prevEdge: number | null = null;
+      for (let i = start; i <= end; i++) {
+        const bar = fullData[i];
+        if (!bar) { prevEdge = null; continue; }
+        // A hidden body (transparent color in candle settings) has nothing to reveal
+        const bodyColor = bar.close >= bar.open ? opts.upColor : opts.downColor;
+        const cx = ts.logicalToCoordinate(i);
+        const yTop = series.priceToCoordinate(Math.max(bar.open, bar.close));
+        const yBottom = series.priceToCoordinate(Math.min(bar.open, bar.close));
+        if (cx === null || yTop === null || yBottom === null) { prevEdge = null; continue; }
+        const top = Math.round(yTop * vpr);
+        const bottom = Math.round(yBottom * vpr);
+        const left = Math.round(cx * hpr) - Math.floor(barWidth * 0.5);
+        const right = left + barWidth - 1;
+        if (borderVisible) {
+          // The border box (its left edge nudged clear of the previous candle, as the chart does)
+          const bl = prevEdge !== null ? Math.min(Math.max(prevEdge + 1, left), right) : left;
+          const borderColor = bar.close >= bar.open ? opts.borderUpColor : opts.borderDownColor;
+          if (bodyColor !== 'transparent' || borderColor !== 'transparent') cut(bl, top, right - bl + 1, bottom - top + 1);
+          if (bodyColor !== 'transparent' && barWidth > borderWidth * 2) cut(left + borderWidth, top + borderWidth, right - left - 2 * borderWidth + 1, bottom - top - 2 * borderWidth + 1);
+        } else if (bodyColor !== 'transparent') {
+          cut(left, top, right - left + 1, bottom - top + 1);
+        }
+        prevEdge = right;
+      }
+      ctx.restore();
+
+      layer.find(isHandle).forEach((n: any) => n.drawScene(layer.getCanvas()));
+    };
+
+    layer.on('draw.candleCut', cutCandleBodies);
+    // Live ticks / replay steps change candle bodies without moving the time scale
+    const redraw = () => layer.batchDraw();
+    series.subscribeDataChanged(redraw);
+    layer.batchDraw();
+    return () => {
+      layer.off('draw.candleCut');
+      try { series.unsubscribeDataChanged(redraw); } catch { /* series already disposed */ }
+    };
+  }, [chart, series]);
+  // Lets handleChartClick (set up once per chart/tool change, not per drawing edit)
+  // read the current drawings without going stale or forcing that effect to
+  // re-subscribe chart.subscribeClick on every single drawing update.
+  const drawingsRef = useRef(drawings);
+  drawingsRef.current = drawings;
+  // Lets the Shift keydown/keyup handlers below (registered in an effect that doesn't
+  // re-run on every pendingPoints/mouse-position change) always read the CURRENT
+  // in-progress trendline point and cursor position, instead of whatever they were the
+  // last time that effect happened to re-run.
+  const pendingPointsRef = useRef<{ logical: number; price: number }[]>([]);
+  const lastPointerPosRef = useRef<{ x: number; y: number } | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  // Which drawing (if any) the pointer is currently over. Driven from the
+  // chart's own crosshair-move stream (not Konva's native mouseenter/leave)
+  // because the Konva stage's wrapper div is deliberately pointer-events:none
+  // whenever nothing is selected and no tool is drawing — that's what lets
+  // ordinary chart panning/zooming/crosshair-hover reach the real chart
+  // underneath instead of being swallowed by an always-on-top empty overlay.
+  // That means Konva never receives a real browser mousemove to react to, so
+  // per-shape hover has to be computed the same way click-to-select already
+  // is: call the Konva stage's own hit-canvas (getIntersection) manually
+  // using the coordinates the chart's crosshair handler hands us, entirely
+  // independent of the wrapper's CSS pointer-events state.
+  const [hoveredShapeId, setHoveredShapeId] = useState<string | null>(null);
+  // Set true for the duration of any native Konva drag (a shape's whole-body
+  // drag, not a handle drag). While true, hover tracking below is frozen:
+  // a fast diagonal drag can momentarily carry the pointer off a thin
+  // line's hit region, which would otherwise flip isHovering to false
+  // mid-gesture — and since isHovering feeds the shape's `draggable` prop,
+  // Konva would cancel/restart the in-progress drag right then, so
+  // dragend's handler never runs with the real total offset (this is what
+  // broke Ctrl-drag-to-clone from a hover-only, unselected shape).
+  const isAnyDraggingRef = useRef(false);
   const [activelyDrawingId, setActivelyDrawingId] = useState<string | null>(null);
   const [activeStrokePoints, setActiveStrokePoints] = useState<{ logical: number; price: number }[]>([]);
   const [activeStrokeConfig, setActiveStrokeConfig] = useState<{ stroke: string, strokeWidth: number, type: string } | null>(null);
@@ -49,26 +226,86 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
   const [isCtrlPressed, setIsCtrlPressed] = useState(false);
   const [isShiftPressed, setIsShiftPressed] = useState(false);
 
-  // Refs for Ctrl+Shift so callbacks always see fresh key state (updated synchronously in key handlers)
+  // Refs for Ctrl/Shift so callbacks always see fresh key state (updated synchronously in key handlers)
   const ctrlRef = useRef(false);
   const shiftRef = useRef(false);
 
   // Track which drawings have already been cloned in the current drag to avoid duplicates
   const clonedDrawingIds = useRef<Set<string>>(new Set());
 
-  // Ctrl+Shift+Drag: clone a drawing at its original position, then let the drag move the original
+  // Ctrl+Drag: clone a drawing at its original position the instant the drag
+  // starts (see the stage-level 'dragstart' listener below), so both the
+  // stationary original and the moving copy are visible for the whole drag
+  // instead of only appearing once the mouse is released. Uses the
+  // functional setDrawings form so it never needs `drawings` in its
+  // dependency array — this callback is invoked from a stage-level Konva
+  // listener attached once on mount, so a stale closure over `drawings`
+  // would otherwise clone from outdated state.
+  const cloneDrawingIfNeeded = useCallback((drawingId: string) => {
+    if (!ctrlRef.current || clonedDrawingIds.current.has(drawingId)) return;
+    clonedDrawingIds.current.add(drawingId);
+    setDrawings(prev => {
+      const original = prev.find(d => d.id === drawingId);
+      if (!original) return prev;
+      const cloneId = Math.random().toString(36).substring(2, 10);
+      return [...prev, { ...original, id: cloneId }];
+    });
+  }, [setDrawings]);
+
+  // While the pointer is held (resizing a handle, dragging a shape), edits go into this
+  // local preview instead of the shared drawing context. Every context update re-renders
+  // all of its consumers — SubBar, ChartContainer, the toolbars — and doing that on every
+  // drag frame blocked the main thread for 50–100 ms per mouse move, so shapes visibly
+  // lagged behind the cursor. Only this layer re-renders during the drag; the result is
+  // committed to the context once, on release.
+  type LiveEdit = { id: string; updates: Partial<any> };
+  const [liveEdit, setLiveEdit] = useState<LiveEdit | null>(null);
+  const liveEditRef = useRef<LiveEdit | null>(null);
+  const pointerHeldRef = useRef(false);
+
+  const commitLiveEdit = useCallback(() => {
+    const pending = liveEditRef.current;
+    if (!pending) return;
+    liveEditRef.current = null;
+    updateDrawing(pending.id, pending.updates);
+    setLiveEdit(null);
+  }, [updateDrawing]);
+
+  // Clones on the first update if needed (a no-op if cloneDrawingIfNeeded already fired),
+  // then applies the update — previewed while the pointer is held, committed otherwise.
   const handleUpdateWithClone = useCallback((drawingId: string, updates: Partial<any>) => {
-    if (ctrlRef.current && shiftRef.current && !clonedDrawingIds.current.has(drawingId)) {
-      const original = drawings.find(d => d.id === drawingId);
-      if (original) {
-        const cloneId = Math.random().toString(36).substring(2, 10);
-        const clone = { ...original, id: cloneId };
-        clonedDrawingIds.current.add(drawingId);
-        setDrawings(prev => [...prev, clone]);
-      }
+    cloneDrawingIfNeeded(drawingId);
+    if (!pointerHeldRef.current) {
+      updateDrawing(drawingId, updates);
+      return;
     }
-    updateDrawing(drawingId, updates);
-  }, [drawings, updateDrawing, setDrawings]);
+    const prev = liveEditRef.current;
+    if (prev && prev.id !== drawingId) commitLiveEdit();
+    const next = { id: drawingId, updates: prev && prev.id === drawingId ? { ...prev.updates, ...updates } : updates };
+    liveEditRef.current = next;
+    setLiveEdit(next);
+  }, [cloneDrawingIfNeeded, updateDrawing, commitLiveEdit]);
+
+  // Konva registers its own window mouseup listeners (which fire dragend) at module load,
+  // so this bubble-phase listener always runs after a tool's final drag-end update.
+  useEffect(() => {
+    const onDown = () => { pointerHeldRef.current = true; };
+    const onUp = () => { pointerHeldRef.current = false; commitLiveEdit(); };
+    window.addEventListener('mousedown', onDown, true);
+    window.addEventListener('touchstart', onDown, true);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchend', onUp);
+    window.addEventListener('touchcancel', onUp);
+    window.addEventListener('blur', onUp);
+    return () => {
+      window.removeEventListener('mousedown', onDown, true);
+      window.removeEventListener('touchstart', onDown, true);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchend', onUp);
+      window.removeEventListener('touchcancel', onUp);
+      window.removeEventListener('blur', onUp);
+    };
+  }, [commitLiveEdit]);
 
   // Clear cloned tracking when a new drag starts
   useEffect(() => {
@@ -127,24 +364,146 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
             deleteDrawing(foundId);
           } else {
             setSelectedShapeId(foundId);
+            // A real Konva click never reaches a shape's own onClick handlers while it's
+            // only hovered (not yet selected) — the wrapper div's pointer-events stay
+            // 'none' until something is selected, so the browser routes the click to the
+            // chart underneath instead, landing here via getIntersection. That means the
+            // "+ Add text" placeholder (and clicking existing text to re-edit it) would
+            // silently do nothing on the very first click. Since this manual hit-test
+            // already found the exact Konva node, open the text editor directly for it
+            // when that node is specifically a Text label on a type that supports one.
+            const textEditableTypes = ['trendline', 'rectangle', 'circle', 'ellipse', 'text'];
+            const clickedDrawing = drawingsRef.current.find(d => d.id === foundId);
+            if (shape.className === 'Text' && clickedDrawing && textEditableTypes.includes(clickedDrawing.type)) {
+              setEditingTextId(foundId);
+            }
           }
           return;
         }
       }
       console.log('[DrawingLayer] No shape found at click pos, clearing selection');
       setSelectedShapeId(null);
+      clearSelection();
     };
     
     chart.subscribeClick(handleChartClick);
 
+    // Same hit-test as handleChartClick above, but driving hover state
+    // instead of a click action. This is a window-level listener rather
+    // than chart.subscribeCrosshairMove on purpose: the wrapper div around
+    // the Konva stage flips pointer-events between 'none' and 'auto' (e.g.
+    // the instant Ctrl is held, to allow a Ctrl-drag directly off a hover
+    // state), and that pointer-events change itself alters which element
+    // the browser considers "under the cursor" — which made the chart
+    // briefly think the pointer had left its canvas and report a null
+    // point right when Ctrl was pressed, clearing hover at exactly the
+    // moment a Ctrl+drag needed it. A window mousemove listener always
+    // fires regardless of any element's pointer-events, so it isn't
+    // affected by that handoff.
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (isAnyDraggingRef.current) return;
+      const isCursorTool = activeTool && ['cross', 'dot', 'arrow_cursor', 'eraser', 'magic', 'demonstration'].includes(activeTool);
+      if (activeTool && !isCursorTool) { setHoveredShapeId(null); return; }
+      if (!stageRef.current) { setHoveredShapeId(null); return; }
+
+      const stageBox = stageRef.current.container().getBoundingClientRect();
+      const point = { x: e.clientX - stageBox.left, y: e.clientY - stageBox.top };
+      if (point.x < 0 || point.y < 0 || point.x > stageBox.width || point.y > stageBox.height) {
+        setHoveredShapeId(null);
+        return;
+      }
+
+      const shape = stageRef.current.getIntersection(point);
+      if (shape) {
+        let current = shape;
+        let foundId: string | null = null;
+        while (current) {
+          if (current.attrs && current.attrs.id) {
+            foundId = current.attrs.id;
+            if (foundId !== 'preview') break;
+          }
+          current = current.parent;
+        }
+        setHoveredShapeId(foundId && foundId !== 'preview' ? foundId : null);
+        return;
+      }
+      setHoveredShapeId(null);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+
+    // Middle-click (mouse wheel button) on a shape deletes it immediately, without
+    // needing to select it or switch to the eraser tool first. This has to be a
+    // window-level 'mousedown' listener rather than a Konva/Stage handler: whenever
+    // nothing is selected the wrapper div is deliberately pointer-events:none (see
+    // shouldCaptureEvents above) so plain hover/pan reaches the real chart underneath,
+    // which means Konva itself never sees the click — so hit-testing is done by hand
+    // here, the same way hover and left-click-to-select already do just above.
+    const handleWindowMiddleClick = (e: MouseEvent) => {
+      if (e.button !== 1 || !stageRef.current) return;
+      const stageBox = stageRef.current.container().getBoundingClientRect();
+      const point = { x: e.clientX - stageBox.left, y: e.clientY - stageBox.top };
+      if (point.x < 0 || point.y < 0 || point.x > stageBox.width || point.y > stageBox.height) return;
+
+      const shape = stageRef.current.getIntersection(point);
+      if (!shape) return;
+      let current: any = shape;
+      let foundId: string | null = null;
+      while (current) {
+        if (current.attrs && current.attrs.id) {
+          foundId = current.attrs.id;
+          if (foundId !== 'preview') break;
+        }
+        current = current.parent;
+      }
+      if (foundId && foundId !== 'preview') {
+        // Stop the browser's middle-click autoscroll cursor and any focus/paste
+        // side effects now that the click actually did something on the page.
+        e.preventDefault();
+        deleteDrawing(foundId);
+        if (selectedShapeId === foundId) setSelectedShapeId(null);
+        setSelectedShapeIds(prev => {
+          if (!prev.has(foundId!)) return prev;
+          const next = new Set(prev);
+          next.delete(foundId!);
+          return next;
+        });
+      }
+    };
+    window.addEventListener('mousedown', handleWindowMiddleClick);
+
+    // Konva drag events bubble up to the stage, so this single pair of
+    // listeners covers every shape's whole-body drag without needing to
+    // touch each of the 18 tool components individually.
+    const handleAnyDragStart = (e: any) => {
+      isAnyDraggingRef.current = true;
+      // Only whole-shape drags carry the drawing's id on the dragged node
+      // itself (handles are anonymous Circles/Rects with no id), so this
+      // naturally skips cloning when a resize handle is being dragged.
+      const drawingId = e.target?.id?.();
+      if (drawingId) cloneDrawingIfNeeded(drawingId);
+    };
+    const handleAnyDragEnd = () => { isAnyDraggingRef.current = false; };
+    stageRef.current?.on('dragstart', handleAnyDragStart);
+    stageRef.current?.on('dragend', handleAnyDragEnd);
+
     // Track Ctrl and Shift keys to allow starting a selection drag or measure drag
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isTypingTarget(e.target)) return;
       if (e.key === 'Control' || e.ctrlKey) { setIsCtrlPressed(true); ctrlRef.current = true; }
-      if (e.key === 'Shift' || e.shiftKey) { setIsShiftPressed(true); shiftRef.current = true; }
+      if (e.key === 'Shift' || e.shiftKey) {
+        setIsShiftPressed(true);
+        shiftRef.current = true;
+        syncTrendlineShiftPreview(true);
+      }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.key === 'Control' || !e.ctrlKey) { setIsCtrlPressed(false); ctrlRef.current = false; }
-      if (e.key === 'Shift' || !e.shiftKey) { setIsShiftPressed(false); shiftRef.current = false; }
+      if (e.key === 'Shift' || !e.shiftKey) {
+        setIsShiftPressed(false);
+        shiftRef.current = false;
+        syncTrendlineShiftPreview(false);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -155,12 +514,17 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(update);
       window.removeEventListener('tv-price-scale-changed', update);
       chart.unsubscribeClick(handleChartClick);
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mousedown', handleWindowMiddleClick);
+      stageRef.current?.off('dragstart', handleAnyDragStart);
+      stageRef.current?.off('dragend', handleAnyDragEnd);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [chart, activeTool, setSelectedShapeId]);
+  }, [chart, activeTool, setSelectedShapeId, cloneDrawingIfNeeded]);
 
   const [pendingPoints, setPendingPoints] = useState<{ logical: number; price: number }[]>([]);
+  pendingPointsRef.current = pendingPoints;
   const [previewPoint, setPreviewPoint] = useState<{ logical: number; price: number } | null>(null);
   const [isShiftMeasuring, setIsShiftMeasuring] = useState(false);
 
@@ -183,6 +547,7 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
     
     trendline: { type: 'click-point', maxPoints: 2 },
     horizontal_line: { type: 'click-point', maxPoints: 2 },
+    horizontal_ray: { type: 'click-point', maxPoints: 1 },
     rectangle: { type: 'click-point', maxPoints: 2 },
     zoom_in: { type: 'click-point', maxPoints: 2 },
     fibonacci: { type: 'click-point', maxPoints: 2 },
@@ -210,13 +575,170 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
     highlighter: { type: 'continuous' },
   };
 
+  // Curve and double curve are placed with two clicks (their ends); their control points
+  // are derived from those ends. Shared by creation and the live preview, so the preview
+  // shows the exact shape that will be created instead of a straight line between clicks.
+  type AnchorPoint = { logical: number; price: number; time?: number };
+
+  const deriveCurvePoints = (start: AnchorPoint, end: AnchorPoint): AnchorPoint[] | null => {
+    const x1 = logicalToPixel(chart, start.logical);
+    const y1 = priceToPixel(series, start.price);
+    const x2 = logicalToPixel(chart, end.logical);
+    const y2 = priceToPixel(series, end.price);
+    if (x1 === null || y1 === null || x2 === null || y2 === null) return null;
+    const mLogical = pixelToLogical(chart, (x1 + x2) / 2);
+    const mPrice = pixelToPrice(series, (y1 + y2) / 2 - 20); // default bulge
+    if (mLogical === null || mPrice === null) return null;
+    return [start, end, { logical: mLogical, price: mPrice }];
+  };
+
+  const deriveDoubleCurvePoints = (start: AnchorPoint, end: AnchorPoint): AnchorPoint[] | null => {
+    const x1 = logicalToPixel(chart, start.logical);
+    const y1 = priceToPixel(series, start.price);
+    const x2 = logicalToPixel(chart, end.logical);
+    const y2 = priceToPixel(series, end.price);
+    if (x1 === null || y1 === null || x2 === null || y2 === null) return null;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const chord = Math.hypot(dx, dy);
+    if (chord < 1) return null;
+    const perpX = -dy / chord;
+    const perpY = dx / chord;
+    // S-shape: control points at 1/4 and 3/4 along the chord, pushed out to opposite sides
+    const bulge = chord * 0.6;
+    const t1logical = pixelToLogical(chart, x1 + dx * 0.25 + perpX * bulge);
+    const t1price = pixelToPrice(series, y1 + dy * 0.25 + perpY * bulge);
+    const t2logical = pixelToLogical(chart, x1 + dx * 0.75 - perpX * bulge);
+    const t2price = pixelToPrice(series, y1 + dy * 0.75 - perpY * bulge);
+    if (t1logical === null || t1price === null || t2logical === null || t2price === null) return null;
+    return [start, { logical: t1logical, price: t1price }, { logical: t2logical, price: t2price }, end];
+  };
+
+  // Shift-key angle lock while placing a trend line's second point: snaps the line to
+  // whichever multiple of 45° from horizontal (0/45/90/135/180/225/270/315) it's already
+  // closest to — the same octant-constrain behavior design tools like Figma/Illustrator
+  // use for a held Shift, rather than only the old horizontal-only special case. Holding
+  // Shift snaps it; releasing Shift (this is simply never called that frame) goes
+  // straight back to whatever the free, unconstrained angle actually is under the
+  // cursor. "45 degrees" is a visual, on-screen notion — a bar and a price unit aren't
+  // the same size — so the snap is computed in pixel space and only converted back to
+  // logical/price afterward.
+  const computeAngleLockedPoint = (
+    p1: { logical: number; price: number },
+    pointerPos: { x: number; y: number }
+  ): { logical: number; price: number; time: number | null } | null => {
+    const x1 = logicalToPixel(chart, p1.logical);
+    const y1 = priceToPixel(series, p1.price);
+    if (x1 === null || y1 === null) return null;
+
+    const dx = pointerPos.x - x1;
+    const dy = pointerPos.y - y1;
+    if (dx === 0 && dy === 0) return null;
+
+    const step = Math.PI / 4; // 45°
+    const angle = Math.round(Math.atan2(dy, dx) / step) * step;
+    // Project the cursor's actual reach onto the snapped direction, so the line's
+    // length keeps tracking the cursor naturally as it moves along that direction.
+    const length = dx * Math.cos(angle) + dy * Math.sin(angle);
+
+    const x2 = x1 + length * Math.cos(angle);
+    const y2 = y1 + length * Math.sin(angle);
+
+    const logical = pixelToLogical(chart, x2);
+    const price = pixelToPrice(series, y2);
+    if (logical === null || price === null) return null;
+
+    // Same fractional-time interpolation/extrapolation the raw cursor position already
+    // gets elsewhere, just re-derived for this angle-snapped logical instead.
+    const fullData = (window as any).__chartFullData || [];
+    let time: number | null = null;
+    const index1 = Math.floor(logical);
+    const index2 = index1 + 1;
+    if (index1 >= 0 && index2 < fullData.length) {
+      const t1 = fullData[index1].time;
+      const t2 = fullData[index2].time;
+      time = t1 + (logical - index1) * (t2 - t1);
+    } else if (fullData.length >= 2 && index1 >= fullData.length - 1) {
+      const lastTime = fullData[fullData.length - 1].time;
+      const prevTime = fullData[fullData.length - 2].time;
+      const diff = lastTime - prevTime;
+      time = lastTime + (logical - (fullData.length - 1)) * diff;
+    } else if (fullData.length > 0) {
+      time = fullData[Math.max(0, Math.min(fullData.length - 1, Math.round(logical)))].time;
+    }
+
+    return { logical, price, time };
+  };
+
+  // Keeps the trendline's live preview in sync the INSTANT Shift is pressed or
+  // released, using the last known pointer position — without this, the 45° snap (or
+  // its release back to a free angle) only took effect on the next actual mousemove,
+  // so toggling Shift while the cursor sat still appeared to do nothing, and any click
+  // that followed without first nudging the mouse would place the point using whichever
+  // state (locked or free) happened to be left over instead of the current one.
+  const syncTrendlineShiftPreview = (shiftHeld: boolean) => {
+    if (activeTool !== 'trendline' || pendingPointsRef.current.length !== 1) return;
+    const pos = lastPointerPosRef.current;
+    if (!pos || !chart || !series) return;
+
+    const rawLogical = pixelToLogical(chart, pos.x);
+    const rawPrice = pixelToPrice(series, pos.y);
+    if (rawLogical === null || rawPrice === null) return;
+
+    const fullData = (window as any).__chartFullData || [];
+    let logical = rawLogical;
+    let price = rawPrice;
+    let time: number | null = null;
+    const snappedLogical = Math.round(rawLogical);
+    if (snappedLogical >= 0 && snappedLogical < fullData.length) {
+      logical = snappedLogical;
+      time = fullData[snappedLogical].time;
+    }
+
+    if (shiftHeld) {
+      const locked = computeAngleLockedPoint(pendingPointsRef.current[0], pos);
+      if (locked) {
+        logical = locked.logical;
+        price = locked.price;
+        if (locked.time !== null) time = locked.time;
+      }
+    }
+
+    setPreviewPoint({ logical, price, time } as any);
+  };
+
+  // Re-sends a press on this layer to the chart element beneath it (see handleMouseDown).
+  // The chart follows the rest of the gesture at document level, so only the press is needed.
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const forwardPressToChart = (evt: MouseEvent): boolean => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return false;
+    const prev = wrapper.style.pointerEvents;
+    wrapper.style.pointerEvents = 'none';
+    const target = document.elementFromPoint(evt.clientX, evt.clientY);
+    wrapper.style.pointerEvents = prev;
+    if (!target || wrapper.contains(target) || !wrapper.parentElement?.contains(target)) return false;
+    target.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true, cancelable: true, view: window, detail: 1,
+      clientX: evt.clientX, clientY: evt.clientY, screenX: evt.screenX, screenY: evt.screenY,
+      button: 0, buttons: 1, ctrlKey: evt.ctrlKey, shiftKey: evt.shiftKey, altKey: evt.altKey, metaKey: evt.metaKey,
+    }));
+    return true;
+  };
+
   const handleMouseDown = (e: any) => {
     const stage = e.target.getStage();
     const pointerPos = stage.getPointerPosition();
     if (!pointerPos) return;
+    lastPointerPosRef.current = pointerPos;
 
-    // Ctrl+drag to start a selection rectangle (but NOT Ctrl+Shift which is clone-drag)
-    if (e.evt?.ctrlKey && !e.evt?.shiftKey && (!activeTool || ['cross', 'dot', 'arrow_cursor', 'eraser', 'magic', 'demonstration'].includes(activeTool))) {
+    // Ctrl+drag on empty canvas starts a selection rectangle. Ctrl+drag
+    // starting directly on a hovered/selected shape (e.target !== stage) is
+    // the clone-drag gesture instead, handled by the shape's own native
+    // Konva drag plus handleUpdateWithClone above — without this check this
+    // branch fired first for every Ctrl+drag and hijacked the mousedown
+    // before it ever reached the shape's own drag handling.
+    if (e.evt?.ctrlKey && !e.evt?.shiftKey && e.target === stage && (!activeTool || ['cross', 'dot', 'arrow_cursor', 'eraser', 'magic', 'demonstration'].includes(activeTool))) {
       setIsCtrlDragging(true);
       setSelectionRect({ startX: pointerPos.x, startY: pointerPos.y, endX: pointerPos.x, endY: pointerPos.y });
       setSelectedShapeId(null);
@@ -224,8 +746,11 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
       return;
     }
 
-    // Shift+drag to start the measure tool
-    if (e.evt?.shiftKey && (!activeTool || ['cross', 'dot', 'arrow_cursor', 'eraser', 'magic', 'demonstration'].includes(activeTool))) {
+    // Shift+drag to start the measure tool — but not when Ctrl is also held,
+    // since Ctrl+Shift+drag on a shape is the clone-drag gesture instead;
+    // without this check this branch fired first and hijacked the mousedown
+    // before it ever reached the shape's own drag handling.
+    if (e.evt?.shiftKey && !e.evt?.ctrlKey && (!activeTool || ['cross', 'dot', 'arrow_cursor', 'eraser', 'magic', 'demonstration'].includes(activeTool))) {
       const logical = pixelToLogical(chart, pointerPos.x);
       const price = pixelToPrice(series, pointerPos.y);
       if (logical !== null && price !== null) {
@@ -241,6 +766,29 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
     }
 
     const clickedOnEmpty = e.target === stage;
+
+    // Pressing empty chart space while this layer captures the mouse (a drawing is selected or
+    // hovered): as on TradingView, dragging pans the chart, the selected drawing stays selected
+    // and moves with it, and only a click without movement deselects. The press is handed to
+    // the chart's own pane underneath, so the pan is the chart's native one; a click without
+    // movement then reaches handleChartClick, which clears the selection.
+    const isCursorLike = !activeTool || ['cross', 'dot', 'arrow_cursor', 'eraser', 'magic', 'demonstration'].includes(activeTool);
+    if (clickedOnEmpty && isCursorLike && e.evt?.button === 0 && forwardPressToChart(e.evt)) {
+      drawings.forEach(d => { if (d.type === 'measure') deleteDrawing(d.id); });
+      return;
+    }
+
+    // Eraser: pressing on a drawing removes it. (Over a drawing this layer captures the
+    // press, so the chart-level click handler that also erases never sees it.)
+    if (activeTool === 'eraser') {
+      let node = e.target;
+      while (node && node !== stage) {
+        const id = node.attrs?.id;
+        if (id && id !== 'preview' && drawings.some(d => d.id === id)) { deleteDrawing(id); break; }
+        node = node.parent;
+      }
+      return;
+    }
 
     if (!activeTool) {
       if (clickedOnEmpty) {
@@ -322,23 +870,31 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
 
     // Every shape's points always snap horizontally to the nearest candle's own center
     // (its wick midline), independent of the Magnet Mode toggle — price stays fully free
-    // so the point can still be placed anywhere along that vertical line. Continuous
-    // freehand tools (brush/highlighter) are excluded — snapping would make strokes look
-    // steppy instead of smooth.
+    // so the point can still be placed anywhere along that vertical line, UNLESS Magnet
+    // Mode already pinned it to that candle's O/H/L/C just above: this block used to
+    // reset price back to the raw cursor position unconditionally, which silently undid
+    // magnet's vertical snap for every point-based tool (trendline included) the instant
+    // it ran. Continuous freehand tools (brush/highlighter) are excluded — snapping would
+    // make strokes look steppy instead of smooth.
     if (activeTool && activeTool !== 'brush' && activeTool !== 'highlighter') {
       const fullData = (window as any).__chartFullData || [];
       const snappedLogical = Math.round(rawLogical);
       if (snappedLogical >= 0 && snappedLogical < fullData.length) {
         logical = snappedLogical;
-        price = rawPrice;
+        if (effectiveMagnetMode === 'off') price = rawPrice;
         time = fullData[snappedLogical].time;
       }
     }
 
-    // Trend line: holding Shift while placing the second point locks the line to
-    // perfectly horizontal (same price as the first point).
+    // Trend line: holding Shift while placing the second point locks the line's angle
+    // to the nearest multiple of 45°.
     if (activeTool === 'trendline' && pendingPoints.length === 1 && e.evt?.shiftKey) {
-      price = pendingPoints[0].price;
+      const locked = computeAngleLockedPoint(pendingPoints[0], pointerPos);
+      if (locked) {
+        logical = locked.logical;
+        price = locked.price;
+        if (locked.time !== null) time = locked.time;
+      }
     }
 
     const config = TOOL_CONFIG[activeTool];
@@ -409,46 +965,59 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
             initialBarWidth
           });
           setSelectedShapeId(newId);
-          setActiveTool(null);
+          finishActiveTool();
         } else {
           let finalPoints = newPoints;
           if (activeTool === 'double_curve' && newPoints.length === 2) {
-            const start = newPoints[0];
-            const end = newPoints[1];
-            const x1 = logicalToPixel(chart, start.logical);
-            const y1 = priceToPixel(series, start.price);
-            const x2 = logicalToPixel(chart, end.logical);
-            const y2 = priceToPixel(series, end.price);
-            if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
-              const dx = x2 - x1;
-              const dy = y2 - y1;
-              const chord = Math.hypot(dx, dy);
-              if (chord >= 1) {
-                const perpX = -dy / chord;
-                const perpY = dx / chord;
-                // To match the user's image, we need a more pronounced S-shape
-                // We'll place the control points at 1/4 and 3/4 along the chord
-                // and push them out further (bulge)
-                const bulge = chord * 0.6; 
-                const t1x = x1 + dx * 0.25 + perpX * bulge;
-                const t1y = y1 + dy * 0.25 + perpY * bulge;
-                const t2x = x1 + dx * 0.75 - perpX * bulge;
-                const t2y = y1 + dy * 0.75 - perpY * bulge;
-                
-                const t1logical = pixelToLogical(chart, t1x);
-                const t1price = pixelToPrice(series, t1y);
-                const t2logical = pixelToLogical(chart, t2x);
-                const t2price = pixelToPrice(series, t2y);
-                
-                if (t1logical !== null && t1price !== null && t2logical !== null && t2price !== null) {
-                  finalPoints = [start, { logical: t1logical, price: t1price }, { logical: t2logical, price: t2price }, end];
-                }
+            finalPoints = deriveDoubleCurvePoints(newPoints[0], newPoints[1]) ?? finalPoints;
+          }
+          
+          // A circle is stored like an ellipse — [center, right-edge point, top-edge point]
+          // — so its horizontal radius is measured in bars and its vertical radius in
+          // price. That keeps it anchored to the chart the way every other shape is:
+          // it stretches with each axis on zoom instead of a single pixel radius
+          // (distance to the drag point) that ballooned when either axis was zoomed.
+          // At the moment of creation it is exactly the circle the user dragged.
+          if (activeTool === 'circle' && newPoints.length === 2) {
+            const c = newPoints[0];
+            const cx = logicalToPixel(chart, c.logical);
+            const cy = priceToPixel(series, c.price);
+            const ex = logicalToPixel(chart, newPoints[1].logical);
+            const ey = priceToPixel(series, newPoints[1].price);
+            if (cx !== null && cy !== null && ex !== null && ey !== null) {
+              const r = Math.hypot(ex - cx, ey - cy);
+              const edgeLogical = pixelToLogical(chart, cx + r);
+              const topPrice = pixelToPrice(series, cy - r);
+              if (r >= 1 && edgeLogical !== null && topPrice !== null) {
+                const fullData: any[] = (window as any).__chartFullData || [];
+                const n = fullData.length;
+                // Time at a fractional bar index, extrapolated past either end of the data
+                const spacing = n > 1 ? (fullData[n - 1].time - fullData[0].time) / (n - 1) : 0;
+                const timeAt = (l: number) => {
+                  if (n === 0) return (c as any).time;
+                  if (l <= 0) return fullData[0].time + l * spacing;
+                  if (l >= n - 1) return fullData[n - 1].time + (l - (n - 1)) * spacing;
+                  const i = Math.floor(l);
+                  return fullData[i].time + (l - i) * (fullData[i + 1].time - fullData[i].time);
+                };
+                finalPoints = [
+                  c,
+                  { logical: edgeLogical, price: c.price, time: timeAt(edgeLogical) },
+                  { logical: c.logical, price: topPrice, time: (c as any).time },
+                ];
               }
             }
           }
-          
+
           let additionalProps = {};
-          
+
+          if (activeTool === 'horizontal_ray') {
+            // Every other line/shape tool falling through this generic path defaults to
+            // pink ('#e91e63' below) unless the user has customized that type's defaults
+            // before — blue reads as a normal price-level line rather than a markup/note.
+            additionalProps = { stroke: '#2962ff' };
+          }
+
           if (activeTool === 'long_position' || activeTool === 'short_position') {
             const isLong = activeTool === 'long_position';
             const entryLogical = finalPoints[0].logical;
@@ -477,12 +1046,15 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
               { logical: entryLogical, price: stopPrice }    // Stop
             ];
             
+            // TradingView's defaults; quantity and P&L are worked out from these as bars print
             additionalProps = {
-              quantity: 57,
-              openPnL: isLong ? 4.660 : -4.660,
               textColor: '#ffffff',
-              targetFillColor: "rgba(76, 175, 80, 0.3)",
-              stopFillColor: "rgba(244, 67, 54, 0.3)",
+              targetFillColor: POSITION_TARGET_FILL,
+              stopFillColor: POSITION_STOP_FILL,
+              accountSize: 1000,
+              lotSize: 1,
+              risk: 25,
+              riskType: '%',
             };
           }
 
@@ -495,21 +1067,7 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
           }
 
           if (activeTool === 'curve' && newPoints.length === 2) {
-            const start = newPoints[0];
-            const end = newPoints[1];
-            const x1 = logicalToPixel(chart, start.logical);
-            const y1 = priceToPixel(series, start.price);
-            const x2 = logicalToPixel(chart, end.logical);
-            const y2 = priceToPixel(series, end.price);
-            if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
-              const mx = (x1 + x2) / 2;
-              const my = (y1 + y2) / 2 - 20; // Default bulge
-              const mLogical = pixelToLogical(chart, mx);
-              const mPrice = pixelToPrice(series, my);
-              if (mLogical !== null && mPrice !== null) {
-                finalPoints = [start, end, { logical: mLogical, price: mPrice }];
-              }
-            }
+            finalPoints = deriveCurvePoints(newPoints[0], newPoints[1]) ?? finalPoints;
           }
 
           if (activeTool === 'arc') {
@@ -522,6 +1080,13 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
             const logical1 = finalPoints[0].logical;
             const logical2 = finalPoints[1].logical;
             if (logical1 !== null && logical2 !== null) {
+              // Zoom Out steps back through these, one zoom at a time (as TradingView's does)
+              const before = chart.timeScale().getVisibleLogicalRange();
+              if (before) {
+                const stack: any[] = ((window as any).__zoomStack = (window as any).__zoomStack || []);
+                stack.push({ from: before.from, to: before.to });
+                window.dispatchEvent(new CustomEvent('tv:zoom-depth', { detail: stack.length }));
+              }
               chart.timeScale().setVisibleLogicalRange({
                 from: Math.min(logical1, logical2),
                 to: Math.max(logical1, logical2)
@@ -555,7 +1120,7 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
         }
         setPendingPoints([]);
         setPreviewPoint(null);
-        setActiveTool(null);
+        finishActiveTool();
       } else {
         setPendingPoints(newPoints);
       }
@@ -566,6 +1131,7 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
     const stage = e.target.getStage();
     const pointerPos = stage.getPointerPosition();
     if (!pointerPos) return;
+    lastPointerPosRef.current = pointerPos;
 
     let rawLogical = pixelToLogical(chart, pointerPos.x);
     let rawPrice = pixelToPrice(series, pointerPos.y);
@@ -615,23 +1181,31 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
 
     // Every shape's points always snap horizontally to the nearest candle's own center
     // (its wick midline), independent of the Magnet Mode toggle — price stays fully free
-    // so the point can still be placed anywhere along that vertical line. Continuous
-    // freehand tools (brush/highlighter) are excluded — snapping would make strokes look
-    // steppy instead of smooth.
+    // so the point can still be placed anywhere along that vertical line, UNLESS Magnet
+    // Mode already pinned it to that candle's O/H/L/C just above: this block used to
+    // reset price back to the raw cursor position unconditionally, which silently undid
+    // magnet's vertical snap for every point-based tool (trendline included) the instant
+    // it ran. Continuous freehand tools (brush/highlighter) are excluded — snapping would
+    // make strokes look steppy instead of smooth.
     if (activeTool && activeTool !== 'brush' && activeTool !== 'highlighter') {
       const fullData = (window as any).__chartFullData || [];
       const snappedLogical = Math.round(rawLogical);
       if (snappedLogical >= 0 && snappedLogical < fullData.length) {
         logical = snappedLogical;
-        price = rawPrice;
+        if (effectiveMagnetMode === 'off') price = rawPrice;
         time = fullData[snappedLogical].time;
       }
     }
 
-    // Trend line: holding Shift while placing the second point locks the live preview
-    // to perfectly horizontal (same price as the first point).
+    // Trend line: holding Shift while placing the second point locks the live preview's
+    // angle to the nearest multiple of 45°.
     if (activeTool === 'trendline' && pendingPoints.length === 1 && e.evt?.shiftKey) {
-      price = pendingPoints[0].price;
+      const locked = computeAngleLockedPoint(pendingPoints[0], pointerPos);
+      if (locked) {
+        logical = locked.logical;
+        price = locked.price;
+        if (locked.time !== null) time = locked.time;
+      }
     }
 
     if (isCtrlDragging && selectionRect) {
@@ -673,12 +1247,13 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
       });
       setPendingPoints([]);
       setPreviewPoint(null);
-      setActiveTool(null);
+      finishActiveTool();
     }
   };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isTypingTarget(e.target)) return;
       if (e.key === 'Enter') {
         if (!activeTool) return;
         const config = TOOL_CONFIG[activeTool];
@@ -694,7 +1269,7 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
           });
           setPendingPoints([]);
           setPreviewPoint(null);
-          setActiveTool(null);
+          finishActiveTool();
         }
       }
     };
@@ -767,6 +1342,8 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
           strokeWidth: activeStrokeConfig.strokeWidth,
           points: activeStrokePoints
         });
+        // A finished stroke is selected (with its toolbar), like every other new drawing
+        setSelectedShapeId(activelyDrawingId);
       }
       setActivelyDrawingId(null);
       setActiveStrokePoints([]);
@@ -783,8 +1360,9 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
       
       // For N-point tools (like Path/Polyline), right-click FINISHES the drawing
       if (config?.type === 'N-point' && pendingPoints.length >= 2) {
+        const finishedId = `${activeTool}-${Date.now()}`;
         addDrawing({
-          id: `${activeTool}-${Date.now()}`,
+          id: finishedId,
           type: activeTool as any,
           visible: true,
           locked: false,
@@ -792,9 +1370,10 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
           strokeWidth: 2,
           points: pendingPoints
         });
+        setSelectedShapeId(finishedId);
       }
 
-      setActiveTool(null);
+      finishActiveTool();
       setPendingPoints([]);
       setPreviewPoint(null);
       setActivelyDrawingId(null);
@@ -812,8 +1391,16 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
 
   const isCursorTool = activeTool && ['cross', 'dot', 'arrow_cursor', 'eraser', 'magic', 'demonstration'].includes(activeTool);
   // Determine if we should capture events. We need to capture if drawing (and not a cursor tool) OR if a shape is selected (for dragging)
-  // OR if we are currently editing a text overlay OR if multi-selecting OR if Ctrl is held (for starting Ctrl+drag)
-  const shouldCaptureEvents = (activeTool !== null && !isCursorTool) || selectedShapeId !== null || editingTextId !== null || selectedShapeIds.size > 0 || isCtrlDragging || isCtrlPressed || isShiftMeasuring || isShiftPressed;
+  // OR if we are currently editing a text overlay OR if multi-selecting OR if Ctrl is held (for starting Ctrl+drag) OR if a shape is
+  // currently hovered: a shape's own resize handles (and its body, for whole-shape drag) only ever render while hovered or selected, so
+  // without this the wrapper stayed pointer-events:none the whole time a shape was merely hovered (not yet clicked to select) and a real
+  // mousedown on one of those very handles never reached Konva at all — it fell through to the chart underneath instead, same as a click
+  // on empty space. That's what made grabbing a visible handle to resize a shape, without first clicking it to select it, unreliable: not
+  // occasionally slow to register, but structurally unable to start a drag most of the time. This matches how every other drawing/vector
+  // tool (this app's own TradingView model included) behaves: hovering a drawn object and starting to drag it moves/resizes that object,
+  // not the canvas underneath.
+  activeDrawingIdsRef.current = [selectedShapeId, hoveredShapeId, ...Array.from(selectedShapeIds)].filter((v): v is string => !!v);
+  const shouldCaptureEvents = (activeTool !== null && !isCursorTool) || selectedShapeId !== null || editingTextId !== null || selectedShapeIds.size > 0 || isCtrlDragging || isCtrlPressed || isShiftMeasuring || isShiftPressed || hoveredShapeId !== null;
 
   // Forward wheel events to the underlying chart so the user can zoom/scroll
   // while a drawing tool is still active.
@@ -860,8 +1447,66 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
     }
   };
 
+  // Anchor position/rotation for the text-edit overlay, frozen for the whole editing
+  // session instead of recomputed on every DrawingLayer re-render. Depending only on
+  // editingTextId (not chart/drawings) is deliberate: unrelated re-renders — hover
+  // tracking's window mousemove listener fires on essentially every pointer move —
+  // used to recompute this from the drawing's live coordinates each time, and for a
+  // trendline that angle feeds a CSS rotate(); any sub-pixel jitter in x1/y1/x2/y2
+  // between renders got amplified by that rotation into a visible shake while typing.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const editingOverlayGeometry = useMemo(() => {
+    if (!editingTextId || !chart || !series) return null;
+    const d = drawingsRef.current.find(x => x.id === editingTextId);
+    if (!d || d.points.length === 0) return null;
+    if (d.type !== 'text' && d.type !== 'trendline' && d.type !== 'rectangle' && d.type !== 'circle' && d.type !== 'ellipse') return null;
+
+    let px = 0, py = 0, rot = 0;
+
+    if (d.type === 'trendline' && d.points.length === 2) {
+      const x1 = logicalToPixel(chart, d.points[0].logical) || 0;
+      const y1 = priceToPixel(series, d.points[0].price) || 0;
+      const x2 = logicalToPixel(chart, d.points[1].logical) || 0;
+      const y2 = priceToPixel(series, d.points[1].price) || 0;
+      const mx = (x1 + x2) / 2;
+      const my = (y1 + y2) / 2;
+      const angle = Math.atan2(y2 - y1, x2 - x1) * (180 / Math.PI);
+      rot = (angle > 90 || angle < -90) ? angle + 180 : angle;
+      // TrendLine renders its own text/placeholder offset 10px "up" in the line's own
+      // rotated local space (Konva's offsetY), not straight up on screen — matching
+      // that rotated offset here is what stops a visible jump the instant you click
+      // "+ Add text" and this HTML overlay replaces it at a different spot.
+      const rotRad = (rot * Math.PI) / 180;
+      px = mx + 10 * Math.sin(rotRad);
+      py = my - 10 * Math.cos(rotRad);
+    } else if (d.type === 'rectangle' && d.points.length === 2) {
+      const x1 = logicalToPixel(chart, d.points[0].logical) || 0;
+      const y1 = priceToPixel(series, d.points[0].price) || 0;
+      const x2 = logicalToPixel(chart, d.points[1].logical) || 0;
+      const y2 = priceToPixel(series, d.points[1].price) || 0;
+      px = (x1 + x2) / 2;
+      py = (y1 + y2) / 2;
+    } else if (d.type === 'ellipse' && d.points.length >= 2) {
+      // points[0]/points[1] are the ellipse's diameter endpoints, not its center
+      const x1 = logicalToPixel(chart, d.points[0].logical) || 0;
+      const y1 = priceToPixel(series, d.points[0].price) || 0;
+      const x2 = logicalToPixel(chart, d.points[1].logical) || 0;
+      const y2 = priceToPixel(series, d.points[1].price) || 0;
+      px = (x1 + x2) / 2;
+      py = (y1 + y2) / 2;
+    } else {
+      const p = d.points[0];
+      px = logicalToPixel(chart, p.logical) || 0;
+      py = priceToPixel(series, p.price) || 0;
+    }
+
+    return { d, px, py, rot };
+  }, [editingTextId]);
+
   return (
+    <>
     <div 
+      ref={wrapperRef}
       style={{ 
         position: 'absolute', 
         top: 0, 
@@ -885,7 +1530,7 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
         onContextMenu={handleContextMenu}
         ref={stageRef}
       >
-        <Layer>
+        <Layer ref={layerRef}>
           {/* Active stroke (being drawn) */}
           {activelyDrawingId && activeStrokePoints.length >= 2 && activeStrokeConfig && (
             activeStrokeConfig.type === 'brush' ? (
@@ -913,7 +1558,8 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
             )
           )}
 
-          {drawings.filter(d => d.visible).map(drawing => {
+          {drawings.filter(d => d.visible).map(committed => {
+            const drawing = liveEdit && liveEdit.id === committed.id ? { ...committed, ...liveEdit.updates } : committed;
             if (drawing.type === 'trendline') {
               return (
                 <TrendLine 
@@ -929,14 +1575,15 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   showPriceLabels={drawing.showPriceLabels}
                   showStats={drawing.showStats}
                   statsPosition={drawing.statsPosition}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)}
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => setSelectedShapeId(drawing.id)}
+                  onSelect={() => selectDrawing(drawing.id)}
                   onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
                   isLocked={drawing.locked}
                   text={(drawing as any).text}
                   onTextEdit={() => setEditingTextId(drawing.id)}
+                  isEditingText={editingTextId === drawing.id}
                 />
               );
             } else if (drawing.type === 'rectangle') {
@@ -947,16 +1594,18 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   points={drawing.points}
                   stroke={drawing.stroke}
                   strokeWidth={drawing.strokeWidth}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)}
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => setSelectedShapeId(drawing.id)}
+                  onSelect={() => selectDrawing(drawing.id)}
                   onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
                   isLocked={drawing.locked}
                   // New properties passed here
                   fill={drawing.fill}
                   backgroundVisible={(drawing as any).backgroundVisible}
                   text={(drawing as any).text}
+                  onTextEdit={() => setEditingTextId(drawing.id)}
+                  isEditingText={editingTextId === drawing.id}
                   textColor={(drawing as any).textColor}
                   fontSize={(drawing as any).fontSize}
                   bold={(drawing as any).bold}
@@ -980,10 +1629,10 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   stroke={drawing.stroke}
                   // @ts-ignore
                   text={drawing.text}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)}
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => setSelectedShapeId(drawing.id)}
+                  onSelect={() => selectDrawing(drawing.id)}
                   onUpdateText={(newText) => updateDrawing(drawing.id, { text: newText } as any)}
                   onEdit={() => setEditingTextId(drawing.id)}
                   onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
@@ -1007,21 +1656,22 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   key={drawing.id}
                   id={drawing.id}
                   points={drawing.points}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)}
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => setSelectedShapeId(drawing.id)}
+                  onSelect={() => selectDrawing(drawing.id)}
                   onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
                   targetFillColor={drawing.targetFillColor}
                   stopFillColor={drawing.stopFillColor}
                   textColor={drawing.textColor}
                   fontSize={drawing.fontSize}
                   showPriceLabels={drawing.showPriceLabels}
-                  statsMode={drawing.statsMode}
-                  compactStatsMode={drawing.compactStatsMode}
                   alwaysShowStats={drawing.alwaysShowStats}
-                  quantity={(drawing as any).quantity}
-                  openPnL={(drawing as any).openPnL}
+                  accountSize={drawing.accountSize}
+                  lotSize={drawing.lotSize}
+                  risk={drawing.risk}
+                  riskType={drawing.riskType}
+                  qtyPrecision={drawing.qtyPrecision}
                 />
               );
             } else if (drawing.type === 'short_position') {
@@ -1030,21 +1680,22 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   key={drawing.id}
                   id={drawing.id}
                   points={drawing.points}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)}
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => setSelectedShapeId(drawing.id)}
+                  onSelect={() => selectDrawing(drawing.id)}
                   onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
                   targetFillColor={drawing.targetFillColor}
                   stopFillColor={drawing.stopFillColor}
                   textColor={drawing.textColor}
                   fontSize={drawing.fontSize}
                   showPriceLabels={drawing.showPriceLabels}
-                  statsMode={drawing.statsMode}
-                  compactStatsMode={drawing.compactStatsMode}
                   alwaysShowStats={drawing.alwaysShowStats}
-                  quantity={(drawing as any).quantity}
-                  openPnL={(drawing as any).openPnL}
+                  accountSize={drawing.accountSize}
+                  lotSize={drawing.lotSize}
+                  risk={drawing.risk}
+                  riskType={drawing.riskType}
+                  qtyPrecision={drawing.qtyPrecision}
                 />
               );
             } else if (drawing.type === 'fibonacci') {
@@ -1055,10 +1706,10 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   points={drawing.points}
                   stroke={drawing.stroke}
                   strokeWidth={drawing.strokeWidth}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)}
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => setSelectedShapeId(drawing.id)}
+                  onSelect={() => selectDrawing(drawing.id)}
                   onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
                   isLocked={drawing.locked}
                   showTrendLine={(drawing as any).showTrendLine}
@@ -1092,10 +1743,10 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   points={drawing.points}
                   stroke={drawing.stroke}
                   strokeWidth={drawing.strokeWidth}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)}
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => setSelectedShapeId(drawing.id)}
+                  onSelect={() => selectDrawing(drawing.id)}
                   onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
                   isLocked={drawing.locked}
                 />
@@ -1106,7 +1757,7 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
               );
             } else if (drawing.type === 'highlighter') {
               return (
-                <HighlighterTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} chart={chart} series={series} onSelect={() => setSelectedShapeId(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
+                <HighlighterTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
               );
             } else if (drawing.type === 'arrow_marker') {
               return (
@@ -1116,10 +1767,10 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   points={drawing.points} 
                   stroke={drawing.stroke} 
                   strokeWidth={drawing.strokeWidth} 
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} 
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => setSelectedShapeId(drawing.id)} 
+                  onSelect={() => selectDrawing(drawing.id)} 
                   onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
                   text={drawing.text}
                   textColor={drawing.textColor}
@@ -1131,7 +1782,7 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
               );
             } else if (drawing.type === 'arrow') {
               return (
-                <ArrowTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} lineStyle={(drawing as any).lineStyle} extendLeft={(drawing as any).extendLeft} extendRight={(drawing as any).extendRight} isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} chart={chart} series={series} onSelect={() => setSelectedShapeId(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
+                <ArrowTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} lineStyle={(drawing as any).lineStyle} extendLeft={(drawing as any).extendLeft} extendRight={(drawing as any).extendRight} isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
               );
             } else if (drawing.type === 'arrow_mark_up' || drawing.type === 'arrow_mark_down') {
               return (
@@ -1140,11 +1791,12 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   id={drawing.id} 
                   points={drawing.points} 
                   stroke={drawing.stroke} 
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} 
-                  type={drawing.type} 
-                  chart={chart} 
-                  series={series} 
-                  onSelect={() => setSelectedShapeId(drawing.id)} 
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
+                  type={drawing.type}
+                  chart={chart}
+                  series={series}
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
                   text={drawing.text}
                   textColor={drawing.textColor}
                   fontSize={drawing.fontSize}
@@ -1155,7 +1807,7 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
               );
             } else if (drawing.type === 'rotated_rectangle') {
               return (
-                <RotatedRectangleTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} chart={chart} series={series} onSelect={() => setSelectedShapeId(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
+                <RotatedRectangleTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
               );
             } else if (drawing.type === 'path') {
               return (
@@ -1170,10 +1822,10 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   lineEndStyle={(drawing as any).lineEndStyle}
                   fill={drawing.fill}
                   backgroundVisible={(drawing as any).backgroundVisible}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} 
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => setSelectedShapeId(drawing.id)} 
+                  onSelect={() => selectDrawing(drawing.id)} 
                   onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
                   isLocked={drawing.locked} 
                 />
@@ -1191,10 +1843,10 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   lineEndStyle={(drawing as any).lineEndStyle}
                   fill={drawing.fill}
                   backgroundVisible={(drawing as any).backgroundVisible}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} 
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => setSelectedShapeId(drawing.id)} 
+                  onSelect={() => selectDrawing(drawing.id)} 
                   onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
                   isLocked={drawing.locked} 
                 />
@@ -1209,12 +1861,17 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   strokeWidth={drawing.strokeWidth} 
                   fill={drawing.fill}
                   backgroundVisible={(drawing as any).backgroundVisible}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} 
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => setSelectedShapeId(drawing.id)} 
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
-                  isLocked={drawing.locked} 
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  isLocked={drawing.locked}
+                  text={(drawing as any).text}
+                  onTextEdit={() => setEditingTextId(drawing.id)}
+                  isEditingText={editingTextId === drawing.id}
+                  textColor={(drawing as any).textColor}
+                  fontSize={(drawing as any).fontSize}
                 />
               );
             } else if (drawing.type === 'ellipse') {
@@ -1227,12 +1884,17 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   strokeWidth={drawing.strokeWidth} 
                   fill={drawing.fill}
                   backgroundVisible={(drawing as any).backgroundVisible}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} 
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => setSelectedShapeId(drawing.id)} 
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
-                  isLocked={drawing.locked} 
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  isLocked={drawing.locked}
+                  text={(drawing as any).text}
+                  onTextEdit={() => setEditingTextId(drawing.id)}
+                  isEditingText={editingTextId === drawing.id}
+                  textColor={(drawing as any).textColor}
+                  fontSize={(drawing as any).fontSize}
                 />
               );
             } else if (drawing.type === 'triangle') {
@@ -1245,17 +1907,17 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   strokeWidth={drawing.strokeWidth} 
                   fill={drawing.fill}
                   backgroundVisible={(drawing as any).backgroundVisible}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} 
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => setSelectedShapeId(drawing.id)} 
+                  onSelect={() => selectDrawing(drawing.id)} 
                   onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
                   isLocked={drawing.locked} 
                 />
               );
             } else if (drawing.type === 'arc') {
               return (
-                <ArcTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} fill={(drawing as any).fill} isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} chart={chart} series={series} onSelect={() => setSelectedShapeId(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
+                <ArcTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} fill={(drawing as any).fill} isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
               );
             } else if (drawing.type === 'curve') {
               return (
@@ -1270,10 +1932,10 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   fillEnabled={(drawing as any).fillEnabled}
                   lineStartStyle={(drawing as any).lineStartStyle}
                   lineEndStyle={(drawing as any).lineEndStyle}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} 
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => setSelectedShapeId(drawing.id)} 
+                  onSelect={() => selectDrawing(drawing.id)} 
                   onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
                   isLocked={drawing.locked} 
                 />
@@ -1291,12 +1953,37 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   fillEnabled={(drawing as any).fillEnabled}
                   lineStartStyle={(drawing as any).lineStartStyle}
                   lineEndStyle={(drawing as any).lineEndStyle}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} 
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => setSelectedShapeId(drawing.id)} 
+                  onSelect={() => selectDrawing(drawing.id)} 
                   onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
                   isLocked={drawing.locked} 
+                />
+              );
+            } else if (drawing.type === 'horizontal_ray') {
+              return (
+                <HorizontalRayTool
+                  key={drawing.id}
+                  id={drawing.id}
+                  points={drawing.points}
+                  stroke={drawing.stroke}
+                  strokeWidth={drawing.strokeWidth}
+                  lineStyle={(drawing as any).lineStyle}
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
+                  chart={chart}
+                  series={series}
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  isLocked={drawing.locked}
+                  text={(drawing as any).text}
+                  textColor={(drawing as any).textColor}
+                  fontSize={(drawing as any).fontSize}
+                  bold={(drawing as any).bold}
+                  italic={(drawing as any).italic}
+                  textVAlign={(drawing as any).textVAlign}
+                  textHAlign={(drawing as any).textHAlign}
+                  priceLabel={(drawing as any).priceLabel}
                 />
               );
             } else if (drawing.type === 'emoji') {
@@ -1310,10 +1997,10 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                   scaleY={drawing.scaleY}
                   rotation={drawing.rotation}
                   initialBarWidth={drawing.initialBarWidth}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)}
+                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => setSelectedShapeId(drawing.id)}
+                  onSelect={() => selectDrawing(drawing.id)}
                   onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
                   onUpdateScale={(scaleX, scaleY, rotation) => updateDrawing(drawing.id, { scaleX, scaleY, rotation })}
                   isLocked={drawing.locked}
@@ -1347,11 +2034,12 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
           )}
 
           {activeTool === 'rectangle' && pendingPoints.length > 0 && previewPoint && (
-            <RectangleTool 
+            <RectangleTool
               id="preview"
               points={[pendingPoints[0], previewPoint]}
-              stroke="rgba(41, 98, 255, 0.2)"
+              stroke="#2962ff"
               strokeWidth={1}
+              fill="rgba(41, 98, 255, 0.1)"
               isSelected={false}
               chart={chart}
               series={series}
@@ -1443,8 +2131,9 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
 
               switch (activeTool) {
                 case 'arrow_marker':
-                case 'arrow':
                   return <ArrowMarkerTool {...props} />;
+                case 'arrow':
+                  return <ArrowTool {...props} />;
                 case 'rotated_rectangle':
                   return <RotatedRectangleTool {...props} />;
                 case 'path':
@@ -1460,9 +2149,9 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
                 case 'arc':
                   return <ArcTool {...props} />;
                 case 'curve':
-                  return <CurveTool {...props} />;
+                  return <CurveTool {...props} points={(previewPts.length === 2 && deriveCurvePoints(previewPts[0], previewPts[1])) || previewPts} />;
                 case 'double_curve':
-                  return <DoubleCurveTool {...props} />;
+                  return <DoubleCurveTool {...props} points={(previewPts.length === 2 && deriveDoubleCurvePoints(previewPts[0], previewPts[1])) || previewPts} />;
                 default:
                   return null;
               }
@@ -1486,35 +2175,16 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
         </Layer>
       </Stage>
 
-      {editingTextId && (() => {
-        const d = drawings.find(x => x.id === editingTextId);
-        if (!d || d.points.length === 0) return null;
-        if (d.type !== 'text' && d.type !== 'trendline') return null;
-
-        let px = 0, py = 0, rot = 0;
-
-        if (d.type === 'trendline' && d.points.length === 2) {
-          const x1 = logicalToPixel(chart, d.points[0].logical) || 0;
-          const y1 = priceToPixel(series, d.points[0].price) || 0;
-          const x2 = logicalToPixel(chart, d.points[1].logical) || 0;
-          const y2 = priceToPixel(series, d.points[1].price) || 0;
-          px = (x1 + x2) / 2;
-          py = (y1 + y2) / 2;
-          const angle = Math.atan2(y2 - y1, x2 - x1) * (180 / Math.PI);
-          rot = (angle > 90 || angle < -90) ? angle + 180 : angle;
-        } else {
-          const p = d.points[0];
-          px = logicalToPixel(chart, p.logical) || 0;
-          py = priceToPixel(series, p.price) || 0;
-        }
-
+      {editingTextId && editingOverlayGeometry && (() => {
+        const { d, px, py, rot } = editingOverlayGeometry;
         return (
           <TextEditorOverlay
             initialText={(d as any).text || ''}
             x={px}
             y={py}
-            rotation={d.type === 'trendline' ? rot : undefined}
-            color={d.stroke}
+            rotation={d.type === 'trendline' ? rot : (d.type === 'rectangle' || d.type === 'circle' || d.type === 'ellipse') ? 0 : undefined}
+            color={(d as any).textColor || d.stroke}
+            fontSize={(d as any).fontSize || 14}
             onCommit={(newText) => {
               if (newText.trim() === '' && d.type === 'text') {
                 deleteDrawing(editingTextId);
@@ -1534,5 +2204,17 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
         );
       })()}
     </div>
+    {/* Price / time axis labels and bands for the selected drawing (and positions' levels) */}
+    {!allDrawingsHidden && (
+      <AxisHighlights
+        chart={chart}
+        series={series}
+        drawings={drawings.filter(d => d.visible).map(d => (liveEdit && liveEdit.id === d.id ? { ...d, ...liveEdit.updates } : d)) as any}
+        selectedIds={[selectedShapeId, ...Array.from(selectedShapeIds)].filter((v): v is string => !!v)}
+        width={width}
+        height={height}
+      />
+    )}
+    </>
   );
 }

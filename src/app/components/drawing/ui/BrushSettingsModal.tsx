@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDrawing } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
+import { useEscapeClose } from "../../../lib/useEscapeClose";
 
 interface BrushSettingsModalProps {
   onClose: () => void;
@@ -76,6 +77,7 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
 }
 
 export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsModalProps) {
+  useEscapeClose(onClose);
   const { selectedShapeId, drawings, updateDrawing } = useDrawing();
   const selectedShape = drawings.find((d: any) => d.id === selectedShapeId);
 

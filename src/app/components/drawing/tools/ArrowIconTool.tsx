@@ -1,7 +1,7 @@
-import React from 'react';
-import { Path, Group, Text, Rect } from 'react-konva';
+import React, { useState } from 'react';
+import { Path, Group, Text, Rect, Circle } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
-import { logicalToPixel, priceToPixel } from '../core/coordinates';
+import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
 
 interface ArrowIconToolProps {
@@ -9,10 +9,13 @@ interface ArrowIconToolProps {
   points: { logical: number; price: number }[];
   stroke: string;
   isSelected: boolean;
+  isHovering?: boolean;
+  isLocked?: boolean;
   type: 'arrow_mark_up' | 'arrow_mark_down';
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   onSelect: () => void;
+  onUpdatePoints?: (points: { logical: number; price: number }[]) => void;
   text?: string;
   textColor?: string;
   fontSize?: number;
@@ -20,11 +23,13 @@ interface ArrowIconToolProps {
   italic?: boolean;
 }
 
-export function ArrowIconTool({ 
-  id, points, stroke, isSelected, type, chart, series, onSelect,
+export function ArrowIconTool({
+  id, points, stroke, isSelected, isHovering = false, isLocked = false, type, chart, series, onSelect, onUpdatePoints,
   text, textColor, fontSize, bold, italic
 }: ArrowIconToolProps) {
   useChartTick(chart);
+  // shadowBlur is redrawn every frame while the handle is dragged — switched off meanwhile
+  const [isDragging, setIsDragging] = useState(false);
   if (!chart || !series || points.length < 1) return null;
 
   const p = points[0];
@@ -37,22 +42,27 @@ export function ArrowIconTool({
   const arrowUpData = "M12 4l-8 8h6v8h4v-8h6z";
   const isDown = type === 'arrow_mark_down';
   const textOffset = isDown ? 30 : -25;
+  // The icon's 24px box is centered on the anchor, so the arrowhead's tip sits 8px above
+  // it (mark up) or 8px below it (mark down, the same path rotated 180°). The handle sits
+  // just past the tip, touching it — centered on the tip, it would hide the small head.
+  const handleRadius = 6;
+  const handleOffset = isDown ? 8 + handleRadius : -8 - handleRadius;
 
-  console.log('[ArrowIconTool] Rendering', id, { type, isSelected, text });
+  // The single handle only moves the mark — the icon has a fixed size, so nothing resizes.
+  const handleTipDrag = (e: any) => {
+    e.cancelBubble = true;
+    if (!onUpdatePoints) return;
+    const logical = pixelToLogical(chart, e.target.x());
+    const price = pixelToPrice(series, e.target.y() - handleOffset);
+    if (logical === null || price === null) return;
+    onUpdatePoints([{ logical, price }]);
+  };
 
   return (
-    <Group 
+    <Group
       id={id}
-      onClick={(e) => { 
-        console.log('[ArrowIconTool] Group CLICKED!', id);
-        e.cancelBubble = true; 
-        onSelect(); 
-      }} 
-      onTap={(e) => { 
-        console.log('[ArrowIconTool] Group TAPPED!', id);
-        e.cancelBubble = true; 
-        onSelect(); 
-      }}
+      onClick={(e) => { e.cancelBubble = true; onSelect(); }}
+      onTap={(e) => { e.cancelBubble = true; onSelect(); }}
     >
       {/* Invisible hit box for easier selection — Konva needs a fill to capture events */}
       <Rect
@@ -73,7 +83,7 @@ export function ArrowIconTool({
         offsetX={isDown ? 24 : 0}
         offsetY={isDown ? 24 : 0}
         shadowColor={isSelected ? color : 'transparent'}
-        shadowBlur={isSelected ? 6 : 0}
+        shadowBlur={isSelected && !isDragging ? 6 : 0}
         shadowOpacity={0.4}
       />
       {text && (
@@ -86,6 +96,21 @@ export function ArrowIconTool({
           fontStyle={`${bold ? 'bold ' : ''}${italic ? 'italic' : ''}`.trim() || 'normal'}
           align="center"
           offsetX={(text.length * (fontSize || 14) * 0.5) / 2}
+        />
+      )}
+
+      {(isSelected || isHovering) && (
+        <Circle
+          x={x}
+          y={y + handleOffset}
+          radius={handleRadius}
+          fill="white"
+          stroke="#2962ff"
+          strokeWidth={2}
+          draggable={!isLocked}
+          onDragStart={(e) => { e.cancelBubble = true; setIsDragging(true); }}
+          onDragMove={handleTipDrag}
+          onDragEnd={(e) => { handleTipDrag(e); setIsDragging(false); }}
         />
       )}
     </Group>

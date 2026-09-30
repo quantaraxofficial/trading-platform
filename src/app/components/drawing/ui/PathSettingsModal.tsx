@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useDrawing } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
-import { ColorPickerDropdown } from './ColorPickerDropdown';
+import { ColorPickerPopup } from './ColorPickerPopup';
+import { useEscapeClose } from "../../../lib/useEscapeClose";
 
 interface PathSettingsModalProps {
   onClose: () => void;
@@ -42,6 +43,7 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
 }
 
 export function PathSettingsModal({ onClose }: PathSettingsModalProps) {
+  useEscapeClose(onClose);
   const { selectedShapeId, drawings, updateDrawing } = useDrawing();
   const selectedShape = drawings.find((d: any) => d.id === selectedShapeId);
 
@@ -168,17 +170,16 @@ export function PathSettingsModal({ onClose }: PathSettingsModalProps) {
                     <div style={{ flex: 1, marginLeft: '8px', height: '1px', backgroundColor: '#131722', margin: '0 8px' }} />
                   </div>
                   {openPicker === 'line' && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10 }}>
-                      <ColorPickerDropdown 
-                        color={selectedShape?.stroke || '#131722'}
-                        thickness={selectedShape?.strokeWidth || 2}
-                        lineStyle={selectedShape?.lineStyle || 'Solid'}
-                        onChange={(c) => updateProp('stroke', c)}
-                        onThicknessChange={(w) => updateProp('strokeWidth', w)}
-                        onLineStyleChange={(s) => updateProp('lineStyle', s)}
-                        onClose={() => setOpenPicker(null)}
-                      />
-                    </div>
+                    <ColorPickerPopup
+                      colorStr={selectedShape?.stroke || '#131722'}
+                      thickness={selectedShape?.strokeWidth || 2}
+                      lineStyle={selectedShape?.lineStyle || 'Solid'}
+                      onChange={(c) => updateProp('stroke', c)}
+                      onThicknessChange={(w) => updateProp('strokeWidth', w)}
+                      onLineStyleChange={(s) => updateProp('lineStyle', s)}
+                      onClose={() => setOpenPicker(null)}
+                      style={{ top: '100%', left: 0, marginTop: '8px' }}
+                    />
                   )}
                 </div>
 

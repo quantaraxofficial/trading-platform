@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useDrawing } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
-import { ColorPickerDropdown } from './ColorPickerDropdown';
+import { ColorPickerPopup } from './ColorPickerPopup';
+import { useEscapeClose } from "../../../lib/useEscapeClose";
 
 interface RectangleSettingsModalProps {
   onClose: () => void;
@@ -67,6 +68,7 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
 const FONT_SIZES = ['8','9','10','11','12','14','16','18','20','24','28','32','36','48','60','72'];
 
 export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps) {
+  useEscapeClose(onClose);
   const { selectedShapeId, drawings, updateDrawing } = useDrawing();
   const selectedShape = drawings.find((d: any) => d.id === selectedShapeId);
 
@@ -222,17 +224,16 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
                     <div style={{ width: '24px', height: '24px', backgroundColor: selectedShape?.stroke || '#9b59b6', borderRadius: '2px', position: 'relative', zIndex: 1 }} />
                   </div>
                   {showBorderPicker && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 1000 }}>
-                      <ColorPickerDropdown 
-                        color={selectedShape?.stroke || '#9b59b6'}
-                        onChange={(color) => updateProp('stroke', color)}
-                        thickness={selectedShape?.strokeWidth || 2}
-                        onThicknessChange={(w) => updateProp('strokeWidth', w)}
-                        lineStyle={selectedShape?.lineStyle || 'Solid'}
-                        onLineStyleChange={(s) => updateProp('lineStyle', s)}
-                        onClose={() => setShowBorderPicker(false)}
-                      />
-                    </div>
+                    <ColorPickerPopup
+                      colorStr={selectedShape?.stroke || '#9b59b6'}
+                      onChange={(color) => updateProp('stroke', color)}
+                      thickness={selectedShape?.strokeWidth || 2}
+                      onThicknessChange={(w) => updateProp('strokeWidth', w)}
+                      lineStyle={selectedShape?.lineStyle || 'Solid'}
+                      onLineStyleChange={(s) => updateProp('lineStyle', s)}
+                      onClose={() => setShowBorderPicker(false)}
+                      style={{ top: '100%', left: 0, marginTop: '8px' }}
+                    />
                   )}
                 </div>
                 <div style={{ width: '64px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -259,13 +260,12 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
                     <div style={{ width: '24px', height: '24px', backgroundColor: selectedShape?.middleLineColor || '#9b59b6', borderRadius: '2px', position: 'relative', zIndex: 1 }} />
                   </div>
                   {showMiddleLinePicker && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 1000 }}>
-                      <ColorPickerDropdown 
-                        color={selectedShape?.middleLineColor || '#9b59b6'}
-                        onChange={(color) => updateProp('middleLineColor', color)}
-                        onClose={() => setShowMiddleLinePicker(false)}
-                      />
-                    </div>
+                    <ColorPickerPopup
+                      colorStr={selectedShape?.middleLineColor || '#9b59b6'}
+                      onChange={(color) => updateProp('middleLineColor', color)}
+                      onClose={() => setShowMiddleLinePicker(false)}
+                      style={{ top: '100%', left: 0, marginTop: '8px' }}
+                    />
                   )}
                 </div>
                 <div style={{ width: '64px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -291,13 +291,12 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
                   <div style={{ width: '24px', height: '24px', backgroundColor: selectedShape?.fill || '#9b59b633', borderRadius: '2px', position: 'relative', zIndex: 1 }} />
                 </div>
                 {showBackgroundPicker && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 1000 }}>
-                    <ColorPickerDropdown 
-                      color={selectedShape?.fill || '#9b59b633'}
-                      onChange={(color) => updateProp('fill', color)}
-                      onClose={() => setShowBackgroundPicker(false)}
-                    />
-                  </div>
+                  <ColorPickerPopup
+                    colorStr={selectedShape?.fill || '#9b59b633'}
+                    onChange={(color) => updateProp('fill', color)}
+                    onClose={() => setShowBackgroundPicker(false)}
+                    style={{ top: '100%', left: 0, marginTop: '8px' }}
+                  />
                 )}
               </div>
             </div>

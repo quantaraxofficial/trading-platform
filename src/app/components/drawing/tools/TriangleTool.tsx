@@ -10,6 +10,7 @@ interface TriangleToolProps {
   stroke: string;
   strokeWidth: number;
   isSelected: boolean;
+  isHovering?: boolean;
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   onSelect: () => void;
@@ -18,13 +19,17 @@ interface TriangleToolProps {
   backgroundVisible?: boolean;
 }
 
-export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, chart, series, onSelect, onUpdatePoints, fill, backgroundVisible }: TriangleToolProps) {
+export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints, fill, backgroundVisible }: TriangleToolProps) {
   useChartTick(chart);
 
   // Local pixel positions for live-preview while dragging handles
   const [livePixels, setLivePixels] = useState<{ x: number; y: number }[] | null>(null);
   // Track which handle is being dragged
   const draggingIndex = useRef<number | null>(null);
+  // shadowBlur is a real per-pixel blur convolution that Konva redraws every frame of any
+  // native drag (move or handle resize) regardless of React re-renders — expensive enough
+  // to feel like lag, so it's switched off for the duration of a drag.
+  const [isDragging, setIsDragging] = useState(false);
 
   if (!chart || !series || points.length < 2) return null;
 
@@ -42,8 +47,11 @@ export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, char
   const flattenedPoints: number[] = [];
   pixelPoints.forEach(p => flattenedPoints.push(p.x, p.y));
 
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+
   // ── Group drag (move whole triangle) ──────────────────────────────────────
   const handleGroupDragEnd = (e: any) => {
+    setIsDragging(false);
     if (!onUpdatePoints) return;
     const node = e.target;
     if (node.className === 'Circle') return; // handled separately
@@ -73,6 +81,7 @@ export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, char
   const handleCircleDragEnd = (index: number) => (e: any) => {
     e.cancelBubble = true;
     draggingIndex.current = null;
+    setIsDragging(false);
 
     if (!onUpdatePoints) return;
     const logical = pixelToLogical(chart, e.target.x());
@@ -89,7 +98,8 @@ export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, char
   return (
     <Group
       id={id}
-      draggable={isSelected}
+      draggable={isSelected || isHovering}
+      onDragStart={handleDragStart}
       onDragEnd={handleGroupDragEnd}
       onClick={onSelect}
       onTap={onSelect}
@@ -101,10 +111,10 @@ export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, char
         fill={backgroundVisible !== false ? (fill || 'rgba(41, 98, 255, 0.08)') : 'transparent'}
         closed={true}
         shadowColor={isSelected ? stroke : 'transparent'}
-        shadowBlur={isSelected ? 4 : 0}
+        shadowBlur={isSelected && !isDragging ? 4 : 0}
         listening={!isSelected} // let circles take events when selected
       />
-      {isSelected && pixelPoints.map((pt, i) => (
+      {(isSelected || isHovering) && pixelPoints.map((pt, i) => (
         <Circle
           key={i}
           x={pt.x}
@@ -114,6 +124,7 @@ export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, char
           stroke="#2962ff"
           strokeWidth={2}
           draggable
+          onDragStart={handleDragStart}
           onDragMove={handleCircleDragMove(i)}
           onDragEnd={handleCircleDragEnd(i)}
         />

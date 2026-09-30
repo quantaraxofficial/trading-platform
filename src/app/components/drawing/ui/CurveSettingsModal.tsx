@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDrawing } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
+import { useEscapeClose } from "../../../lib/useEscapeClose";
 
 interface CurveSettingsModalProps {
   onClose: () => void;
@@ -42,6 +43,7 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
 }
 
 export function CurveSettingsModal({ onClose, initialPosition }: CurveSettingsModalProps) {
+  useEscapeClose(onClose);
   const { drawings, selectedShapeId, updateDrawing } = useDrawing();
   const selectedShape = drawings.find((d: any) => d.id === selectedShapeId);
 

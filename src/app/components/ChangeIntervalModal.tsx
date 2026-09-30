@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { Info, X } from "lucide-react";
+import { useEscapeClose } from "../lib/useEscapeClose";
 
 interface ChangeIntervalModalProps {
   initialDigit: string;
@@ -28,22 +29,68 @@ export default function ChangeIntervalModal({ initialDigit, onApply, onClose, th
     inputRef.current?.setSelectionRange(len, len);
   }, []);
 
-  // Close on Escape
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  useEscapeClose(onClose);
 
-  const numValue = parseInt(value, 10);
-  const isValid = !isNaN(numValue) && numValue > 0 && numValue <= 1440;
-  const displayLabel = isValid ? `${numValue} minute${numValue !== 1 ? "s" : ""}` : "";
+  // A trailing unit letter picks minutes/hours/days/months/years, matching the
+  // same values TopBar's own interval dropdown already sends through
+  // handleIntervalChange (1h.."4h", 1day, 1month/3month/6month/12month, Nmin) —
+  // reusing those exact strings is what makes typed values here genuinely work
+  // rather than just looking accepted.
+  const parsed = (() => {
+    const m = value.match(/^(\d+)\s*([hHdDwWmMyY]?)$/);
+    if (!m) return null;
+    const num = parseInt(m[1], 10);
+    if (isNaN(num) || num <= 0) return null;
+    const unit = m[2].toLowerCase() as "" | "h" | "d" | "w" | "m" | "y";
+    return { num, unit };
+  })();
+
+  const maxForUnit: Record<string, number> = { "": 1440, h: 24, d: 30, w: 52, m: 120, y: 50 };
+  const isValid = parsed !== null && parsed.num <= maxForUnit[parsed.unit];
+
+  const displayLabel = (() => {
+    if (!parsed) return "";
+    const { num, unit } = parsed;
+    if (unit === "h") return `${num} hour${num !== 1 ? "s" : ""}`;
+    if (unit === "d") return `${num} day${num !== 1 ? "s" : ""}`;
+    if (unit === "w") return `${num} week${num !== 1 ? "s" : ""}`;
+    if (unit === "m") return `${num} month${num !== 1 ? "s" : ""}`;
+    if (unit === "y") return `${num} year${num !== 1 ? "s" : ""}`;
+    return `${num} minute${num !== 1 ? "s" : ""}`;
+  })();
 
   const handleSubmit = () => {
-    if (!isValid) return;
-    // Map to TwelveData-compatible intervals
+    if (!isValid || !parsed) return;
+    const { num, unit } = parsed;
+
+    if (unit === "h") {
+      onApply(`${num}h`, `${num}h`);
+      return;
+    }
+    if (unit === "d") {
+      // TwelveData only exposes a single fixed "1day" bar; other day counts
+      // are passed through best-effort, same as unmapped minute values below.
+      onApply(num === 1 ? "1day" : `${num}day`, num === 1 ? "D" : `${num}D`);
+      return;
+    }
+    if (unit === "w") {
+      // Same fixed "1week" bar TopBar's own "1 week" button sends; other counts pass through best-effort.
+      onApply(`${num}week`, num === 1 ? "W" : `${num}W`);
+      return;
+    }
+    if (unit === "m") {
+      onApply(`${num}month`, `${num}M`);
+      return;
+    }
+    if (unit === "y") {
+      // No native "year" interval — TopBar's own "12 months" button is how this
+      // app already represents one year, so N years becomes N*12 months.
+      const months = num * 12;
+      onApply(`${months}month`, `${num}Y`);
+      return;
+    }
+
+    // Plain minutes — map to TwelveData-compatible intervals
     const supported: Record<number, { value: string; label: string }> = {
       1: { value: "1min", label: "1m" },
       5: { value: "5min", label: "5m" },
@@ -54,11 +101,11 @@ export default function ChangeIntervalModal({ initialDigit, onApply, onClose, th
       120: { value: "2h", label: "2h" },
       240: { value: "4h", label: "4h" },
     };
-    if (supported[numValue]) {
-      onApply(supported[numValue].value, supported[numValue].label);
+    if (supported[num]) {
+      onApply(supported[num].value, supported[num].label);
     } else {
       // For unsupported intervals, still pass through (future aggregation support)
-      onApply(`${numValue}min`, `${numValue}m`);
+      onApply(`${num}min`, `${num}m`);
     }
   };
 
@@ -110,8 +157,11 @@ export default function ChangeIntervalModal({ initialDigit, onApply, onClose, th
           type="text"
           value={value}
           onChange={(e) => {
-            const v = e.target.value.replace(/[^0-9]/g, "");
-            setValue(v);
+            // Digits, plus at most one trailing unit letter (h/d/w/m/y)
+            const raw = e.target.value.replace(/[^0-9hHdDwWmMyY]/g, "");
+            const digits = raw.match(/^\d*/)?.[0] || "";
+            const unit = raw.slice(digits.length).match(/[hHdDwWmMyY]/)?.[0] || "";
+            setValue(digits + unit);
           }}
           onKeyDown={handleKeyDown}
           style={{

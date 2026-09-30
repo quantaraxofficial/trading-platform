@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { X, LayoutGrid, HelpCircle, ChevronDown, ChevronRight, Plus, Activity } from 'lucide-react';
 import { useAlerts } from '@/context/AlertsContext';
+import { useEscapeClose } from "../lib/useEscapeClose";
 
 interface CreateAlertModalProps {
   onClose: () => void;
@@ -12,6 +13,7 @@ interface CreateAlertModalProps {
 }
 
 export default function CreateAlertModal({ onClose, theme, symbol = 'XAUUSD', initialPrice = 4218.560 }: CreateAlertModalProps) {
+  useEscapeClose(onClose);
   const [conditions, setConditions] = useState([{ id: 1, type: 'Price', operator: 'Crossing', value: initialPrice.toFixed(3) }]);
   const [trigger, setTrigger] = useState('Once only');
   const { addAlert } = useAlerts();

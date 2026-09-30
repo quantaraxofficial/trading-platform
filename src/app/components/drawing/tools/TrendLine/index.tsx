@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Line, Circle, Group, Text } from 'react-konva';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../../core/coordinates';
+import { useChartTick } from '../../core/useChartTick';
 
 interface TrendLineProps {
   id: string;
@@ -15,6 +16,7 @@ interface TrendLineProps {
   showStats?: boolean;
   statsPosition?: 'Left' | 'Center' | 'Right';
   isSelected: boolean;
+  isHovering?: boolean;
   chart: any;
   series: any;
   onSelect: () => void;
@@ -22,17 +24,33 @@ interface TrendLineProps {
   isLocked?: boolean;
   text?: string;
   onTextEdit?: () => void;
+  isEditingText?: boolean;
 }
 
-export function TrendLine({ 
-  id, points, stroke, strokeWidth, lineStyle = 'solid', 
+export function TrendLine({
+  id, points, stroke, strokeWidth, lineStyle = 'solid',
   extendLeft = false, extendRight = false, showMiddlePoint = false,
   showPriceLabels = false, showStats = false, statsPosition = 'Right',
-  isSelected, chart, series, onSelect, onUpdatePoints, isLocked = false,
-  text, onTextEdit
+  isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints, isLocked = false,
+  text, onTextEdit, isEditingText = false
 }: TrendLineProps) {
-  const [isHovering, setIsHovering] = React.useState(false);
-  
+  useChartTick(chart);
+  // The resize handles are only rendered while (isSelected || isHovering) — but a resize
+  // drag moves the very endpoint that hover-tracking hit-tests against, so a drag started
+  // by hovering (not clicking to select first) very quickly carries the cursor outside
+  // the line's hit area, hover flips false, and — with isSelected also false — the whole
+  // handles block used to unmount mid-drag, destroying the exact Circle node Konva was
+  // dragging and freezing the resize wherever it happened to be at that instant. Any
+  // constraint applied during the drag (e.g. the Shift 45° angle lock below) only had a
+  // few pixels of real cursor movement to work with before that happened, which is why it
+  // could look "wrong" for most angles: the resize wasn't actually completing at all.
+  // Tracking the drag explicitly keeps the handles mounted for its whole duration.
+  const [isDraggingHandle, setIsDraggingHandle] = useState(false);
+  // Which endpoint (0 or 1) is currently being resize-dragged, and a ref to its live
+  // Konva node — both needed by the Shift-toggle effect below, which has to reach in
+  // and move that exact node from outside Konva's own dragmove callback.
+  const draggingIndexRef = useRef<number | null>(null);
+  const handleRefs = useRef<[any, any]>([null, null]);
   if (points.length !== 2) return null;
 
   const [p1, p2] = points;
@@ -98,7 +116,7 @@ export function TrendLine({
       // Dragging the whole shape
       const dx = node.x();
       const dy = node.y();
-      
+
       const newL1 = pixelToLogical(chart, x1 + dx);
       const newP1 = pixelToPrice(series, y1 + dy);
       const newL2 = pixelToLogical(chart, x2 + dx);
@@ -107,22 +125,50 @@ export function TrendLine({
       if (newL1 !== null && newP1 !== null && newL2 !== null && newP2 !== null) {
         onUpdatePoints([{ logical: newL1, price: newP1 }, { logical: newL2, price: newP2 }]);
       }
-      
+
       // Reset position so it re-renders based on new logical points
       node.position({ x: 0, y: 0 });
     }
   };
 
-  const handleCircleDrag = (index: number) => (e: any) => {
-    e.cancelBubble = true; // Prevent Group drag
+  // Shared by the real Konva dragmove/dragend callback below AND by the Shift-toggle
+  // effect further down: given a handle's raw (unsnapped) target position, applies the
+  // 45°-angle lock when shiftHeld is true, repositions the live Konva node to match,
+  // and pushes the resulting point up via onUpdatePoints.
+  const applyHandleMove = (index: number, node: any, rawX: number, rawY: number, shiftHeld: boolean) => {
     if (!onUpdatePoints) return;
-    
-    const newX = e.target.x();
-    const newY = e.target.y();
-    
+    let newX = rawX;
+    let newY = rawY;
+
+    // Same 45°-multiple angle lock the line gets while first being drawn, now also
+    // while resizing an already-placed line by dragging one of its endpoints — held
+    // Shift snaps this handle's angle around the OTHER (fixed) endpoint.
+    if (shiftHeld) {
+      const anchorX = index === 0 ? x2 : x1;
+      const anchorY = index === 0 ? y2 : y1;
+      const dx = newX - anchorX;
+      const dy = newY - anchorY;
+      if (dx !== 0 || dy !== 0) {
+        const step = Math.PI / 4; // 45°
+        const angle = Math.round(Math.atan2(dy, dx) / step) * step;
+        const length = dx * Math.cos(angle) + dy * Math.sin(angle);
+        newX = anchorX + length * Math.cos(angle);
+        newY = anchorY + length * Math.sin(angle);
+      }
+    }
+    // Konva's own drag machinery keeps positioning this node at the raw cursor spot on
+    // every pointer move regardless of what the points prop says (it takes priority
+    // over React-driven x/y during an active drag), so the target position has to be
+    // commanded on the node directly here too, not just handed off via onUpdatePoints,
+    // or the handle would visually lag behind until the drag ends. Doing this
+    // unconditionally (not just in the shiftHeld branch) is also what makes releasing
+    // Shift mid-drag snap the handle straight back to the raw cursor position instead
+    // of leaving it wherever it was last pinned.
+    if (node) node.position({ x: newX, y: newY });
+
     const logical = pixelToLogical(chart, newX);
     const price = pixelToPrice(series, newY);
-    
+
     if (logical !== null && price !== null) {
       const newPoints = [...points];
       newPoints[index] = { logical, price };
@@ -130,15 +176,47 @@ export function TrendLine({
     }
   };
 
+  const handleCircleDrag = (index: number) => (e: any) => {
+    e.cancelBubble = true; // Prevent Group drag
+    applyHandleMove(index, e.target, e.target.x(), e.target.y(), !!e.evt?.shiftKey);
+  };
+
+  // Without this, toggling Shift while the mouse sits still mid-resize does nothing
+  // visible until the next actual pointer move — since the whole snap/un-snap only ever
+  // ran inside the dragmove callback above. A quick tap of Shift (press then release
+  // between two mouse movements) could then land entirely between pointer-move events
+  // and never get applied at all, which is what made a "tap" look like it didn't work
+  // while holding Shift down through further movement did. Mirrors the same fix already
+  // used for the live preview while first drawing a trend line.
+  useEffect(() => {
+    if (!isDraggingHandle || draggingIndexRef.current === null) return;
+    const index = draggingIndexRef.current;
+    const node = handleRefs.current[index];
+    const stage = node?.getStage?.();
+
+    const resync = (shiftHeld: boolean) => {
+      const pos = stage?.getPointerPosition?.();
+      if (!pos) return;
+      applyHandleMove(index, node, pos.x, pos.y, shiftHeld);
+    };
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Shift') resync(true); };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Shift') resync(false); };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDraggingHandle]);
+
   return (
     <Group 
       id={id}
-      draggable={isSelected && !isLocked} 
+      draggable={(isSelected || isHovering) && !isLocked}
       onDragEnd={handleDragEnd}
       onClick={onSelect}
       onTap={onSelect}
-      onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
     >
       <Line
         points={[displayX1, displayY1, displayX2, displayY2]}
@@ -167,50 +245,63 @@ export function TrendLine({
         />
       )}
 
-      {/* Text rendering */}
-      {(() => {
+      {/* Text rendering — suppressed while the HTML overlay is actively editing this
+          shape's text, so its own blinking cursor isn't doubled up with this label */}
+      {!isEditingText && (() => {
         const mx = (x1 + x2) / 2;
         const my = (y1 + y2) / 2;
         const angle = Math.atan2(y2 - y1, x2 - x1) * (180 / Math.PI);
         const textRot = (angle > 90 || angle < -90) ? angle + 180 : angle;
 
         if (text) {
+          // offsetX must be half the rendered width for align="center" to actually
+          // center the text on (mx,my) — offsetX=0 anchors at the text's own left
+          // edge instead, which is what let this drift out of sync with the HTML
+          // text-edit overlay (which centers using the real DOM-measured width).
+          const estWidth = Math.max(text.length * 14 * 0.6, 10);
           return (
-            <Group 
-              x={mx} 
-              y={my} 
-              rotation={textRot} 
-              onClick={(e) => { e.cancelBubble = true; onTextEdit && onTextEdit(); }} 
+            <Group
+              x={mx}
+              y={my}
+              rotation={textRot}
+              onClick={(e) => { e.cancelBubble = true; onTextEdit && onTextEdit(); }}
               onTap={(e) => { e.cancelBubble = true; onTextEdit && onTextEdit(); }}
             >
-              <Text 
-                text={text} 
-                fill={stroke} 
-                fontSize={14} 
-                offsetX={0} 
-                offsetY={20} // Position above the line
+              <Text
+                text={text}
+                fill={stroke}
+                fontSize={14}
+                width={estWidth}
+                offsetX={estWidth / 2}
+                offsetY={10} // Position above the line
                 align="center"
               />
             </Group>
           );
         }
 
-        if (isSelected && isHovering && !text) {
+        // isSelected alone is enough (matches Rectangle/Circle/Ellipse) — requiring
+        // isHovering too meant moving the mouse from the line up toward this label,
+        // which sits 20px above it, passed through a gap with no hit-test coverage
+        // and made the placeholder vanish before the click ever landed.
+        if ((isSelected || isHovering) && !text) {
+          const placeholderWidth = '+ Add text'.length * 12 * 0.6;
           return (
-            <Group 
-              x={mx} 
-              y={my} 
-              rotation={textRot} 
-              onClick={(e) => { e.cancelBubble = true; onTextEdit && onTextEdit(); }} 
+            <Group
+              x={mx}
+              y={my}
+              rotation={textRot}
+              onClick={(e) => { e.cancelBubble = true; onTextEdit && onTextEdit(); }}
               onTap={(e) => { e.cancelBubble = true; onTextEdit && onTextEdit(); }}
             >
-              <Text 
-                text="+ Add text" 
-                fill="#2962ff" 
-                opacity={0.7} 
-                fontSize={12} 
-                offsetX={0} 
-                offsetY={18}
+              <Text
+                text="+ Add text"
+                fill="#2962ff"
+                opacity={0.7}
+                fontSize={12}
+                width={placeholderWidth}
+                offsetX={placeholderWidth / 2}
+                offsetY={10}
                 align="center"
               />
             </Group>
@@ -219,26 +310,28 @@ export function TrendLine({
         return null;
       })()}
 
-      {isSelected && (
+      {(isSelected || isHovering || isDraggingHandle) && (
         <>
-          <Circle 
-            x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} 
-            draggable={!isLocked} 
-            onDragStart={(e) => e.cancelBubble = true}
+          <Circle
+            ref={(node: any) => { handleRefs.current[0] = node; }}
+            x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2}
+            draggable={!isLocked}
+            onDragStart={(e) => { e.cancelBubble = true; draggingIndexRef.current = 0; setIsDraggingHandle(true); }}
             onDragMove={handleCircleDrag(0)}
-            onDragEnd={handleCircleDrag(0)} 
+            onDragEnd={(e) => { handleCircleDrag(0)(e); draggingIndexRef.current = null; setIsDraggingHandle(false); }}
           />
           {showMiddlePoint && (
-            <Circle 
-              x={(x1 + x2) / 2} y={(y1 + y2) / 2} radius={5} fill="white" stroke="#2962ff" strokeWidth={1} 
+            <Circle
+              x={(x1 + x2) / 2} y={(y1 + y2) / 2} radius={5} fill="white" stroke="#2962ff" strokeWidth={1}
             />
           )}
-          <Circle 
-            x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} 
-            draggable={!isLocked} 
-            onDragStart={(e) => e.cancelBubble = true}
+          <Circle
+            ref={(node: any) => { handleRefs.current[1] = node; }}
+            x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={2}
+            draggable={!isLocked}
+            onDragStart={(e) => { e.cancelBubble = true; draggingIndexRef.current = 1; setIsDraggingHandle(true); }}
             onDragMove={handleCircleDrag(1)}
-            onDragEnd={handleCircleDrag(1)} 
+            onDragEnd={(e) => { handleCircleDrag(1)(e); draggingIndexRef.current = null; setIsDraggingHandle(false); }}
           />
         </>
       )}

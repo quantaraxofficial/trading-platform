@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useDrawing } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
-import { ColorPickerDropdown } from './ColorPickerDropdown';
+import { ColorPickerPopup } from './ColorPickerPopup';
+import { useEscapeClose } from "../../../lib/useEscapeClose";
 
 interface ArrowMarkerSettingsModalProps {
   onClose: () => void;
@@ -67,6 +68,7 @@ const FONT_SIZES = ['8','9','10','11','12','14','16','18','20','24','28','32','3
 const THICKNESS_OPTIONS = ['1px', '2px', '3px', '4px'];
 
 export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalProps) {
+  useEscapeClose(onClose);
   const { selectedShapeId, drawings, updateDrawing } = useDrawing();
   const selectedShape = drawings.find((d: any) => d.id === selectedShapeId);
 
@@ -198,16 +200,12 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
                   <div style={{ width: '100%', height: '100%', backgroundColor: selectedShape?.stroke || '#2962ff' }} />
                 </div>
                 {showColorPicker && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 1000 }}>
-                    <ColorPickerDropdown 
-                      color={selectedShape?.stroke || '#2962ff'}
-                      onChange={(color) => {
-                        updateProp('stroke', color);
-                        setShowColorPicker(false);
-                      }}
-                      onClose={() => setShowColorPicker(false)}
-                    />
-                  </div>
+                  <ColorPickerPopup
+                    colorStr={selectedShape?.stroke || '#2962ff'}
+                    onChange={(color) => updateProp('stroke', color)}
+                    onClose={() => setShowColorPicker(false)}
+                    style={{ top: '100%', left: 0, marginTop: '8px' }}
+                  />
                 )}
               </div>
             </div>
@@ -252,16 +250,12 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
                   <div style={{ width: '100%', height: '100%', backgroundColor: selectedShape?.textColor || '#2962ff' }} />
                 </div>
                 {showTextColorPicker && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 1000 }}>
-                    <ColorPickerDropdown 
-                      color={selectedShape?.textColor || '#2962ff'}
-                      onChange={(color) => {
-                        updateProp('textColor', color);
-                        setShowTextColorPicker(false);
-                      }}
-                      onClose={() => setShowTextColorPicker(false)}
-                    />
-                  </div>
+                  <ColorPickerPopup
+                    colorStr={selectedShape?.textColor || '#2962ff'}
+                    onChange={(color) => updateProp('textColor', color)}
+                    onClose={() => setShowTextColorPicker(false)}
+                    style={{ top: '100%', left: 0, marginTop: '8px' }}
+                  />
                 )}
               </div>
 

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { Search, X } from "lucide-react";
+import { useEscapeClose } from "../lib/useEscapeClose";
 
 interface SymbolItem {
   symbol: string;
@@ -35,6 +36,7 @@ interface SymbolSearchProps {
 }
 
 export default function SymbolSearch({ onClose, onSelect, initialSearch = "" }: SymbolSearchProps) {
+  useEscapeClose(onClose);
   const [search, setSearch] = useState(initialSearch);
   const [activeCategory, setActiveCategory] = useState("All");
   const inputRef = useRef<HTMLInputElement>(null);

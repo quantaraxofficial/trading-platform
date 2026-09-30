@@ -8,6 +8,7 @@ interface EmojiSettingsModalProps {
 
 import { DualRangeSlider } from './DualRangeSlider';
 import { NumberInput } from './NumberInput';
+import { useEscapeClose } from "../../../lib/useEscapeClose";
 
 // Reusable checked box component matching TradingView style
 function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
@@ -85,6 +86,7 @@ function VisibilityRow({ label, checked, minVal, maxVal, minLimit, maxLimit, onT
 }
 
 export function EmojiSettingsModal({ onClose }: EmojiSettingsModalProps) {
+  useEscapeClose(onClose);
   const { selectedShape, updateDrawing } = useDrawing();
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);

@@ -35,6 +35,7 @@ interface FibonacciProps {
   stroke: string;
   strokeWidth: number;
   isSelected: boolean;
+  isHovering?: boolean;
   chart: any;
   series: any;
   onSelect: () => void;
@@ -63,8 +64,8 @@ interface FibonacciProps {
   fibFontSize?: number;
 }
 
-export function FibonacciTool({ 
-  id, points, stroke, strokeWidth, isSelected, chart, series, onSelect, onUpdatePoints, isLocked = false,
+export function FibonacciTool({
+  id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints, isLocked = false,
   showTrendLine = true, trendLineColor, trendLineStyle = 'dashed', trendLineWidth,
   fibLevels, useOneColor, oneColor, extendLeft, extendRight,
   levelsLineWidth, levelsLineStyle = 'solid',
@@ -173,37 +174,15 @@ export function FibonacciTool({
 
   const stageWidth = chart.chartElement().clientWidth;
 
-  // Invisible hit-area spanning the whole fib body (all levels, full width including
-  // any extend-left/right), so clicking anywhere inside it — not just on a line, a
-  // background band (which is itself non-listening), or a label — selects the shape.
-  const levelYs = levelsToRender
-    .map(l => priceToPixel(series, l.price))
-    .filter((y): y is number => y !== null);
-  const bodyTop = levelYs.length > 0 ? Math.min(...levelYs) : Math.min(y1, y2);
-  const bodyBottom = levelYs.length > 0 ? Math.max(...levelYs) : Math.max(y1, y2);
-  let bodyLeft = Math.min(x1, x2);
-  let bodyRight = Math.max(x1, x2);
-  if (extendLeft) bodyLeft = 0;
-  if (extendRight) bodyRight = stageWidth;
-
   return (
     <Group
       id={id}
-      draggable={isSelected && !isLocked}
+      draggable={(isSelected || isHovering) && !isLocked}
       onDragEnd={handleDragEnd}
       onClick={onSelect}
       onTap={onSelect}
       listening={true}
     >
-      <Rect
-        x={bodyLeft}
-        y={bodyTop}
-        width={bodyRight - bodyLeft}
-        height={bodyBottom - bodyTop}
-        fill="transparent"
-        listening={true}
-      />
-
       {/* Trendline connecting the two points */}
       {showTrendLine && (
         <Line
@@ -337,6 +316,7 @@ export function FibonacciTool({
                 stroke={level.color}
                 strokeWidth={lineStrokeWidth}
                 dash={lineDash}
+                hitStrokeWidth={8}
               />
             ))}
             {fibShowText && labelText && (
@@ -356,7 +336,7 @@ export function FibonacciTool({
       })}
 
       {/* Selection handles */}
-      {isSelected && (
+      {(isSelected || isHovering) && (
         <>
           <Circle 
             x={x1} y={y1} radius={5} fill="white" stroke="#2962ff" strokeWidth={2} 

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { X, ChevronDown } from "lucide-react";
 import { DualRangeSlider } from "./drawing/ui/DualRangeSlider";
+import { useEscapeClose } from "../lib/useEscapeClose";
 
 const TV_COLORS = [
   ["#ffffff", "#f0f3fa", "#e0e3eb", "#b2b5be", "#787b86", "#434651", "#2a2e39", "#1e222d", "#131722", "#000000"],
@@ -254,6 +255,7 @@ export const defaultSessionConfig = {
 };
 
 export default function SessionSettingsModal({ isOpen, onClose, config, onSave, theme }: any) {
+  useEscapeClose(onClose, !!isOpen);
   const [activeTab, setActiveTab] = useState("Style");
   const [localConfig, setLocalConfig] = useState(config || defaultSessionConfig);
   const [colorPickerOpen, setColorPickerOpen] = useState("");

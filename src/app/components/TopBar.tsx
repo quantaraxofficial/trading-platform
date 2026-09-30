@@ -6,26 +6,27 @@ import IndicatorsModal from "./IndicatorsModal";
 import { useDrawing } from "./drawing/core/DrawingContext";
 import { useAuth } from "@/context/AuthContext";
 import { loadFavoriteIndicators } from "@/app/utils/favoriteIndicators";
-import Link from 'next/link';
 import {
-  Search,
   ChevronDown,
   ChevronUp,
-  BarChart2,
-  Maximize,
-  Camera,
-  Undo2,
-  Redo2,
-  Moon,
-  Sun,
-  AlarmClockPlus,
-  Save,
   Plus,
-  ChevronsLeft,
   Star,
-  ChartNoAxesCombined
+  Download,
+  Copy,
+  Link2,
+  ExternalLink,
+  Menu
 } from "lucide-react";
-import { TVSettingsIcon } from "./icons/TVIcons";
+import { placeBelow, useCloseOnAnchorScroll } from "../lib/anchoredPopup";
+import type { SnapshotAction } from "./SnapshotController";
+import { useEscapeClose } from "../lib/useEscapeClose";
+import { TVAlertIcon, TVReplayIcon, TVQuickSearchIcon, TVIndicatorsIcon, TVCompareIcon, TVCandlesIcon, TVSettingsHexIcon, TVFullscreenIcon, TVCameraIcon, TVUndoIcon, TVRedoIcon } from "./icons/TVIcons";
+import { Tip, TipKey } from "../trading/ui";
+import LayoutMenu from "./LayoutMenu";
+import IndicatorTemplatesMenu from "./IndicatorTemplatesMenu";
+import type { IndicatorTemplate } from "@/app/utils/indicatorTemplates";
+import AccountMenu from "./AccountMenu";
+import TradeButton from "../trading/TradeButton";
 
 interface TopBarProps {
   theme: string;
@@ -45,6 +46,13 @@ interface TopBarProps {
   onSymbolSearchClose?: () => void;
   onSettingsClick?: () => void;
   onMaximizeClick?: () => void;
+  onSnapshot?: (action: SnapshotAction) => void;
+  activeIndicators?: { id: string; name: string; visible?: boolean }[];
+  onApplyIndicatorTemplate?: (template: IndicatorTemplate) => void;
+  onQuickSearchClick?: () => void;
+  onMenuClick?: () => void;
+  drawingsPanelVisible?: boolean;
+  onToggleDrawingsPanel?: () => void;
 }
 
 interface TFItem { display: string; value: string; short: string; }
@@ -139,6 +147,16 @@ function getShortLabel(value: string): string {
   return value;
 }
 
+function getLongLabel(value: string): string {
+  const found = ALL_TF_ITEMS.find(i => i.value === value);
+  if (found) return found.display;
+  const m = value.match(/^(\d+)(min|h|day|week|month)$/);
+  if (!m) return value;
+  const n = Number(m[1]);
+  const unit = { min: "minute", h: "hour", day: "day", week: "week", month: "month" }[m[2] as "min"]!;
+  return `${n} ${unit}${n === 1 ? "" : "s"}`;
+}
+
 function loadFavoriteIntervals(): string[] {
   try {
     const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
@@ -161,16 +179,7 @@ function saveFavoriteIntervals(values: string[]) {
   }
 }
 
-// Deterministic per-user avatar color, same idea as the colored initials used in the watchlist
-const AVATAR_COLORS = ["#8c7ae6", "#2962ff", "#00bcd4", "#e91e63", "#ff9800", "#4caf50", "#f23645", "#9c27b0"];
-
-function getAvatarColor(seed: string): string {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-}
-
-export default function TopBar({ theme, toggleTheme, interval, onIntervalChange, onReplayClick, isReplayActive, symbol, onSymbolChange, onIndicatorSelect, isBotActive, onToggleBot, onAlertClick, symbolSearchOpen, symbolSearchInitial, onSymbolSearchClose, onSettingsClick, onMaximizeClick }: TopBarProps) {
+export default function TopBar({ theme, toggleTheme, interval, onIntervalChange, onReplayClick, isReplayActive, symbol, onSymbolChange, onIndicatorSelect, isBotActive, onToggleBot, onAlertClick, symbolSearchOpen, symbolSearchInitial, onSymbolSearchClose, onSettingsClick, onMaximizeClick, onSnapshot, activeIndicators = [], onApplyIndicatorTemplate, onQuickSearchClick, onMenuClick, drawingsPanelVisible, onToggleDrawingsPanel }: TopBarProps) {
   const [showSymbolSearchInternal, setShowSymbolSearchInternal] = useState(false);
   const [internalSearchInitial, setInternalSearchInitial] = useState("");
   const showSymbolSearch = showSymbolSearchInternal || !!symbolSearchOpen;
@@ -180,12 +189,12 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
   const [favoriteIndicators, setFavoriteIndicators] = useState<string[]>([]);
   const [favorites, setFavorites] = useState<string[]>(DEFAULT_FAVORITES);
   const tfMenuRef = useRef<HTMLDivElement>(null);
+  const [showSnapshotMenu, setShowSnapshotMenu] = useState(false);
+  const snapshotMenuRef = useRef<HTMLDivElement>(null);
   const favIndicatorsMenuRef = useRef<HTMLDivElement>(null);
   const { undo, redo, canUndo, canRedo } = useDrawing();
   const { user } = useAuth();
 
-  const avatarLetter = (user?.displayName?.trim()?.[0] || user?.email?.trim()?.[0] || "T").toUpperCase();
-  const avatarColor = getAvatarColor(user?.uid || user?.email || "guest");
 
   // Listen for global keyboard shortcut to open indicators
   useEffect(() => {
@@ -211,6 +220,19 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
     return () => document.removeEventListener("mousedown", handleClick);
   }, [showMoreTf]);
 
+  // Snapshot dropdown: Esc / outside click closes it
+  useEscapeClose(() => setShowSnapshotMenu(false), showSnapshotMenu);
+  useEffect(() => {
+    if (!showSnapshotMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (snapshotMenuRef.current && !snapshotMenuRef.current.contains(e.target as Node)) {
+        setShowSnapshotMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showSnapshotMenu]);
+
   // Close the "favorite indicators" dropdown on outside click
   useEffect(() => {
     if (!showFavIndicators) return;
@@ -222,6 +244,15 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [showFavIndicators]);
+
+  // The header's popups are fixed-positioned (it scrolls sideways on narrow screens),
+  // so each closes if the header scrolls out from under it
+  const closeMoreTf = useCallback(() => setShowMoreTf(false), []);
+  const closeFavIndicators = useCallback(() => setShowFavIndicators(false), []);
+  const closeSnapshotMenu = useCallback(() => setShowSnapshotMenu(false), []);
+  useCloseOnAnchorScroll(tfMenuRef, showMoreTf, closeMoreTf);
+  useCloseOnAnchorScroll(favIndicatorsMenuRef, showFavIndicators, closeFavIndicators);
+  useCloseOnAnchorScroll(snapshotMenuRef, showSnapshotMenu, closeSnapshotMenu);
 
   const toggleFavoriteInterval = useCallback((value: string) => {
     setFavorites(prev => {
@@ -236,40 +267,28 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
     setShowMoreTf(false);
   }, [onIntervalChange]);
 
-  const btnH = "28px";
-  const iconS = 16;
+  const btnH = "32px";
 
   return (
     <>
-      <div style={{ display: "flex", alignItems: "center", gap: "1px", height: "100%", minWidth: 0 }}>
-        {/* App avatar with notification badge */}
-        <button
-          className="tv-icon-btn"
-          style={{ width: "28px", height: btnH, position: "relative", padding: 0 }}
-        >
-          <div style={{
-            width: "24px", height: "24px", borderRadius: "50%",
-            backgroundColor: avatarColor, color: "#ffffff",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "12px", fontWeight: 700, flexShrink: 0
-          }}>
-            {avatarLetter}
-          </div>
-          <div style={{
-            position: "absolute", top: "0px", right: "0px",
-            backgroundColor: "#f23645", color: "white", fontSize: "9px", fontWeight: 700,
-            borderRadius: "6px", padding: "0 4px", lineHeight: "14px", minWidth: "14px", textAlign: "center"
-          }}>3</div>
+      <div style={{ display: "flex", alignItems: "center", gap: "2px", height: "100%", minWidth: 0 }}>
+        {/* Phone/tablet: the menu that replaces the hidden right-hand panels */}
+        <button className="tv-hdr-btn tv-narrow-only" onClick={onMenuClick} aria-label="Open menu">
+          <Menu size={22} strokeWidth={1.5} />
         </button>
 
-        {/* Symbol */}
-        <button
-          className="tv-icon-btn"
-          onClick={() => { setInternalSearchInitial(""); setShowSymbolSearchInternal(true); }}
-          style={{ height: btnH, width: "auto", padding: "0 8px", fontWeight: 700, fontSize: "14px", color: "var(--tv-color-text)" }}
-        >
-          {symbol}
-        </button>
+        {/* Account menu */}
+        <AccountMenu isDark={theme === "dark"} onToggleTheme={toggleTheme} height={btnH} drawingsPanelVisible={drawingsPanelVisible} onToggleDrawingsPanel={onToggleDrawingsPanel} />
+
+        {/* Symbol search: the symbol in a rounded pill */}
+        <Tip text="Symbol search" placement="bottom">
+          <button
+            className="tv-hdr-sym"
+            onClick={() => { setInternalSearchInitial(""); setShowSymbolSearchInternal(true); }}
+          >
+            {symbol}
+          </button>
+        </Tip>
 
         {showSymbolSearch && (
           <SymbolSearch
@@ -283,105 +302,93 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
           />
         )}
 
-        {/* Symbol info diamond */}
-        <button className="tv-icon-btn" style={{ width: "24px", height: btnH }}>
-          <div style={{ width: "9px", height: "9px", border: "1.5px solid currentColor", transform: "rotate(45deg)" }} />
-        </button>
+        {/* Compare symbols */}
+        <Tip text="Compare symbols" placement="bottom">
+          <button className="tv-hdr-btn" aria-label="Compare symbols"><TVCompareIcon size={28} /></button>
+        </Tip>
 
-        {/* Add (compare/indicator) button */}
-        <button className="tv-icon-btn" style={{ width: "24px", height: btnH }}>
-          <div style={{
-            width: "18px", height: "18px", borderRadius: "50%",
-            border: "1.5px solid currentColor",
-            display: "flex", alignItems: "center", justifyContent: "center"
-          }}>
-            <Plus size={11} strokeWidth={2.5} />
-          </div>
-        </button>
+        <div className="tv-hdr-sep" />
 
-        <div className="tv-divider-v" style={{ height: "16px" }} />
-
-        {/* Timeframes */}
-        <div style={{ display: "flex", gap: "0px" }}>
-          {favorites.map((value) => (
+        {/* Intervals */}
+        {favorites.map((value) => (
+          <Tip key={value} text={getLongLabel(value)} placement="bottom">
             <button
-              key={value}
-              className={`tv-icon-btn ${interval === value ? "active" : ""}`}
-              style={{ height: btnH, width: "auto", padding: "0 6px", fontSize: "13px", fontWeight: interval === value ? 700 : 400 }}
+              className={`tv-hdr-btn tv-tf-fav ${interval === value ? "active" : ""}`}
+              style={{ minWidth: 0, padding: "0 6px" }}
               onClick={() => selectInterval(value)}
             >
               {getShortLabel(value)}
             </button>
-          ))}
-          {/* More timeframes dropdown */}
-          <div style={{ position: "relative" }} ref={tfMenuRef}>
-            <button
-              className={`tv-icon-btn ${!favorites.includes(interval) ? "active" : ""}`}
-              style={{ height: btnH, width: "auto", padding: "0 4px", fontSize: "13px", display: "flex", alignItems: "center", gap: "2px" }}
-              onClick={() => setShowMoreTf(!showMoreTf)}
-            >
-              {!favorites.includes(interval) ? getShortLabel(interval) : ""}
-              <ChevronDown size={12} strokeWidth={2} />
-            </button>
-            {showMoreTf && (
-              <TimeframeDropdown
-                interval={interval}
-                favorites={favorites}
-                onSelect={selectInterval}
-                onToggleFavorite={toggleFavoriteInterval}
-              />
-            )}
-          </div>
+          </Tip>
+        ))}
+        {/* More intervals */}
+        <div style={{ position: "relative" }} ref={tfMenuRef}>
+          <button
+            className={`tv-hdr-btn ${!favorites.includes(interval) || showMoreTf ? "active" : ""}`}
+            style={{ minWidth: 24, padding: "0 4px", gap: "2px" }}
+            aria-label="More intervals"
+            onClick={() => setShowMoreTf(!showMoreTf)}
+          >
+            {!favorites.includes(interval) ? getShortLabel(interval) : ""}
+            {showMoreTf ? <ChevronUp size={14} strokeWidth={1.5} /> : <ChevronDown size={14} strokeWidth={1.5} />}
+          </button>
+          {showMoreTf && (
+            <TimeframeDropdown
+              anchorRef={tfMenuRef}
+              interval={interval}
+              favorites={favorites}
+              onSelect={selectInterval}
+              onToggleFavorite={toggleFavoriteInterval}
+            />
+          )}
         </div>
 
-        <div className="tv-divider-v" style={{ height: "16px" }} />
+        <div className="tv-hdr-sep" />
 
         {/* Chart type */}
-        <button className="tv-icon-btn" style={{ width: "28px", height: btnH }}>
-          <BarChart2 size={iconS} strokeWidth={1.5} />
-        </button>
+        <Tip text="Candles" placement="bottom">
+          <button className="tv-hdr-btn" aria-label="Chart type"><TVCandlesIcon size={28} /></button>
+        </Tip>
 
-        <div className="tv-divider-v" style={{ height: "16px" }} />
+        <div className="tv-hdr-sep" />
 
         {/* Indicators */}
         <button
-          className="tv-icon-btn"
-          style={{ height: btnH, width: "auto", padding: "0 8px", display: "flex", alignItems: "center", gap: "4px" }}
+          className="tv-hdr-btn tv-topbar-labeled"
+          style={{ padding: "0 8px 0 2px" }}
           onClick={() => setShowIndicatorsModal(true)}
         >
-          <ChartNoAxesCombined size={iconS} strokeWidth={1.5} />
-          <span style={{ fontSize: "13px", fontWeight: 400 }}>Indicators</span>
+          <TVIndicatorsIcon size={28} />
+          <span className="tv-topbar-label">Indicators</span>
         </button>
 
-        {/* Favorite indicators quick-access */}
-        <div className="tv-tooltip-container" style={{ position: "relative" }} ref={favIndicatorsMenuRef}>
-          <button
-            className="tv-icon-btn"
-            style={{ width: "22px", height: btnH }}
-            onClick={() => {
-              setFavoriteIndicators(loadFavoriteIndicators());
-              setShowFavIndicators(!showFavIndicators);
-            }}
-          >
-            <ChevronDown size={14} strokeWidth={2} />
-          </button>
-          {!showFavIndicators && (
-            <div className="tv-tooltip" style={{ top: "100%", left: "50%", transform: "translateX(-50%)", marginTop: "6px" }}>
-              Favorite indicators
-            </div>
-          )}
+        {/* Favorite indicators */}
+        <div style={{ position: "relative" }} ref={favIndicatorsMenuRef}>
+          <Tip text="Favorite indicators" placement="bottom">
+            <button
+              className={`tv-hdr-btn ${showFavIndicators ? "active" : ""}`}
+              style={{ minWidth: 24, padding: "0 4px" }}
+              aria-label="Favorite indicators"
+              onClick={() => {
+                setFavoriteIndicators(loadFavoriteIndicators());
+                setShowFavIndicators(!showFavIndicators);
+              }}
+            >
+              {showFavIndicators ? <ChevronUp size={14} strokeWidth={1.5} /> : <ChevronDown size={14} strokeWidth={1.5} />}
+            </button>
+          </Tip>
           {showFavIndicators && (
-            <div style={{
+            <div ref={el => placeBelow(el, favIndicatorsMenuRef.current)} style={{
               position: "absolute", top: "100%", left: 0, marginTop: "4px",
               backgroundColor: "var(--tv-color-pane-bg)", border: "1px solid var(--tv-color-border)",
-              borderRadius: "6px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)", padding: "4px 0",
-              zIndex: 9999, minWidth: "220px"
+              borderRadius: "8px", boxShadow: "0 4px 16px rgba(0,0,0,0.15)", padding: "6px 0",
+              zIndex: 9999, minWidth: "240px"
             }}>
-              <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--tv-color-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px", padding: "6px 12px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--tv-color-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px", padding: "6px 14px" }}>
                 Indicators
               </div>
               {favoriteIndicators.length === 0 ? (
-                <div style={{ padding: "8px 12px", fontSize: "13px", color: "var(--tv-color-text-muted)" }}>
+                <div style={{ padding: "8px 14px", fontSize: "14px", color: "var(--tv-color-text-muted)" }}>
                   No favorite indicators yet
                 </div>
               ) : (
@@ -393,11 +400,11 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
                       setShowFavIndicators(false);
                     }}
                     style={{
-                      display: "block", width: "100%", padding: "7px 12px", textAlign: "left",
-                      fontSize: "13px", border: "none", background: "transparent",
+                      display: "block", width: "100%", padding: "8px 14px", textAlign: "left",
+                      fontSize: "14px", border: "none", background: "transparent",
                       color: "var(--tv-color-text)", cursor: "pointer"
                     }}
-                    onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--tv-color-item-hover)"}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--tv-hover-neutral)"}
                     onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
                   >
                     {ind}
@@ -408,103 +415,126 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
           )}
         </div>
 
-        <div className="tv-divider-v" style={{ height: "16px" }} />
+        {/* Indicator templates */}
+        <IndicatorTemplatesMenu
+          activeIndicators={activeIndicators}
+          symbol={symbol}
+          interval={interval}
+          intervalLabel={getShortLabel(interval)}
+          onApply={(t) => onApplyIndicatorTemplate?.(t)}
+        />
+
+        <div className="tv-hdr-sep" />
 
         {/* Alert */}
-        <button 
-          className="tv-icon-btn" 
-          onClick={onAlertClick}
-          style={{ height: btnH, width: "auto", padding: "0 8px", display: "flex", alignItems: "center", gap: "4px" }}
-        >
-          <AlarmClockPlus size={iconS} strokeWidth={1.5} />
-          <span style={{ fontSize: "13px", fontWeight: 400 }}>Alert</span>
-        </button>
-
-        <div className="tv-divider-v" style={{ height: "16px" }} />
+        <Tip text={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>Create alert <TipKey>Alt</TipKey>+<TipKey>A</TipKey></span>} placement="bottom">
+          <button className="tv-hdr-btn tv-topbar-labeled" onClick={onAlertClick} style={{ padding: "0 8px 0 2px" }}>
+            <TVAlertIcon size={28} />
+            <span className="tv-topbar-label">Alert</span>
+          </button>
+        </Tip>
 
         {/* Replay */}
-        <button
-          className="tv-icon-btn"
-          onClick={onReplayClick}
-          style={{
-            height: btnH, width: "auto", padding: "0 8px",
-            display: "flex", alignItems: "center", gap: "4px",
-            color: isReplayActive ? "var(--tv-color-accent)" : undefined,
-            backgroundColor: isReplayActive ? "rgba(41,98,255,0.08)" : undefined,
-          }}
-        >
-          <ChevronsLeft size={iconS} strokeWidth={2} />
-          <span style={{ fontSize: "13px", fontWeight: 400 }}>Replay</span>
-        </button>
+        <Tip text="Bar replay" placement="bottom">
+          <button
+            className={`tv-hdr-btn tv-topbar-labeled ${isReplayActive ? "active" : ""}`}
+            onClick={onReplayClick}
+            style={{ padding: "0 8px 0 2px", color: isReplayActive ? "var(--tv-color-accent)" : undefined }}
+          >
+            <TVReplayIcon size={28} />
+            <span className="tv-topbar-label">Replay</span>
+          </button>
+        </Tip>
 
-        <div className="tv-divider-v" style={{ height: "16px" }} />
+        <div className="tv-hdr-sep" />
 
         {/* Undo / Redo */}
-        <button className="tv-icon-btn" style={{ width: "28px", height: btnH, opacity: canUndo ? 1 : 0.35 }} onClick={undo} title="Undo (Ctrl+Z)">
-          <Undo2 size={iconS} strokeWidth={1.5} />
-        </button>
-        <button className="tv-icon-btn" style={{ width: "28px", height: btnH, opacity: canRedo ? 1 : 0.35 }} onClick={redo} title="Redo (Ctrl+Y)">
-          <Redo2 size={iconS} strokeWidth={1.5} />
-        </button>
+        <Tip text={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>Undo <TipKey>Ctrl</TipKey>+<TipKey>Z</TipKey></span>} placement="bottom">
+          <button className="tv-hdr-btn" disabled={!canUndo} onClick={undo} aria-label="Undo"><TVUndoIcon size={28} /></button>
+        </Tip>
+        <Tip text={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>Redo <TipKey>Ctrl</TipKey>+<TipKey>Y</TipKey></span>} placement="bottom">
+          <button className="tv-hdr-btn" disabled={!canRedo} onClick={redo} aria-label="Redo"><TVRedoIcon size={28} /></button>
+        </Tip>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "1px" }}>
-        {/* Settings, Fullscreen, Camera */}
-        <button className="tv-icon-btn" style={{ width: "28px", height: btnH }} onClick={onSettingsClick}><TVSettingsIcon size={iconS} /></button>
-        <button className="tv-icon-btn" style={{ width: "28px", height: btnH }} onClick={onMaximizeClick} title="Hide panels"><Maximize size={iconS} strokeWidth={1.5} /></button>
-        <button className="tv-icon-btn" style={{ width: "28px", height: btnH }}><Camera size={iconS} strokeWidth={1.5} /></button>
-        
-        <div className="tv-divider-v" style={{ height: "16px" }} />
+      <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+        {/* Layout name + Manage layouts */}
+        <span className="tv-wide-only" style={{ display: "contents" }}>
+          <LayoutMenu />
+        </span>
 
-        {/* Save */}
-        <button className="tv-icon-btn" style={{ height: btnH, width: "auto", padding: "0 6px", display: "flex", alignItems: "center", gap: "4px" }}>
-          <Save size={iconS} strokeWidth={1.5} />
-        </button>
+        <div className="tv-hdr-sep" />
 
-        <div className="tv-divider-v" style={{ height: "16px" }} />
+        {/* Quick search (Ctrl+K) */}
+        <Tip text={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>Quick search <TipKey>Ctrl</TipKey>+<TipKey>K</TipKey></span>} placement="bottom">
+          <button className="tv-hdr-btn" onClick={onQuickSearchClick} aria-label="Quick search"><TVQuickSearchIcon size={28} /></button>
+        </Tip>
 
-        {/* Theme Toggle */}
-        <button className="tv-icon-btn" style={{ width: "28px", height: btnH }} onClick={toggleTheme} title="Toggle Theme">
-          {theme === "light" ? <Moon size={iconS} strokeWidth={1.5} /> : <Sun size={iconS} strokeWidth={1.5} />}
-        </button>
+        {/* Settings, Fullscreen, Snapshot */}
+        <Tip text="Settings" placement="bottom">
+          <button className="tv-hdr-btn" onClick={onSettingsClick} aria-label="Settings"><TVSettingsHexIcon size={28} /></button>
+        </Tip>
+        <Tip text={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>Fullscreen mode <TipKey>Shift</TipKey>+<TipKey>F</TipKey></span>} placement="bottom">
+          <button className="tv-hdr-btn" onClick={onMaximizeClick} aria-label="Fullscreen mode"><TVFullscreenIcon size={28} /></button>
+        </Tip>
+        <div ref={snapshotMenuRef} style={{ position: "relative" }}>
+          <Tip text="Take a snapshot" placement="bottom">
+            <button
+              className={`tv-hdr-btn ${showSnapshotMenu ? "active" : ""}`}
+              onClick={() => setShowSnapshotMenu(v => !v)}
+              aria-label="Take a snapshot"
+            >
+              <TVCameraIcon size={28} />
+            </button>
+          </Tip>
+          {showSnapshotMenu && (
+            <div ref={el => placeBelow(el, snapshotMenuRef.current, "end", 6)} style={{
+              position: "absolute", top: "calc(100% + 6px)", right: "-90px", width: "280px", zIndex: 3000,
+              background: "var(--tv-color-bg)", color: "var(--tv-color-text)",
+              border: "1px solid var(--tv-color-border)", borderRadius: "8px",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.25)", padding: "6px 0",
+            }}>
+              <div style={{ padding: "8px 16px 6px", fontSize: "11px", letterSpacing: "0.5px", fontWeight: 600, color: "var(--tv-color-text-muted)" }}>
+                CHART SNAPSHOT
+              </div>
+              {([
+                { action: "download", icon: <Download size={20} strokeWidth={1.5} />, label: "Download image", shortcut: "Ctrl + Alt + S" },
+                { action: "copy-image", icon: <Copy size={20} strokeWidth={1.5} />, label: "Copy image", shortcut: "Ctrl + Shift + S" },
+                { action: "copy-link", icon: <Link2 size={20} strokeWidth={1.5} />, label: "Copy link", shortcut: "Alt + S" },
+                { action: "open-tab", icon: <ExternalLink size={20} strokeWidth={1.5} />, label: "Open in new tab" },
+                { action: "tweet", icon: (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
+                ), label: "Tweet image" },
+              ] as { action: SnapshotAction; icon: React.ReactNode; label: string; shortcut?: string }[]).map(item => (
+                <button
+                  key={item.action}
+                  onClick={() => { setShowSnapshotMenu(false); onSnapshot?.(item.action); }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "14px", width: "100%", padding: "10px 16px",
+                    background: "transparent", border: "none", color: "inherit", cursor: "pointer",
+                    fontSize: "14px", textAlign: "left",
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "var(--tv-hover-neutral)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                >
+                  {item.icon}
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  {item.shortcut && <span style={{ fontSize: "12px", color: "var(--tv-color-text-muted)" }}>{item.shortcut}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
-        <div className="tv-divider-v" style={{ height: "16px" }} />
-
-        {/* Trade */}
-        <button style={{
-          backgroundColor: "transparent",
-          color: "var(--tv-color-text)",
-          border: "none",
-          padding: "0 10px",
-          height: btnH,
-          fontSize: "13px",
-          fontWeight: 400,
-          cursor: "pointer",
-          borderRadius: "4px",
-        }}
-        onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--tv-color-item-hover)"}
-        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
-        >
-          Trade
-        </button>
+        {/* Trade (paper trading broker) */}
+        <span style={{ marginLeft: 6, display: "inline-flex" }}><TradeButton height={btnH} /></span>
 
         {/* Publish */}
-        <button style={{
-          backgroundColor: "transparent",
-          color: "var(--tv-color-text)",
-          border: "none",
-          padding: "0 10px",
-          height: btnH,
-          fontSize: "13px",
-          fontWeight: 400,
-          cursor: "pointer",
-          borderRadius: "4px",
-        }}
-        onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--tv-color-item-hover)"}
-        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
-        >
-          Publish
-        </button>
+        <Tip text="Share your idea with the trade community" placement="bottom">
+          <button className="tv-hdr-publish" onClick={() => window.dispatchEvent(new CustomEvent("tv:publish-idea"))}>
+            Publish
+          </button>
+        </Tip>
       </div>
 
       {/* Indicators Modal */}
@@ -524,11 +554,13 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
 }
 
 function TimeframeDropdown({
+  anchorRef,
   interval,
   favorites,
   onSelect,
   onToggleFavorite,
 }: {
+  anchorRef: React.RefObject<HTMLDivElement | null>;
   interval: string;
   favorites: string[];
   onSelect: (value: string) => void;
@@ -552,7 +584,7 @@ function TimeframeDropdown({
   };
 
   return (
-    <div style={{
+    <div ref={el => placeBelow(el, anchorRef.current)} style={{
       position: "absolute", top: "100%", left: 0, marginTop: "4px",
       backgroundColor: "var(--tv-color-pane-bg)", border: "1px solid var(--tv-color-border)",
       borderRadius: "6px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)",

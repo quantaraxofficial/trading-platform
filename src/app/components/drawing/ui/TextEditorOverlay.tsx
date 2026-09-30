@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 interface TextEditorOverlayProps {
   initialText: string;
@@ -10,54 +10,73 @@ interface TextEditorOverlayProps {
   onCommit: (newText: string) => void;
   onCancel: () => void;
   color?: string;
+  fontSize?: number;
 }
 
-export function TextEditorOverlay({ initialText, x, y, rotation, onCommit, onCancel, color = '#2962ff' }: TextEditorOverlayProps) {
-  const [text, setText] = useState(initialText);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+// Uses a contentEditable element instead of a <textarea> so the box always sizes
+// itself to whatever's typed (shrink-to-fit, like any absolutely positioned block
+// with no explicit width) — that's what lets translate(-50%, -50%) genuinely center
+// the text on the shape's anchor point regardless of string length, and it's what
+// gives a plain blinking caret with no visible input chrome, matching how this
+// editor is meant to look sitting directly on top of the shape.
+export function TextEditorOverlay({ initialText, x, y, rotation, onCommit, onCancel, color = '#2962ff', fontSize = 14 }: TextEditorOverlayProps) {
+  const editableRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef(initialText);
 
   useEffect(() => {
-    if (textareaRef.current) {
-      setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.focus();
-          textareaRef.current.selectionStart = textareaRef.current.value.length;
-          textareaRef.current.selectionEnd = textareaRef.current.value.length;
-        }
-      }, 50);
-      adjustHeight();
-    }
+    const el = editableRef.current;
+    if (!el) return;
+    el.textContent = initialText;
+
+    setTimeout(() => {
+      el.focus();
+      // Place the caret at the end of any existing text rather than the start
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }, 50);
   }, []);
 
-  const adjustHeight = () => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
+  const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+    textRef.current = e.currentTarget.textContent || '';
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value);
-    adjustHeight();
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Escape') {
       onCancel();
+      return;
     }
-    // Enter just adds a new line in TradingView
+    if (e.key === 'Enter') {
+      // Enter adds a new line rather than committing, matching TradingView.
+      e.preventDefault();
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        const lineBreak = document.createTextNode('\n');
+        range.insertNode(lineBreak);
+        range.setStartAfter(lineBreak);
+        range.setEndAfter(lineBreak);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      textRef.current = editableRef.current?.textContent || '';
+    }
   };
 
   const handleBlur = () => {
-    if (text.trim() === '') {
+    if (textRef.current.trim() === '') {
       onCancel();
     } else {
-      onCommit(text);
+      onCommit(textRef.current);
     }
   };
 
   return (
-    <div 
+    <div
       style={{
         position: 'absolute',
         top: 0,
@@ -67,39 +86,38 @@ export function TextEditorOverlay({ initialText, x, y, rotation, onCommit, onCan
         zIndex: 100, // Above drawing layer
       }}
       onMouseDown={(e) => {
-        // If clicking outside the textarea, blur it (which commits)
-        if (e.target !== textareaRef.current) {
+        // If clicking outside the editable text, blur it (which commits)
+        if (e.target !== editableRef.current) {
           handleBlur();
         }
       }}
     >
-      <textarea
-        ref={textareaRef}
-        value={text}
-        onChange={handleChange}
+      <style>{`.tv-text-editor-overlay-input:empty:before { content: attr(data-placeholder); color: ${color}; opacity: 0.7; pointer-events: none; }`}</style>
+      <div
+        ref={editableRef}
+        className="tv-text-editor-overlay-input"
+        contentEditable
+        suppressContentEditableWarning
+        data-placeholder="Add text"
+        onInput={handleInput}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
-        placeholder="Add text"
         style={{
           position: 'absolute',
           left: `${x}px`,
           top: `${y}px`,
           transform: typeof rotation === 'number' ? `translate(-50%, -50%) rotate(${rotation}deg)` : undefined,
-          minWidth: '100px',
-          minHeight: '24px',
-          background: 'var(--tv-color-pane-background)',
-          color: color,
-          border: '1px solid var(--tv-color-border)',
-          borderRadius: '4px',
-          padding: '4px 8px',
-          fontSize: '16px',
+          minWidth: '20px',
+          minHeight: `${fontSize + 4}px`,
+          maxWidth: '360px',
+          color,
+          fontSize: `${fontSize}px`,
           fontFamily: 'sans-serif',
-          resize: 'none',
-          overflow: 'hidden',
+          textAlign: 'center',
           outline: 'none',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          caretColor: color,
           whiteSpace: 'pre-wrap',
-          wordWrap: 'break-word',
+          wordBreak: 'break-word',
         }}
       />
     </div>

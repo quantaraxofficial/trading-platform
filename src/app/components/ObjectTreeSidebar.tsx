@@ -40,6 +40,7 @@ export default function ObjectTreeSidebar({ indicators, onUpdateIndicator, onDel
   const getDrawingIcon = (type: string) => {
     switch(type) {
       case 'trendline': return <Minus size={16} />;
+      case 'horizontal_ray': return <Minus size={16} />;
       case 'rectangle': return <Square size={16} />;
       case 'text': return <Type size={16} />;
       case 'long_position': return <TrendingUp size={16} />;
@@ -59,6 +60,7 @@ export default function ObjectTreeSidebar({ indicators, onUpdateIndicator, onDel
     if (text) return text.slice(0, 20) + (text.length > 20 ? '...' : '');
     const names: Record<string, string> = {
       'trendline': 'Trend Line',
+      'horizontal_ray': 'Horizontal Ray',
       'rectangle': 'Rectangle',
       'text': 'Text',
       'long_position': 'Long Position',

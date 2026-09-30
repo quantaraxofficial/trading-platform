@@ -1,7 +1,8 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Text as KonvaText, Group, Transformer, Rect as KonvaRect } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
+import { useChartTick } from '../core/useChartTick';
 
 interface EmojiToolProps {
   id: string;
@@ -12,6 +13,7 @@ interface EmojiToolProps {
   rotation?: number;
   initialBarWidth?: number;
   isSelected: boolean;
+  isHovering?: boolean;
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   onSelect: () => void;
@@ -20,22 +22,24 @@ interface EmojiToolProps {
   isLocked?: boolean;
 }
 
-export function EmojiTool({ 
-  id, points, emojiChar, scaleX = 1, scaleY = 1, rotation = 0,  initialBarWidth, isSelected, chart, series, onSelect, onUpdatePoints, onUpdateScale,
+export function EmojiTool({
+  id, points, emojiChar, scaleX = 1, scaleY = 1, rotation = 0,  initialBarWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints, onUpdateScale,
   emojiSize = 40, isLocked = false
 }: EmojiToolProps & { emojiSize?: number }) {
+  useChartTick(chart);
   const shapeRef = useRef<any>(null);
   const trRef = useRef<any>(null);
+  const showHandles = isSelected || isHovering;
 
   useEffect(() => {
-    if (isSelected && trRef.current && shapeRef.current) {
+    if (showHandles && trRef.current && shapeRef.current) {
       trRef.current.nodes([shapeRef.current]);
       const layer = trRef.current.getLayer();
       if (layer) {
         layer.batchDraw();
       }
     }
-  }, [isSelected]);
+  }, [showHandles]);
 
   if (points.length < 1) return null;
 
@@ -64,7 +68,7 @@ export function EmojiTool({
         scaleX={finalScaleX}
         scaleY={finalScaleY}
         rotation={rotation}
-        draggable={isSelected && !isLocked}
+        draggable={showHandles && !isLocked}
         onMouseDown={(e) => {
           e.cancelBubble = true;
           onSelect();
@@ -127,7 +131,7 @@ export function EmojiTool({
         />
       </Group>
 
-      {isSelected && (
+      {showHandles && (
         <Transformer
           ref={trRef}
           boundBoxFunc={(oldBox, newBox) => {

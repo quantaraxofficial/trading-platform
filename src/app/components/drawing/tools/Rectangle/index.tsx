@@ -1,6 +1,8 @@
 import React, { useRef } from 'react';
 import { Rect, Circle, Group, Text, Line } from 'react-konva';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../../core/coordinates';
+import { useChartTick } from '../../core/useChartTick';
+import { textLinesHitFunc } from '../../core/textHit';
 
 interface RectangleProps {
   id: string;
@@ -8,6 +10,7 @@ interface RectangleProps {
   stroke: string;
   strokeWidth: number;
   isSelected: boolean;
+  isHovering?: boolean;
   chart: any;
   series: any;
   onSelect: () => void;
@@ -16,6 +19,8 @@ interface RectangleProps {
   fill?: string;
   backgroundVisible?: boolean;
   text?: string;
+  onTextEdit?: () => void;
+  isEditingText?: boolean;
   textColor?: string;
   fontSize?: number;
   bold?: boolean;
@@ -31,12 +36,13 @@ interface RectangleProps {
   isLocked?: boolean;
 }
 
-export function RectangleTool({ 
-  id, points, stroke, strokeWidth, isSelected, chart, series, onSelect, onUpdatePoints,
-  fill, backgroundVisible, text, textColor, fontSize, bold, italic,
+export function RectangleTool({
+  id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints,
+  fill, backgroundVisible, text, onTextEdit, isEditingText = false, textColor, fontSize, bold, italic,
   textAlign, textVerticalAlign, middleLineVisible, middleLineColor, middleLineStyle,
   extendLeft, extendRight, lineStyle, isLocked = false
 }: RectangleProps) {
+  useChartTick(chart);
   const groupRef = useRef<any>(null);
 
   if (points.length !== 2) return null;
@@ -170,9 +176,9 @@ export function RectangleTool({
     <Group 
       id={id} 
       ref={groupRef}
-      draggable={isSelected && !isLocked}
+      draggable={(isSelected || isHovering) && !isLocked}
       onDragEnd={handleGroupDragEnd}
-      onClick={(e) => { e.cancelBubble = true; onSelect(); }} 
+      onClick={(e) => { e.cancelBubble = true; onSelect(); }}
       onTap={(e) => { e.cancelBubble = true; onSelect(); }}
     >
       <Rect
@@ -196,9 +202,12 @@ export function RectangleTool({
         />
       )}
 
-      {text && (
+      {/* Suppressed while the HTML overlay is actively editing this shape's text, so
+          its own blinking cursor isn't doubled up with this label */}
+      {text && !isEditingText && (
         <Text
           text={text}
+          hitFunc={textLinesHitFunc}
           x={left + 5}
           y={top + 5}
           width={width - 10}
@@ -208,10 +217,30 @@ export function RectangleTool({
           fontStyle={`${bold ? 'bold ' : ''}${italic ? 'italic' : ''}`.trim() || 'normal'}
           align={textAlign || 'center'}
           verticalAlign={textVerticalAlign || 'middle'}
+          onClick={(e) => { e.cancelBubble = true; onTextEdit && onTextEdit(); }}
+          onTap={(e) => { e.cancelBubble = true; onTextEdit && onTextEdit(); }}
         />
       )}
 
-      {isSelected && (
+      {(isSelected || isHovering) && !text && !isEditingText && (
+        <Text
+          text="+ Add text"
+          hitFunc={textLinesHitFunc}
+          x={left}
+          y={top}
+          width={width}
+          height={height}
+          align="center"
+          verticalAlign="middle"
+          fill="#2962ff"
+          opacity={0.7}
+          fontSize={fontSize || 14}
+          onClick={(e) => { e.cancelBubble = true; onTextEdit && onTextEdit(); }}
+          onTap={(e) => { e.cancelBubble = true; onTextEdit && onTextEdit(); }}
+        />
+      )}
+
+      {(isSelected || isHovering) && (
         <>
           {/* Corner handles (Circles) */}
           <Circle 

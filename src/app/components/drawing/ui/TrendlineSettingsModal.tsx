@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDrawing } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
+import { useEscapeClose } from "../../../lib/useEscapeClose";
 
 interface TrendlineSettingsModalProps {
   onClose: () => void;
@@ -42,6 +43,7 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
 }
 
 export function TrendlineSettingsModal({ onClose, initialPosition }: TrendlineSettingsModalProps) {
+  useEscapeClose(onClose);
   const { drawings, updateDrawing, selectedShapeId } = useDrawing();
   const drawing = drawings.find((d: any) => d.id === selectedShapeId);
 

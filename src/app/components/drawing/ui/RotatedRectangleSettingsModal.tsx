@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDrawing } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
+import { useEscapeClose } from "../../../lib/useEscapeClose";
 
 interface RotatedRectangleSettingsModalProps {
   onClose: () => void;
@@ -41,6 +42,7 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
 }
 
 export function RotatedRectangleSettingsModal({ onClose }: RotatedRectangleSettingsModalProps) {
+  useEscapeClose(onClose);
   const { selectedShapeId, drawings, updateDrawing } = useDrawing();
   const selectedShape = drawings.find((d: any) => d.id === selectedShapeId);
 

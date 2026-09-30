@@ -28,6 +28,8 @@ function aggregateCandles(values: any[], minutes: number): any[] {
     let low = parseFloat(ascending[i].low);
     let close = parseFloat(ascending[i].close);
     let volume = parseFloat(ascending[i].volume || '0');
+    // Forex/metals come without volume: keep it absent rather than a made-up 0
+    let hasVolume = ascending[i].volume != null;
     const datetime = ascending[i].datetime;
 
     i++;
@@ -40,6 +42,7 @@ function aggregateCandles(values: any[], minutes: number): any[] {
       const l = parseFloat(ascending[i].low);
       const c = parseFloat(ascending[i].close);
       const v = parseFloat(ascending[i].volume || '0');
+      if (ascending[i].volume != null) hasVolume = true;
 
       if (h > high) high = h;
       if (l < low) low = l;
@@ -54,7 +57,7 @@ function aggregateCandles(values: any[], minutes: number): any[] {
       high: high.toFixed(5),
       low: low.toFixed(5),
       close: close.toFixed(5),
-      volume: volume.toString(),
+      volume: hasVolume ? volume.toString() : undefined,
     });
   }
 
@@ -80,6 +83,8 @@ function aggregateCandlesByMonths(values: any[], monthsPerBucket: number): any[]
     let low = parseFloat(ascending[i].low);
     let close = parseFloat(ascending[i].close);
     let volume = parseFloat(ascending[i].volume || '0');
+    // Forex/metals come without volume: keep it absent rather than a made-up 0
+    let hasVolume = ascending[i].volume != null;
     const datetime = ascending[i].datetime;
 
     i++;
@@ -89,6 +94,7 @@ function aggregateCandlesByMonths(values: any[], monthsPerBucket: number): any[]
       const l = parseFloat(ascending[i].low);
       const c = parseFloat(ascending[i].close);
       const v = parseFloat(ascending[i].volume || '0');
+      if (ascending[i].volume != null) hasVolume = true;
 
       if (h > high) high = h;
       if (l < low) low = l;
@@ -103,7 +109,7 @@ function aggregateCandlesByMonths(values: any[], monthsPerBucket: number): any[]
       high: high.toFixed(5),
       low: low.toFixed(5),
       close: close.toFixed(5),
-      volume: volume.toString(),
+      volume: hasVolume ? volume.toString() : undefined,
     });
   }
 
@@ -121,6 +127,22 @@ export async function GET(request: Request) {
 
   if (!apikey) {
     return NextResponse.json({ error: 'API key not configured' }, { status: 500 });
+  }
+
+  // ?earliest=1: the first bar the provider has for this symbol (replay's "First available date",
+  // "Random bar" and the date dialog's range). Custom intervals are built from 1min / 1day bars.
+  if (searchParams.get('earliest')) {
+    const base = NATIVE_INTERVALS.has(interval) ? interval : /month/.test(interval) ? '1day' : '1min';
+    try {
+      const response = await fetch(`https://api.twelvedata.com/earliest_timestamp?symbol=${encodeURIComponent(symbol)}&interval=${base}&apikey=${apikey}`);
+      const data = await response.json();
+      if (data.status === 'error' || !data.datetime) {
+        return NextResponse.json({ error: data.message || 'Earliest date unavailable' }, { status: 400 });
+      }
+      return NextResponse.json({ datetime: data.datetime, unix_time: data.unix_time });
+    } catch {
+      return NextResponse.json({ error: 'Connection to TwelveData failed' }, { status: 500 });
+    }
   }
 
   // Check if this is a custom (non-native) interval like "4min", "7min", "3h", etc.

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, forwardRef } from "react";
 import { createPortal } from "react-dom";
 import { createChart, ColorType, ISeriesApi, IChartApi, CandlestickSeries, HistogramSeries, LineSeries, PriceScaleMode, TickMarkType } from "lightweight-charts";
+import { CandleBodyAwareLine } from "./chartPrimitives/CandleBodyAwareLine";
 import dynamic from "next/dynamic";
 const DrawingLayer = dynamic(() => import("./drawing/DrawingLayer"), { ssr: false });
 import { SubBar } from "./drawing/ui/SubBar";
@@ -16,14 +17,29 @@ import SessionSettingsModal, { defaultSessionConfig } from "./SessionSettingsMod
 import ChartSettingsModal from "./ChartSettingsModal";
 import SaveTemplateModal from "./SaveTemplateModal";
 import CreateAlertModal from "./CreateAlertModal";
-import { ToolButton } from "./LeftToolbar";
+import StrategyReportPanel from "./StrategyReportPanel";
+import { strategyDock } from "./strategy/strategyStore";
+import { fetchPineTimeframeData } from "../lib/pineDataFetch";
+import { runPineScriptAsync, appIntervalToPineTf, getPineInputsMeta, type PineInputMeta } from "../lib/pineScriptEngine";
+import PineSettingsModal from "./PineSettingsModal";
 import { useAuth } from "@/context/AuthContext";
 import { MultiSelectSubBar } from "./drawing/ui/MultiSelectSubBar";
 import { TVSettingsIcon } from "./icons/TVIcons";
+import { SubSettingsIcon } from "./drawing/ui/subbarIcons";
+import { isTypingTarget } from "../lib/isTypingTarget";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useAlerts } from "@/context/AlertsContext";
-import { usePaperTrading } from "@/context/PaperTradingContext";
+import { engine, useEngineState, openTicket, projectChartOrder, orderTypeAt, lastQtyFor, tradingUi } from "@/app/trading/store";
+import { quoteOf, activeBook } from "@/app/trading/engine";
+import { useTradingSettings } from "@/app/trading/settings";
+import { formatQty } from "@/app/trading/instruments";
+import TradingOverlay from "@/app/trading/TradingOverlay";
+import { Tip, TipKey as Kbd, SymbolAvatar, Popover, MenuItem, MenuDivider } from "@/app/trading/ui";
+import { statusLine, type StatusLineSettings } from "../lib/statusLine";
+import { loadFavoriteIndicators, saveFavoriteIndicators } from "@/app/utils/favoriteIndicators";
+import { rememberExchangeTimezone, toChartTime } from "@/app/utils/exchangeTime";
+import { createSeriesMarkers } from "lightweight-charts";
 import { precomputeAllTimeframes, getAggCachedData, setAggCachedData, AGGREGATABLE_INTERVALS } from "@/app/utils/aggregateCandles";
 
 // The full "UTC" timezone selector list — city groups exactly as shown in the reference dropdown.
@@ -244,71 +260,43 @@ interface ChartContainerProps {
 }
 
 // ── Stock data cache (localStorage) ───────────────────────────────────────────
-const CACHE_PREFIX = 'tv_data_';
-const CACHE_TTL_LIVE = 5 * 60 * 1000;      // 5 min for today's data
-const CACHE_TTL_HISTORICAL = 7 * 24 * 60 * 60 * 1000; // 7 days for historical
-const CACHE_MAX_ENTRIES = 200;              // Max entries before eviction
+// Moved to lib/stockDataCache.ts so it can be shared with the Pine engine's
+// multi-timeframe fetcher without a circular import between this file and
+// PineEditorPanel.tsx. Re-exported here since other files still import these
+// from "./ChartContainer".
+import { getCacheKey, getCachedData, setCachedData } from "../lib/stockDataCache";
+import { barVolume, volumeHistogram, formatVolume } from "../utils/volume";
+import { rememberFromSeriesMeta, useSymbolInfo, marketOpenNow } from "../utils/symbolInfo";
+import { getEarliestBarTime } from "../utils/earliestBar";
+import { useEscapeClose } from "../lib/useEscapeClose";
+import TvMenu, { type TvMenuItem } from "./ui/TvMenu";
+import { MenuAlertIcon, MenuBuyIcon, MenuSellIcon, MenuAddOrderIcon, MenuSettingsIcon, MenuResetIcon } from "./ui/tvMenuIcons";
+import ChartTableView from "./ChartTableView";
+import { useChartTick } from "./drawing/core/useChartTick";
+import type { DateRangeSpan } from "./BottomPanel";
+import { detectPrecision, simulatedQuote } from "@/app/utils/pricePrecision";
+export { getCacheKey, getCachedData, setCachedData } from "../lib/stockDataCache";
 
-function getCacheKey(symbol: string, interval: string, endDate?: string, startDate?: string): string {
-  return `${CACHE_PREFIX}${symbol}|${interval}|${endDate || 'latest'}|${startDate || ''}`;
-}
+// Requests currently on the wire, keyed like the localStorage cache. The cache only
+// fills once a response has arrived, so several effects asking for the same
+// symbol/interval at the same moment (initial load runs the loader more than once,
+// plus React StrictMode's double-invoke in dev) each missed it and each hit the
+// paid API. Sharing the pending promise makes them all wait on a single request.
+const inflightStockFetches = new Map<string, Promise<any[]>>();
 
-function isToday(dateStr?: string): boolean {
-  if (!dateStr) return true; // "latest" is always today
-  const today = new Date().toISOString().split('T')[0];
-  return dateStr === today;
-}
-
-function getCachedData(key: string, endDate?: string): any[] | null {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const { data, ts } = JSON.parse(raw);
-    const age = Date.now() - ts;
-    const ttl = isToday(endDate) ? CACHE_TTL_LIVE : CACHE_TTL_HISTORICAL;
-    if (age > ttl) {
-      localStorage.removeItem(key);
-      return null;
-    }
-    return data;
-  } catch {
-    return null;
+function fetchStockData(symbol: string = 'AAPL', interval: string = '1min', endDate?: string, lastPrice?: number, startDate?: string): Promise<any[]> {
+  const key = getCacheKey(symbol, interval, endDate, startDate);
+  let pending = inflightStockFetches.get(key);
+  if (!pending) {
+    pending = fetchStockDataUncached(symbol, interval, endDate, lastPrice, startDate)
+      .finally(() => { inflightStockFetches.delete(key); });
+    inflightStockFetches.set(key, pending);
   }
+  // Callers sort/filter/mutate what they get back, so each waiter gets its own copy.
+  return pending.then(rows => rows.map(r => ({ ...r })));
 }
 
-function setCachedData(key: string, data: any[]): void {
-  try {
-    // Evict oldest entries if approaching limit
-    const allKeys: { key: string; ts: number }[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith(CACHE_PREFIX)) {
-        try {
-          const { ts } = JSON.parse(localStorage.getItem(k) || '{}');
-          allKeys.push({ key: k, ts: ts || 0 });
-        } catch { allKeys.push({ key: k, ts: 0 }); }
-      }
-    }
-    if (allKeys.length >= CACHE_MAX_ENTRIES) {
-      allKeys.sort((a, b) => a.ts - b.ts);
-      const toRemove = allKeys.slice(0, Math.floor(CACHE_MAX_ENTRIES * 0.3));
-      toRemove.forEach(e => localStorage.removeItem(e.key));
-    }
-    localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() }));
-  } catch (e) {
-    // Storage full — clear oldest cache entries and retry once
-    console.warn('[Cache] localStorage full, evicting old entries');
-    const keys: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith(CACHE_PREFIX)) keys.push(k);
-    }
-    keys.slice(0, Math.ceil(keys.length / 2)).forEach(k => localStorage.removeItem(k));
-    try { localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })); } catch {}
-  }
-}
-
-async function fetchStockData(symbol: string = 'AAPL', interval: string = '1min', endDate?: string, lastPrice?: number, startDate?: string) {
+async function fetchStockDataUncached(symbol: string = 'AAPL', interval: string = '1min', endDate?: string, lastPrice?: number, startDate?: string) {
   const cacheKey = getCacheKey(symbol, interval, endDate, startDate);
   
   // Check cache first
@@ -325,9 +313,13 @@ async function fetchStockData(symbol: string = 'AAPL', interval: string = '1min'
     
     const response = await fetch(url);
     const data = await response.json();
+    rememberExchangeTimezone(symbol, data?.meta?.exchange_timezone);
+    rememberFromSeriesMeta(symbol, data?.meta);
     
     if (data.error && data.error.toLowerCase().includes('limit')) {
-      throw new Error('API_LIMIT');
+      const e: any = new Error('API_LIMIT');
+      e.scope = /\bday\b|daily/i.test(data.error) ? 'day' : 'minute';
+      throw e;
     }
     
     if (data.error) return [];
@@ -337,7 +329,8 @@ async function fetchStockData(symbol: string = 'AAPL', interval: string = '1min'
       open: parseFloat(item.open),
       high: parseFloat(item.high),
       low: parseFloat(item.low),
-      close: parseFloat(item.close)
+      close: parseFloat(item.close),
+      volume: barVolume(item)
     })).reverse();
     
     // Cache the result
@@ -507,7 +500,8 @@ export default function ChartContainer({
   const { activeTool, shiftDrawings, setSymbol: setDrawingSymbol, setDrawings } = useDrawing();
   const { mode, replayIndex, startReplayAt, getReplayTime, stopReplay, togglePlay, stepBack, stepForward, setHoverX, hoverX, updateReplayData } = useReplay();
   const { checkAlerts } = useAlerts();
-  const { setCurrentPrice, positions, orders, history } = usePaperTrading();
+  const tradingState = useEngineState();
+  const tradingSettings = useTradingSettings();
 
   // Keep track of active price lines so we can remove them when they update or close
   const priceLinesRef = useRef<any[]>([]);
@@ -517,26 +511,66 @@ export default function ChartContainer({
     setDrawingSymbol(symbol);
   }, [symbol, setDrawingSymbol]);
 
+  // Expose the currently loaded symbol/interval globally, mirroring the
+  // window.__chartFullData pattern, so panels like the Pine Editor (which
+  // aren't wired with these as props) can fetch other-timeframe data for
+  // request.security()/request.security_lower_tf() against the right symbol.
+  useEffect(() => {
+    (window as any).__chartSymbol = symbol;
+    (window as any).__chartInterval = interval;
+    // Zoom In history belongs to the old bars; start over (Zoom Out hides again)
+    (window as any).__zoomStack = [];
+    window.dispatchEvent(new CustomEvent('tv:zoom-depth', { detail: 0 }));
+  }, [symbol, interval]);
+
   const [chart, setChart] = useState<IChartApi | null>(null);
   const [series, setSeries] = useState<any>(null);
   const tradeMarkersRef = useRef<any[]>([]);
+  const seriesMarkersRef = useRef<{ series: any; api: any } | null>(null);
+  const snapshotHideTradesRef = useRef(false);
   const pineMarkersRef = useRef<any[]>([]);
   const pineSeriesRef = useRef<Record<number, ISeriesApi<"Line">>>({});
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [isLoading, setIsLoading] = useState(true);
-  const [apiLimitReached, setApiLimitReached] = useState(false);
+  // The data plan's limit: per minute (retried automatically once the minute resets) or per day
+  const [apiLimitReached, setApiLimitReachedState] = useState<false | 'minute' | 'day'>(false);
+  const limitRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const setApiLimitReached = (v: boolean | 'minute' | 'day') => {
+    if (!v && limitRetryTimerRef.current) { clearTimeout(limitRetryTimerRef.current); limitRetryTimerRef.current = null; }
+    setApiLimitReachedState(v === true ? 'minute' : v);
+  };
+  // A request hit the limit: show it, and for the per-minute limit run `retry` (the load that
+  // failed) just after the minute resets
+  const onApiLimit = (err: any, retry?: () => void) => {
+    const scope: 'minute' | 'day' = err?.scope === 'day' ? 'day' : 'minute';
+    setApiLimitReachedState(scope);
+    if (limitRetryTimerRef.current) clearTimeout(limitRetryTimerRef.current);
+    limitRetryTimerRef.current = null;
+    if (scope === 'minute') {
+      const ms = 60000 - (Date.now() % 60000) + 2500;
+      limitRetryTimerRef.current = setTimeout(() => { limitRetryTimerRef.current = null; setApiLimitReachedState(false); retry?.(); }, ms);
+    }
+  };
+  useEffect(() => () => { if (limitRetryTimerRef.current) clearTimeout(limitRetryTimerRef.current); }, []);
   const [lastPriceData, setLastPriceData] = useState<{ price: number; prevPrice: number } | null>(null);
   const [hoveredBarData, setHoveredBarData] = useState<any>(null);
   // vertical line state in select mode
   const [vLineX, setVLineX] = useState<number | null>(null);
   const [vLineTime, setVLineTime] = useState<number | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, price: number | null, visible: boolean } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, clientX: number, clientY: number, price: number | null, time: number | null, visible: boolean } | null>(null);
+  // "Lock vertical cursor line by time": the bar time the vertical line stays on
+  const [lockedCursorTime, setLockedCursorTime] = useState<number | null>(null);
+  const [showTableView, setShowTableView] = useState(false);
+  const [psAnchor, setPsAnchor] = useState<{ right: number; top: number } | null>(null);
   const [showChartSettings, setShowChartSettings] = useState(false);
+  const [chartSettingsTab, setChartSettingsTab] = useState<string | undefined>(undefined);
+  const crosshairPriceRef = useRef<number | null>(null);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [showAlertModal, setShowAlertModal] = useState(false);
 
   useEffect(() => {
     if (triggerSettings && triggerSettings > 0) {
+      setChartSettingsTab(undefined);
       setShowChartSettings(true);
     }
   }, [triggerSettings]);
@@ -586,7 +620,7 @@ export default function ChartContainer({
     priceLine: true, prevClose: false, prePostMarket: false, highLow: false, bidAsk: false,
   });
   const prevCloseLineRef = useRef<any>(null);
-  const [countdownText, setCountdownText] = useState('');
+  const [countdown, setCountdown] = useState<{ text: string; top: number; width: number; color: string } | null>(null);
 
   useEffect(() => {
     try { chartRef.current?.priceScale('right').applyOptions({ autoScale: psAutoScale }); } catch { /* ignore */ }
@@ -633,26 +667,41 @@ export default function ChartContainer({
     }
   }, [lineSettings.prevClose]);
 
-  // Ticking "time until bar close" badge shown next to the symbol legend
+  // "Countdown to bar close": as on TradingView, a line under the last-price label on the
+  // price scale, in the label's colour. Recomputed each second and whenever the view moves.
   useEffect(() => {
-    if (!labelSettings.countdown) { setCountdownText(''); return; }
-    const tick = () => {
+    if (!labelSettings.countdown || !labelSettings.lastPrice) { setCountdown(null); return; }
+    let frame = 0;
+    const update = () => {
       const data = fullDataRef.current;
-      if (!data || data.length === 0) { setCountdownText(''); return; }
+      const series = candleSeriesRef.current;
+      const chart = chartRef.current;
+      if (!data || data.length === 0 || !series || !chart || modeRef.current !== 'idle') { setCountdown(null); return; }
       const last = data[data.length - 1];
-      const barMs = getIntervalMs(intervalRef.current);
-      const barEndSec = last.time + Math.floor(barMs / 1000);
-      const remain = barEndSec - Math.floor(Date.now() / 1000);
-      if (remain <= 0) { setCountdownText('0:00'); return; }
-      const h = Math.floor(remain / 3600);
-      const m = Math.floor((remain % 3600) / 60);
-      const s = remain % 60;
-      setCountdownText(h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`);
+      const barEnd = last.time + Math.floor(getIntervalMs(intervalRef.current) / 1000);
+      const remain = barEnd - toChartTime(symbolRef.current, Date.now());
+      const y = series.priceToCoordinate(last.close);
+      const width = chart.priceScale('right').width();
+      // Nothing to count down once the bar has closed (e.g. the market is shut)
+      if (remain <= 0 || y == null || !width) { setCountdown(null); return; }
+      const d = Math.floor(remain / 86400), h = Math.floor((remain % 86400) / 3600);
+      const m = Math.floor((remain % 3600) / 60), sec = remain % 60;
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const text = d > 0 ? `${d}d ${h}h` : h > 0 ? `${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+      const color = last.close >= last.open ? candleColorsRef.current.upColor : candleColorsRef.current.downColor;
+      setCountdown(prev => (prev && prev.text === text && prev.top === y && prev.width === width && prev.color === color) ? prev : { text, top: y, width, color });
     };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [labelSettings.countdown]);
+    const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(update); };
+    update();
+    const id = setInterval(update, 1000);
+    const chart = chartRef.current;
+    chart?.timeScale().subscribeVisibleLogicalRangeChange(schedule);
+    return () => {
+      clearInterval(id);
+      cancelAnimationFrame(frame);
+      try { chart?.timeScale().unsubscribeVisibleLogicalRangeChange(schedule); } catch { /* chart gone */ }
+    };
+  }, [labelSettings.countdown, labelSettings.lastPrice, chart]);
 
   // Alt+I / Alt+P / Alt+L price-scale shortcuts (Invert / Percent / Logarithmic)
   useEffect(() => {
@@ -687,12 +736,32 @@ export default function ChartContainer({
     background: theme === "dark" ? "#131722" : "#ffffff",
     gridVert: theme === "dark" ? "#1e222d" : "#f0f3fa",
     gridHorz: theme === "dark" ? "#1e222d" : "#f0f3fa",
-    crosshair: "#9598a1",
+    crosshair: theme === "dark" ? "#758696" : "#9598a1",
     text: theme === "dark" ? "#d1d4dc" : "#131722",
-    lines: theme === "dark" ? "#e0e3eb" : "#e0e3eb"
+    lines: theme === "dark" ? "#2a2e39" : "#e0e3eb"
   });
   const canvasColorsRef = useRef(canvasColors);
   useEffect(() => { canvasColorsRef.current = canvasColors; }, [canvasColors]);
+
+  // canvasColors is only seeded from the theme at mount, so flipping light/dark
+  // afterwards would leave the chart pane on the old background. Re-seed the
+  // theme-dependent colors when the theme actually changes (skipping first mount so
+  // colors loaded from saved settings aren't overwritten).
+  const prevThemeRef = useRef(theme);
+  useEffect(() => {
+    if (prevThemeRef.current === theme) return;
+    prevThemeRef.current = theme;
+    const dark = theme === "dark";
+    setCanvasColors(prev => ({
+      ...prev,
+      background: dark ? "#131722" : "#ffffff",
+      gridVert: dark ? "#1e222d" : "#f0f3fa",
+      gridHorz: dark ? "#1e222d" : "#f0f3fa",
+      text: dark ? "#d1d4dc" : "#131722",
+      lines: dark ? "#2a2e39" : "#e0e3eb",
+      crosshair: dark ? "#758696" : "#9598a1",
+    }));
+  }, [theme]);
 
   const { user } = useAuth();
 
@@ -718,12 +787,8 @@ export default function ChartContainer({
           const data = docSnap.data().chartSettings;
           if (data) {
             if (data.candleColors) {
+              // The effect below re-applies candleColors to the series whenever they change
               setCandleColors(data.candleColors);
-              if (chartRef.current && seriesRef.current) {
-                // Not using seriesRef directly for applyOptions later, wait, series might be undefined here. 
-                // We'll let the standard React state flow handle updating, but lightweight charts isn't reactive.
-                // It's safer to just let the standard update happen in a separate useEffect if needed, or apply directly here:
-              }
             }
             if (data.canvasColors) {
               setCanvasColors(data.canvasColors);
@@ -742,9 +807,10 @@ export default function ChartContainer({
     fetchSettings();
   }, [user]);
 
-  // Sync loaded settings to chart if chart is already ready
+  // Sync loaded settings to chart if chart is already ready (the live series only — state can
+  // briefly still hold the previous chart's series while the chart is being rebuilt)
   useEffect(() => {
-    if (chartRef.current && series) {
+    if (chartRef.current && series && series === candleSeriesRef.current) {
       series.applyOptions({
         upColor: candleColors.bodyVisible ? candleColors.upColor : 'transparent',
         downColor: candleColors.bodyVisible ? candleColors.downColor : 'transparent',
@@ -759,6 +825,8 @@ export default function ChartContainer({
         layout: { background: { type: ColorType.Solid, color: canvasColors.background }, textColor: canvasColors.text },
         grid: { vertLines: { color: canvasColors.gridVert }, horzLines: { color: canvasColors.gridHorz } },
         timeScale: { borderColor: canvasColors.lines },
+        rightPriceScale: { borderColor: canvasColors.lines },
+        leftPriceScale: { borderColor: canvasColors.lines },
         crosshair: { 
           vertLine: { color: canvasColors.crosshair },
           horzLine: { color: canvasColors.crosshair }
@@ -823,135 +891,442 @@ export default function ChartContainer({
   }, [activeTool, chart]);
 
   // Sync Price Lines for Positions and Orders
+  // Execution marks: an arrow on the bar each paper-trading fill happened in (blue up below
+  // the bar for buys, red down above it for sells), per Settings → Trading → Execution marks
+  const executions = activeBook(tradingState).executions;
   useEffect(() => {
-    // Clean up chart lines
-    priceLinesRef.current.forEach(line => {
-      if (series) {
-        try { series.removePriceLine(line); } catch (e) {}
+    if (!series) return;
+    const bars = fullDataRef.current;
+    const marks: any[] = [];
+    if (tradingSettings.executionMarks && tradingState.connected && bars.length) {
+      const firstTime = bars[0].time as number;
+      for (const ex of executions) {
+        if (ex.symbol !== symbol) continue;
+        const t = toChartTime(symbol, ex.time);
+        if (t < firstTime) continue;
+        let lo = 0, hi = bars.length - 1;
+        while (lo < hi) { const mid = (lo + hi + 1) >> 1; if ((bars[mid].time as number) <= t) lo = mid; else hi = mid - 1; }
+        const isBuy = ex.side === 'buy';
+        marks.push({
+          time: bars[lo].time,
+          position: isBuy ? 'belowBar' : 'aboveBar',
+          color: isBuy ? '#2962ff' : '#f23645',
+          shape: isBuy ? 'arrowUp' : 'arrowDown',
+          text: tradingSettings.executionLabels ? `${isBuy ? 'Buy' : 'Sell'} ${formatQty(ex.qty)}` : '',
+          size: 1,
+        });
       }
-    });
-    priceLinesRef.current = [];
-
-    // Draw active positions
-    if (series) {
-      positions.forEach(p => {
-        if (p.symbol === symbol) {
-          // Main position line
-          const posLine = series.createPriceLine({
-            price: p.avgFillPrice,
-            color: p.side === 'buy' ? '#2962ff' : '#f23645',
-            lineWidth: 1,
-            lineStyle: 2, // Dashed
-            axisLabelVisible: true,
-            title: `${p.quantity}${p.side === 'buy' ? 'L' : 'S'}  ${p.unrealizedPnL > 0 ? '+' : ''}${p.unrealizedPnL.toFixed(2)} USD`,
-          });
-          priceLinesRef.current.push(posLine);
-
-          // Take profit line
-          if (p.takeProfit) {
-            const tpLine = series.createPriceLine({
-              price: p.takeProfit,
-              color: '#089981', // Green for TP
-              lineWidth: 1,
-              lineStyle: 2,
-              axisLabelVisible: true,
-              title: `TP ${p.quantity}`,
-            });
-            priceLinesRef.current.push(tpLine);
-          }
-
-          // Stop loss line
-          if (p.stopLoss) {
-            const slLine = series.createPriceLine({
-              price: p.stopLoss,
-              color: '#f2a900', // Orange for SL
-              lineWidth: 1,
-              lineStyle: 2,
-              axisLabelVisible: true,
-              title: `SL ${p.quantity}`,
-            });
-            priceLinesRef.current.push(slLine);
-          }
-        }
-      });
-      
-      // Draw pending orders (Limit/Stop)
-      orders.filter(o => o.status === 'Working' && o.symbol === symbol).forEach(o => {
-        const orderLine = series.createPriceLine({
-          price: o.price,
-          color: o.side === 'buy' ? '#2962ff' : '#f23645',
-          lineWidth: 1,
-          lineStyle: 3, // Dotted
-          axisLabelVisible: true,
-          title: `${o.type} ${o.side.toUpperCase()} ${o.quantity}`,
-        });
-        priceLinesRef.current.push(orderLine);
-      });
     }
+    tradeMarkersRef.current = marks;
+    applyAllMarkers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [series, symbol, executions, tradingSettings.executionMarks, tradingSettings.executionLabels, tradingState.connected, lastPriceData, interval]);
 
-    return () => {
-      // Don't unmount chart here, just wait for next dependency change
-    };
-  }, [series, symbol, positions, orders]);
-
-  // Sync Trade Execution Markers
+  // Chart snapshots (Settings → Trading → "Orders, executions, and positions in chart
+  // snapshots"): lets the snapshot hide execution marks, or draw the position/order lines,
+  // which are HTML on top of the chart rather than part of its canvas
   useEffect(() => {
-    if (series && history) {
-      const markers = history
-        .filter(h => h.symbol === symbol)
-        .map(h => {
-          const isBuy = h.action === 'Buy';
-          // lightweight-charts needs time in seconds
-          return {
-            time: Math.floor(h.time / 1000) as any, // type cast for Time
-            position: isBuy ? 'belowBar' : 'aboveBar',
-            color: isBuy ? '#2962ff' : '#f23645',
-            shape: isBuy ? 'arrowUp' : 'arrowDown',
-            text: h.action,
-            size: 1,
-          };
-        });
+    if (!series) return;
+    (window as any).__tradingSnapshot = {
+      setMarksHidden: (hidden: boolean) => { snapshotHideTradesRef.current = hidden; applyAllMarkers(); },
+      lines: () => {
+        const st = engine.getState();
+        if (!st.connected) return [];
+        const sym = symbolRef.current;
+        const book = activeBook(st);
+        const out: { y: number; color: string; dashed: boolean; text: string }[] = [];
+        const add = (price: number | undefined, color: string, dashed: boolean, text: string) => {
+          if (price === undefined) return;
+          const y = series.priceToCoordinate(price);
+          if (y !== null && y !== undefined && isFinite(y)) out.push({ y, color, dashed, text });
+        };
+        const pos = book.positions.find(p => p.symbol === sym);
+        if (pos) add(pos.avgPrice, pos.side === 'buy' ? '#2962ff' : '#f23645', false, `${pos.side === 'sell' ? '−' : ''}${formatQty(pos.qty)}`);
+        for (const o of book.orders) {
+          if (o.symbol !== sym || (o.status !== 'working' && o.status !== 'inactive')) continue;
+          const price = o.type === 'limit' ? o.limitPrice : o.stopPrice;
+          if (o.role === 'tp') add(price, '#089981', o.status === 'inactive', `TP ${formatQty(o.qty)}`);
+          else if (o.role === 'sl') add(price, '#ff9800', o.status === 'inactive', `SL ${formatQty(o.qty)}`);
+          else add(price, o.side === 'buy' ? '#2962ff' : '#f23645', true, `${formatQty(o.qty)} ${o.type === 'limit' ? 'Limit' : 'Stop'}`);
+        }
+        return out;
+      },
+    };
+    return () => { delete (window as any).__tradingSnapshot; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [series]);
 
-      tradeMarkersRef.current = markers;
-      applyAllMarkers();
-    }
-  }, [series, symbol, history]);
+  const [pineVisible, setPineVisible] = useState(true);
+  // Collapses the buy/sell price boxes + indicator/strategy legend rows,
+  // leaving just the symbol/OHLC line — on by default, matching TradingView.
+  const [legendExpanded, setLegendExpanded] = useState(true);
+  const statusLineSettings = statusLine.useValue();
+  const symbolInfo = useSymbolInfo(symbol);
 
   // Merges trade-execution markers with any markers produced by a running Pine
   // script, since both share the single candle series' marker list.
   function applyAllMarkers() {
-    if (!series || typeof (series as any).setMarkers !== 'function') return;
-    const merged = [...tradeMarkersRef.current, ...pineMarkersRef.current].sort((a, b) => a.time - b.time);
+    if (!series) return;
+    const trades = snapshotHideTradesRef.current ? [] : tradeMarkersRef.current;
+    const merged = [...trades, ...(pineVisibleRef.current ? pineMarkersRef.current : [])].sort((a, b) => a.time - b.time);
     try {
-      (series as any).setMarkers(merged);
+      if (!seriesMarkersRef.current || seriesMarkersRef.current.series !== series) {
+        seriesMarkersRef.current = { series, api: createSeriesMarkers(series, []) };
+      }
+      seriesMarkersRef.current.api.setMarkers(merged);
     } catch (e) {
-      // sometimes setMarkers fails if time is perfectly between bars in strict modes, ignore for clone
+      // a marker time that isn't one of the series' bars is rejected; skip this round
     }
   }
 
+  const pineVisibleRef = useRef(true);
+  useEffect(() => { pineVisibleRef.current = pineVisible; }, [pineVisible]);
+
+  function togglePineVisible() {
+    const next = !pineVisible;
+    setPineVisible(next);
+    Object.values(pineSeriesRef.current).forEach((s) => { try { (s as any).applyOptions({ visible: next }); } catch { /* ignore */ } });
+    pineVisibleRef.current = next;
+    applyAllMarkers();
+  }
+
+  function removePineScript() {
+    window.dispatchEvent(new CustomEvent("tv:clear-pine-script"));
+  }
+
+  // "Reset chart view" shows once the view differs from its default (scrolled, zoomed, or the
+  // price scale no longer auto), and puts it back: default bar spacing at the latest bars, as
+  // TradingView's Alt + R does (not a fit-everything)
+  function isChartViewChanged() {
+    const ch = chartRef.current, se = candleSeriesRef.current;
+    if (!ch) return false;
+    const ts = ch.timeScale();
+    const o: any = ts.options();
+    const spacing = Math.abs((ts.logicalToCoordinate(1 as any) ?? 0) - (ts.logicalToCoordinate(0 as any) ?? 0));
+    const scrolled = Math.abs(ts.scrollPosition() - (o.rightOffset ?? 0)) > 0.5;
+    const zoomed = Math.abs(spacing - (o.barSpacing ?? 6)) > 0.01;
+    const auto = se ? se.priceScale().options().autoScale : true;
+    return scrolled || zoomed || !auto;
+  }
+  function resetChartView() {
+    const ch = chartRef.current;
+    if (!ch) return;
+    ch.timeScale().resetTimeScale();
+    candleSeriesRef.current?.priceScale().applyOptions({ autoScale: true });
+    setPsAutoScale(true);
+    (window as any).__zoomStack = [];
+    window.dispatchEvent(new CustomEvent('tv:zoom-depth', { detail: 0 }));
+    notifyPriceScaleChanged();
+  }
+  const resetChartViewRef = useRef(resetChartView);
+  resetChartViewRef.current = resetChartView;
+  useEffect(() => {
+    const on = () => resetChartViewRef.current();
+    window.addEventListener('tv:reset-chart-view', on);
+    return () => window.removeEventListener('tv:reset-chart-view', on);
+  }, []);
+  // The price scale menu's "Lock price to bar ratio" value: price units per bar step
+  function priceToBarRatioText() {
+    const ch = chartRef.current, se = candleSeriesRef.current;
+    if (!ch || !se) return "";
+    const ts = ch.timeScale();
+    const spacing = Math.abs((ts.logicalToCoordinate(1 as any) ?? 0) - (ts.logicalToCoordinate(0 as any) ?? 0));
+    const a = se.coordinateToPrice(0 as any), b = se.coordinateToPrice(100 as any);
+    if (a === null || b === null || !spacing) return "";
+    const r = (Math.abs(a - b) / 100) * spacing;
+    return r >= 1 ? r.toFixed(4) : r.toPrecision(4);
+  }
+  // While a vertical cursor line is locked, the chart's own vertical crosshair line steps aside
+  useEffect(() => {
+    try { chartRef.current?.applyOptions({ crosshair: { vertLine: { visible: lockedCursorTime === null, labelVisible: lockedCursorTime === null } } }); } catch { /* ignore */ }
+  }, [lockedCursorTime]);
+
   // Runs whenever the Pine Editor's "Add to chart" is clicked, or the script is
-  // removed — renders plot() output as line series and strategy/plotshape
-  // output as markers on the main candle series.
+  // removed — renders plot() output as line series, strategy/plotshape
+  // output as markers on the main candle series, and table.new()/table.cell()
+  // output as a positioned HTML overlay (see pineTables below).
+  const [pineTables, setPineTables] = useState<any[]>([]);
+  const [strategyReport, setStrategyReport] = useState<any>(null);
+  const [strategyScriptName, setStrategyScriptName] = useState<string>("");
+  // The on-chart legend line for whatever script is currently added — name,
+  // its real input values (for the "D 240 6 2 Directional 0.34 ..." style
+  // summary), and each plot's live (most recent bar) value in its own color.
+  const [pineLegend, setPineLegend] = useState<{ name: string; inputs: string[]; plots: { title: string; color: string; lastValue: number | null }[] } | null>(null);
+  // The script's own source + the symbol/timeframe it was run against —
+  // kept here (not just inside PineEditorPanel, which unmounts when closed)
+  // so the strategy report's "Testing period" picker can re-run the exact
+  // same script over a different bar range at any time, editor open or not.
+  const lastPineRunRef = useRef<{ code: string; symbol: string; pineTf: string; scriptName: string } | null>(null);
+  const [backtestRange, setBacktestRange] = useState<{ kind: "all" | "days" | "custom" | "history"; days?: number; from?: number; to?: number }>({ kind: "all" });
+  const [backtestBusy, setBacktestBusy] = useState(false);
+  const [capitalOverride, setCapitalOverride] = useState<number | null>(null);
+  const [inputOverrides, setInputOverrides] = useState<Record<string, any>>({});
+  // Keyed by plot title, survives a re-run (which otherwise rebuilds every
+  // series fresh from the script's own colors) so a Style-tab recolor
+  // doesn't get silently undone the next time the range/capital/inputs change.
+  const [plotColorOverrides, setPlotColorOverrides] = useState<Record<string, string>>({});
+  const [pineInputsMeta, setPineInputsMeta] = useState<PineInputMeta[]>([]);
+  const [pineDeclMeta, setPineDeclMeta] = useState<{ initialCapital: number; pyramiding?: number; defaultQtyValue?: number; defaultQtyType?: string }>({ initialCapital: 100000 });
+  const [showPineSettings, setShowPineSettings] = useState(false);
+  // Ephemeral "Updating report" / "updated successfully" toast — shown for
+  // every re-run triggered from the settings modal, the date-range picker or
+  // the capital picker, since those are silent state changes that otherwise
+  // give no feedback that the report actually recomputed.
+  const [reportToast, setReportToast] = useState<"updating" | "success" | null>(null);
+  const reportToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Renders a completed PineRunResult onto the chart (series/markers/tables/
+  // legend/report) — shared by the initial run (tv:run-pine-script) and by
+  // re-running the same script over a different backtest date range.
+  function applyPineResult(result: any, scriptName: string) {
+    if (!chartRef.current) return;
+    Object.values(pineSeriesRef.current).forEach((s) => { try { chartRef.current!.removeSeries(s); } catch { /* ignore */ } });
+    pineSeriesRef.current = {};
+    const plots = result?.plots || [];
+    plots.forEach((p: any, idx: number) => {
+      try {
+        const color = plotColorOverrides[p.title] || p.color;
+        const s = chartRef.current!.addSeries(LineSeries, {
+          color,
+          lineWidth: 2,
+          title: p.title,
+          crosshairMarkerVisible: true,
+          // The actual line is painted by CandleBodyAwareLine below (ducking under
+          // candle bodies); this series stays invisible but still drives the
+          // price-axis label, crosshair value and tooltip/legend readouts.
+          lineVisible: false,
+        });
+        s.setData(p.values);
+        s.attachPrimitive(new CandleBodyAwareLine());
+        pineSeriesRef.current[idx] = s;
+      } catch { /* ignore */ }
+    });
+    pineMarkersRef.current = result?.markers || [];
+    setPineVisible(true);
+    applyAllMarkers();
+    setPineTables(result?.tables || []);
+    const report = result?.strategyReport;
+    setStrategyReport(report || null);
+    setStrategyScriptName(report ? (scriptName || "Strategy") : "");
+    setPineLegend({
+      name: scriptName || (report ? "Strategy" : "Script"),
+      inputs: result?.inputs || [],
+      plots: plots.map((p: any) => ({ title: p.title, color: plotColorOverrides[p.title] || p.color, lastValue: p.values?.length ? p.values[p.values.length - 1].value : null })),
+    });
+  }
+
+  // The chart only ever holds as much history as has actually been fetched
+  // (an initial ~5000-bar load, plus whatever infinite-scroll has backfilled)
+  // — for an intraday interval that can easily be far short of "Last 90 days"
+  // or "Last 365 days". Picking one of those presets when the real requested
+  // window reaches further back than what's loaded would otherwise silently
+  // run the backtest over the SAME (too-short) bar set every time, since
+  // there'd be nothing new to filter down to — which is exactly what looks
+  // like "the report isn't updating" even though the re-run genuinely ran.
+  // This backfills older bars the same way scrolling the chart left does
+  // (same /api/stock-data endpoint, same merge/dedupe/weekend-filter), just
+  // triggered by the picker instead of a scroll event.
+  async function ensureHistoryForRange(range: { kind: "all" | "days" | "custom" | "history"; days?: number; from?: number; to?: number }): Promise<any[]> {
+    let all = fullDataRef.current || [];
+    if (all.length === 0) return all;
+    let neededFrom: number | null = null;
+    if (range.kind === "days" && range.days) {
+      neededFrom = all[all.length - 1].time - range.days * 86400;
+    } else if (range.kind === "custom" && range.from) {
+      neededFrom = range.from;
+    } else if (range.kind === "history") {
+      // "Entire history": everything the data source has, back to its first bar
+      neededFrom = 1;
+    }
+    if (neededFrom === null || neededFrom >= all[0].time) return all;
+
+    const symbol = symbolRef.current;
+    const interval = intervalRef.current;
+    let guard = 0;
+    while (all.length > 0 && all[0].time > neededFrom && guard < 8) {
+      guard++;
+      const oldestBar = all[0];
+      const endDateStr = new Date(oldestBar.time * 1000).toISOString().split('T')[0];
+      const startDateStr = new Date(neededFrom * 1000).toISOString().split('T')[0];
+      let moreData: any[] = [];
+      try {
+        moreData = await fetchStockData(symbol, interval, endDateStr, oldestBar.close, startDateStr);
+      } catch {
+        break;
+      }
+      if (!moreData || moreData.length === 0) break;
+
+      const dataMap = new Map<number, any>();
+      moreData.forEach((d: any) => dataMap.set(d.time, d));
+      all.forEach((d: any) => dataMap.set(d.time, d));
+      let unique = Array.from(dataMap.values());
+      unique.sort((a: any, b: any) => (a.time as number) - (b.time as number));
+      unique = unique.filter((d: any) => {
+        const day = new Date(d.time * 1000).getUTCDay();
+        return day !== 0 && day !== 6;
+      });
+
+      if (unique.length <= all.length || unique[0].time >= oldestBar.time) break; // no real progress
+      all = unique;
+      fullDataRef.current = unique;
+      (window as any).__chartFullData = unique;
+    }
+    return all;
+  }
+
+  // Re-runs the last-run script over a filtered slice of the full loaded bar
+  // history with a given initial capital — this is what backs both the
+  // strategy report's "Testing period" and "Initial capital" pickers, since
+  // changing either one needs the exact same re-run mechanics.
+  async function runBacktest(
+    range: { kind: "all" | "days" | "custom" | "history"; days?: number; from?: number; to?: number },
+    capital: number | null,
+    overrides?: Record<string, any>,
+    silent?: boolean,
+  ) {
+    const last = lastPineRunRef.current;
+    if (!last) return;
+    if (fullDataRef.current.length === 0) return;
+    if (!silent) {
+      if (reportToastTimerRef.current) { clearTimeout(reportToastTimerRef.current); reportToastTimerRef.current = null; }
+      setReportToast("updating");
+      setBacktestBusy(true);
+    }
+    setBacktestRange(range);
+    setCapitalOverride(capital);
+    if (overrides) setInputOverrides(overrides);
+    try {
+      const all = await ensureHistoryForRange(range);
+      if (all.length === 0) { setReportToast(null); return; }
+      // TradingView's real "Testing period" keeps calculating the strategy
+      // across the FULL loaded chart history and only restricts which bars
+      // may submit new orders — truncating the bar array to just the
+      // selected window (the old approach) starves any var-persisted state
+      // the script needs to warm up before its first in-window signal.
+      // So the full backfilled history is always passed through here; only
+      // backtestFrom/backtestTo change per range, gating trades inside the
+      // engine instead of pre-filtering the data.
+      let backtestFrom: number | undefined;
+      let backtestTo: number | undefined;
+      if (range.kind === "days" && range.days) {
+        backtestFrom = all[all.length - 1].time - range.days * 86400;
+      } else if (range.kind === "custom" && range.from && range.to) {
+        backtestFrom = range.from;
+        backtestTo = range.to;
+      }
+      const result = await runPineScriptAsync(last.code, all, {
+        symbol: last.symbol,
+        pineTf: last.pineTf,
+        fetchTimeframe: fetchPineTimeframeData,
+        initialCapital: capital ?? undefined,
+        inputOverrides: overrides ?? inputOverrides,
+        backtestFrom,
+        backtestTo,
+      });
+      if (result.errors.length === 0) {
+        applyPineResult(result, last.scriptName);
+        if (!silent) {
+          setReportToast("success");
+          reportToastTimerRef.current = setTimeout(() => setReportToast(null), 2200);
+        }
+      } else if (!silent) {
+        setReportToast(null);
+      }
+    } finally {
+      if (!silent) setBacktestBusy(false);
+    }
+  }
+  // The latest re-run and its inputs, for the live-price handler (registered once per mode)
+  const realtimeRerunRef = useRef<{ run: () => void; busy: boolean; last: number }>({ run: () => {}, busy: false, last: 0 });
+  realtimeRerunRef.current.run = () => {
+    const rt = realtimeRerunRef.current;
+    if (rt.busy || !lastPineRunRef.current || !strategyReport) return;
+    rt.busy = true; rt.last = Date.now();
+    runBacktest(backtestRange, capitalOverride, undefined, true).finally(() => { rt.busy = false; });
+  };
+
+  // "Show on chart" (the report's trades): scroll the chart to a bar, or to a trade's entry..exit
+  function showTimeOnChart(from: number, to?: number) {
+    const chart = chartRef.current;
+    const bars = fullDataRef.current;
+    if (!chart || !bars.length) return;
+    const ts = chart.timeScale();
+    // the bar at (or last before) a time, as the chart's own logical index
+    const idxOf = (t: number) => {
+      let lo = 0, hi = bars.length - 1;
+      while (lo < hi) { const mid = (lo + hi + 1) >> 1; if ((bars[mid].time as number) <= t) lo = mid; else hi = mid - 1; }
+      const idx = ts.timeToIndex(bars[lo].time as any, true);
+      return idx === null ? lo : (idx as number);
+    };
+    const i0 = idxOf(from), i1 = to !== undefined ? idxOf(to) : i0;
+    const cur = ts.getVisibleLogicalRange();
+    const span = cur ? Math.max(20, cur.to - cur.from) : 120;
+    const half = Math.max(span / 2, (i1 - i0) / 2 + 10);
+    const mid = (i0 + i1) / 2;
+    ts.setVisibleLogicalRange({ from: mid - half, to: mid + half });
+  }
+
+  useEffect(() => {
+    return () => { if (reportToastTimerRef.current) clearTimeout(reportToastTimerRef.current); };
+  }, []);
+
+  function rerunPineForRange(range: { kind: "all" | "days" | "custom" | "history"; days?: number; from?: number; to?: number }) {
+    return runBacktest(range, capitalOverride);
+  }
+
+  function changeInitialCapital(capital: number) {
+    return runBacktest(backtestRange, capital);
+  }
+
+  // Applied when the settings modal's Ok button is clicked. Recoloring is
+  // applied directly to the live series immediately (no re-run needed for a
+  // cosmetic change), and is also remembered in plotColorOverrides so the
+  // NEXT re-run (triggered here for any changed inputs/capital, via the same
+  // mechanics as the date-range/capital pickers) doesn't reset it back to
+  // the script's own colors.
+  function applyPineSettings(overrides: Record<string, any>, capital: number, plotColors: Record<string, string>) {
+    setPlotColorOverrides((prev) => ({ ...prev, ...plotColors }));
+    if (pineLegend) {
+      const updatedPlots = pineLegend.plots.map((p, idx) => {
+        const newColor = plotColors[p.title];
+        if (newColor && newColor !== p.color) {
+          try { (pineSeriesRef.current[idx] as any)?.applyOptions({ color: newColor }); } catch { /* ignore */ }
+          return { ...p, color: newColor };
+        }
+        return p;
+      });
+      setPineLegend({ ...pineLegend, plots: updatedPlots });
+    }
+    return runBacktest(backtestRange, capital, overrides);
+  }
+
   useEffect(() => {
     function handleRunPine(e: any) {
       if (!chartRef.current) return;
-      Object.values(pineSeriesRef.current).forEach((s) => { try { chartRef.current!.removeSeries(s); } catch { /* ignore */ } });
-      pineSeriesRef.current = {};
-      const plots = e?.detail?.result?.plots || [];
-      plots.forEach((p: any, idx: number) => {
-        try {
-          const s = chartRef.current!.addSeries(LineSeries, {
-            color: p.color,
-            lineWidth: 2,
-            title: p.title,
-            crosshairMarkerVisible: true,
-          });
-          s.setData(p.values);
-          pineSeriesRef.current[idx] = s;
-        } catch { /* ignore */ }
-      });
-      pineMarkersRef.current = e?.detail?.result?.markers || [];
-      applyAllMarkers();
+      const scriptName = e?.detail?.scriptName || "Script";
+      const result = e?.detail?.result;
+      applyPineResult(result, scriptName);
+      setBacktestRange({ kind: "all" });
+      setCapitalOverride(null);
+      setInputOverrides({});
+      setPlotColorOverrides({});
+      if (result?.meta) {
+        setPineDeclMeta({
+          initialCapital: result.meta.initialCapital,
+          pyramiding: result.meta.pyramiding,
+          defaultQtyValue: result.meta.defaultQtyValue,
+          defaultQtyType: result.meta.defaultQtyType,
+        });
+      }
+      if (e?.detail?.code) {
+        lastPineRunRef.current = {
+          code: e.detail.code,
+          symbol,
+          pineTf: appIntervalToPineTf(interval),
+          scriptName,
+        };
+        setPineInputsMeta(getPineInputsMeta(e.detail.code));
+      }
     }
     function handleClearPine() {
       if (!chartRef.current) return;
@@ -959,6 +1334,12 @@ export default function ChartContainer({
       pineSeriesRef.current = {};
       pineMarkersRef.current = [];
       applyAllMarkers();
+      setPineTables([]);
+      setStrategyReport(null);
+      setPineLegend(null);
+      setPineInputsMeta([]);
+      setShowPineSettings(false);
+      lastPineRunRef.current = null;
     }
     window.addEventListener('tv:run-pine-script', handleRunPine);
     window.addEventListener('tv:clear-pine-script', handleClearPine);
@@ -966,7 +1347,22 @@ export default function ChartContainer({
       window.removeEventListener('tv:run-pine-script', handleRunPine);
       window.removeEventListener('tv:clear-pine-script', handleClearPine);
     };
-  }, [series]);
+  }, [series, symbol, interval]);
+
+  // Maps Pine's position.* constant (see resolveIdent's dot-namespace
+  // fallback in pineScriptEngine.ts) to CSS anchoring for the table overlay.
+  function pineTablePositionStyle(position: string): React.CSSProperties {
+    const style: React.CSSProperties = { position: "absolute" };
+    const p = position || "top_right";
+    if (p.includes("top")) style.top = "8px"; else if (p.includes("bottom")) style.bottom = "8px";
+    else { style.top = "50%"; style.transform = "translateY(-50%)"; }
+    if (p.includes("left")) style.left = "8px"; else if (p.includes("right")) style.right = "8px";
+    else {
+      style.left = "50%";
+      style.transform = style.transform ? "translate(-50%, -50%)" : "translateX(-50%)";
+    }
+    return style;
+  }
 
   const [volumeConfig, setVolumeConfig] = useState({ upColor: 'rgba(38, 166, 154, 0.5)', downColor: 'rgba(239, 83, 80, 0.5)', maColor: '#2962ff' });
   const volumeConfigRef = useRef(volumeConfig);
@@ -978,6 +1374,24 @@ export default function ChartContainer({
   useEffect(() => { emaConfigsRef.current = emaConfigs; }, [emaConfigs]);
   const emaVisibilitiesRef = useRef(emaVisibilities);
   useEffect(() => { emaVisibilitiesRef.current = emaVisibilities; }, [emaVisibilities]);
+
+  // Indicator templates (TopBar) snapshot and restore the per-indicator settings kept here
+  useEffect(() => {
+    const w = window as any;
+    w.__indicatorSettings = {
+      get: () => ({ ema: emaConfigsRef.current, volume: volumeConfigRef.current }),
+      set: ({ ema, volume }: { ema?: Record<string, any>; volume?: any }) => {
+        if (ema) {
+          // Written to the ref right away so the effect that creates the new EMA series
+          // (on the same render) builds them with these settings instead of the defaults
+          emaConfigsRef.current = { ...emaConfigsRef.current, ...ema };
+          setEmaConfigs(prev => ({ ...prev, ...ema }));
+        }
+        if (volume) setVolumeConfig(volume);
+      },
+    };
+    return () => { delete w.__indicatorSettings; };
+  }, []);
 
   const [hoveredEmasData, setHoveredEmasData] = useState<Record<string, any>>({});
 
@@ -991,11 +1405,7 @@ export default function ChartContainer({
   useEffect(() => {
     volumeConfigRef.current = volumeConfig;
     if (volumeSeriesRef.current && fullDataRef.current.length > 0) {
-      const volData = fullDataRef.current.map((d: any) => ({
-        time: d.time,
-        value: Math.floor((Math.abs(d.close - d.open) + (d.high - d.low)) * 1000) || 100,
-        color: d.close >= d.open ? volumeConfig.upColor : volumeConfig.downColor
-      }));
+      const volData = volumeHistogram(fullDataRef.current, volumeConfig.upColor, volumeConfig.downColor);
       volumeSeriesRef.current.setData(volData);
     }
   }, [volumeConfig]);
@@ -1024,6 +1434,71 @@ export default function ChartContainer({
     (window as any).__replayVisibleCutoff = mode !== 'idle' ? replayIndex : null;
   }, [mode, replayIndex]);
 
+  // Call before the candles get a dataset with different bar times (new interval, symbol
+  // or go-to date). Otherwise the time scale briefly holds the overlays' old bar times
+  // alongside the new candle times, and when the overlays are refilled lightweight-charts
+  // paints the candles with stale bar indices and throws "Value is null".
+  // Price axis / legend decimals follow the symbol's own quotes (EUR/USD to 5 places, stocks
+  // to 2), set whenever the candles get a new dataset
+  const [pricePrecision, setPricePrecision] = useState(2);
+  const pricePrecisionRef = useRef(2);
+  const priceFormatFor = (p: number) => ({ type: 'price' as const, precision: p, minMove: Math.pow(10, -p) });
+  const applyPricePrecision = (data: any[]) => {
+    const p = detectPrecision(data, symbolRef.current);
+    pricePrecisionRef.current = p;
+    (window as any).__pricePrecision = p;
+    engine.setPrecision(symbolRef.current, p);
+    setPricePrecision(p);
+    candleSeriesRef.current?.applyOptions({ priceFormat: priceFormatFor(p) });
+    Object.values(emasRef.current).forEach(s => s.applyOptions({ priceFormat: priceFormatFor(p) }));
+  };
+
+  const clearOverlaySeriesData = () => {
+    Object.values(emasRef.current).forEach(s => s.setData([]));
+    volumeSeriesRef.current?.setData([]);
+  };
+
+  // Bottom bar date ranges ("3 months in 1 hour intervals"…): the page switches the
+  // interval, and the chart shows that span ending at the newest bar — right away if the
+  // interval is unchanged, else once the new interval's bars are loaded.
+  const pendingDateRangeRef = useRef<{ interval: string; span: DateRangeSpan } | null>(null);
+  const showDateRange = (span: DateRangeSpan, data: any[]) => {
+    if (!chartRef.current || data.length === 0) return;
+    const last = data[data.length - 1].time as number;
+    let fromIdx: number;
+    if (span === 'all') fromIdx = 0;
+    else if (span !== 'ytd' && span.days) {
+      // Trading days, not calendar days (so 5D over a weekend is still 5 sessions):
+      // walk back through the last N dates that actually have bars
+      let seen = 0, prevDate = '', i = data.length - 1;
+      for (; i >= 0; i--) {
+        const date = new Date(data[i].time * 1000).toISOString().slice(0, 10);
+        if (date !== prevDate) { prevDate = date; if (++seen > span.days) break; }
+      }
+      fromIdx = i + 1;
+    } else {
+      let fromTime: number;
+      if (span === 'ytd') fromTime = Date.UTC(new Date(last * 1000).getUTCFullYear(), 0, 1) / 1000;
+      else {
+        const d = new Date(last * 1000);
+        d.setUTCMonth(d.getUTCMonth() - (span.months || 0));
+        fromTime = d.getTime() / 1000;
+      }
+      fromIdx = Math.max(0, data.findIndex(b => b.time >= fromTime));
+    }
+    chartRef.current.timeScale().setVisibleLogicalRange({ from: fromIdx, to: data.length - 1 + 3 });
+  };
+  useEffect(() => {
+    const onRange = (e: Event) => {
+      const { interval: target, span } = (e as CustomEvent).detail || {};
+      if (!span) return;
+      if (target === intervalRef.current && fullDataRef.current.length > 0) showDateRange(span, fullDataRef.current);
+      else pendingDateRangeRef.current = { interval: target, span };
+    };
+    window.addEventListener('tv:apply-date-range', onRange);
+    return () => window.removeEventListener('tv:apply-date-range', onRange);
+  }, []);
+
   const updateEmaData = (data: any[]) => {
     if (!data || data.length === 0) return;
     // In replay mode, clip data to the replay index
@@ -1048,11 +1523,7 @@ export default function ChartContainer({
     });
     // Also clip volume in replay mode
     if (modeRef.current !== 'idle' && volumeSeriesRef.current && effectiveData !== data) {
-      const volData = effectiveData.map((d: any) => ({
-        time: d.time,
-        value: Math.floor((Math.abs(d.close - d.open) + (d.high - d.low)) * 1000) || 100,
-        color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
-      }));
+      const volData = volumeHistogram(effectiveData, 'rgba(38, 166, 154, 0.5)', 'rgba(239, 83, 80, 0.5)');
       volumeSeriesRef.current.setData(volData);
     }
   };
@@ -1234,11 +1705,7 @@ export default function ChartContainer({
       // Compute data if available
       const data = fullDataRef.current;
       if (data && data.length > 0) {
-        const volData = data.map(d => ({
-          time: d.time,
-          value: Math.floor((Math.abs(d.close - d.open) + (d.high - d.low)) * 1000) || 100,
-          color: d.close >= d.open ? volumeConfigRef.current.upColor : volumeConfigRef.current.downColor
-        }));
+        const volData = volumeHistogram(data, volumeConfigRef.current.upColor, volumeConfigRef.current.downColor);
         volumeSeries.setData(volData);
       }
     } else if (!showVolume && volumeSeriesRef.current) {
@@ -1256,9 +1723,14 @@ export default function ChartContainer({
         const series = chartRef.current!.addSeries(LineSeries, {
           color: config.color,
           lineWidth: 1.5,
+          priceFormat: priceFormatFor(pricePrecisionRef.current),
           crosshairMarkerVisible: false,
-          visible: emaVisibilitiesRef.current[ema.id] ?? true
+          visible: emaVisibilitiesRef.current[ema.id] ?? true,
+          // Painted by CandleBodyAwareLine instead (ducking under candle bodies);
+          // this series stays invisible but still drives the price-axis label.
+          lineVisible: false
         });
+        series.attachPrimitive(new CandleBodyAwareLine());
         emasRef.current[ema.id] = series;
         if (!emaConfigsRef.current[ema.id]) setEmaConfigs(prev => ({ ...prev, [ema.id]: config }));
         if (emaVisibilitiesRef.current[ema.id] === undefined) setEmaVisibilities(prev => ({ ...prev, [ema.id]: true }));
@@ -1276,7 +1748,8 @@ export default function ChartContainer({
 
     if (changed) updateEmaData(fullDataRef.current);
     recalcSessionBoxes(fullDataRef.current);
-  }, [activeIndicators]);
+    // `chart`: a rebuilt chart (e.g. after a theme change) gets its indicators added again
+  }, [activeIndicators, chart]);
 
   useEffect(() => {
     if (volumeSeriesRef.current) {
@@ -1295,6 +1768,8 @@ export default function ChartContainer({
   }, [emaConfigs, emaVisibilities]);
 
   const updateReplayDataRef = useRef(updateReplayData);
+  const startReplayAtRef = useRef(startReplayAt);
+  startReplayAtRef.current = startReplayAt;
   updateReplayDataRef.current = updateReplayData;
 
   // Clip EMA and volume data to the replay index during replay mode
@@ -1323,12 +1798,110 @@ export default function ChartContainer({
       const prefix = change >= 0 ? '+' : '';
       document.title = `${symbol} ${formattedPrice} ${sign} ${prefix}${changePercent.toFixed(2)}% | TradePilot`;
       
-      setCurrentPrice(price);
+      // The last loaded bar is a quote for paper trading (a newer live quote wins)
+      if (mode === 'idle') {
+        const bars = fullDataRef.current;
+        const lastTime = bars.length ? (bars[bars.length - 1].time as number) * 1000 : Date.now();
+        engine.setQuote(symbol, price, lastTime);
+      }
       checkAlerts(symbol, price);
     } else {
       document.title = `${symbol} | TradePilot`;
     }
-  }, [symbol, lastPriceData, setCurrentPrice, checkAlerts]);
+  }, [symbol, lastPriceData, checkAlerts, mode]);
+
+  // "Add order on AAPL at 180.00…": the ticket as a limit/stop at that price
+  const addOrderAt = (price: number) => {
+    if (!engine.getState().connected) { tradingUi.set({ dialog: { kind: 'broker', then: { side: 'buy', symbol } } }); return; }
+    const f = Math.pow(10, pricePrecisionRef.current);
+    const p = Math.round(price * f) / f;
+    openTicket({ symbol, side: 'buy', type: orderTypeAt(symbol, 'buy', p), price: p });
+  };
+  const addOrderAtRef = useRef(addOrderAt);
+  addOrderAtRef.current = addOrderAt;
+
+  // Trading shortcuts at the crosshair price: Alt+Shift+B / Alt+Shift+S project a buy / sell
+  // limit or stop there, Shift+T opens the ticket at that price
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (isTypingTarget(t)) return;
+      if (e.ctrlKey || e.metaKey || !e.shiftKey) return;
+      const price = crosshairPriceRef.current;
+      if (price === null || !(price > 0) || mode !== 'idle') return;
+      const f = Math.pow(10, pricePrecisionRef.current);
+      const p = Math.round(price * f) / f;
+      if (e.altKey && (e.code === 'KeyB' || e.code === 'KeyS')) {
+        e.preventDefault(); e.stopPropagation();
+        const side = e.code === 'KeyB' ? 'buy' : 'sell';
+        projectChartOrder(symbolRef.current, side, orderTypeAt(symbolRef.current, side, p), p);
+      } else if (!e.altKey && e.code === 'KeyT') {
+        e.preventDefault(); e.stopPropagation();
+        addOrderAtRef.current(p);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [mode]);
+
+  // Live prices from the paper-trading quote feed move the last candle (or open the next one)
+  useEffect(() => {
+    const onLive = (e: Event) => {
+      const d = (e as CustomEvent).detail;
+      if (!d || d.symbol !== symbolRef.current || mode !== 'idle' || !d.marketOpen) return;
+      const bars = fullDataRef.current;
+      const cs = candleSeriesRef.current;
+      if (!bars.length || !cs) return;
+      const step = getIntervalMs(intervalRef.current) / 1000;
+      if (!(step > 0)) return;
+      const last = bars[bars.length - 1];
+      const t = toChartTime(d.symbol, d.time);
+      let bar: any;
+      if (t >= last.time && t < last.time + step) {
+        bar = { ...last, high: Math.max(last.high, d.price), low: Math.min(last.low, d.price), close: d.price };
+        bars[bars.length - 1] = bar;
+      } else if (step < 86400 && t >= last.time + step && t < last.time + 2 * step) {
+        bar = { time: last.time + step, open: last.close, high: Math.max(last.close, d.price), low: Math.min(last.close, d.price), close: d.price };
+        bars.push(bar);
+      } else return;
+      try { cs.update(bar); } catch { return; }
+      updateEmaData(bars);
+      setLastPriceData({ price: d.price, prevPrice: bars.length > 1 ? bars[bars.length - 2].close : d.price });
+      // Script execution "On realtime bar tick": the strategy recalculates on each real-time update
+      // (at most every 1.5 s, one run at a time)
+      if (strategyDock.get().onRealtimeTick && Date.now() - realtimeRerunRef.current.last > 1500) realtimeRerunRef.current.run();
+    };
+    window.addEventListener('tv:live-price', onLive);
+    return () => window.removeEventListener('tv:live-price', onLive);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  // Open chart settings on a tab
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      setChartSettingsTab((e as CustomEvent).detail?.tab);
+      setShowChartSettings(true);
+    };
+    window.addEventListener('tv:open-chart-settings', onOpen);
+    return () => window.removeEventListener('tv:open-chart-settings', onOpen);
+  }, []);
+
+  // "Draw horizontal line at …" from the price axis "+" menu: a horizontal level from the
+  // first loaded bar, spanning the chart
+  useEffect(() => {
+    const onDraw = (e: Event) => {
+      const price = (e as CustomEvent).detail?.price;
+      const bars = fullDataRef.current;
+      if (typeof price !== 'number' || !bars.length) return;
+      const id = `horizontal_ray-${Date.now()}`;
+      setDrawings(prev => [...prev, {
+        id, type: 'horizontal_ray', visible: true, locked: false, stroke: '#2962ff', strokeWidth: 2,
+        points: [{ logical: 0, price, time: bars[0].time }],
+      } as any]);
+    };
+    window.addEventListener('tv:draw-hline', onDraw);
+    return () => window.removeEventListener('tv:draw-hline', onDraw);
+  }, [setDrawings]);
 
   useEffect(() => {
     recalcSessionBoxes(fullDataRef.current);
@@ -1343,22 +1916,13 @@ export default function ChartContainer({
         const h = chartContainerRef.current.clientHeight;
         setDimensions({ width: w, height: h });
         if (chartRef.current) {
-          // Resizing can otherwise shift the visible range (e.g. lightweight-charts
-          // re-anchoring to the right edge) — pin it back to wherever it was.
-          let savedRange = null;
-          try { savedRange = chartRef.current.timeScale().getVisibleLogicalRange(); } catch { /* ignore */ }
+          // As on TradingView, a resize (a side panel shown or hidden, the Pine Editor's split
+          // view, the window) keeps the bar spacing and the right edge: candles and drawings stay
+          // where they are on screen, and the chart just shows more or fewer bars on the left.
           chartRef.current.applyOptions({ width: w, height: h });
-          if (savedRange) {
-            try { chartRef.current.timeScale().setVisibleLogicalRange(savedRange); } catch { /* ignore */ }
-          }
         }
       }
     };
-
-    const isDark = theme === "dark";
-    const bgColor = isDark ? "#131722" : "#ffffff";
-    const textColor = isDark ? "#d1d4dc" : "#131722";
-    const gridColor = isDark ? "#1e222d" : "#f0f3fa";
 
     const w = chartContainerRef.current.clientWidth;
     const h = chartContainerRef.current.clientHeight;
@@ -1427,6 +1991,9 @@ export default function ChartContainer({
 
     newChart.subscribeCrosshairMove((param) => {
       if (updateSessionDOMRef.current) updateSessionDOMRef.current();
+      try {
+        crosshairPriceRef.current = param.point ? (candleSeries.coordinateToPrice(param.point.y) as number | null) : null;
+      } catch { crosshairPriceRef.current = null; }
       if (param.time) {
         const data = param.seriesData.get(candleSeries);
         setHoveredBarData(data || null);
@@ -1478,7 +2045,9 @@ export default function ChartContainer({
       });
 
       const oldInitData = fullDataRef.current; // May be empty on first load, but helps for subsequent remaps
+      clearOverlaySeriesData();
       candleSeries.setData(stockData);
+      applyPricePrecision(stockData);
       fullDataRef.current = stockData;
       (window as any).__chartFullData = stockData;
 
@@ -1495,11 +2064,7 @@ export default function ChartContainer({
       setDrawings(prevDrawings => remapDrawingPoints(prevDrawings, stockData, 'DrawingRemap-InitLoad', oldInitData));
       
       if (volumeSeriesRef.current) {
-        const volData = stockData.map((d: any) => ({
-          time: d.time,
-          value: Math.floor((Math.abs(d.close - d.open) + (d.high - d.low)) * 1000) || 100,
-          color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
-        }));
+        const volData = volumeHistogram(stockData, 'rgba(38, 166, 154, 0.5)', 'rgba(239, 83, 80, 0.5)');
         volumeSeriesRef.current.setData(volData);
       }
       
@@ -1544,7 +2109,7 @@ export default function ChartContainer({
         applyPosition();
       }
       } catch (err: any) {
-        if (err.message === 'API_LIMIT') setApiLimitReached(true);
+        if (err.message === 'API_LIMIT') onApiLimit(err, () => { if (chartRef.current === newChart) loadData(); });
       } finally {
         setIsLoading(false);
       }
@@ -1659,11 +2224,7 @@ export default function ChartContainer({
             // Only update the series directly if NOT in replay mode
             candleSeries.setData(unique);
             if (volumeSeriesRef.current) {
-              const volData = unique.map((d: any) => ({
-                time: d.time,
-                value: Math.floor((Math.abs(d.close - d.open) + (d.high - d.low)) * 1000) || 100,
-                color: d.close >= d.open ? volumeConfigRef.current.upColor : volumeConfigRef.current.downColor
-              }));
+              const volData = volumeHistogram(unique, volumeConfigRef.current.upColor, volumeConfigRef.current.downColor);
               volumeSeriesRef.current.setData(volData);
             }
             updateEmaData(unique);
@@ -1681,7 +2242,7 @@ export default function ChartContainer({
           }
         }
         } catch (err: any) {
-          if (err.message === 'API_LIMIT') setApiLimitReached(true);
+          if (err.message === 'API_LIMIT') onApiLimit(err);
         } finally {
           setIsLoading(false);
           isFetchingMore = false;
@@ -1696,50 +2257,19 @@ export default function ChartContainer({
     (window as any).__chartInstance = newChart;
     (window as any).__chartSeries = candleSeries;
 
-    // Expose a goToDate function for the GoToModal calendar
-    (window as any).__goToDate = async (dateStr: string, timeStr: string) => {
-      const targetTimestamp = new Date(`${dateStr}T${timeStr}`).getTime() / 1000;
-      console.log(`[GoToDate] Triggered for ${dateStr} ${timeStr}. Target timestamp: ${targetTimestamp}`);
-      const currentData = fullDataRef.current;
-
-      // Check if the target date is already within the loaded data range
-      if (currentData.length > 0) {
-        const oldestTime = currentData[0].time;
-        const newestTime = currentData[currentData.length - 1].time;
-
-        if (targetTimestamp >= oldestTime && targetTimestamp <= newestTime) {
-          // Date is already in memory — just scroll to it
-          let closestIdx = 0;
-          let minDiff = Infinity;
-          for (let i = 0; i < currentData.length; i++) {
-            const diff = Math.abs(currentData[i].time - targetTimestamp);
-            if (diff < minDiff) { minDiff = diff; closestIdx = i; }
-          }
-          const timeScale = newChart.timeScale();
-          const visibleRange = timeScale.getVisibleLogicalRange();
-          if (visibleRange) {
-            const halfWidth = (visibleRange.to - visibleRange.from) / 2;
-            timeScale.setVisibleLogicalRange({ from: closestIdx - halfWidth, to: closestIdx + halfWidth });
-          }
-          return;
-        }
-      }
-
-      // Target date is outside loaded range — fetch from API
+    // Loads a window of history (end date, optionally a start date) into the chart and every
+    // series that mirrors it, replacing what was loaded. Returns the bars, or null if none came.
+    const pad2 = (n: number) => n.toString().padStart(2, '0');
+    const apiDate = (ms: number) => {
+      const d = new Date(ms);
+      return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:00`;
+    };
+    const loadWindow = async (endDateStr: string, startDateStr?: string): Promise<any[] | null> => {
       isNavigatingRef.current = true; // Block infinite scroll during navigation
       setIsLoading(true);
       setApiLimitReached(false);
       try {
-        // Shift the end_date forward by ~2500 bars so the target date is in the middle of the 5000 returned bars
-        let halfMs = 2500 * getIntervalMs(interval);
-        
-        const fetchEndTimestamp = Math.min((targetTimestamp * 1000) + halfMs, Date.now());
-        const d = new Date(fetchEndTimestamp);
-        const pad = (n: number) => n.toString().padStart(2, '0');
-        const fetchEndDateStr = `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00`;
-
-        let stockData = await fetchStockData(symbolRef.current, intervalRef.current, fetchEndDateStr);
-
+        let stockData = await fetchStockData(symbolRef.current, intervalRef.current, endDateStr, undefined, startDateStr);
         // Deduplicate, sort, filter
         stockData = stockData.filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.time === v.time) === i);
         stockData.sort((a: any, b: any) => (a.time as number) - (b.time as number));
@@ -1747,71 +2277,40 @@ export default function ChartContainer({
           const day = new Date(d.time * 1000).getUTCDay();
           return day !== 0 && day !== 6;
         });
+        if (stockData.length === 0) return null;
 
-        if (stockData.length > 0) {
-          // IMPORTANT: Update refs BEFORE setData so any synchronous scroll
-          // handler events during setData see the new data, not the old data
-          fullDataRef.current = stockData;
-          (window as any).__chartFullData = stockData;
-          
-          // Cache in agg cache for future instant switching
-          const currentInterval = intervalRef.current;
-          const currentSymbol = symbolRef.current;
-          if (AGGREGATABLE_INTERVALS[currentInterval] && stockData.length > 0) {
-            setAggCachedData(currentSymbol, currentInterval, stockData);
-          }
+        // IMPORTANT: Update refs BEFORE setData so any synchronous scroll
+        // handler events during setData see the new data, not the old data
+        fullDataRef.current = stockData;
+        (window as any).__chartFullData = stockData;
 
-          // Now replace the chart data
-          candleSeries.setData(stockData);
-
-          // Update volume
-          if (volumeSeriesRef.current) {
-            const volData = stockData.map((d: any) => ({
-              time: d.time,
-              value: Math.floor((Math.abs(d.close - d.open) + (d.high - d.low)) * 1000) || 100,
-              color: d.close >= d.open ? volumeConfigRef.current.upColor : volumeConfigRef.current.downColor
-            }));
-            volumeSeriesRef.current.setData(volData);
-          }
-
-          // Update EMAs
-          updateEmaData(stockData);
-
-          // Find the closest bar to target and center on it
-          let closestIdx = 0;
-          let minDiff = Infinity;
-          for (let i = 0; i < stockData.length; i++) {
-            const diff = Math.abs(stockData[i].time - targetTimestamp);
-            if (diff < minDiff) { minDiff = diff; closestIdx = i; }
-          }
-
-          const timeScale = newChart.timeScale();
-          const visibleRange = timeScale.getVisibleLogicalRange();
-          if (visibleRange) {
-            const halfWidth = (visibleRange.to - visibleRange.from) / 2;
-            timeScale.setVisibleLogicalRange({ from: closestIdx - halfWidth, to: closestIdx + halfWidth });
-          } else {
-            // Fallback: show last 100 bars centered around target
-            timeScale.setVisibleLogicalRange({ from: closestIdx - 50, to: closestIdx + 50 });
-          }
-
-          if (onChartStateChange) {
-            const barSpacing = timeScale.options().barSpacing || 6;
-            console.log(`[GoToDate] Manually triggering save for targetTimestamp: ${targetTimestamp}, barSpacing: ${barSpacing}`);
-            onChartStateChange(targetTimestamp, barSpacing);
-          }
-
-          // Update price display
-          if (stockData.length > 1) {
-            setLastPriceData({
-              price: stockData[stockData.length - 1].close,
-              prevPrice: stockData[stockData.length - 2].close
-            });
-          }
+        // Cache in agg cache for future instant switching
+        const currentInterval = intervalRef.current;
+        const currentSymbol = symbolRef.current;
+        if (AGGREGATABLE_INTERVALS[currentInterval] && stockData.length > 0) {
+          setAggCachedData(currentSymbol, currentInterval, stockData);
         }
+
+        // Now replace the chart data
+        clearOverlaySeriesData();
+        candleSeries.setData(stockData);
+        applyPricePrecision(stockData);
+        if (volumeSeriesRef.current) {
+          volumeSeriesRef.current.setData(volumeHistogram(stockData, volumeConfigRef.current.upColor, volumeConfigRef.current.downColor));
+        }
+        updateEmaData(stockData);
+
+        if (stockData.length > 1) {
+          setLastPriceData({
+            price: stockData[stockData.length - 1].close,
+            prevPrice: stockData[stockData.length - 2].close
+          });
+        }
+        return stockData;
       } catch (err: any) {
-        if (err.message === 'API_LIMIT') setApiLimitReached(true);
-        console.error('[GoToDate] Failed to fetch historical data:', err);
+        if (err.message === 'API_LIMIT') onApiLimit(err);
+        console.error('[LoadWindow] Failed to fetch historical data:', err);
+        return null;
       } finally {
         setIsLoading(false);
         // Release the guard after a tiny delay — just enough to catch synchronous events
@@ -1819,6 +2318,107 @@ export default function ChartContainer({
         setTimeout(() => { isNavigatingRef.current = false; }, 50);
       }
     };
+
+    // Expose a goToDate function for the GoToModal calendar
+    (window as any).__goToDate = async (dateStr: string, timeStr: string) => {
+      const targetTimestamp = new Date(`${dateStr}T${timeStr}`).getTime() / 1000;
+      const centreOn = (data: any[]) => {
+        let closestIdx = 0;
+        let minDiff = Infinity;
+        for (let i = 0; i < data.length; i++) {
+          const diff = Math.abs(data[i].time - targetTimestamp);
+          if (diff < minDiff) { minDiff = diff; closestIdx = i; }
+        }
+        const timeScale = newChart.timeScale();
+        const visibleRange = timeScale.getVisibleLogicalRange();
+        if (visibleRange) {
+          const halfWidth = (visibleRange.to - visibleRange.from) / 2;
+          timeScale.setVisibleLogicalRange({ from: closestIdx - halfWidth, to: closestIdx + halfWidth });
+        } else {
+          timeScale.setVisibleLogicalRange({ from: closestIdx - 50, to: closestIdx + 50 });
+        }
+      };
+      const currentData = fullDataRef.current;
+      // Already loaded: just scroll to it
+      if (currentData.length > 0 && targetTimestamp >= currentData[0].time && targetTimestamp <= currentData[currentData.length - 1].time) {
+        centreOn(currentData);
+        return;
+      }
+      // Outside the loaded range: fetch ~2500 bars either side, so the date sits in the middle
+      const halfMs = 2500 * getIntervalMs(intervalRef.current);
+      const stockData = await loadWindow(apiDate(Math.min(targetTimestamp * 1000 + halfMs, Date.now())));
+      if (!stockData) return;
+      centreOn(stockData);
+      if (onChartStateChange) {
+        const barSpacing = newChart.timeScale().options().barSpacing || 6;
+        onChartStateChange(targetTimestamp, barSpacing);
+      }
+    };
+
+    // Replay's "Select starting point" (as on TradingView): a date from the dialog, the first bar
+    // the provider has, or a random bar anywhere in the history. The chart is cut just before the
+    // chosen bar, so it's the first one Play reveals; history outside the loaded range is fetched.
+    const replayFrom = async (detail: { kind: 'date' | 'first' | 'random'; date?: string; time?: string }) => {
+      const iv = intervalRef.current;
+      const daily = /day|week|month/.test(iv);
+      const barMs = getIntervalMs(iv);
+      const dateOf = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
+      let data: any[] = fullDataRef.current;
+      const earliest = detail.kind === 'date' ? null : await getEarliestBarTime(symbolRef.current, iv);
+      // "First available" needs the provider's first bar; without it there's nothing true to show
+      if (detail.kind === 'first' && earliest === null) { onApiLimit({}); return; }
+
+      // The moment to start from, as chart time (daily bars compare by calendar date)
+      let target: number;
+      if (detail.kind === 'first') {
+        target = earliest ?? (data[0]?.time ?? 0);
+      } else if (detail.kind === 'random') {
+        const lo = earliest ?? (data[0]?.time ?? 0);
+        const hi = data.length ? data[data.length - 1].time : Math.floor(Date.now() / 1000);
+        target = Math.floor(lo + Math.random() * Math.max(0, hi - lo));
+      } else {
+        target = daily
+          ? Math.floor(new Date(`${detail.date}T00:00:00Z`).getTime() / 1000)
+          : Math.floor(new Date(`${detail.date}T${detail.time || '00:00'}`).getTime() / 1000);
+      }
+
+      // Make sure the bars around it are loaded
+      const inRange = data.length > 0 && target >= data[0].time && target <= data[data.length - 1].time + barMs / 1000;
+      if (!inRange) {
+        const loaded = detail.kind === 'first'
+          ? await loadWindow(apiDate(Math.min(target * 1000 + 4990 * barMs, Date.now())), apiDate(target * 1000))
+          : await loadWindow(apiDate(Math.min(target * 1000 + 2500 * barMs, Date.now())));
+        // Couldn't fetch that part of history (e.g. the data plan's rate limit): don't start from
+        // a wrong bar — the chart stays as it was, with the API-limit notice showing
+        if (!loaded) return;
+        data = loaded;
+      }
+      if (data.length === 0) return;
+
+      let startIdx: number;
+      if (detail.kind === 'first') {
+        startIdx = 0;
+      } else if (detail.kind === 'random') {
+        // The random moment's own bar: the last one at or before it
+        let i = data.findIndex((b: any) => b.time > target);
+        if (i < 0) i = data.length;
+        startIdx = Math.max(0, i - 1);
+      } else {
+        // The chosen day's bar plays next, so the chart ends on the bar before it
+        const firstOnOrAfter = daily
+          ? data.findIndex((b: any) => dateOf(b.time) >= (detail.date as string))
+          : data.findIndex((b: any) => b.time >= target);
+        startIdx = firstOnOrAfter < 0 ? data.length - 1 : Math.max(0, firstOnOrAfter - 1);
+      }
+
+      startReplayAtRef.current(startIdx, data, candleSeries, newChart);
+      // Keep the bar spacing, with the start bar near the right edge
+      const vr = newChart.timeScale().getVisibleLogicalRange();
+      const width = vr ? Math.max(20, vr.to - vr.from) : 120;
+      newChart.timeScale().setVisibleLogicalRange({ from: startIdx - width * 0.85, to: startIdx + width * 0.15 });
+    };
+    const onReplayStart = (e: Event) => { replayFrom((e as CustomEvent).detail); };
+    window.addEventListener('tv:replay-start', onReplayStart);
 
     window.addEventListener("resize", handleResize);
 
@@ -1867,14 +2467,54 @@ export default function ChartContainer({
     };
     containerEl.addEventListener('wheel', handlePriceAxisWheel, { passive: false, capture: true });
 
+    // Clicking and dragging directly on the price axis rescales it live — this is
+    // the library's own native gesture, handled entirely internally with no
+    // subscribe-to-change API (same constraint as the wheel-zoom case above), so
+    // without this Konva-drawn shapes never moved at all until the drag ended,
+    // rather than tracking it continuously the way panning the time axis already
+    // does via useChartTick's subscribeVisibleLogicalRangeChange.
+    let priceAxisDragRaf: number | null = null;
+    const stopPriceAxisDragTracking = () => {
+      if (priceAxisDragRaf !== null) { cancelAnimationFrame(priceAxisDragRaf); priceAxisDragRaf = null; }
+      window.removeEventListener('mouseup', stopPriceAxisDragTracking);
+    };
+    const handlePriceAxisMouseDown = (e: MouseEvent) => {
+      const rect = containerEl.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const priceScale = newChart.priceScale('right');
+      const axisWidth = priceScale.width();
+      if (axisWidth <= 0 || x < rect.width - axisWidth) return;
+
+      const tick = () => {
+        notifyPriceScaleChanged();
+        priceAxisDragRaf = requestAnimationFrame(tick);
+      };
+      priceAxisDragRaf = requestAnimationFrame(tick);
+      window.addEventListener('mouseup', stopPriceAxisDragTracking);
+    };
+    containerEl.addEventListener('mousedown', handlePriceAxisMouseDown);
+
     return () => {
+      window.removeEventListener('tv:replay-start', onReplayStart);
       window.removeEventListener("resize", handleResize);
       resizeObserver.disconnect();
       containerEl.removeEventListener('wheel', handlePriceAxisWheel, { capture: true });
+      containerEl.removeEventListener('mousedown', handlePriceAxisMouseDown);
+      stopPriceAxisDragTracking();
       newChart.remove();
+      // The removed chart's series went with it: forget them, so the next chart rebuilds
+      // its indicators instead of feeding (and repainting) dead series ("Object is disposed")
+      if (chartRef.current === newChart) chartRef.current = null;
+      candleSeriesRef.current = null;
+      volumeSeriesRef.current = null;
+      emasRef.current = {};
+      pineSeriesRef.current = {};
       setChart(null); setSeries(null);
     };
-  }, [theme]);
+    // Built once: a theme switch only recolours the chart (the canvas-colours effect applies the
+    // new colours to it), so the view, the data and the drawings stay exactly where they are
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Resize chart when replay mode changes (container height changes via CSS)
   useEffect(() => {
@@ -1923,8 +2563,15 @@ export default function ChartContainer({
           let preservedRangeWidth: number | null = null;
           // Save replay timestamp BEFORE we overwrite fullDataRef
           let savedReplayTime: number | null = null;
-          
-          if (chartRef.current && fullDataRef.current.length > 0) {
+          // A bottom-bar date range always ends at the newest bar, so it fetches the latest
+          // data rather than data centered on the old view
+          // (during replay it's just a timeframe change: the replay keeps its date, and the
+          // range's "latest bars" view doesn't apply)
+          const inReplay = modeRef.current !== 'idle';
+          if (inReplay && pendingDateRangeRef.current?.interval === interval) pendingDateRangeRef.current = null;
+          const switchingForDateRange = !inReplay && pendingDateRangeRef.current?.interval === interval;
+
+          if (chartRef.current && fullDataRef.current.length > 0 && !switchingForDateRange) {
             // Determine target time: if in replay, use replay time. Otherwise use screen center.
             if (modeRef.current !== 'idle') {
               const rTime = getReplayTime();
@@ -1976,7 +2623,9 @@ export default function ChartContainer({
           
           if (AGGREGATABLE_INTERVALS[interval]) {
             const cached = getAggCachedData(symbol, interval);
-            if (cached && cached.length > 0) {
+            // (for a date range, only a cache that reaches the present — within a long weekend)
+            const reachesPresent = !!cached?.length && Date.now() / 1000 - cached[cached.length - 1].time < 4 * 86400;
+            if (cached && cached.length > 0 && (!switchingForDateRange || reachesPresent)) {
               console.log(`[AggCache] HIT for ${symbol}/${interval} (${cached.length} bars) — instant switch!`);
               stockData = cached;
               usedAggCache = true;
@@ -2000,13 +2649,11 @@ export default function ChartContainer({
             return day !== 0 && day !== 6;
           });
 
+          clearOverlaySeriesData();
           series.setData(stockData);
+          applyPricePrecision(stockData);
           if (volumeSeriesRef.current) {
-            const volData = stockData.map((d: any) => ({
-              time: d.time,
-              value: Math.floor((Math.abs(d.close - d.open) + (d.high - d.low)) * 1000) || 100,
-              color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
-            }));
+            const volData = volumeHistogram(stockData, 'rgba(38, 166, 154, 0.5)', 'rgba(239, 83, 80, 0.5)');
             volumeSeriesRef.current.setData(volData);
           }
           const oldStockData = fullDataRef.current; // Save before overwriting
@@ -2031,7 +2678,12 @@ export default function ChartContainer({
             });
           }
 
-          if (targetTimestamp && chartRef.current) {
+          const pendingRange = pendingDateRangeRef.current;
+          if (pendingRange && pendingRange.interval === interval) {
+            // Switched here by a bottom-bar date range: show that span instead of the old view
+            pendingDateRangeRef.current = null;
+            showDateRange(pendingRange.span, stockData);
+          } else if (targetTimestamp && chartRef.current) {
             let closestIdx = 0;
             let minDiff = Infinity;
             for (let i = 0; i < stockData.length; i++) {
@@ -2048,7 +2700,14 @@ export default function ChartContainer({
               // Fallback: show ~80 bars centered on target
               halfBars = 40;
             }
-            chartRef.current.timeScale().setVisibleLogicalRange({ from: closestIdx - halfBars, to: closestIdx + halfBars });
+            // Centering on the old view's middle can push most of the window past the newest
+            // bar (e.g. 1h → 15m near the live edge), leaving an empty chart — so stop the
+            // window at the last bar plus a small right margin, keeping its width.
+            let from = closestIdx - halfBars;
+            let to = closestIdx + halfBars;
+            const maxTo = stockData.length - 1 + 5;
+            if (to > maxTo) { from -= to - maxTo; to = maxTo; }
+            chartRef.current.timeScale().setVisibleLogicalRange({ from, to });
           }
 
           // If interval changes, preserve active replay by mapping the time
@@ -2092,11 +2751,11 @@ export default function ChartContainer({
               }
               startReplayAt(closestIdx, stockData, candleSeriesRef.current, chartRef.current);
             } else {
-              stopReplay();
+              stopReplay(stockData);
             }
           }
         } catch (err: any) {
-          if (err.message === 'API_LIMIT') setApiLimitReached(true);
+          if (err.message === 'API_LIMIT') onApiLimit(err, () => { if (!cancelled) refresh(); });
         } finally {
           if (!cancelled) {
             setIsLoading(false);
@@ -2121,7 +2780,7 @@ export default function ChartContainer({
   // Keyboard shortcuts for replay
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) return;
+      if (isTypingTarget(e.target)) return;
       if (mode === 'idle') return;
       if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
       if (e.code === 'ArrowLeft') { e.preventDefault(); stepBack(); }
@@ -2171,15 +2830,21 @@ export default function ChartContainer({
     if (modeRef.current !== 'selecting') return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    setVLineX(x);
 
+    // Magnetic snap: jump the split-line to the exact center of the nearest bar,
+    // the same horizontal snap-to-candle behavior drawing tools like Fibonacci
+    // already apply, instead of following the raw mouse pixel.
     if (chartRef.current && fullDataRef.current.length > 0) {
       const logical = chartRef.current.timeScale().coordinateToLogical(x);
       if (logical !== null) {
         const idx = Math.max(0, Math.min(fullDataRef.current.length - 1, Math.round(logical)));
+        const snappedX = chartRef.current.timeScale().logicalToCoordinate(idx as any);
+        setVLineX(snappedX !== null ? snappedX : x);
         setVLineTime(fullDataRef.current[idx].time);
+        return;
       }
     }
+    setVLineX(x);
   }, []);
 
   const handleOverlayMouseLeave = useCallback(() => {
@@ -2206,12 +2871,17 @@ export default function ChartContainer({
   const isActive = mode === 'active';
 
   useEffect(() => {
+    // Zoom Out goes back one zoom-in (the ranges the Zoom In tool recorded); with none left
+    // it fits the whole chart
     const handleZoomOut = () => {
-      if (chartRef.current) {
-        chartRef.current.timeScale().fitContent();
-        chartRef.current.priceScale('right').applyOptions({ autoScale: true });
-        notifyPriceScaleChanged();
-      }
+      if (!chartRef.current) return;
+      const stack: any[] = (window as any).__zoomStack || [];
+      const prev = stack.pop();
+      if (prev) chartRef.current.timeScale().setVisibleLogicalRange(prev);
+      else chartRef.current.timeScale().fitContent();
+      chartRef.current.priceScale('right').applyOptions({ autoScale: true });
+      notifyPriceScaleChanged();
+      window.dispatchEvent(new CustomEvent('tv:zoom-depth', { detail: stack.length }));
     };
     window.addEventListener('tv-zoom-out', handleZoomOut);
     return () => window.removeEventListener('tv-zoom-out', handleZoomOut);
@@ -2227,7 +2897,10 @@ export default function ChartContainer({
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         const price = candleSeriesRef.current.coordinateToPrice(y as any);
-        setContextMenu({ x, y, price, visible: true });
+        const logical = chartRef.current.timeScale().coordinateToLogical(x as any);
+        const bars = fullDataRef.current;
+        const idx = logical === null ? -1 : Math.max(0, Math.min(bars.length - 1, Math.round(logical)));
+        setContextMenu({ x, y, clientX: e.clientX, clientY: e.clientY, price, time: idx >= 0 && bars[idx] ? bars[idx].time : null, visible: true });
       }}
     >
       {/* Watermark - bottom left like TradingView */}
@@ -2244,150 +2917,206 @@ export default function ChartContainer({
         TradePilot
       </div>
 
-      {/* Legend & Symbol info */}
-      <div style={{ position: "absolute", top: "6px", left: "10px", zIndex: 10, display: "flex", flexDirection: "column", gap: "2px", pointerEvents: "none" }}>
-        
-        {/* Top Row: Symbol, Interval, Exchange + OHLC */}
-        <div style={{ display: "flex", alignItems: "baseline", gap: "6px", fontSize: "12px", fontWeight: 600 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: "4px" }}>
-            <span style={{ fontSize: "13px", fontWeight: 700, color: theme === "dark" ? "#d1d4dc" : "#131722" }}>{symbol}</span>
-            <span style={{ color: "var(--tv-color-text-muted)", fontSize: "11px", fontWeight: 400 }}>· {intervalLabel} · TradePilot</span>
-          </div>
+      {/* Legend (the status line), as on TradingView: logo, title, market status and the bar's
+          values; the buy/sell buttons; then a row per indicator, which the arrow at the end
+          folds away. What it shows follows Chart settings → Status line. Kept clear of the
+          price axis; on a narrow chart the values wrap. */}
+      {(() => {
+        const sl = statusLineSettings;
+        const bars = fullDataRef.current;
+        const hoverIdx = hoveredBarData ? barIndexAtTime(bars, hoveredBarData.time as number) : -1;
+        const idx = hoverIdx >= 0 ? hoverIdx : bars.length - 1;
+        const bar = idx >= 0 ? bars[idx] : null;
+        const prev = idx > 0 ? bars[idx - 1] : null;
+        const upColor = candleColors.upColor, downColor = candleColors.downColor;
+        const fmt = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: pricePrecision, maximumFractionDigits: pricePrecision });
+        // TradingView writes changes with a true minus sign
+        const signed = (v: number, text: string) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${text}`;
+        const changeText = (from: number, to: number) => {
+          const d = to - from;
+          const pct = from ? (d / from) * 100 : 0;
+          return { text: `${signed(d, fmt(Math.abs(d)))} (${signed(pct, Math.abs(pct).toFixed(2))}%)`, color: d >= 0 ? upColor : downColor };
+        };
+        const barColor = bar ? (bar.close >= bar.open ? upColor : downColor) : undefined;
+        const barChange = bar && prev ? changeText(prev.close, bar.close) : null;
+        const dayChange = bar && sl.lastDayChange ? (() => {
+          const prevDayClose = previousDayClose(bars, idx, interval);
+          return prevDayClose != null ? changeText(prevDayClose, bar.close) : null;
+        })() : null;
 
-          {/* OHLC values */}
-          {(() => {
-            const data = hoveredBarData || (fullDataRef.current.length > 0 ? fullDataRef.current[fullDataRef.current.length - 1] : null);
-            if (!data) return null;
-            const format = (v: number) => v.toFixed(3);
-            const change = data.close - data.open;
-            const changePct = (change / data.open) * 100;
-            const isUp = data.close >= data.open;
-            const cColor = isUp ? "#089981" : "#f23645";
-            return (
-              <div style={{ display: "flex", gap: "6px", fontWeight: 400, fontSize: "12px", color: "var(--tv-color-text-muted)" }}>
-                <span>O<span style={{ color: cColor, marginLeft: 2 }}>{format(data.open)}</span></span>
-                <span>H<span style={{ color: cColor, marginLeft: 2 }}>{format(data.high)}</span></span>
-                <span>L<span style={{ color: cColor, marginLeft: 2 }}>{format(data.low)}</span></span>
-                <span>C<span style={{ color: cColor, marginLeft: 2 }}>{format(data.close)}</span></span>
-                <span style={{ color: cColor, marginLeft: 4 }}>
-                  {change > 0 ? '+' : ''}{format(change)} ({change > 0 ? '+' : ''}{changePct.toFixed(2)}%)
-                </span>
-                {countdownText && (
-                  <span style={{ color: "var(--tv-color-text-muted)", marginLeft: 4 }}>{countdownText}</span>
-                )}
-              </div>
-            );
-          })()}
-        </div>
+        const description = symbolInfo.description;
+        const main = sl.titleMode === "Ticker" || !description ? symbol
+          : sl.titleMode === "Ticker and description" ? `${symbol} · ${description}` : description;
+        const titleText = [main, legendIntervalLabel(interval), symbolInfo.exchange].filter(Boolean).join(" · ");
+        const marketOpen = marketOpenNow(symbolInfo);
+        const legendBg = (on: boolean, pct: number) => on ? `color-mix(in srgb, var(--tv-color-pane-bg) ${pct}%, transparent)` : "transparent";
+        const mainBg = legendBg(sl.background, sl.backgroundOpacity);
+        const indicatorBg = legendBg(sl.indBackground, sl.indBackgroundOpacity);
 
-        {/* Buy / Sell Buttons Row */}
-        {(() => {
-          const data = hoveredBarData || (fullDataRef.current.length > 0 ? fullDataRef.current[fullDataRef.current.length - 1] : null);
-          if (!data) return null;
-          
-          // Generate realistic looking bid/ask based on the current close price
-          const price = data.close;
-          const isDark = theme === "dark";
-          const sellPriceStr = (price - 0.60).toFixed(2);
-          const buyPriceStr = (price + 0.60).toFixed(2);
-          const spread = "120.0";
-
-          const btnStyle: React.CSSProperties = {
-            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-            padding: "2px 12px", borderRadius: "4px", 
-            backgroundColor: isDark ? "rgba(0,0,0,0.2)" : "#ffffff",
-            border: "1px solid", pointerEvents: "auto", cursor: "pointer",
-            minWidth: "72px", height: "34px", fontFamily: "inherit"
-          };
-
-          return (
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "2px 0 4px 0" }}>
-              <button 
-                className="tv-buy-sell-btn"
-                style={{ ...btnStyle, borderColor: "rgba(242, 54, 69, 0.5)", color: "#f23645" }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isDark ? "rgba(242, 54, 69, 0.1)" : "rgba(242, 54, 69, 0.05)"}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isDark ? "rgba(0,0,0,0.2)" : "#ffffff"}
-                onClick={() => onOpenOrderPanel?.("sell")}
-              >
-                <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "flex-start", lineHeight: "1" }}>
-                  {sellPriceStr}
-                  <span style={{ fontSize: "9px", marginTop: "1px", marginLeft: "1px" }}>0</span>
-                </div>
-                <div style={{ fontSize: "9px", fontWeight: 600, letterSpacing: "0.5px", marginTop: "2px" }}>SELL</div>
-              </button>
-              
-              <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--tv-color-text-muted)" }}>{spread}</span>
-              
-              <button 
-                className="tv-buy-sell-btn"
-                style={{ ...btnStyle, borderColor: "rgba(41, 98, 255, 0.5)", color: "#2962ff" }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isDark ? "rgba(41, 98, 255, 0.1)" : "rgba(41, 98, 255, 0.05)"}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isDark ? "rgba(0,0,0,0.2)" : "#ffffff"}
-                onClick={() => onOpenOrderPanel?.("buy")}
-              >
-                <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "flex-start", lineHeight: "1" }}>
-                  {buyPriceStr}
-                  <span style={{ fontSize: "9px", marginTop: "1px", marginLeft: "1px" }}>0</span>
-                </div>
-                <div style={{ fontSize: "9px", fontWeight: 600, letterSpacing: "0.5px", marginTop: "2px" }}>BUY</div>
-              </button>
-            </div>
-          );
-        })()}
-
-        {/* Indicators Rows */}
-        {activeIndicators?.map(ind => {
+        const rows: React.ReactNode[] = [];
+        if (pineLegend) rows.push(
+          <PineScriptLegendRow
+            key="pine"
+            name={pineLegend.name}
+            inputs={pineLegend.inputs}
+            plots={pineLegend.plots}
+            status={statusLineSettings}
+            background={indicatorBg}
+            format={fmt}
+            isVisible={pineVisible}
+            onToggleVisibility={togglePineVisible}
+            onOpenSettings={() => setShowPineSettings(true)}
+            onOpenCode={() => window.dispatchEvent(new CustomEvent("tv:open-pine-editor", {
+              detail: { code: lastPineRunRef.current?.code, scriptName: lastPineRunRef.current?.scriptName },
+            }))}
+            onRemove={removePineScript}
+          />
+        );
+        activeIndicators?.forEach(ind => {
           if (ind.name === "Volume") {
-            return (
-              <IndicatorRow 
+            rows.push(
+              <IndicatorRow
                 key={ind.id}
-                name="Vol" title="Volume" 
-                value={hoveredBarData ? Math.floor((Math.abs(hoveredBarData.close - hoveredBarData.open) + (hoveredBarData.high - hoveredBarData.low)) * 1000) : ''} 
-                theme={theme} 
+                name="Vol" fullName="Volume" args=""
+                values={[{ text: formatVolume(bar?.volume), color: barColor }]}
+                status={statusLineSettings} background={indicatorBg}
                 isVisible={volumeVisible}
                 onToggleVisibility={() => setVolumeVisible(!volumeVisible)}
                 onOpenSettings={() => setShowVolumeSettings(true)}
                 onRemove={() => onRemoveIndicator?.(ind.id)}
               />
             );
-          }
-          if (ind.name === "Moving Average Exponential") {
+          } else if (ind.name === "Moving Average Exponential") {
             const config = emaConfigs[ind.id] || { length: 9, source: 'Close', color: '#2962ff' };
             const isVis = emaVisibilities[ind.id] ?? true;
-            const hData = hoveredEmasData[ind.id];
-            return (
-              <IndicatorRow 
+            const point = hoverIdx >= 0 ? hoveredEmasData[ind.id] : lastSeriesPoint(emasRef.current[ind.id]);
+            rows.push(
+              <IndicatorRow
                 key={ind.id}
-                name="EMA" title={`EMA ${config.length} ${config.source.toLowerCase()}`} 
-                value={hData ? hData.value.toFixed(3) : ''} 
-                theme={theme} 
-                color={config.color}
+                name="EMA" fullName="Moving Average Exponential" args={`${config.length} ${String(config.source).toLowerCase()}`}
+                values={[{ text: point && typeof point.value === "number" ? fmt(point.value) : "∅", color: config.color }]}
+                status={statusLineSettings} background={indicatorBg}
                 isVisible={isVis}
-                onToggleVisibility={() => setEmaVisibilities(prev => ({...prev, [ind.id]: !isVis}))}
+                onToggleVisibility={() => setEmaVisibilities(prev => ({ ...prev, [ind.id]: !isVis }))}
                 onOpenSettings={() => setShowEmaSettingsFor(ind.id)}
                 onRemove={() => onRemoveIndicator?.(ind.id)}
               />
             );
-          }
-          if (ind.name === "FXN - Asian Session Range") {
-            return (
-              <IndicatorRow 
-                key={ind.id} 
-                name="FXN" 
-                title="FXN - Asian Session Range" 
-                value="" 
-                theme={theme} 
+          } else if (ind.name === "FXN - Asian Session Range") {
+            rows.push(
+              <IndicatorRow
+                key={ind.id}
+                name="FXN - Asian Session Range" fullName="FXN - Asian Session Range" args="" values={[]}
+                status={statusLineSettings} background={indicatorBg}
                 isVisible={sessionVisible}
                 onToggleVisibility={() => setSessionVisible(!sessionVisible)}
                 onOpenSettings={() => setSessionSettingsOpen(true)}
-                onRemove={() => onRemoveIndicator?.(ind.id)} 
+                onRemove={() => onRemoveIndicator?.(ind.id)}
               />
             );
           }
-          return null;
-        })}
+        });
 
-      </div>
+        return (
+          <div style={{ position: "absolute", top: "6px", left: "9px", maxWidth: "calc(100% - 90px)", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "flex-start", pointerEvents: "none", color: "var(--tv-hdr-text)" }}>
+            {/* Title line */}
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0 8px", minHeight: "22px" }}>
+              {(sl.logo || sl.title) && (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "0 4px", margin: "0 -4px", borderRadius: "4px", background: mainBg }}>
+                  {sl.logo && <SymbolAvatar symbol={symbol} size={18} />}
+                  {sl.title && <span style={{ fontSize: "16px", lineHeight: "22px", whiteSpace: "nowrap" }}>{titleText}</span>}
+                </div>
+              )}
+              {sl.marketStatus && marketOpen === false && (
+                <Tip text="Market closed">
+                  <span aria-label="Market closed" style={{ pointerEvents: "auto", display: "inline-flex", alignItems: "center", justifyContent: "center", height: "22px", minWidth: "26px", padding: "0 6px", borderRadius: "11px", background: "rgba(0, 0, 0, 0.08)" }}>
+                    <svg width="10" height="4" viewBox="0 0 10 4" aria-hidden><rect width="10" height="4" rx="2" fill="currentColor" opacity="0.75" /></svg>
+                  </span>
+                </Tip>
+              )}
+              {bar && (sl.chartValues || sl.barChange || sl.volume || sl.lastDayChange) && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0 8px", fontSize: "14px", lineHeight: "22px", padding: "0 4px", margin: "0 -4px", borderRadius: "4px", background: mainBg }}>
+                  {sl.chartValues && ([["O", bar.open], ["H", bar.high], ["L", bar.low], ["C", bar.close]] as [string, number][]).map(([k, v]) => (
+                    <span key={k} style={{ whiteSpace: "nowrap" }}>{k}<span style={{ color: barColor }}>{fmt(v)}</span></span>
+                  ))}
+                  {sl.barChange && barChange && <span style={{ color: barChange.color, whiteSpace: "nowrap" }}>{barChange.text}</span>}
+                  {sl.volume && <span style={{ whiteSpace: "nowrap" }}>Vol <span style={{ color: barColor }}>{formatVolume(bar.volume)}</span></span>}
+                  {dayChange && <span style={{ color: dayChange.color, whiteSpace: "nowrap" }}>{dayChange.text}</span>}
+                </div>
+              )}
+            </div>
+
+            {/* Buy / Sell buttons (Settings → Trading → Buy/sell buttons): the live bid and ask,
+                outlined until a broker is connected and filled after, like TradingView's */}
+            {tradingSettings.buySellButtons && (() => {
+              const lastBar = bars.length > 0 ? bars[bars.length - 1] : null;
+              const live = quoteOf(tradingState, symbol);
+              if (!live && !lastBar) return null;
+              const { bid, ask } = live ? { bid: live.bid, ask: live.ask } : simulatedQuote(lastBar!.close, pricePrecision);
+              const connected = tradingState.connected;
+              // At 3+ decimals the last (fractional pip) digit is set small, as on TradingView
+              const pip = (str: string) => pricePrecision >= 3 ? { main: str.slice(0, -1), sup: str.slice(-1) } : { main: str, sup: "" };
+              const spreadTicks = Math.round((ask - bid) * Math.pow(10, pricePrecision));
+              const button = (side: "sell" | "buy") => {
+                const parts = pip(fmt(side === "sell" ? bid : ask));
+                const color = side === "sell" ? "#f23645" : "#2962ff";
+                const hover = side === "sell" ? "#d5303e" : "#1e53e5";
+                const idleBg = "var(--tv-color-pane-bg)";
+                return (
+                  <Tip key={side} text={<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>{side === "sell" ? "Sell Market" : "Buy Market"}<span style={{ width: 1, height: 14, background: "rgba(255,255,255,0.3)" }} /><Kbd>Shift</Kbd><Kbd>{side === "sell" ? "S" : "B"}</Kbd></span>} placement="bottom">
+                    <button
+                      className="tv-buy-sell-btn"
+                      aria-label={side === "sell" ? "Sell" : "Buy"}
+                      style={{
+                        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1px",
+                        padding: "0 10px", borderRadius: "6px", border: `1px solid ${color}`,
+                        background: connected ? color : idleBg, color: connected ? "#ffffff" : color,
+                        pointerEvents: "auto", cursor: "pointer", minWidth: "78px", height: "34px", fontFamily: "inherit",
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = connected ? hover : (side === "sell" ? "rgba(242, 54, 69, 0.08)" : "rgba(41, 98, 255, 0.08)"); }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = connected ? color : idleBg; }}
+                      onClick={() => onOpenOrderPanel?.(side)}
+                    >
+                      <span style={{ fontSize: "14px", fontWeight: 700, display: "flex", alignItems: "flex-start", lineHeight: "15px" }}>
+                        {parts.main}
+                        {parts.sup && <span style={{ fontSize: "10px", lineHeight: "10px", marginLeft: "1px" }}>{parts.sup}</span>}
+                      </span>
+                      <span style={{ fontSize: "11px", fontWeight: 700, lineHeight: "12px" }}>{side === "sell" ? "SELL" : "BUY"}</span>
+                    </button>
+                  </Tip>
+                );
+              };
+              return (
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "2px 0 6px" }}>
+                  {button("sell")}
+                  <span style={{ fontSize: "11px", minWidth: 10, textAlign: "center" }}>{spreadTicks}</span>
+                  {button("buy")}
+                </div>
+              );
+            })()}
+
+            {/* Indicator rows */}
+            {legendExpanded && rows}
+
+            {rows.length > 0 && (
+              <Tip text={legendExpanded ? "Hide indicator legend" : "Show indicator legend"}>
+                <button
+                  type="button"
+                  aria-label={legendExpanded ? "Hide indicator legend" : "Show indicator legend"}
+                  onClick={() => setLegendExpanded(v => !v)}
+                  className="tv-legend-btn"
+                  style={{ pointerEvents: "auto", height: "22px", minWidth: "22px", padding: legendExpanded ? 0 : "0 6px", gap: "4px", marginTop: "1px", fontSize: "13px" }}
+                >
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden>
+                    <path d={legendExpanded ? "M1 5l4-4 4 4" : "M1 1l4 4 4-4"} />
+                  </svg>
+                  {!legendExpanded && <span>{rows.length}</span>}
+                </button>
+              </Tip>
+            )}
+          </div>
+        );
+      })()}
 
       {showVolumeSettings && (
         <VolumeSettingsModal onClose={() => setShowVolumeSettings(false)} theme={theme} config={volumeConfig} onChangeConfig={setVolumeConfig} />
@@ -2423,6 +3152,170 @@ export default function ChartContainer({
         }} 
       />
 
+      {/* Countdown to bar close, joined under the last-price label */}
+      {countdown && (
+        <div aria-label="Time to bar close" style={{
+          position: "absolute", right: 0, top: Math.round(countdown.top + 10), width: countdown.width, height: 17,
+          background: countdown.color, color: "#ffffff", fontSize: "12px", lineHeight: "15px", textAlign: "center",
+          borderRadius: "0 0 2px 2px", pointerEvents: "none", zIndex: 5, fontVariantNumeric: "tabular-nums",
+        }}>
+          {countdown.text}
+        </div>
+      )}
+
+      {/* Pine script table.new()/table.cell() output — a positioned HTML
+          overlay, since this chart has no native drawing-object renderer.
+          Sized to `dimensions` (chartContainerRef's own clientWidth/Height,
+          the same measurement DrawingLayer uses) rather than 100% of this
+          component's outer wrapper: that wrapper doesn't actually shrink
+          when the Pine Editor panel opens (only the chart canvas itself
+          does, via an explicit resize call), so anchoring directly to it
+          placed "top_right" behind the editor panel instead of on the chart. */}
+      {pineTables.length > 0 && dimensions.width > 0 && (
+        <div style={{ position: "absolute", top: 0, left: 0, width: dimensions.width, height: dimensions.height, pointerEvents: "none", overflow: "hidden", zIndex: 40 }}>
+          {pineTables.map((t, ti) => (
+            <div
+              key={ti}
+              style={{
+                ...pineTablePositionStyle(t.position),
+                borderCollapse: "collapse" as any,
+                display: "table",
+                background: t.bgcolor || "rgba(30,34,45,0.9)",
+                border: t.borderColor ? `1px solid ${t.borderColor}` : "1px solid rgba(255,255,255,0.1)",
+                borderRadius: "2px", overflow: "hidden",
+                fontFamily: "inherit",
+              }}
+            >
+              {t.cells.map((row: any[], ri: number) => (
+                <div key={ri} style={{ display: "table-row" }}>
+                  {row.map((cell: any, ci: number) => (
+                    <div
+                      key={ci}
+                      style={{
+                        display: "table-cell",
+                        padding: "3px 8px",
+                        fontSize: "11px",
+                        whiteSpace: "nowrap",
+                        color: cell?.textColor || "#d1d4dc",
+                        background: cell?.bgcolor || "transparent",
+                      }}
+                    >
+                      {cell?.text ?? ""}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Strategy backtest report — appears after a successful strategy run.
+          Sized to `dimensions` for the same reason as the Pine table overlay
+          above: the outer wrapper doesn't shrink when a side panel opens.
+          The wrapper itself stays pointer-events:none — it spans the WHOLE
+          chart area regardless of the panel's own (possibly much shorter,
+          e.g. minimized) height, so only the panel's own box below should
+          ever intercept clicks; StrategyReportPanel re-enables pointer
+          events on just its own root, matching its real rendered size. */}
+      {strategyReport && (
+        <StrategyReportPanel
+          theme={theme}
+          scriptName={strategyScriptName}
+          symbol={symbol}
+          report={strategyReport}
+          range={backtestRange}
+          busy={backtestBusy}
+          tz={chartTimezone}
+          pricePrecision={pricePrecision}
+          onChangeRange={rerunPineForRange}
+          onChangeCapital={changeInitialCapital}
+          onShowTime={showTimeOnChart}
+          onOpenSettings={() => setShowPineSettings(true)}
+          onAddAlert={() => setShowAlertModal(true)}
+          onRemove={removePineScript}
+          fullRangeStart={fullDataRef.current[0]?.time}
+          fullRangeEnd={fullDataRef.current[fullDataRef.current.length - 1]?.time}
+        />
+      )}
+
+      {/* "Updating report" / "updated successfully" toast — pops in above
+          whatever is docked at the bottom (strategy report panel included,
+          hence the high z-index) and dismisses itself; the success variant's
+          own fade-out is baked into its keyframe so no extra unmount timer
+          juggling is needed for the exit animation. */}
+      {reportToast && (
+        <div style={{
+          position: "fixed", bottom: "calc(var(--tv-bottom-toolbar-height) + 16px)", left: "50%",
+          transform: "translateX(-50%)", zIndex: 5000, pointerEvents: "none",
+        }}>
+          <div
+            key={reportToast}
+            style={{
+              display: "flex", alignItems: "center", gap: "9px",
+              background: "rgba(30, 34, 45, 0.95)", color: "#fff", fontSize: "13px", fontWeight: 500,
+              padding: "8px 16px", borderRadius: "6px", boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+              animation: reportToast === "success" ? "chartToastSuccess 2.2s ease forwards" : "chartToastIn 0.2s ease forwards",
+            }}
+          >
+            {reportToast === "updating" ? (
+              <>
+                <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                  {[0, 1, 2].map((i) => (
+                    <span key={i} style={{
+                      width: "5px", height: "5px", borderRadius: "50%", background: "#9598a1",
+                      animation: `chartToastDot 1.2s ${i * 0.15}s infinite ease-in-out`,
+                    }} />
+                  ))}
+                </span>
+                Updating report
+              </>
+            ) : (
+              <>
+                <span style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: "16px", height: "16px", borderRadius: "50%", background: "#26a69a", flexShrink: 0,
+                }}>
+                  <Check size={11} color="#fff" strokeWidth={3} />
+                </span>
+                The report has been updated successfully
+              </>
+            )}
+          </div>
+          <style>{`
+            @keyframes chartToastIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+            @keyframes chartToastSuccess {
+              0% { opacity: 0; transform: translateY(6px); }
+              10% { opacity: 1; transform: translateY(0); }
+              85% { opacity: 1; transform: translateY(0); }
+              100% { opacity: 0; transform: translateY(-4px); }
+            }
+            @keyframes chartToastDot {
+              0%, 60%, 100% { opacity: 0.35; transform: scale(0.7); }
+              30% { opacity: 1; transform: scale(1); }
+            }
+          `}</style>
+        </div>
+      )}
+
+      {/* Settings modal — opened from the legend row's gear icon, built
+          dynamically from the running script's own declared inputs. */}
+      {showPineSettings && pineLegend && (
+        <PineSettingsModal
+          theme={theme}
+          scriptName={pineLegend.name}
+          inputsMeta={pineInputsMeta}
+          currentOverrides={inputOverrides}
+          initialCapital={capitalOverride ?? pineDeclMeta.initialCapital}
+          pyramiding={pineDeclMeta.pyramiding}
+          defaultQtyValue={pineDeclMeta.defaultQtyValue}
+          defaultQtyType={pineDeclMeta.defaultQtyType}
+          plots={pineLegend.plots}
+          onApply={applyPineSettings}
+          onClose={() => setShowPineSettings(false)}
+        />
+      )}
+
       {/* Loading & API Limit Overlay */}
       {(isLoading || apiLimitReached) && (
         <div style={{
@@ -2433,12 +3326,20 @@ export default function ChartContainer({
         }}>
           {apiLimitReached ? (
             <div style={{ padding: '24px', backgroundColor: '#1e222d', borderRadius: '8px', border: '1px solid #f23645', textAlign: 'center', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
-              <div style={{ color: '#f23645', marginBottom: '8px', fontSize: '16px' }}>API Limit Reached</div>
-              <div style={{ color: 'var(--tv-color-text-muted)' }}>Waiting for TwelveData limit to reset...</div>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite", color: "#f23645", margin: "16px auto 0", display: "block" }}>
-                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
-              </svg>
+              <div style={{ color: '#f23645', marginBottom: '8px', fontSize: '16px' }}>{apiLimitReached === 'day' ? 'Daily data limit reached' : 'Data limit reached'}</div>
+              <div style={{ color: 'var(--tv-color-text-muted)', maxWidth: 320, lineHeight: '20px' }}>
+                {apiLimitReached === 'day'
+                  ? "The data provider's daily allowance is used up. It resets at 00:00 UTC."
+                  : "The data provider allows 8 requests a minute. Retrying automatically when the minute resets…"}
+              </div>
+              {apiLimitReached === 'day' ? (
+                <button type="button" onClick={() => setApiLimitReached(false)} style={{ marginTop: 16, height: 32, padding: '0 16px', borderRadius: 6, border: 'none', background: '#2962ff', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>OK</button>
+              ) : (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite", color: "#f23645", margin: "16px auto 0", display: "block" }}>
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+                </svg>
+              )}
             </div>
           ) : (
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite", color: "#2962ff" }}>
@@ -2459,6 +3360,15 @@ export default function ChartContainer({
           onMouseMove={handleOverlayMouseMove}
           onMouseLeave={handleOverlayMouseLeave}
           onClick={handleOverlayClick}
+          onContextMenu={(e) => {
+            // Right-click while the scissors cursor is showing cancels the pick: drop the
+            // cursor and close the replay panel instead of opening the chart context menu.
+            e.preventDefault();
+            e.stopPropagation();
+            setVLineX(null);
+            setVLineTime(null);
+            stopReplay();
+          }}
           style={{
             position: "absolute",
             top: 0, left: 0, right: 0, bottom: 0,
@@ -2474,7 +3384,7 @@ export default function ChartContainer({
               <div style={{
                 position: "absolute",
                 top: 0, left: vLineX, right: 0, bottom: 0,
-                backgroundColor: "rgba(240,243,250,0.55)",
+                backgroundColor: theme === "dark" ? "rgba(19,23,34,0.6)" : "rgba(240,243,250,0.55)",
                 pointerEvents: "none",
               }} />
               {/* The vertical line itself */}
@@ -2483,7 +3393,7 @@ export default function ChartContainer({
                 top: 0, bottom: 0,
                 left: vLineX,
                 width: "1px",
-                backgroundColor: "#131722",
+                backgroundColor: theme === "dark" ? "#d1d4dc" : "#131722",
                 pointerEvents: "none",
               }} />
               {/* Scissors icon near cursor */}
@@ -2493,7 +3403,7 @@ export default function ChartContainer({
                 top: "20px",
                 pointerEvents: "none",
               }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={theme === "dark" ? "#d1d4dc" : "#131722"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="6" cy="6" r="3"/>
                   <circle cx="6" cy="18" r="3"/>
                   <line x1="20" y1="4" x2="8.12" y2="15.88"/>
@@ -2509,8 +3419,8 @@ export default function ChartContainer({
                   top: "50%",
                   transform: "translate(-50%, -50%)",
                   pointerEvents: "none",
-                  backgroundColor: "#131722",
-                  color: "#ffffff",
+                  backgroundColor: theme === "dark" ? "#d1d4dc" : "#131722",
+                  color: theme === "dark" ? "#131722" : "#ffffff",
                   fontSize: "11px",
                   fontWeight: 600,
                   padding: "3px 8px",
@@ -2529,13 +3439,16 @@ export default function ChartContainer({
       {chart && series && dimensions.width > 0 && (
         <>
           <DrawingLayer chart={chart} series={series} width={dimensions.width} height={dimensions.height} />
+          {mode === 'idle' && (
+            <TradingOverlay chart={chart} series={series} symbol={symbol} width={dimensions.width} height={dimensions.height} plusButton={psPlusButton} />
+          )}
           <SubBar />
           <MultiSelectSubBar />
         </>
       )}
 
       {/* Replay controls bar */}
-      <ReplayBar intervalLabel={intervalLabel} />
+      <ReplayBar intervalLabel={intervalLabel} interval={interval} symbol={symbol} />
 
       {/* Session Settings Modal */}
       <SessionSettingsModal
@@ -2548,48 +3461,52 @@ export default function ChartContainer({
 
       {contextMenu?.visible && (
         <ChartContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
+          pos={{ x: contextMenu.clientX, y: contextMenu.clientY }}
           price={contextMenu.price}
           symbol={symbol}
           theme={theme}
           onClose={() => setContextMenu(null)}
-          onReset={() => {
-            if (chartRef.current) {
-              chartRef.current.timeScale().fitContent();
-              chartRef.current.priceScale('right').applyOptions({ autoScale: true });
-              notifyPriceScaleChanged();
-            }
+          viewChanged={isChartViewChanged()}
+          onReset={() => { resetChartView(); setContextMenu(null); }}
+          drawingCount={((window as any).__drawings || []).filter((d: any) => d.type !== 'measure').length}
+          indicatorCount={activeIndicators.length + (pineLegend ? 1 : 0)}
+          onRemoveDrawings={() => { setDrawings([]); setContextMenu(null); }}
+          onRemoveIndicators={() => {
+            activeIndicators.forEach(ind => onRemoveIndicator?.(ind.id));
+            if (pineLegend) removePineScript();
             setContextMenu(null);
           }}
-          onRemoveDrawings={() => {
-            setDrawings([]);
+          onSettings={() => { setShowChartSettings(true); setContextMenu(null); }}
+          onAddAlert={() => { setShowAlertModal(true); setContextMenu(null); }}
+          precision={pricePrecision}
+          onCopyPrice={(text: string) => { navigator.clipboard?.writeText(text).catch(() => {}); setContextMenu(null); }}
+          canPaste={!!(window as any).__copiedDrawings?.length}
+          onPaste={() => { window.dispatchEvent(new CustomEvent('tv:paste-drawings')); setContextMenu(null); }}
+          quickQty={formatQty(lastQtyFor(symbol))}
+          buyType={contextMenu.price !== null ? orderTypeAt(symbol, 'buy', contextMenu.price) : 'limit'}
+          sellType={contextMenu.price !== null ? orderTypeAt(symbol, 'sell', contextMenu.price) : 'stop'}
+          onQuickOrder={(side: 'buy' | 'sell', type: 'limit' | 'stop') => {
+            if (contextMenu.price !== null) projectChartOrder(symbol, side, type, contextMenu.price);
             setContextMenu(null);
           }}
-          onSettings={() => {
-            setShowChartSettings(true);
-            setContextMenu(null);
-          }}
-          onSaveTemplate={() => {
-            setShowSaveTemplate(true);
-            setContextMenu(null);
-          }}
-          onAddAlert={() => {
-            setShowAlertModal(true);
-            setContextMenu(null);
-          }}
-          templates={savedTemplates}
-          onApplyTemplate={(t: any) => {
-            if (t.settings?.candleColors) setCandleColors(t.settings.candleColors);
-            if (t.settings?.canvasColors) setCanvasColors(t.settings.canvasColors);
-            setContextMenu(null);
-          }}
+          onAddOrder={() => { if (contextMenu.price !== null) addOrderAt(contextMenu.price); setContextMenu(null); }}
+          cursorLocked={lockedCursorTime !== null}
+          onToggleCursorLock={() => { setLockedCursorTime(t => (t !== null ? null : contextMenu.time)); setContextMenu(null); }}
+          onTableView={() => { setShowTableView(true); setContextMenu(null); }}
+          onObjectTree={() => { window.dispatchEvent(new CustomEvent('tv:open-sidebar-panel', { detail: 'object_tree' })); setContextMenu(null); }}
         />
+      )}
+      {lockedCursorTime !== null && chartRef.current && (
+        <LockedCursorLine chart={chartRef.current} time={lockedCursorTime} theme={theme} tz={chartTimezone} />
+      )}
+      {showTableView && (
+        <ChartTableView bars={fullDataRef.current} precision={pricePrecision} theme={theme} tz={chartTimezone} onClose={() => setShowTableView(false)} />
       )}
 
       {showChartSettings && (
         <ChartSettingsModal 
           theme={theme} 
+          initialTab={chartSettingsTab}
           onClose={() => setShowChartSettings(false)} 
           candleColors={candleColors}
           onSaveColors={async (newColors) => {
@@ -2654,23 +3571,7 @@ export default function ChartContainer({
         }} />
       </button>
 
-      {/* Timezone selector — bottom-left corner of the chart pane */}
-      <button
-        title="Change the time zone"
-        data-timezone-toggle
-        onClick={() => { setShowPriceScaleMenu(false); setShowTimezoneMenu(v => !v); }}
-        style={{
-          position: "absolute", bottom: "4px", left: "6px",
-          height: "18px", padding: "0 4px", borderRadius: "3px",
-          background: showTimezoneMenu ? "var(--tv-color-hover-bg, rgba(135,141,157,0.15))" : "none",
-          border: "none",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          cursor: "pointer", zIndex: 40,
-          color: "var(--tv-color-text-muted)", fontSize: "11px",
-        }}
-      >
-        UTC
-      </button>
+      {/* The time zone menu opens from the bottom bar's clock, as on TradingView */}
       {showTimezoneMenu && (
         <TimezoneMenu
           theme={theme}
@@ -2684,7 +3585,12 @@ export default function ChartContainer({
       <button
         title="Chart settings"
         data-price-scale-toggle
-        onClick={() => { setShowTimezoneMenu(false); setShowPriceScaleMenu(v => !v); setPriceScaleSubmenu(null); }}
+        onClick={(e) => {
+          const b = e.currentTarget.getBoundingClientRect();
+          const c = e.currentTarget.parentElement?.getBoundingClientRect();
+          setPsAnchor({ right: c ? c.right : b.right, top: b.top });
+          setShowTimezoneMenu(false); setShowPriceScaleMenu(v => !v); setPriceScaleSubmenu(null);
+        }}
         style={{
           position: "absolute", bottom: "4px", right: "6px",
           width: "20px", height: "20px", borderRadius: "50%",
@@ -2695,13 +3601,14 @@ export default function ChartContainer({
           color: "var(--tv-color-text-muted)",
         }}
       >
-        <SettingsIcon size={14} />
+        <SubSettingsIcon size={18} />
       </button>
-      {showPriceScaleMenu && (
+      {showPriceScaleMenu && psAnchor && (
         <PriceScaleMenu
           theme={theme}
-          submenu={priceScaleSubmenu}
-          setSubmenu={setPriceScaleSubmenu}
+          anchor={psAnchor}
+          ratioText={priceToBarRatioText()}
+          dailyOrMore={/day|week|month/.test(interval)}
           psAutoScale={psAutoScale} setPsAutoScale={setPsAutoScale}
           psLockRatio={psLockRatio} setPsLockRatio={setPsLockRatio}
           psScaleOnly={psScaleOnly} setPsScaleOnly={setPsScaleOnly}
@@ -2719,131 +3626,196 @@ export default function ChartContainer({
   );
 }
 
-function IndicatorRow({ 
-  name, title, value, theme, color = "#d1d4dc",
-  isVisible = true, onToggleVisibility, onOpenSettings, onRemove
-}: { 
-  name: string, title: string, value: any, theme: string, color?: string,
-  isVisible?: boolean, onToggleVisibility?: () => void, onOpenSettings?: () => void, onRemove?: () => void
+// --- Legend helpers ---
+
+// The bar at `time` (the crosshair's), by binary search over the loaded bars
+function barIndexAtTime(bars: { time: number }[], time: number): number {
+  let lo = 0, hi = bars.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const t = bars[mid].time;
+    if (t === time) return mid;
+    if (t < time) lo = mid + 1; else hi = mid - 1;
+  }
+  return -1;
+}
+
+// Close of the last bar of the day before bar `idx` (for "Last day change values"); on daily
+// and longer bars that's simply the previous bar
+function previousDayClose(bars: { time: number; close: number }[], idx: number, interval: string): number | null {
+  if (idx <= 0) return null;
+  if (/day|week|month/.test(interval)) return bars[idx - 1].close;
+  const dayOf = (t: number) => { const d = new Date(t * 1000); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
+  const today = dayOf(bars[idx].time);
+  for (let i = idx - 1; i >= 0; i--) if (dayOf(bars[i].time) !== today) return bars[i].close;
+  return null;
+}
+
+// A line series' latest point (the legend's value when the crosshair isn't on the chart)
+function lastSeriesPoint(series: any): { value: number } | null {
+  try {
+    const data = series?.data?.();
+    return data && data.length ? data[data.length - 1] : null;
+  } catch { return null; }
+}
+
+// The interval as TradingView's legend writes it: minutes as a bare number, then 1h, 1D, 1W, 1M
+function legendIntervalLabel(interval: string): string {
+  const m = interval.match(/^(\d+)(min|h|day|week|month)$/);
+  if (!m) return interval;
+  const unit = { min: "", h: "h", day: "D", week: "W", month: "M" }[m[2] as "min"];
+  return `${m[1]}${unit}`;
+}
+
+const LegendEye = ({ off }: { off?: boolean }) => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1" aria-hidden>
+    <path d="M1.5 9c1.9-3.3 4.4-5 7.5-5s5.6 1.7 7.5 5c-1.9 3.3-4.4 5-7.5 5S3.4 12.3 1.5 9z" />
+    <circle cx="9" cy="9" r="2.5" />
+    {off && <path d="M3 15L15 3" />}
+  </svg>
+);
+const LegendTrash = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1" aria-hidden>
+    <path d="M3 5.5h12M7 5.5v-2h4v2M4.5 5.5l.9 9.5a1 1 0 0 0 1 .9h5.2a1 1 0 0 0 1-.9l.9-9.5" />
+  </svg>
+);
+const LegendMore = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" aria-hidden>
+    <circle cx="4" cy="9" r="1.2" /><circle cx="9" cy="9" r="1.2" /><circle cx="14" cy="9" r="1.2" />
+  </svg>
+);
+const LegendCode = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1" aria-hidden>
+    <path d="M6.5 4.5L2.5 9l4 4.5M11.5 4.5l4 4.5-4 4.5" />
+  </svg>
+);
+const LegendStar = ({ filled }: { filled?: boolean }) => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill={filled ? "#f7a600" : "none"} stroke={filled ? "#f7a600" : "currentColor"} strokeWidth="1" aria-hidden>
+    <path d="M9 2.5l2 4.3 4.7.5-3.5 3.2 1 4.6L9 12.7l-4.2 2.4 1-4.6-3.5-3.2 4.7-.5z" />
+  </svg>
+);
+
+const LegendIconBtn = forwardRef<HTMLButtonElement, { label: string; onClick?: () => void; children: React.ReactNode }>(
+  function LegendIconBtn({ label, onClick, children }, ref) {
+    return (
+      <Tip text={label}>
+        <button ref={ref} type="button" aria-label={label} className="tv-legend-btn" style={{ width: 22, height: 22, padding: 0 }}
+          onClick={e => { e.stopPropagation(); onClick?.(); }}>
+          {children}
+        </button>
+      </Tip>
+    );
+  }
+);
+
+// One indicator's legend row, as on TradingView: its name, inputs (grey) and values. Hovered
+// (or clicked, which keeps it that way until you click elsewhere) it becomes a chip with the
+// full name as a tooltip and Show/Hide, Settings, Remove and More in place of the values; a
+// hidden indicator is greyed out with its "Show" eye left in view.
+function IndicatorRow({
+  name, fullName, args, values, status, background, isVisible = true,
+  onToggleVisibility, onOpenSettings, onOpenCode, onRemove,
+}: {
+  name: string; fullName: string; args: string; values: { text: string; color?: string }[];
+  status: StatusLineSettings; background: string; isVisible?: boolean;
+  onToggleVisibility?: () => void; onOpenSettings?: () => void; onOpenCode?: () => void; onRemove?: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  
-  const textColor = theme === "dark" ? "#d1d4dc" : "#131722";
-  const iconColor = theme === "dark" ? "#787b86" : "#787b86";
+  const [selected, setSelected] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [favorite, setFavorite] = useState(false);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const active = hovered || selected || menuOpen;
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
-      }
-    };
-    if (showDropdown) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [showDropdown]);
+    if (!selected) return;
+    const onDown = (e: MouseEvent) => { if (!rowRef.current?.contains(e.target as Node)) setSelected(false); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [selected]);
+
+  const openMenu = () => {
+    setFavorite(loadFavoriteIndicators().includes(fullName));
+    setMenuOpen(o => !o);
+  };
+  const toggleFavorite = () => {
+    const list = loadFavoriteIndicators();
+    const next = list.includes(fullName) ? list.filter(n => n !== fullName) : [...list, fullName];
+    saveFavoriteIndicators(next);
+    setMenuOpen(false);
+  };
 
   return (
-    <div 
-      style={{ position: "relative", display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", pointerEvents: "auto", padding: "2px 0", borderRadius: "4px" }}
+    <div
+      ref={rowRef}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onClick={() => setSelected(true)}
+      style={{ display: "flex", alignItems: "center", height: "24px", pointerEvents: "auto" }}
     >
-      <span style={{ fontWeight: 600, color: textColor }}>{name === "Vol" ? "Vol · Ticks" : title}</span>
-      <span style={{ color, marginLeft: "4px" }}>{value}</span>
-
-      {(hovered || showDropdown) && (
-        <div style={{ display: "flex", gap: "6px", marginLeft: "8px" }}>
-          <div onClick={onToggleVisibility} style={{ display: 'flex', alignItems: 'center' }}>
-            {isVisible ? (
-              <Eye size={16} color={iconColor} style={{ cursor: "pointer" }} onMouseEnter={e => e.currentTarget.style.color = textColor} onMouseLeave={e => e.currentTarget.style.color = iconColor} />
-            ) : (
-              <EyeOff size={16} color={iconColor} style={{ cursor: "pointer" }} onMouseEnter={e => e.currentTarget.style.color = textColor} onMouseLeave={e => e.currentTarget.style.color = iconColor} />
-            )}
-          </div>
-          <TVSettingsIcon size={16} color={iconColor} style={{ cursor: "pointer" }} onMouseEnter={(e: any) => e.currentTarget.style.color = textColor} onMouseLeave={(e: any) => e.currentTarget.style.color = iconColor} onClick={onOpenSettings} />
-          <Trash2 size={16} color={iconColor} style={{ cursor: "pointer" }} onMouseEnter={e => e.currentTarget.style.color = textColor} onMouseLeave={e => e.currentTarget.style.color = iconColor} onClick={onRemove} />
-          <MoreHorizontal 
-            size={16} color={iconColor} style={{ cursor: "pointer" }} 
-            onMouseEnter={e => e.currentTarget.style.color = textColor} 
-            onMouseLeave={e => e.currentTarget.style.color = iconColor} 
-            onClick={() => setShowDropdown(!showDropdown)}
-          />
-        </div>
-      )}
-
-      {/* Dropdown Menu */}
-      {showDropdown && (
-        <div 
-          ref={dropdownRef}
-          style={{
-            position: "absolute",
-            top: "100%",
-            left: "80px", // offset slightly to align with the icons
-            backgroundColor: theme === "dark" ? "#1e222d" : "#ffffff",
-            border: `1px solid ${theme === "dark" ? "#2a2e39" : "#e0e3eb"}`,
-            borderRadius: "6px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-            zIndex: 1000,
-            display: "flex",
-            flexDirection: "column",
-            minWidth: "260px",
-            padding: "6px 0",
-            pointerEvents: "auto",
-          }}
-        >
-          <DropdownItem icon={<Clock size={16} />} text={`Add alert on ${name === "Vol" ? "Vol · Ticks" : title}...`} shortcut="Alt + A" theme={theme} onClick={() => setShowDropdown(false)} />
-          <DropdownItem icon={<Star size={16} />} text="Add this indicator to favorites" theme={theme} onClick={() => setShowDropdown(false)} />
-          <div style={{ height: "1px", backgroundColor: theme === "dark" ? "#2a2e39" : "#e0e3eb", margin: "4px 0" }} />
-          <DropdownItem icon={<Copy size={16} />} text="Copy" shortcut="Ctrl + C" theme={theme} onClick={() => setShowDropdown(false)} />
-          <DropdownItem 
-            icon={isVisible ? <EyeOff size={16} /> : <Eye size={16} />} 
-            text={isVisible ? "Hide" : "Show"} 
-            theme={theme} 
-            onClick={() => { onToggleVisibility?.(); setShowDropdown(false); }} 
-          />
-          <DropdownItem icon={<Trash2 size={16} />} text="Remove" shortcut="Del" theme={theme} onClick={() => { onRemove?.(); setShowDropdown(false); }} />
-          <div style={{ height: "1px", backgroundColor: theme === "dark" ? "#2a2e39" : "#e0e3eb", margin: "4px 0" }} />
-          <DropdownItem icon={<TVSettingsIcon size={16} />} text="Settings..." theme={theme} onClick={() => { onOpenSettings?.(); setShowDropdown(false); }} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DropdownItem({ icon, text, shortcut, theme, onClick }: any) {
-  const [hovered, setHovered] = useState(false);
-  const textColor = theme === "dark" ? "#d1d4dc" : "#131722";
-  const iconColor = theme === "dark" ? "#787b86" : "#787b86";
-  const bgHover = theme === "dark" ? "#2a2e39" : "#f0f3fa";
-  
-  return (
-    <div 
-      style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "8px 16px", cursor: "pointer", backgroundColor: hovered ? bgHover : "transparent",
-        color: textColor, fontSize: "13px"
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={onClick}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}>
-        <span style={{ color: iconColor, display: "flex", width: "16px", justifyContent: "center" }}>{icon}</span>
-        <span style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "space-between" }}>{text}</span>
+      <div style={{
+        display: "inline-flex", alignItems: "center", gap: "6px", height: "22px", padding: "0 4px", margin: "0 -4px",
+        borderRadius: "4px", fontSize: "13px", whiteSpace: "nowrap", cursor: "default",
+        background: active ? "var(--tv-color-bg)" : background,
+        boxShadow: selected ? "inset 0 0 0 1px var(--tv-color-accent)" : undefined,
+        color: isVisible ? "inherit" : "var(--tv-legend-muted)",
+      }}>
+        {(status.indTitles || active) && <Tip text={fullName}><span>{name}</span></Tip>}
+        {status.indInputs && args && <span style={{ color: isVisible ? "var(--tv-legend-args)" : "inherit" }}>{args}</span>}
+        {!active && isVisible && status.indValues && values.map((v, i) => (
+          <span key={i} style={{ color: v.color }}>{v.text}</span>
+        ))}
+        {active ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "2px", color: "var(--tv-hdr-text)" }}>
+            <LegendIconBtn label={isVisible ? "Hide" : "Show"} onClick={onToggleVisibility}><LegendEye off={!isVisible} /></LegendIconBtn>
+            <LegendIconBtn label="Settings" onClick={onOpenSettings}><TVSettingsIcon size={18} /></LegendIconBtn>
+            {onOpenCode && <LegendIconBtn label="Source code" onClick={onOpenCode}><LegendCode /></LegendIconBtn>}
+            <LegendIconBtn label="Remove" onClick={onRemove}><LegendTrash /></LegendIconBtn>
+            <LegendIconBtn ref={moreRef} label="More" onClick={openMenu}><LegendMore /></LegendIconBtn>
+          </span>
+        ) : !isVisible && (
+          <LegendIconBtn label="Show" onClick={onToggleVisibility}><LegendEye off /></LegendIconBtn>
+        )}
       </div>
-      {shortcut && <span style={{ color: iconColor, fontSize: "12px", opacity: 0.7, marginLeft: "16px" }}>{shortcut}</span>}
+      <Popover anchor={moreRef.current} open={menuOpen} onClose={() => setMenuOpen(false)} width={280}>
+        <MenuItem icon={<LegendStar filled={favorite} />} onClick={toggleFavorite}>
+          {favorite ? "Remove this indicator from favorites" : "Add this indicator to favorites"}
+        </MenuItem>
+        <MenuDivider />
+        <MenuItem icon={<LegendEye off={isVisible} />} onClick={() => { setMenuOpen(false); onToggleVisibility?.(); }}>{isVisible ? "Hide" : "Show"}</MenuItem>
+        <MenuItem icon={<LegendTrash />} onClick={() => { setMenuOpen(false); onRemove?.(); }}>Remove</MenuItem>
+        <MenuDivider />
+        <MenuItem icon={<TVSettingsIcon size={18} />} onClick={() => { setMenuOpen(false); onOpenSettings?.(); }}>Settings…</MenuItem>
+      </Popover>
     </div>
   );
 }
+
+// Legend row for a script added from the Pine Editor: its name, its real current input values
+// (TradingView's "name + inputs" legend text) and each plot's latest value in the plot's colour
+function PineScriptLegendRow({
+  name, inputs, plots, status, background, format, isVisible, onToggleVisibility, onOpenSettings, onOpenCode, onRemove,
+}: {
+  name: string; inputs: string[]; plots: { title: string; color: string; lastValue: number | null }[];
+  status: StatusLineSettings; background: string; format: (v: number) => string;
+  isVisible: boolean; onToggleVisibility: () => void; onOpenSettings?: () => void; onOpenCode?: () => void; onRemove?: () => void;
+}) {
+  return (
+    <IndicatorRow
+      name={name} fullName={name} args={inputs.join(" ")}
+      values={plots.filter(p => p.lastValue !== null && !isNaN(p.lastValue)).map(p => ({ text: format(p.lastValue as number), color: p.color }))}
+      status={status} background={background} isVisible={isVisible}
+      onToggleVisibility={onToggleVisibility} onOpenSettings={onOpenSettings} onOpenCode={onOpenCode} onRemove={onRemove}
+    />
+  );
+}
+
 
 function TimezoneMenu({ theme, selected, onSelect, onClose }: {
   theme: string; selected: string; onSelect: (tz: string) => void; onClose: () => void;
 }) {
+  useEscapeClose(onClose);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -2897,253 +3869,100 @@ function TimezoneMenu({ theme, selected, onSelect, onClose }: {
   );
 }
 
-function PriceScaleMenuRow({ label, checked, disabled, shortcut, hasSubmenu, icon, onClick, theme }: {
-  label: string; checked?: boolean; disabled?: boolean; shortcut?: string; hasSubmenu?: boolean; icon?: React.ReactNode; onClick?: () => void; theme: string;
-}) {
-  const [hovered, setHovered] = useState(false);
-  const isDark = theme === "dark";
-  const text = disabled ? "var(--tv-color-text-muted)" : (isDark ? "#d1d4dc" : "#131722");
-  const hoverBg = isDark ? "#2a2e39" : "#f0f3fa";
-  return (
-    <div
-      onClick={disabled ? undefined : onClick}
-      onMouseEnter={() => !disabled && setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: "flex", alignItems: "center", gap: "8px",
-        padding: "7px 12px", cursor: disabled ? "default" : "pointer",
-        backgroundColor: hovered ? hoverBg : "transparent",
-        color: text, fontSize: "13px", whiteSpace: "nowrap",
-      }}
-    >
-      <span style={{ width: "14px", display: "inline-flex", justifyContent: "center", flexShrink: 0, color: "var(--tv-color-text-muted)" }}>
-        {icon || (checked && <Check size={13} />)}
-      </span>
-      <span style={{ flex: 1 }}>{label}</span>
-      {shortcut && <span style={{ color: "var(--tv-color-text-muted)", fontSize: "11px", marginLeft: "16px" }}>{shortcut}</span>}
-      {hasSubmenu && <ChevronRight size={14} style={{ color: "var(--tv-color-text-muted)", marginLeft: "16px" }} />}
-    </div>
-  );
-}
-
-function PriceScaleMenuDivider({ theme }: { theme: string }) {
-  return <div style={{ height: "1px", backgroundColor: theme === "dark" ? "#2a2e39" : "#e0e3eb", margin: "4px 0" }} />;
-}
-
 function PriceScaleMenu({
-  theme, submenu, setSubmenu,
+  theme, anchor, ratioText, dailyOrMore,
   psAutoScale, setPsAutoScale, psLockRatio, setPsLockRatio, psScaleOnly, setPsScaleOnly,
   psInvert, setPsInvert, psMode, setPsMode, psScaleLeft, setPsScaleLeft, psPlusButton, setPsPlusButton,
   labelSettings, setLabelSettings, lineSettings, setLineSettings,
   onClose, onMoreSettings,
 }: any) {
-  const ref = useRef<HTMLDivElement>(null);
-  const labelsAnchorRef = useRef<HTMLDivElement>(null);
-  const linesAnchorRef = useRef<HTMLDivElement>(null);
-  const [submenuPos, setSubmenuPos] = useState<{ right: number; bottom: number } | null>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (
-        ref.current && !ref.current.contains(target) &&
-        !target.closest?.('[data-price-scale-submenu]') &&
-        !target.closest?.('[data-price-scale-toggle]')
-      ) {
-        onClose();
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [onClose]);
-
-  const isDark = theme === "dark";
-  const bg = isDark ? "#1e222d" : "#ffffff";
-  const text = isDark ? "#d1d4dc" : "#131722";
-  const border = isDark ? "#2a2e39" : "#e0e3eb";
-
   const toggleLabel = (key: string) => setLabelSettings((s: any) => ({ ...s, [key]: !s[key] }));
   const toggleLine = (key: string) => setLineSettings((s: any) => ({ ...s, [key]: !s[key] }));
+  // TradingView's price scale menu (the gear under the price scale); checkable rows stay open
+  const items: TvMenuItem[] = [
+    { label: "Auto (fits data to screen)", checked: !!psAutoScale, keepOpen: true, onClick: () => setPsAutoScale(!psAutoScale) },
+    { label: "Lock price to bar ratio", checked: !!psLockRatio, shortcut: ratioText, keepOpen: true, onClick: () => setPsLockRatio(!psLockRatio) },
+    { label: "Scale price chart only", checked: !!psScaleOnly, keepOpen: true, onClick: () => setPsScaleOnly(!psScaleOnly) },
+    { label: "Invert scale", checked: !!psInvert, shortcut: "Alt + I", keepOpen: true, onClick: () => setPsInvert(!psInvert) },
+    { kind: "divider" },
+    { label: "Regular", checked: psMode === PriceScaleMode.Normal, keepOpen: true, onClick: () => setPsMode(PriceScaleMode.Normal) },
+    { label: "Percent", checked: psMode === PriceScaleMode.Percentage, shortcut: "Alt + P", keepOpen: true, onClick: () => setPsMode(PriceScaleMode.Percentage) },
+    { label: "Indexed to 100", checked: psMode === PriceScaleMode.IndexedTo100, keepOpen: true, onClick: () => setPsMode(PriceScaleMode.IndexedTo100) },
+    { label: "Logarithmic", checked: psMode === PriceScaleMode.Logarithmic, shortcut: "Alt + L", keepOpen: true, onClick: () => setPsMode(PriceScaleMode.Logarithmic) },
+    { kind: "divider" },
+    { label: "Move scale to left", checked: !!psScaleLeft, keepOpen: true, onClick: () => setPsScaleLeft(!psScaleLeft) },
+    { kind: "divider" },
+    { label: "Labels", testId: "ps-labels", submenu: [
+      { label: "Symbol name label", checked: !!labelSettings.symbolName, keepOpen: true, onClick: () => toggleLabel('symbolName') },
+      { label: "Symbol last price label", checked: !!labelSettings.lastPrice, keepOpen: true, onClick: () => toggleLabel('lastPrice') },
+      { label: "Symbol previous day close price label", checked: !dailyOrMore && !!labelSettings.prevClose, disabled: dailyOrMore, keepOpen: true, onClick: () => toggleLabel('prevClose') },
+      { label: "Pre/post/night market price label", checked: false, disabled: true },
+      { label: "High and low price labels", checked: !!labelSettings.highLow, keepOpen: true, onClick: () => toggleLabel('highLow') },
+      { label: "Bid and ask labels", checked: !!labelSettings.bidAsk, keepOpen: true, onClick: () => toggleLabel('bidAsk') },
+      { label: "Indicators and financials name labels", checked: !!labelSettings.indicatorName, keepOpen: true, onClick: () => toggleLabel('indicatorName') },
+      { label: "Indicators and financials value labels", checked: !!labelSettings.indicatorValue, keepOpen: true, onClick: () => toggleLabel('indicatorValue') },
+      { label: "Countdown to bar close", checked: !!labelSettings.countdown, keepOpen: true, onClick: () => toggleLabel('countdown') },
+      { kind: "divider" },
+      { label: "No overlapping labels", checked: !!labelSettings.noOverlap, keepOpen: true, onClick: () => toggleLabel('noOverlap') },
+    ] },
+    { label: "Lines", testId: "ps-lines", submenu: [
+      { label: "Price line", checked: !!lineSettings.priceLine, keepOpen: true, onClick: () => toggleLine('priceLine') },
+      { label: "Previous day close price line", checked: !dailyOrMore && !!lineSettings.prevClose, disabled: dailyOrMore, keepOpen: true, onClick: () => toggleLine('prevClose') },
+      { label: "Pre/post/night market price line", checked: false, disabled: true },
+      { label: "High and low price lines", checked: !!lineSettings.highLow, keepOpen: true, onClick: () => toggleLine('highLow') },
+      { label: "Bid and ask lines", checked: !!lineSettings.bidAsk, keepOpen: true, onClick: () => toggleLine('bidAsk') },
+    ] },
+    { label: "Plus button", checked: !!psPlusButton, keepOpen: true, onClick: () => setPsPlusButton(!psPlusButton) },
+    { kind: "divider" },
+    { label: "More settings…", icon: <MenuSettingsIcon />, onClick: onMoreSettings },
+  ];
+  return <TvMenu items={items} position={{ above: anchor }} isDark={theme === "dark"} onClose={onClose} ariaLabel="Price scale" testId="price-scale-menu" />;
+}
 
-  const toggleSubmenu = (name: 'labels' | 'lines', anchorRef: React.RefObject<HTMLDivElement>) => {
-    if (submenu === name) { setSubmenu(null); return; }
-    const rect = anchorRef.current?.getBoundingClientRect();
-    if (rect) setSubmenuPos({ right: window.innerWidth - rect.left + 2, bottom: window.innerHeight - rect.bottom - 6 });
-    setSubmenu(name);
-  };
-
-  const submenuBoxStyle = (width: number): React.CSSProperties => ({
-    position: "fixed", right: submenuPos?.right ?? 0, bottom: submenuPos?.bottom ?? 0, zIndex: 3000,
-    width, maxHeight: "80vh", overflowY: "auto", backgroundColor: bg, color: text,
-    border: `1px solid ${border}`, borderRadius: "6px",
-    boxShadow: "0 4px 16px rgba(0,0,0,0.25)", padding: "6px 0",
-  });
-
+// The vertical cursor line locked at a bar's time ("Lock vertical cursor line by time"), with
+// its time label on the time axis, drawn like the crosshair's
+function LockedCursorLine({ chart, time, theme, tz }: { chart: any; time: number; theme: string; tz: string }) {
+  useChartTick(chart);
+  const x = chart.timeScale().timeToCoordinate(time as any);
+  if (x === null || x === undefined) return null;
+  const axisH = chart.timeScale().height();
+  const dark = theme === "dark";
   return (
-    <div
-      ref={ref}
-      style={{
-        position: "absolute", bottom: "26px", right: "2px",
-        width: "260px", maxHeight: "80vh", overflowY: "auto", backgroundColor: bg, color: text,
-        border: `1px solid ${border}`, borderRadius: "6px",
-        boxShadow: "0 4px 16px rgba(0,0,0,0.25)", zIndex: 1000, padding: "6px 0",
-      }}
-    >
-      <PriceScaleMenuRow theme={theme} label="Auto (fits data to screen)" checked={psAutoScale} onClick={() => setPsAutoScale(!psAutoScale)} />
-      <PriceScaleMenuRow theme={theme} label="Lock price to bar ratio" checked={psLockRatio} shortcut="0.6633" onClick={() => setPsLockRatio(!psLockRatio)} />
-      <PriceScaleMenuRow theme={theme} label="Scale price chart only" checked={psScaleOnly} onClick={() => setPsScaleOnly(!psScaleOnly)} />
-      <PriceScaleMenuRow theme={theme} label="Invert scale" checked={psInvert} shortcut="Alt + I" onClick={() => setPsInvert(!psInvert)} />
-      <PriceScaleMenuDivider theme={theme} />
-      <PriceScaleMenuRow theme={theme} label="Regular" checked={psMode === PriceScaleMode.Normal} onClick={() => setPsMode(PriceScaleMode.Normal)} />
-      <PriceScaleMenuRow theme={theme} label="Percent" checked={psMode === PriceScaleMode.Percentage} shortcut="Alt + P" onClick={() => setPsMode(PriceScaleMode.Percentage)} />
-      <PriceScaleMenuRow theme={theme} label="Indexed to 100" checked={psMode === PriceScaleMode.IndexedTo100} onClick={() => setPsMode(PriceScaleMode.IndexedTo100)} />
-      <PriceScaleMenuRow theme={theme} label="Logarithmic" checked={psMode === PriceScaleMode.Logarithmic} shortcut="Alt + L" onClick={() => setPsMode(PriceScaleMode.Logarithmic)} />
-      <PriceScaleMenuDivider theme={theme} />
-      <PriceScaleMenuRow theme={theme} label="Move scale to left" checked={psScaleLeft} onClick={() => setPsScaleLeft(!psScaleLeft)} />
-      <PriceScaleMenuDivider theme={theme} />
-      <div ref={labelsAnchorRef}>
-        <PriceScaleMenuRow theme={theme} label="Labels" hasSubmenu onClick={() => toggleSubmenu('labels', labelsAnchorRef)} />
+    <>
+      <div aria-hidden data-testid="locked-cursor-line" style={{ position: "absolute", top: 0, bottom: axisH, left: Math.round(x), width: 0, borderLeft: `1px dashed ${dark ? "#758696" : "#9598a1"}`, pointerEvents: "none", zIndex: 5 }} />
+      <div aria-hidden style={{ position: "absolute", bottom: 0, height: axisH, left: Math.round(x), transform: "translateX(-50%)", display: "flex", alignItems: "center", padding: "0 6px", background: dark ? "#363a45" : "#131722", color: "#ffffff", fontSize: 12, whiteSpace: "nowrap", pointerEvents: "none", zIndex: 6 }}>
+        {formatCrosshairTime(time, tz)}
       </div>
-      <div ref={linesAnchorRef}>
-        <PriceScaleMenuRow theme={theme} label="Lines" hasSubmenu onClick={() => toggleSubmenu('lines', linesAnchorRef)} />
-      </div>
-      <PriceScaleMenuDivider theme={theme} />
-      <PriceScaleMenuRow theme={theme} label="Plus button" checked={psPlusButton} onClick={() => setPsPlusButton(!psPlusButton)} />
-      <PriceScaleMenuDivider theme={theme} />
-      <PriceScaleMenuRow theme={theme} label="More settings..." icon={<SettingsIcon size={13} />} onClick={onMoreSettings} />
-
-      {submenu === 'labels' && submenuPos && createPortal(
-        <div data-price-scale-submenu style={submenuBoxStyle(280)}>
-          <PriceScaleMenuRow theme={theme} label="Symbol name label" checked={labelSettings.symbolName} onClick={() => toggleLabel('symbolName')} />
-          <PriceScaleMenuRow theme={theme} label="Symbol last price label" checked={labelSettings.lastPrice} onClick={() => toggleLabel('lastPrice')} />
-          <PriceScaleMenuRow theme={theme} label="Symbol previous day close price label" checked={labelSettings.prevClose} onClick={() => toggleLabel('prevClose')} />
-          <PriceScaleMenuRow theme={theme} label="Pre/post/night market price label" disabled />
-          <PriceScaleMenuRow theme={theme} label="High and low price labels" checked={labelSettings.highLow} onClick={() => toggleLabel('highLow')} />
-          <PriceScaleMenuRow theme={theme} label="Bid and ask labels" checked={labelSettings.bidAsk} onClick={() => toggleLabel('bidAsk')} />
-          <PriceScaleMenuRow theme={theme} label="Indicators and financials name labels" checked={labelSettings.indicatorName} onClick={() => toggleLabel('indicatorName')} />
-          <PriceScaleMenuRow theme={theme} label="Indicators and financials value labels" checked={labelSettings.indicatorValue} onClick={() => toggleLabel('indicatorValue')} />
-          <PriceScaleMenuRow theme={theme} label="Countdown to bar close" checked={labelSettings.countdown} onClick={() => toggleLabel('countdown')} />
-          <PriceScaleMenuRow theme={theme} label="No overlapping labels" checked={labelSettings.noOverlap} onClick={() => toggleLabel('noOverlap')} />
-        </div>,
-        document.body
-      )}
-      {submenu === 'lines' && submenuPos && createPortal(
-        <div data-price-scale-submenu style={submenuBoxStyle(260)}>
-          <PriceScaleMenuRow theme={theme} label="Price line" checked={lineSettings.priceLine} onClick={() => toggleLine('priceLine')} />
-          <PriceScaleMenuRow theme={theme} label="Previous day close price line" checked={lineSettings.prevClose} onClick={() => toggleLine('prevClose')} />
-          <PriceScaleMenuRow theme={theme} label="Pre/post/night market price line" disabled />
-          <PriceScaleMenuRow theme={theme} label="High and low price lines" checked={lineSettings.highLow} onClick={() => toggleLine('highLow')} />
-          <PriceScaleMenuRow theme={theme} label="Bid and ask lines" checked={lineSettings.bidAsk} onClick={() => toggleLine('bidAsk')} />
-        </div>,
-        document.body
-      )}
-    </div>
+    </>
   );
 }
 
-function ChartContextMenu({ x, y, price, symbol, theme, onClose, onReset, onRemoveDrawings, onSettings, onSaveTemplate, onAddAlert, templates, onApplyTemplate }: any) {
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const [showTemplateMenu, setShowTemplateMenu] = useState(false);
-  
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [onClose]);
-
-  const formattedPrice = price !== null ? price.toFixed(3) : "0.000";
-  const bg = theme === "dark" ? "#1e222d" : "#ffffff";
-  const border = theme === "dark" ? "#2a2e39" : "#e0e3eb";
-  const divider = theme === "dark" ? "#2a2e39" : "#e0e3eb";
-
-  // Prevent menu from going off-screen (approximate height/width)
-  const menuWidth = 280;
-  const menuHeight = 350;
-  let finalX = x;
-  let finalY = y;
-  
-  if (typeof window !== 'undefined') {
-    if (x + menuWidth > window.innerWidth) finalX = window.innerWidth - menuWidth - 20;
-    if (y + menuHeight > window.innerHeight) finalY = window.innerHeight - menuHeight - 20;
-  }
-
-  const style: React.CSSProperties = {
-    position: "absolute",
-    top: `${Math.max(0, finalY)}px`,
-    left: `${Math.max(0, finalX)}px`,
-    backgroundColor: bg,
-    border: `1px solid ${border}`,
-    borderRadius: "6px",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-    zIndex: 10000,
-    display: "flex",
-    flexDirection: "column",
-    minWidth: `${menuWidth}px`,
-    padding: "6px 0",
-  };
-
-  return (
-    <div ref={dropdownRef} style={style} onContextMenu={(e) => e.preventDefault()}>
-      <DropdownItem icon={<RotateCcw size={16}/>} text="Reset chart view" shortcut="Alt + R" theme={theme} onClick={onReset} />
-      <div style={{ height: "1px", backgroundColor: divider, margin: "4px 0" }} />
-      
-      <DropdownItem icon={null} text={`Copy price ${formattedPrice}`} theme={theme} onClick={onClose} />
-      <DropdownItem icon={null} text="Paste" shortcut="Ctrl + V" theme={theme} onClick={onClose} />
-      <div style={{ height: "1px", backgroundColor: divider, margin: "4px 0" }} />
-      
-      <DropdownItem icon={<Clock size={16}/>} text={`Add alert on ${symbol} at ${formattedPrice}...`} shortcut="Alt + A" theme={theme} onClick={onAddAlert} />
-      <DropdownItem icon={<ChevronDown size={16}/>} text={`Sell 137 ${symbol} @ ${formattedPrice} limit`} shortcut="Alt + Shift + S" theme={theme} onClick={onClose} />
-      <DropdownItem icon={<ChevronUp size={16}/>} text={`Buy 137 ${symbol} @ ${formattedPrice} stop`} theme={theme} onClick={onClose} />
-      <DropdownItem icon={<PlusSquare size={16}/>} text={`Add order on ${symbol} at ${formattedPrice}...`} shortcut="Shift + T" theme={theme} onClick={onClose} />
-      <div style={{ height: "1px", backgroundColor: divider, margin: "4px 0" }} />
-      
-      <div 
-         onMouseEnter={() => setShowTemplateMenu(true)} 
-         onMouseLeave={() => setShowTemplateMenu(false)}
-         style={{ position: 'relative' }}
-      >
-        <DropdownItem 
-           icon={null} 
-           text={<div style={{display: 'flex', justifyContent: 'space-between', width: '100%'}}><span>Chart template</span><ChevronRight size={16}/></div>} 
-           theme={theme} 
-           onClick={(e: any) => e.stopPropagation()} 
-        />
-        {showTemplateMenu && (
-          <div style={{
-            position: "absolute",
-            top: "-4px", // Align nicely with parent item
-            left: "100%",
-            backgroundColor: bg,
-            border: `1px solid ${border}`,
-            borderRadius: "6px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-            zIndex: 10001,
-            padding: "6px 0",
-            minWidth: "120px",
-            marginLeft: "2px"
-          }}>
-            <DropdownItem icon={null} text="Save as..." theme={theme} onClick={onSaveTemplate} />
-            {templates && templates.length > 0 && (
-              <>
-                <div style={{ height: "1px", backgroundColor: divider, margin: "4px 0" }} />
-                {templates.map((t: any) => (
-                  <DropdownItem key={t.id} icon={null} text={t.name} theme={theme} onClick={() => onApplyTemplate(t)} />
-                ))}
-              </>
-            )}
-          </div>
-        )}
-      </div>
-      <div style={{ height: "1px", backgroundColor: divider, margin: "4px 0" }} />
-      
-      <DropdownItem icon={null} text="Remove drawings" theme={theme} onClick={onRemoveDrawings} />
-      <div style={{ height: "1px", backgroundColor: divider, margin: "4px 0" }} />
-      
-      <DropdownItem icon={<SettingsIcon size={16}/>} text="Settings..." theme={theme} onClick={onSettings} />
-    </div>
-  );
+// TradingView's right-click menu on the chart
+function ChartContextMenu({ pos, price, precision = 3, symbol, theme, onClose, viewChanged, onReset, drawingCount, indicatorCount, onRemoveDrawings, onRemoveIndicators, onSettings, onAddAlert, onCopyPrice, onPaste, canPaste, onQuickOrder, onAddOrder, quickQty, buyType, sellType, cursorLocked, onToggleCursorLock, onTableView, onObjectTree }: any) {
+  const p = price !== null ? price.toFixed(precision) : "0";
+  // The limit order comes first, with its shortcut (a buy below the market, a sell above it)
+  const buy: TvMenuItem = { label: `Buy ${quickQty} ${symbol} @ ${p} ${buyType}`, icon: <MenuBuyIcon />, shortcut: buyType === 'limit' ? "Alt + Shift + B" : undefined, onClick: () => onQuickOrder('buy', buyType) };
+  const sell: TvMenuItem = { label: `Sell ${quickQty} ${symbol} @ ${p} ${sellType}`, icon: <MenuSellIcon />, shortcut: sellType === 'limit' ? "Alt + Shift + S" : undefined, onClick: () => onQuickOrder('sell', sellType) };
+  const removals: TvMenuItem[] = [
+    ...(drawingCount > 0 ? [{ label: "Remove drawings", onClick: onRemoveDrawings } as TvMenuItem] : []),
+    ...(indicatorCount > 0 ? [{ label: `Remove ${indicatorCount} indicator${indicatorCount === 1 ? "" : "s"}`, onClick: onRemoveIndicators } as TvMenuItem] : []),
+  ];
+  const items: TvMenuItem[] = [
+    ...(viewChanged ? [{ label: "Reset chart view", icon: <MenuResetIcon />, shortcut: "Alt + R", onClick: onReset } as TvMenuItem, { kind: "divider" } as TvMenuItem] : []),
+    { label: `Copy price ${p}`, onClick: () => onCopyPrice(p) },
+    { label: "Paste", shortcut: "Ctrl + V", disabled: !canPaste, onClick: onPaste },
+    { kind: "divider" },
+    { label: `Add alert on ${symbol} at ${p}…`, icon: <MenuAlertIcon />, shortcut: "Alt + A", onClick: onAddAlert },
+    ...(buyType === 'limit' ? [buy, sell] : [sell, buy]),
+    { label: `Add order on ${symbol} at ${p}…`, icon: <MenuAddOrderIcon />, shortcut: "Shift + T", onClick: onAddOrder },
+    { kind: "divider" },
+    { label: cursorLocked ? "Unlock vertical cursor line" : "Lock vertical cursor line by time", onClick: onToggleCursorLock },
+    { kind: "divider" },
+    { label: "Table view", onClick: onTableView },
+    { label: "Object tree", onClick: onObjectTree },
+    ...(removals.length ? [{ kind: "divider" } as TvMenuItem, ...removals] : []),
+    { kind: "divider" },
+    { label: "Settings…", icon: <MenuSettingsIcon />, onClick: onSettings },
+  ];
+  return <TvMenu items={items} position={pos} isDark={theme === "dark"} onClose={onClose} ariaLabel="Chart" testId="chart-context-menu" />;
 }

@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { X, ChevronDown, BarChart2, Activity, Plus } from "lucide-react";
 import { DualRangeSlider } from "./drawing/ui/DualRangeSlider";
+import { useEscapeClose } from "../lib/useEscapeClose";
 
 function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -79,6 +80,7 @@ interface VolumeSettingsModalProps {
 }
 
 export default function VolumeSettingsModal({ onClose, theme, config, onChangeConfig }: VolumeSettingsModalProps) {
+  useEscapeClose(onClose);
   const [activeTab, setActiveTab] = useState<"Inputs" | "Style" | "Visibility">("Inputs");
   const [visibility, setVisibility] = useState({
     ticks: { enabled: true, from: 1, to: 1000 },

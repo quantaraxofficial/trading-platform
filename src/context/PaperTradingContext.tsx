@@ -1,312 +1,108 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+// Paper trading: loads and saves the engine's accounts (Firestore for signed-in users, this
+// browser otherwise), runs the live price feed and order expiry, and plays execution sounds.
+// The engine itself lives in app/trading; components read it through usePaperTrading().
+
+import React, { ReactNode, useEffect, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { engine, useEngineState } from '@/app/trading/store';
+import {
+  createInitialState, normalizeState, activeAccount, activeBook, accountMetrics, positionViews,
+} from '@/app/trading/engine';
+import { startQuoteFeed } from '@/app/trading/quoteFeed';
+import { tradingSettings } from '@/app/trading/settings';
+import { playExecutionSound } from '@/app/trading/sounds';
 
-export interface Position {
-  id: string;
-  symbol: string;
-  side: 'buy' | 'sell';
-  quantity: number;
-  avgFillPrice: number;
-  takeProfit?: number;
-  stopLoss?: number;
-  unrealizedPnL: number;
-  unrealizedPnLPercent: number;
-  tradeValue: number;
-  marketValue: number;
-}
+const LOCAL_KEY = 'tv:paperTrading';
+const localKeyFor = (uid?: string) => (uid ? `${LOCAL_KEY}:${uid}` : LOCAL_KEY);
 
-export interface Order {
-  id: string;
-  symbol: string;
-  side: 'buy' | 'sell';
-  type: 'Market' | 'Limit' | 'Stop';
-  status: 'Working' | 'Filled' | 'Cancelled' | 'Rejected';
-  quantity: number;
-  price: number; // The limit/stop price
-  takeProfit?: number;
-  stopLoss?: number;
-  createdAt: number;
-}
-
-export interface HistoryItem {
-  id: string;
-  symbol: string;
-  side: 'buy' | 'sell';
-  action: 'Buy' | 'Sell' | 'Cancel' | 'TP' | 'SL';
-  quantity: number;
-  price: number;
-  time: number;
-}
-
-interface PaperTradingContextType {
-  balance: number;
-  equity: number;
-  realizedPnL: number;
-  unrealizedPnL: number;
-  positions: Position[];
-  orders: Order[];
-  history: HistoryItem[];
-  currentPrice: number;
-  setCurrentPrice: (price: number) => void;
-  placeOrder: (order: Omit<Order, 'id' | 'status' | 'createdAt'>) => void;
-  closePosition: (id: string) => void;
-  cancelOrder: (id: string) => void;
-}
-
-const PaperTradingContext = createContext<PaperTradingContextType>({
-  balance: 100000,
-  equity: 100000,
-  realizedPnL: 0,
-  unrealizedPnL: 0,
-  positions: [],
-  orders: [],
-  history: [],
-  currentPrice: 0,
-  setCurrentPrice: () => {},
-  placeOrder: () => {},
-  closePosition: () => {},
-  cancelOrder: () => {},
-});
+// Firestore rejects undefined fields; JSON round-trip drops them
+const plain = (v: unknown) => JSON.parse(JSON.stringify(v));
 
 export const PaperTradingProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
-  const [balance, setBalance] = useState(100000);
-  const [realizedPnL, setRealizedPnL] = useState(0);
-  const [positions, setPositions] = useState<Position[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [currentPrice, setCurrentPrice] = useState(0);
+  const uid = user?.uid;
 
-  // Load from Firebase
+  // Load this user's (or this browser's) paper accounts, then save on every change that matters
   useEffect(() => {
-    if (!user?.uid) {
-      // Reset if logged out
-      setBalance(100000);
-      setRealizedPnL(0);
-      setPositions([]);
-      setOrders([]);
-      setHistory([]);
-      return;
-    }
-    const loadPaperTrading = async () => {
-      try {
-        const docRef = doc(db, 'userPaperTrading', user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.balance !== undefined) setBalance(data.balance);
-          if (data.realizedPnL !== undefined) setRealizedPnL(data.realizedPnL);
-          if (data.positions) setPositions(data.positions);
-          if (data.orders) setOrders(data.orders);
-          if (data.history) setHistory(data.history);
-        }
-      } catch (error) {
-        console.error("Failed to load paper trading data:", error);
-      }
+    let cancelled = false;
+    let ready = false;
+    let lastSaved = -1;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const save = () => {
+      const state = plain(engine.getState());
+      lastSaved = engine.getRevision();
+      try { localStorage.setItem(localKeyFor(uid), JSON.stringify(state)); } catch { /* ignore */ }
+      if (uid) setDoc(doc(db, 'userPaperTrading', uid), { engine: state }, { merge: true }).catch(err => console.warn('[PaperTrading] save failed', err));
     };
-    loadPaperTrading();
-  }, [user]);
 
-  // Save to Firebase
-  useEffect(() => {
-    if (!user?.uid) return;
-    const saveData = async () => {
-      try {
-        await setDoc(doc(db, 'userPaperTrading', user.uid), {
-          balance, realizedPnL, positions, orders, history
-        }, { merge: true });
-      } catch (error) {
-        console.error("Failed to save paper trading data:", error);
-      }
-    };
-    // Debounce this in production, but for now we just save on change
-    saveData();
-  }, [balance, realizedPnL, positions, orders, history, user]);
-
-  // Update PnL on price change
-  useEffect(() => {
-    if (currentPrice > 0) {
-      setPositions(prev => prev.map(p => {
-        const isLong = p.side === 'buy';
-        const priceDiff = isLong ? currentPrice - p.avgFillPrice : p.avgFillPrice - currentPrice;
-        const pnl = priceDiff * p.quantity;
-        const pnlPct = (priceDiff / p.avgFillPrice) * 100;
-        return {
-          ...p,
-          unrealizedPnL: pnl,
-          unrealizedPnLPercent: pnlPct,
-          marketValue: currentPrice * p.quantity,
-        };
-      }));
-
-      // Check limit/stop orders
-      orders.filter(o => o.status === 'Working').forEach(o => {
-        let trigger = false;
-        if (o.side === 'buy' && o.type === 'Limit' && currentPrice <= o.price) trigger = true;
-        if (o.side === 'buy' && o.type === 'Stop' && currentPrice >= o.price) trigger = true;
-        if (o.side === 'sell' && o.type === 'Limit' && currentPrice >= o.price) trigger = true;
-        if (o.side === 'sell' && o.type === 'Stop' && currentPrice <= o.price) trigger = true;
-
-        if (trigger) {
-          executeOrder(o);
+    (async () => {
+      let raw: any = null;
+      if (uid) {
+        try {
+          const snap = await getDoc(doc(db, 'userPaperTrading', uid));
+          raw = snap.exists() ? snap.data()?.engine ?? null : null;
+        } catch (err) {
+          console.warn('[PaperTrading] load failed, using this browser\'s copy', err);
         }
-      });
-    }
-  }, [currentPrice]);
-
-  const executeOrder = (order: Order) => {
-    setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'Filled' } : o));
-    
-    // Add history
-    const historyItem: HistoryItem = {
-      id: Math.random().toString(36).substr(2, 9),
-      symbol: order.symbol,
-      side: order.side,
-      action: order.side === 'buy' ? 'Buy' : 'Sell',
-      quantity: order.quantity,
-      price: currentPrice,
-      time: Date.now()
-    };
-    setHistory(prev => [historyItem, ...prev]);
-
-    // Check if position already exists for symbol
-    setPositions(prev => {
-      const existingIdx = prev.findIndex(p => p.symbol === order.symbol);
-      if (existingIdx >= 0) {
-        const p = prev[existingIdx];
-        // If same side, average up/down
-        if (p.side === order.side) {
-          const newQty = p.quantity + order.quantity;
-          const newAvg = ((p.avgFillPrice * p.quantity) + (currentPrice * order.quantity)) / newQty;
-          const newPositions = [...prev];
-          newPositions[existingIdx] = { ...p, quantity: newQty, avgFillPrice: newAvg, tradeValue: newAvg * newQty };
-          return newPositions;
-        } else {
-          // Opposite side: reduce or flip
-          if (order.quantity < p.quantity) {
-            // Partial close
-            const realized = (p.side === 'buy' ? currentPrice - p.avgFillPrice : p.avgFillPrice - currentPrice) * order.quantity;
-            setRealizedPnL(r => r + realized);
-            setBalance(b => b + realized);
-            const newPositions = [...prev];
-            newPositions[existingIdx] = { ...p, quantity: p.quantity - order.quantity, tradeValue: p.avgFillPrice * (p.quantity - order.quantity) };
-            return newPositions;
-          } else if (order.quantity === p.quantity) {
-            // Full close
-            const realized = (p.side === 'buy' ? currentPrice - p.avgFillPrice : p.avgFillPrice - currentPrice) * order.quantity;
-            setRealizedPnL(r => r + realized);
-            setBalance(b => b + realized);
-            return prev.filter(x => x.symbol !== order.symbol);
-          } else {
-            // Flip position
-            const realized = (p.side === 'buy' ? currentPrice - p.avgFillPrice : p.avgFillPrice - currentPrice) * p.quantity;
-            setRealizedPnL(r => r + realized);
-            setBalance(b => b + realized);
-            const remainingQty = order.quantity - p.quantity;
-            const newPositions = [...prev];
-            newPositions[existingIdx] = {
-              id: Math.random().toString(36).substr(2, 9),
-              symbol: order.symbol,
-              side: order.side,
-              quantity: remainingQty,
-              avgFillPrice: currentPrice,
-              takeProfit: order.takeProfit,
-              stopLoss: order.stopLoss,
-              unrealizedPnL: 0,
-              unrealizedPnLPercent: 0,
-              tradeValue: currentPrice * remainingQty,
-              marketValue: currentPrice * remainingQty,
-            };
-            return newPositions;
-          }
-        }
-      } else {
-        // New position
-        return [...prev, {
-          id: Math.random().toString(36).substr(2, 9),
-          symbol: order.symbol,
-          side: order.side,
-          quantity: order.quantity,
-          avgFillPrice: currentPrice,
-          takeProfit: order.takeProfit,
-          stopLoss: order.stopLoss,
-          unrealizedPnL: 0,
-          unrealizedPnLPercent: 0,
-          tradeValue: currentPrice * order.quantity,
-          marketValue: currentPrice * order.quantity,
-        }];
       }
+      if (!raw) {
+        try { raw = JSON.parse(localStorage.getItem(localKeyFor(uid)) || 'null'); } catch { raw = null; }
+      }
+      if (cancelled) return;
+      const name = user?.displayName || user?.email?.split('@')[0] || 'Paper Trading';
+      engine.replaceState(raw ? normalizeState(raw) : createInitialState(name));
+      lastSaved = engine.getRevision();
+      ready = true;
+    })();
+
+    const unsubscribe = engine.subscribe(() => {
+      if (!ready || engine.getRevision() === lastSaved) return;
+      clearTimeout(timer);
+      timer = setTimeout(save, 800);
     });
-  };
+    const flush = () => { if (ready && engine.getRevision() !== lastSaved) save(); };
+    window.addEventListener('beforeunload', flush);
 
-  const placeOrder = (orderData: Omit<Order, 'id' | 'status' | 'createdAt'>) => {
-    const order: Order = {
-      ...orderData,
-      id: Math.random().toString(36).substr(2, 9),
-      status: orderData.type === 'Market' ? 'Filled' : 'Working',
-      createdAt: Date.now()
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      flush();
+      unsubscribe();
+      window.removeEventListener('beforeunload', flush);
     };
-    
-    if (orderData.type === 'Market') {
-      executeOrder(order);
-    } else {
-      setOrders(prev => [order, ...prev]);
-    }
-  };
+  }, [uid]);
 
-  const closePosition = (id: string) => {
-    setPositions(prev => {
-      const p = prev.find(x => x.id === id);
-      if (p) {
-        const realized = (p.side === 'buy' ? currentPrice - p.avgFillPrice : p.avgFillPrice - currentPrice) * p.quantity;
-        setRealizedPnL(r => r + realized);
-        setBalance(b => b + realized);
-        
-        setHistory(h => [{
-          id: Math.random().toString(36).substr(2, 9),
-          symbol: p.symbol,
-          side: p.side === 'buy' ? 'sell' : 'buy',
-          action: p.side === 'buy' ? 'Sell' : 'Buy',
-          quantity: p.quantity,
-          price: currentPrice,
-          time: Date.now()
-        }, ...h]);
-      }
-      return prev.filter(x => x.id !== id);
-    });
-  };
+  // Live prices and order expiry
+  useEffect(() => {
+    const stop = startQuoteFeed();
+    const tick = setInterval(() => engine.tick(), 30000);
+    return () => { stop(); clearInterval(tick); };
+  }, []);
 
-  const cancelOrder = (id: string) => {
-    setOrders(prev => prev.map(o => o.id === id ? { ...o, status: 'Cancelled' } : o));
-    const order = orders.find(o => o.id === id);
-    if (order) {
-      setHistory(h => [{
-        id: Math.random().toString(36).substr(2, 9),
-        symbol: order.symbol,
-        side: order.side,
-        action: 'Cancel',
-        quantity: order.quantity,
-        price: order.price,
-        time: Date.now()
-      }, ...h]);
-    }
-  };
+  // Settings → Trading → Execution sound
+  useEffect(() => engine.onNotice(n => {
+    const s = tradingSettings.get();
+    if (n.kind === 'executed' && s.executionSound) playExecutionSound(s.executionSoundName, s.executionSoundVolume);
+  }), []);
 
-  const unrealizedPnL = positions.reduce((sum, p) => sum + p.unrealizedPnL, 0);
-  const equity = balance + unrealizedPnL;
-
-  return (
-    <PaperTradingContext.Provider value={{
-      balance, equity, realizedPnL, unrealizedPnL, positions, orders, history,
-      currentPrice, setCurrentPrice, placeOrder, closePosition, cancelOrder
-    }}>
-      {children}
-    </PaperTradingContext.Provider>
-  );
+  return <>{children}</>;
 };
 
-export const usePaperTrading = () => useContext(PaperTradingContext);
+// Everything a component usually needs, recomputed when the engine state changes
+export function usePaperTrading() {
+  const state = useEngineState();
+  return useMemo(() => ({
+    state,
+    engine,
+    account: activeAccount(state),
+    book: activeBook(state),
+    metrics: accountMetrics(state),
+    positions: positionViews(state),
+    connected: state.connected,
+  }), [state]);
+}

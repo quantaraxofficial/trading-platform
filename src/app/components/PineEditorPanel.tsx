@@ -1,31 +1,42 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useAuth } from "@/context/AuthContext";
+// TradingView's Pine Editor. It opens over the right half of the window (resizable from its
+// left edge), can move to a split view beside the whole layout or to a tab in the bottom panel,
+// and collapses without losing the script. Header: Pine Editor, split view, collapse, close.
+// Script row: the script's name (its menu: save, copy, rename, version history, move to the
+// bottom, create new, recently used, open), Add to chart / Update on chart, Save, Publish
+// script, and "…" (editor settings, new window / tab, profiler, Pine logs, command palette,
+// release notes, help). The editor is Monaco, as TradingView's, and runs on this app's Pine
+// engine against the chart's own bars; a console under it logs compiles and errors.
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
+import { useAuth } from "@/context/AuthContext";
+import { runPineScriptAsync, appIntervalToPineTf, type PineRunResult } from "../lib/pineScriptEngine";
+import { fetchPineTimeframeData } from "../lib/pineDataFetch";
+import { useEscapeClose } from "../lib/useEscapeClose";
+import type { PineEditorApi } from "./pine/PineMonaco";
+import { pineDock, pineEditorSettings, pineMisc, RELEASE_NOTES_VERSION, clampPineWidth, defaultPineWidth } from "./pine/pineStore";
+import { BUILTIN_SCRIPTS } from "./pine/builtinScripts";
+import * as Ic from "./pine/pineIcons";
 import {
-  ChevronDown, Play, CloudUpload, Minus, X, MoreHorizontal, TrendingUp, ChevronsRight,
-  Copy, Pencil, History, ArrowDownToLine, FolderOpen, ChevronRight, Activity, Package,
-  BarChart3, Settings, ExternalLink, ToggleLeft, ToggleRight, ScrollText, AlertTriangle,
-  RefreshCw,
-} from "lucide-react";
-import { runPineScript, PineRunResult, PineScriptError } from "../lib/pineScriptEngine";
-import { EditorView, keymap, lineNumbers, Decoration, WidgetType, type DecorationSet } from "@codemirror/view";
-import { EditorState, StateField, StateEffect } from "@codemirror/state";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { javascript } from "@codemirror/lang-javascript";
-import { syntaxHighlighting, HighlightStyle, bracketMatching } from "@codemirror/language";
-import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import { linter, lintGutter, lintKeymap, setDiagnostics, type Diagnostic } from "@codemirror/lint";
-import { tags } from "@lezer/highlight";
+  pinePalette, SaveScriptDialog, OpenScriptDialog, BuiltinScriptDialog, EditorSettingsDialog, VersionHistoryDialog,
+  KeyboardShortcutsDialog, StrategyReportEmptyDialog, ConfirmDialog, formatStamp, type PinePalette,
+} from "./pine/PineDialogs";
+
+const PineMonaco = dynamic(() => import("./pine/PineMonaco"), { ssr: false, loading: () => null });
 
 interface PineEditorPanelProps {
   theme?: string;
   onClose: () => void;
+  // Set when the editor is opened via the on-chart legend row's "{}" icon — loads the exact
+  // script running on the chart rather than whatever the editor last had
+  initialCode?: string;
+  initialScriptName?: string;
 }
 
 type ScriptType = "indicator" | "strategy" | "library";
-
 interface SavedScript {
   id: string;
   name: string;
@@ -37,1010 +48,744 @@ interface SavedScript {
 }
 
 const STORAGE_KEY = "tv-pine-scripts-v1";
-
+const SESSION_KEY = "tv:pineSession";
 function loadScripts(): SavedScript[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
+  try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
 }
 function persistScripts(list: SavedScript[]) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch { /* ignore */ }
 }
 
-const STRATEGY_TEMPLATE = `// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// This source code is not for redistribution without permission.
+// TradingView's new-script templates
+const LICENSE = "// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/";
+const header = (user: string | null) => `${LICENSE}\n${user ? `// © ${user}` : ""}\n\n`;
+const TEMPLATES: Record<ScriptType, (user: string | null) => string> = {
+  indicator: (u) => `${header(u)}//@version=6\nindicator("My script")\nplot(close)\n`,
+  strategy: (u) => `${header(u)}//@version=6\nstrategy("My strategy", overlay=true, fill_orders_on_standard_ohlc = true)\n\nlongCondition = ta.crossover(ta.sma(close, 14), ta.sma(close, 28))\nif (longCondition)\n    strategy.entry("My Long Entry Id", strategy.long)\n\nshortCondition = ta.crossunder(ta.sma(close, 14), ta.sma(close, 28))\nif (shortCondition)\n    strategy.entry("My Short Entry Id", strategy.short)\n`,
+  library: (u) => `${header(u)}//@version=6\n// @description TODO: add library description here\nlibrary("MyLibrary")\n\n// @function TODO: add function description here\n// @param x TODO: add parameter x description here\n// @returns TODO: add what function returns\nexport fun(float x) =>\n    //TODO : add function body and return value here\n    x\n`,
+};
 
-//@version=6
-strategy("My strategy", overlay=true, fill_orders_on_standard_ohlc=true)
+const detectType = (code: string): ScriptType => /^\s*strategy\s*\(/m.test(code) ? "strategy" : /^\s*library\s*\(/m.test(code) ? "library" : "indicator";
+const declaredTitle = (code: string) => (code.match(/^\s*(?:indicator|strategy|library)\s*\(\s*(?:title\s*=\s*)?"([^"]*)"/m) || [])[1] || "";
 
-longCondition = ta.crossover(ta.sma(close, 14), ta.sma(close, 28))
-if (longCondition)
-    strategy.entry("My Long Entry Id", strategy.long)
+// What this editor put on the chart (kept across remounts): the script and the code added
+let onChartMemo: { key: string; code: string } | null = null;
 
-shortCondition = ta.crossunder(ta.sma(close, 14), ta.sma(close, 28))
-if (shortCondition)
-    strategy.entry("My Short Entry Id", strategy.short)
-`;
+type ConsoleLine = { t: number; text: string; kind: "info" | "error" | "warning" };
+const clock = (t: number) => new Date(t).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" });
 
-const INDICATOR_TEMPLATE = `//@version=6
-indicator("My indicator", overlay=true)
-
-fastMa = ta.sma(close, 9)
-slowMa = ta.sma(close, 21)
-
-plot(fastMa, title="Fast MA", color=color.blue)
-plot(slowMa, title="Slow MA", color=color.orange)
-`;
-
-const LIBRARY_TEMPLATE = `//@version=6
-// A Pine library holds reusable functions for other scripts to import.
-// This editor runs indicators/strategies directly; libraries are for
-// authoring only and are not executed on their own.
-library("MyLibrary", overlay=true)
-`;
-
-const BUILTINS: { name: string; code: string }[] = [
-  { name: "Moving Average", code: INDICATOR_TEMPLATE },
-  {
-    name: "Relative Strength Index", code: `//@version=6
-indicator("RSI", overlay=false)
-
-rsiLen = 14
-rsiValue = ta.rsi(close, rsiLen)
-
-plot(rsiValue, title="RSI", color=color.purple)
-` },
-  {
-    name: "MACD-style Crossover", code: `//@version=6
-indicator("MACD-style Crossover", overlay=true)
-
-fastMa = ta.ema(close, 12)
-slowMa = ta.ema(close, 26)
-macdLine = fastMa - slowMa
-
-plot(macdLine, title="MACD Line", color=color.blue)
-plot(0, title="Zero", color=color.gray)
-` },
-];
-
-function timeAgo(ts: number) {
-  const s = Math.floor((Date.now() - ts) / 1000);
-  if (s < 60) return "just now";
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
+// --- Tooltip (TradingView's: dark, 13px, with the hotkey after a divider) ---
+function Tip({ text, keys, children, placement = "top" }: { text: string; keys?: string[]; children: React.ReactElement<any>; placement?: "top" | "bottom" }) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const show = (e: React.MouseEvent) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setPos({ x: r.left + r.width / 2, y: placement === "top" ? r.top - 6 : r.bottom + 6 }), 500);
+  };
+  const hide = () => { clearTimeout(timer.current); setPos(null); };
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return (
+    <>
+      {React.cloneElement(children, { onMouseEnter: show, onMouseLeave: hide, onMouseDown: hide })}
+      {pos && createPortal(
+        <div role="tooltip" style={{
+          position: "fixed", left: pos.x, top: pos.y, transform: placement === "top" ? "translate(-50%, -100%)" : "translate(-50%, 0)", zIndex: 3300, pointerEvents: "none",
+          display: "flex", alignItems: "center", gap: 8, height: 24, padding: "0 8px", borderRadius: 2, background: "#2e2e2e", color: "#f2f2f2", fontSize: 13, whiteSpace: "nowrap",
+        }}>
+          {text}
+          {keys && (
+            <span style={{ display: "flex", alignItems: "center", gap: 3, paddingLeft: 8, borderLeft: "1px solid #4a4a4a", height: 16 }}>
+              {keys.map((k, i) => (
+                <React.Fragment key={i}>
+                  {i > 0 && <span style={{ fontSize: 11 }}>+</span>}
+                  <span style={{ padding: "0 4px", borderRadius: 2, background: "#4a4a4a", fontSize: 11, lineHeight: "16px" }}>{k}</span>
+                </React.Fragment>
+              ))}
+            </span>
+          )}
+        </div>,
+        document.body,
+      )}
+    </>
+  );
 }
 
-// A menu row that opens a portal-rendered flyout to its left, escaping the
-// panel's own clipping/overflow the same way other nested submenus in this
-// app already do.
-function FlyoutRow({ label, icon, disabled, children, border, bg, color }: { label: React.ReactNode; icon?: React.ReactNode; disabled?: boolean; children: React.ReactNode; border: string; bg: string; color: string }) {
-  const [open, setOpen] = useState(false);
-  const rowRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
-  const closeTimer = useRef<any>(null);
+// --- Menus ---
+type MenuItem =
+  | { kind?: "item"; label: string; icon?: React.ReactNode; shortcut?: string; disabled?: boolean; onClick?: () => void; right?: React.ReactNode; submenu?: MenuItem[]; hint?: string; testId?: string; dot?: boolean }
+  | { kind: "divider" }
+  | { kind: "header"; label: string };
 
-  const openFlyout = () => {
-    if (disabled) return;
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    const r = rowRef.current?.getBoundingClientRect();
-    if (r) setPos({ top: r.top, left: r.left - 220 });
-    setOpen(true);
-  };
-  const scheduleClose = () => {
-    closeTimer.current = setTimeout(() => setOpen(false), 150);
-  };
+function Menu({ p, anchor, items, onClose, align = "left", width, submenuSide }: {
+  p: PinePalette; anchor: DOMRect; items: MenuItem[]; onClose: () => void; align?: "left" | "right"; width: number; submenuSide?: "left" | "right";
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [sub, setSub] = useState<{ index: number; rect: DOMRect } | null>(null);
+  useEscapeClose(onClose);
+  useEffect(() => {
+    const down = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest?.("[data-pine-menu]")) return;
+      onClose();
+    };
+    document.addEventListener("mousedown", down, true);
+    return () => document.removeEventListener("mousedown", down, true);
+  }, [onClose]);
+  const left = align === "left" ? anchor.left : anchor.right - width;
+  const top = anchor.bottom;
+  return createPortal(
+    <>
+      <MenuBox p={p} refEl={ref} left={Math.max(4, Math.min(left, window.innerWidth - width - 4))} top={top} width={width} items={items} onClose={onClose}
+        onOpenSub={(index, rect) => setSub(rect ? { index, rect } : null)} activeSub={sub?.index ?? null} />
+      {sub && (() => {
+        const it = items[sub.index];
+        if (!it || it.kind === "divider" || it.kind === "header" || !it.submenu) return null;
+        const subW = 222;
+        const side = submenuSide ?? (sub.rect.right + subW + 4 < window.innerWidth ? "right" : "left");
+        const x = side === "right" ? sub.rect.right + 2 : sub.rect.left - subW - 2;
+        return <MenuBox p={p} left={x} top={sub.rect.top - 6} width={subW} items={it.submenu} onClose={onClose} onOpenSub={() => {}} activeSub={null} alignBottom />;
+      })()}
+    </>,
+    document.body,
+  );
+}
 
+function MenuBox({ p, refEl, left, top, width, items, onClose, onOpenSub, activeSub, alignBottom }: {
+  p: PinePalette; refEl?: React.RefObject<HTMLDivElement | null>; left: number; top: number; width: number; items: MenuItem[]; onClose: () => void;
+  onOpenSub: (index: number, rect: DOMRect | null) => void; activeSub: number | null; alignBottom?: boolean;
+}) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [y, setY] = useState(top);
+  useEffect(() => {
+    const h = boxRef.current?.offsetHeight ?? 0;
+    setY(top + h > window.innerHeight - 8 ? Math.max(8, alignBottom ? window.innerHeight - h - 8 : top - h - 44) : top);
+  }, [top, alignBottom]);
   return (
-    <div
-      ref={rowRef}
-      onMouseEnter={openFlyout}
-      onMouseLeave={scheduleClose}
-      style={{ position: "relative", opacity: disabled ? 0.4 : 1, cursor: disabled ? "default" : "pointer" }}
-    >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 12px", fontSize: "13px" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>{icon}{label}</span>
-        <ChevronRight size={14} />
-      </div>
-      {open && !disabled && createPortal(
-        <div
-          data-pine-flyout="true"
-          onMouseEnter={openFlyout}
-          onMouseLeave={scheduleClose}
-          style={{ position: "fixed", top: pos.top, left: Math.max(4, pos.left), width: "220px", background: bg, border: `1px solid ${border}`, borderRadius: "6px", boxShadow: "0 4px 20px rgba(0,0,0,0.25)", zIndex: 2000, padding: "6px 0", color }}
-        >
-          {children}
-        </div>,
-        document.body
-      )}
+    <div ref={(el) => { boxRef.current = el; if (refEl) (refEl as React.MutableRefObject<HTMLDivElement | null>).current = el; }} data-pine-menu role="menu"
+      style={{ position: "fixed", left, top: y, width, zIndex: 3100, background: p.menu, color: p.text, borderRadius: 10, boxShadow: p.shadow, padding: "6px 0", fontFamily: "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif" }}>
+      {items.map((it, i) => {
+        if (it.kind === "divider") return <div key={i} style={{ height: 1, background: p.border, margin: "6px 6px" }} />;
+        if (it.kind === "header") return <div key={i} style={{ padding: "2px 14px 6px", fontSize: 11, color: p.muted, textTransform: "uppercase", letterSpacing: ".4px", lineHeight: "16px" }}>{it.label}</div>;
+        return <MenuRow key={i} p={p} item={it} open={activeSub === i} onClose={onClose}
+          onHover={(rect) => onOpenSub(i, it.submenu ? rect : null)} />;
+      })}
     </div>
   );
 }
 
-// The persistent "N of M problems" banner (matching the reference editor) is
-// implemented as a real CodeMirror block widget decoration rather than an
-// absolutely-positioned div guessing at pixel coordinates. Being a block
-// widget means it occupies real space in the document's own layout — it
-// pushes the following lines down like an inserted line would, CodeMirror
-// keeps its position correct across edits/scrolling automatically, and it
-// can never overlap or intercept clicks meant for the actual code, which is
-// exactly the class of bug the previous hand-rolled overlay kept hitting.
-const setPineErrorBanner = StateEffect.define<{ errors: PineScriptError[]; activeIndex: number; visible: boolean } | null>();
-
-interface PineBannerCallbacks {
-  onNavigate: (dir: 1 | -1) => void;
-  onDismiss: () => void;
+function MenuRow({ p, item, open, onClose, onHover }: { p: PinePalette; item: Extract<MenuItem, { label: string; kind?: "item" }>; open: boolean; onClose: () => void; onHover: (rect: DOMRect) => void }) {
+  const [hover, setHover] = useState(false);
+  const dis = !!item.disabled;
+  return (
+    <div role="menuitem" aria-disabled={dis} data-testid={item.testId}
+      onMouseEnter={e => { setHover(true); onHover(e.currentTarget.getBoundingClientRect()); }}
+      onMouseLeave={() => setHover(false)}
+      onClick={() => { if (dis || item.submenu) return; onClose(); item.onClick?.(); }}
+      style={{
+        display: "flex", alignItems: "center", gap: 4, height: 32, margin: "0 6px", padding: item.icon ? "0 8px 0 4px" : "0 8px", borderRadius: 6,
+        cursor: dis ? "default" : "pointer", color: dis ? p.faint : p.text, background: (hover || open) && !dis ? p.hover : "transparent", fontSize: 14,
+      }}>
+      {item.icon && <span style={{ display: "flex", width: 28, justifyContent: "center", opacity: dis ? 0.6 : 1 }}>{item.icon}</span>}
+      <span style={{ flex: 1, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
+        {item.label}
+        {item.hint && <span title={item.hint} style={{ color: p.faint, display: "flex" }}><Ic.HelpCircleIcon /></span>}
+        {item.dot && <span aria-label="New" style={{ width: 6, height: 6, borderRadius: "50%", background: p.danger }} />}
+      </span>
+      {item.shortcut && <span style={{ fontSize: 12, color: p.muted, whiteSpace: "nowrap" }}>{item.shortcut}</span>}
+      {item.right}
+      {item.submenu && <span style={{ display: "flex", color: p.muted }}><Ic.ChevronRightIcon /></span>}
+    </div>
+  );
 }
 
-class PineErrorBannerWidget extends WidgetType {
-  constructor(
-    private errors: PineScriptError[],
-    private activeIndex: number,
-    private isDark: boolean,
-    private callbacksRef: { current: PineBannerCallbacks }
-  ) {
-    super();
-  }
-
-  eq(other: PineErrorBannerWidget) {
-    return other.errors === this.errors && other.activeIndex === this.activeIndex && other.isDark === this.isDark;
-  }
-
-  toDOM(view: EditorView) {
-    const err = this.errors[Math.min(this.activeIndex, this.errors.length - 1)];
-    const bg = this.isDark ? "#2b1a1d" : "#fdecea";
-    const border = this.isDark ? "#5c2b2f" : "#f5c6c2";
-    const textColor = this.isDark ? "#d1d4dc" : "#131722";
-    const muted = "#787b86";
-
-    // A block widget is laid out at the width of the document's own scrollable
-    // content, not the visible viewport — for a long line elsewhere in the
-    // script, that pushed this banner (and its buttons) off to the right,
-    // reachable only via horizontal scroll. Sticking it to the left edge of
-    // the actual scroller and sizing it to the scroller's visible width keeps
-    // the whole banner (buttons included) on screen regardless of scroll
-    // position or how wide the document itself is.
-    const wrap = document.createElement("div");
-    wrap.style.cssText = `background:${bg}; font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace; font-size:12px; cursor:default; position:sticky; left:0; box-sizing:border-box;`;
-    // The widget sticks to .cm-content's own left edge, which sits to the right
-    // of the line-number gutter — so the available width is the scroller's
-    // visible right edge minus that gutter offset, not the scroller's full
-    // clientWidth (which would overshoot by the gutter's width).
-    const syncWidth = () => {
-      const scrollerRight = view.scrollDOM.getBoundingClientRect().right;
-      const contentLeft = view.contentDOM.getBoundingClientRect().left;
-      wrap.style.width = `${Math.max(0, scrollerRight - contentLeft)}px`;
-    };
-    syncWidth();
-    const resizeObserver = new ResizeObserver(syncWidth);
-    resizeObserver.observe(view.scrollDOM);
-    (wrap as any).__pineResizeObserver = resizeObserver;
-
-    const header = document.createElement("div");
-    header.style.cssText = `display:flex; align-items:center; justify-content:space-between; padding:5px 8px; border-top:1px solid ${border}; border-bottom:1px solid ${border};`;
-
-    const left = document.createElement("span");
-    left.style.cssText = "display:flex; align-items:center; gap:6px; color:#f23645;";
-    left.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg><span>${this.activeIndex + 1} of ${this.errors.length} problem${this.errors.length > 1 ? "s" : ""}</span>`;
-
-    const right = document.createElement("span");
-    right.style.cssText = "display:flex; align-items:center; gap:2px;";
-
-    const mkBtn = (svg: string, title: string, onClick: () => void) => {
-      const btn = document.createElement("button");
-      btn.style.cssText = `width:20px; height:20px; display:flex; align-items:center; justify-content:center; background:none; border:none; color:${muted}; cursor:pointer; padding:0;`;
-      btn.innerHTML = svg;
-      btn.title = title;
-      // Prevent the mousedown from moving the editor's own caret/focus before our click fires.
-      btn.addEventListener("mousedown", (e) => e.preventDefault());
-      btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); onClick(); });
-      return btn;
-    };
-
-    right.appendChild(mkBtn(`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>`, "Go to previous problem (error, warning, info) (Shift+Alt+F8)", () => this.callbacksRef.current.onNavigate(-1)));
-    right.appendChild(mkBtn(`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`, "Go to next problem (error, warning, info) (Alt+F8)", () => this.callbacksRef.current.onNavigate(1)));
-    right.appendChild(mkBtn(`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>`, "Close", () => this.callbacksRef.current.onDismiss()));
-
-    header.appendChild(left);
-    header.appendChild(right);
-
-    const body = document.createElement("div");
-    body.style.cssText = `padding:6px 8px; color:${textColor}; border-bottom:1px solid ${border};`;
-    body.textContent = err.message + " ";
-    const codeSpan = document.createElement("span");
-    codeSpan.style.color = muted;
-    codeSpan.textContent = `(${err.code})`;
-    body.appendChild(codeSpan);
-
-    wrap.appendChild(header);
-    wrap.appendChild(body);
-    return wrap;
-  }
-
-  ignoreEvent() {
-    return true;
-  }
-
-  destroy(dom: HTMLElement) {
-    (dom as any).__pineResizeObserver?.disconnect();
-  }
+function Switch({ on, p }: { on: boolean; p: PinePalette }) {
+  return (
+    <span aria-hidden style={{ width: 38, height: 20, borderRadius: 10, background: on ? p.text : p.faint, position: "relative", flexShrink: 0, transition: "background .15s" }}>
+      <span style={{ position: "absolute", top: 2, left: on ? 20 : 2, width: 16, height: 16, borderRadius: "50%", background: p.bg === "#ffffff" ? "#ffffff" : p.menu, transition: "left .15s" }} />
+    </span>
+  );
 }
 
-function buildPineErrorField(isDark: boolean, callbacksRef: { current: PineBannerCallbacks }) {
-  return StateField.define<DecorationSet>({
-    create() {
-      return Decoration.none;
-    },
-    update(deco, tr) {
-      deco = deco.map(tr.changes);
-      for (const effect of tr.effects) {
-        if (effect.is(setPineErrorBanner)) {
-          const val = effect.value;
-          if (!val || !val.visible || val.errors.length === 0) return Decoration.none;
-          const activeIndex = Math.min(val.activeIndex, val.errors.length - 1);
-          const lineNum = Math.min(Math.max(val.errors[activeIndex].line, 1), tr.state.doc.lines);
-          const pos = tr.state.doc.line(lineNum).to;
-          const widget = Decoration.widget({
-            widget: new PineErrorBannerWidget(val.errors, activeIndex, isDark, callbacksRef),
-            side: 1,
-            block: true,
-          });
-          return Decoration.set([widget.range(pos)]);
-        }
-      }
-      return deco;
-    },
-    provide: (f) => EditorView.decorations.from(f),
-  });
-}
-
-// A real code-editing engine (CodeMirror) instead of a hand-rolled textarea
-// overlaid with a separate syntax-highlighted div: cursor placement, drag
-// selection, and rendering are all the browser-tested behavior CodeMirror
-// already gets right, rather than approximations this app has to maintain.
-interface PineCodeEditorProps {
-  code: string;
-  onChange: (code: string) => void;
-  onCursorChange: (pos: { line: number; col: number }) => void;
-  isDark: boolean;
-  fontSize: number;
-  errors: PineScriptError[];
-  activeErrorIndex: number;
-  bannerVisible: boolean;
-  onNavigateError: (dir: 1 | -1) => void;
-  onDismissError: () => void;
-}
-
-function PineCodeEditor({ code, onChange, onCursorChange, isDark, fontSize, errors, activeErrorIndex, bannerVisible, onNavigateError, onDismissError }: PineCodeEditorProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const viewRef = useRef<EditorView | null>(null);
-  const lastPushedRef = useRef(code);
-  const onChangeRef = useRef(onChange);
-  const onCursorChangeRef = useRef(onCursorChange);
-  const callbacksRef = useRef<PineBannerCallbacks>({ onNavigate: onNavigateError, onDismiss: onDismissError });
-  onChangeRef.current = onChange;
-  onCursorChangeRef.current = onCursorChange;
-  callbacksRef.current = { onNavigate: onNavigateError, onDismiss: onDismissError };
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const textColor = isDark ? "#d1d4dc" : "#131722";
-    const highlightStyle = HighlightStyle.define([
-      { tag: [tags.keyword, tags.controlKeyword, tags.operatorKeyword], color: "#2962ff" },
-      { tag: [tags.string, tags.special(tags.string)], color: isDark ? "#4caf50" : "#22863a" },
-      { tag: tags.number, color: "#e07800" },
-      { tag: tags.comment, color: "#787b86", fontStyle: "italic" },
-      { tag: [tags.function(tags.variableName), tags.propertyName], color: textColor },
-      { tag: tags.variableName, color: textColor },
-      { tag: tags.operator, color: textColor },
-    ]);
-
-    const theme = EditorView.theme({
-      "&": { height: "100%", fontSize: `${fontSize}px`, backgroundColor: "transparent", color: textColor },
-      ".cm-content": {
-        fontFamily: "'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace",
-        caretColor: textColor,
-        padding: "8px 0",
-      },
-      ".cm-gutters": { backgroundColor: isDark ? "#1a1e27" : "#fafafa", color: "#787b86", border: "none" },
-      ".cm-activeLine": { backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" },
-      ".cm-activeLineGutter": { backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" },
-      "&.cm-focused": { outline: "none" },
-      ".cm-scroller": { overflow: "auto", fontFamily: "inherit" },
-      ".cm-selectionBackground, .cm-content ::selection": { backgroundColor: "rgba(51, 153, 255, 0.35) !important" },
-      "&.cm-focused .cm-selectionBackground": { backgroundColor: "rgba(51, 153, 255, 0.35) !important" },
-      ".cm-lintRange-error": { backgroundImage: "none", textDecorationLine: "underline", textDecorationStyle: "wavy", textDecorationColor: "#f23645", textUnderlineOffset: "3px" },
-      ".cm-gutter-lint": { width: "1.2em" },
-    }, { dark: isDark });
-
-    const updateListener = EditorView.updateListener.of((update) => {
-      if (update.docChanged) {
-        const newCode = update.state.doc.toString();
-        lastPushedRef.current = newCode;
-        onChangeRef.current(newCode);
-      }
-      if (update.docChanged || update.selectionSet) {
-        const pos = update.state.selection.main.head;
-        const line = update.state.doc.lineAt(pos);
-        onCursorChangeRef.current({ line: line.number, col: pos - line.from + 1 });
-      }
-    });
-
-    const state = EditorState.create({
-      doc: code,
-      extensions: [
-        lineNumbers(),
-        history(),
-        closeBrackets(),
-        bracketMatching(),
-        javascript(),
-        syntaxHighlighting(highlightStyle),
-        linter(null),
-        lintGutter(),
-        buildPineErrorField(isDark, callbacksRef),
-        keymap.of([
-          { key: "Alt-F8", run: () => { callbacksRef.current.onNavigate(1); return true; } },
-          { key: "Shift-Alt-F8", run: () => { callbacksRef.current.onNavigate(-1); return true; } },
-          ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...lintKeymap, indentWithTab,
-        ]),
-        theme,
-        updateListener,
-      ],
-    });
-
-    const view = new EditorView({ state, parent: containerRef.current });
-    viewRef.current = view;
-    lastPushedRef.current = code;
-
-    return () => { view.destroy(); viewRef.current = null; };
-    // Rebuilt only when theme/fontSize change (cheap) rather than reconfigured
-    // in place, keeping the extension setup above straightforward.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDark, fontSize]);
-
-  // Pushes external content changes (opening a different script, restoring a
-  // version, switching templates) into the editor. Edits typed by the user
-  // flow the other direction via the updateListener above, and are excluded
-  // here by comparing against the last value this effect itself pushed.
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view || code === lastPushedRef.current) return;
-    lastPushedRef.current = code;
-    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: code } });
-  }, [code]);
-
-  // Pushes the Pine engine's errors into CodeMirror's own diagnostics system —
-  // this is what actually draws the squiggly underline and gutter marker — and
-  // separately into the custom banner field for the persistent "N of M
-  // problems" panel. Both are real editor decorations, not overlay elements,
-  // so neither can end up sitting on top of the text and blocking clicks.
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view) return;
-    const docLines = view.state.doc.lines;
-    const diagnostics: Diagnostic[] = errors.map((e) => {
-      const lineNum = Math.min(Math.max(e.line, 1), docLines);
-      const line = view.state.doc.line(lineNum);
-      return { from: line.from, to: line.to, severity: "error", message: `${e.message} (${e.code})` };
-    });
-    view.dispatch(setDiagnostics(view.state, diagnostics));
-    view.dispatch({ effects: setPineErrorBanner.of({ errors, activeIndex: activeErrorIndex, visible: bannerVisible }) });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [errors, activeErrorIndex, bannerVisible, isDark, fontSize]);
-
-  return <div ref={containerRef} style={{ height: "100%", width: "100%", overflow: "hidden" }} />;
-}
-
-export default function PineEditorPanel({ theme, onClose }: PineEditorPanelProps) {
+// --- The editor ---
+export default function PineEditorPanel({ theme, onClose, initialCode, initialScriptName }: PineEditorPanelProps) {
   const isDark = theme === "dark";
+  const p = pinePalette(isDark);
   const { user } = useAuth();
   const uid = user?.uid;
-  const [minimized, setMinimized] = useState(false);
-  const [code, setCode] = useState(STRATEGY_TEMPLATE);
-  const [scriptType, setScriptType] = useState<ScriptType>("strategy");
+  const author = user ? (user.displayName || user.email?.split("@")[0] || "").replace(/\s+/g, "_") || null : null;
+  const dock = pineDock.useValue();
+  const settings = pineEditorSettings.useValue();
+  const misc = pineMisc.useValue();
+
+  // --- Script state ---
+  const [scripts, setScripts] = useState<SavedScript[]>([]);
+  const session = useRef<{ scriptId: string | null; name: string; code: string } | null>(null);
+  if (session.current === null) {
+    try { session.current = initialCode === undefined ? JSON.parse(localStorage.getItem(SESSION_KEY) || "null") : null; } catch { session.current = null; }
+  }
+  const [currentScriptId, setCurrentScriptId] = useState<string | null>(initialCode === undefined ? session.current?.scriptId ?? null : null);
+  const [scriptName, setScriptName] = useState(initialScriptName || (initialCode === undefined ? session.current?.name : undefined) || "Untitled script");
+  const [code, setCode] = useState<string>(initialCode ?? session.current?.code ?? TEMPLATES.indicator(author));
+  const scriptType = detectType(code);
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
 
-  const [scripts, setScripts] = useState<SavedScript[]>([]);
-  const [currentScriptId, setCurrentScriptId] = useState<string | null>(null);
-  const [scriptName, setScriptName] = useState("Untitled script");
-  const [renaming, setRenaming] = useState(false);
-
-  const [scriptMenuOpen, setScriptMenuOpen] = useState(false);
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const [openScriptOpen, setOpenScriptOpen] = useState(false);
-  const [versionsOpen, setVersionsOpen] = useState(false);
-  const [editorSettingsOpen, setEditorSettingsOpen] = useState(false);
-  const [saveAsModalOpen, setSaveAsModalOpen] = useState(false);
-  const [saveAsName, setSaveAsName] = useState("");
-  const [fontSize, setFontSize] = useState(13);
-
-  const [profilerMode, setProfilerMode] = useState(false);
-  const [pineLogsOn, setPineLogsOn] = useState(false);
-  const [runResult, setRunResult] = useState<PineRunResult | null>(null);
-  const [activeErrorIndex, setActiveErrorIndex] = useState(0);
-  const [errorBannerDismissed, setErrorBannerDismissed] = useState(false);
-
-  const scriptMenuRef = useRef<HTMLDivElement>(null);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
-
-  // Signed-in users get real server-backed persistence (a PineScript row per
-  // saved script, owned by their TraderProfile) so scripts follow them across
-  // devices/browsers; signed-out users keep the old localStorage-only behavior.
-  async function syncScriptToServer(partial: {
-    id?: string; name?: string; script_type?: string; code?: string; versions?: { code: string; savedAt: number }[]; order?: number;
-  }) {
+  // Signed-in users keep scripts on the server (so they follow them across devices); signed-out
+  // users keep them in this browser
+  async function syncScriptToServer(partial: { id?: string; name?: string; script_type?: string; code?: string; versions?: { code: string; savedAt: number }[]; order?: number }) {
     if (!uid) return null;
     try {
-      const res = await fetch(`http://localhost:8000/api/users/pinescripts/${uid}/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(partial),
-      });
-      if (!res.ok) return null;
-      return await res.json();
-    } catch (e) {
-      console.error("Failed to save Pine script to server:", e);
-      return null;
-    }
+      const res = await fetch(`http://localhost:8000/api/users/pinescripts/${uid}/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(partial) });
+      return res.ok ? await res.json() : null;
+    } catch { return null; }
   }
-
+  async function deleteScriptOnServer(id: string) {
+    if (!uid) return;
+    try { await fetch(`http://localhost:8000/api/users/pinescripts/${uid}/`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); } catch { /* ignore */ }
+  }
   useEffect(() => {
     if (!uid) { setScripts(loadScripts()); return; }
-    fetch(`http://localhost:8000/api/users/pinescripts/${uid}/`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (!Array.isArray(data)) return;
-        setScripts(data.map((s: any): SavedScript => ({
-          id: String(s.id),
-          name: s.name,
-          code: s.code,
-          type: s.script_type as ScriptType,
-          updatedAt: new Date(s.updated_at).getTime(),
-          order: s.order,
-          versions: s.versions || [],
-        })));
-      })
-      .catch((e) => console.error("Failed to load Pine scripts:", e));
+    fetch(`http://localhost:8000/api/users/pinescripts/${uid}/`).then(r => r.json()).then((data) => {
+      if (!Array.isArray(data)) return;
+      setScripts(data.map((s: any): SavedScript => ({ id: String(s.id), name: s.name, code: s.code, type: s.script_type as ScriptType, updatedAt: new Date(s.updated_at).getTime(), order: s.order, versions: s.versions || [] })));
+    }).catch(() => setScripts(loadScripts()));
   }, [uid]);
+  const commitScripts = (next: SavedScript[]) => { setScripts(next); if (!uid) persistScripts(next); };
 
+  // The editor's session survives closing the panel and reloading, as on TradingView
   useEffect(() => {
-    function onDocClick(e: MouseEvent) {
-      const target = e.target as HTMLElement;
-      if (target.closest && target.closest('[data-pine-flyout]')) return;
-      if (scriptMenuRef.current && !scriptMenuRef.current.contains(target)) setScriptMenuOpen(false);
-      if (moreMenuRef.current && !moreMenuRef.current.contains(target)) setMoreMenuOpen(false);
-    }
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    const t = setTimeout(() => { try { localStorage.setItem(SESSION_KEY, JSON.stringify({ scriptId: currentScriptId, name: scriptName, code })); } catch { /* ignore */ } }, 300);
+    return () => clearTimeout(t);
+  }, [currentScriptId, scriptName, code]);
+
+  const currentScript = scripts.find(s => s.id === currentScriptId) || null;
+  const savedCode = currentScript?.code ?? null;
+  const dirty = savedCode === null ? true : savedCode !== code;
+
+  // --- Console ---
+  const [consoleLines, setConsoleLines] = useState<ConsoleLine[]>(() => [{ t: Date.now(), text: `"${initialScriptName || session.current?.name || "Untitled script"}" opened`, kind: "info" }]);
+  const [consoleOpen, setConsoleOpen] = useState(false);
+  const [unseenError, setUnseenError] = useState(false);
+  const log = useCallback((text: string, kind: ConsoleLine["kind"] = "info") => setConsoleLines(l => [...l.slice(-199), { t: Date.now(), text, kind }]), []);
+  const consoleRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { consoleRef.current?.scrollTo({ top: consoleRef.current.scrollHeight }); }, [consoleLines, consoleOpen]);
+  useEffect(() => { if (consoleOpen) setUnseenError(false); }, [consoleOpen]);
+
+  // --- Running on the chart ---
+  const scriptKey = currentScriptId ?? "untitled";
+  const [onChart, setOnChart] = useState(onChartMemo);
+  useEffect(() => { onChartMemo = onChart; }, [onChart]);
+  useEffect(() => {
+    const clear = () => setOnChart(null);
+    window.addEventListener("tv:clear-pine-script", clear);
+    return () => window.removeEventListener("tv:clear-pine-script", clear);
   }, []);
+  const isOnChart = onChart?.key === scriptKey;
+  const upToDate = isOnChart && onChart?.code === code;
+  const [runResult, setRunResult] = useState<PineRunResult | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [problemsTick, setProblemsTick] = useState(0);
+  const [profilerMode, setProfilerMode] = useState(false);
+  const [logsPanel, setLogsPanel] = useState(false);
+  const errors = runResult?.errors ?? [];
 
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      const meta = e.ctrlKey || e.metaKey;
-      if (!meta) return;
-      if (e.key.toLowerCase() === "s") { e.preventDefault(); saveScript(); }
-      if (e.key.toLowerCase() === "o") { e.preventDefault(); setOpenScriptOpen(true); }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code, scripts, currentScriptId, scriptName]);
-
-  const bg = isDark ? "#1e222d" : "#ffffff";
-  const headerBg = isDark ? "#131722" : "#f8f9fd";
-  const border = isDark ? "#2a2e39" : "#e0e3eb";
-  const text = isDark ? "#d1d4dc" : "#131722";
-  const muted = "#787b86";
-  const keyColor = "#2962ff";
-  const menuBg = isDark ? "#1e222d" : "#ffffff";
-
-  const hasErrors = !!runResult && runResult.errors.length > 0;
-
-  function persistAsNew(name: string, codeToSave: string, type: ScriptType) {
-    const id = "ps_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-    const maxOrder = scripts.reduce((m, s) => Math.max(m, s.order), 0);
-    const versions = [{ code: codeToSave, savedAt: Date.now() }];
-    const order = maxOrder + 1;
-    const entry: SavedScript = { id, name, code: codeToSave, type, updatedAt: Date.now(), order, versions };
-    const next = [...scripts, entry];
-    setScripts(next);
-    if (uid) {
-      syncScriptToServer({ name, script_type: type, code: codeToSave, versions, order }).then((res) => {
-        if (res?.id) {
-          const serverId = String(res.id);
-          setScripts((prev) => prev.map((s) => (s.id === id ? { ...s, id: serverId } : s)));
-          setCurrentScriptId((cur) => (cur === id ? serverId : cur));
+  async function runScript() {
+    if (isRunning || upToDate) return;
+    setIsRunning(true);
+    const wasOnChart = isOnChart;
+    try {
+      const bars = (window as any).__chartFullData || [];
+      const symbol = (window as any).__chartSymbol || "";
+      const appInterval = (window as any).__chartInterval || "";
+      const result = await runPineScriptAsync(code, bars, { symbol, pineTf: appInterval ? appIntervalToPineTf(appInterval) : "", fetchTimeframe: fetchPineTimeframeData, profile: profilerMode });
+      setRunResult(result);
+      if (result.errors.length) {
+        const model = code.split("\n");
+        for (const e of result.errors) {
+          const line = Math.min(Math.max(1, e.line), model.length);
+          const col = (model[line - 1]?.search(/\S/) ?? 0) + 1;
+          log(`Error at ${line}:${col} ${e.message}`, "error");
         }
-      });
-    } else {
-      persistScripts(next);
+        setUnseenError(true);
+        setConsoleOpen(true);
+        setProblemsTick(t => t + 1);
+        return;
+      }
+      result.warnings.forEach(w => log(w, "warning"));
+      log("Compiled.");
+      window.dispatchEvent(new CustomEvent("tv:run-pine-script", { detail: { result, scriptName: result.meta.title || scriptName, code } }));
+      setOnChart({ key: scriptKey, code });
+      log(wasOnChart ? "Updated on chart." : "Added to chart.");
+      if (profilerMode && result.profile) log(`Profiler: ${result.execMs.toFixed(1)} ms over ${bars.length} bars`);
+    } finally {
+      setIsRunning(false);
     }
-    setCurrentScriptId(id); setScriptName(name);
-    return entry;
   }
 
+  // --- Saving ---
+  const [dialog, setDialog] = useState<null | "save" | "rename" | "open" | "builtin" | "settings" | "versions" | "shortcuts" | "reportEmpty">(null);
+  const [confirm, setConfirm] = useState<null | { title: string; text: React.ReactNode; confirm: string; onConfirm: () => void; extra?: string; onExtra?: () => void }>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); }, [toast]);
+
+  function persistAsNew(name: string, codeToSave: string) {
+    const id = "ps_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const order = scripts.reduce((m, s) => Math.max(m, s.order), 0) + 1;
+    const versions = [{ code: codeToSave, savedAt: Date.now() }];
+    const entry: SavedScript = { id, name, code: codeToSave, type: detectType(codeToSave), updatedAt: Date.now(), order, versions };
+    commitScripts([...scripts, entry]);
+    if (uid) syncScriptToServer({ name, script_type: entry.type, code: codeToSave, versions, order }).then(res => {
+      if (!res?.id) return;
+      const serverId = String(res.id);
+      setScripts(prev => prev.map(s => (s.id === id ? { ...s, id: serverId } : s)));
+      setCurrentScriptId(cur => (cur === id ? serverId : cur));
+      if (onChartMemo?.key === id) setOnChart({ ...onChartMemo, key: serverId });
+    });
+    if (onChart?.key === "untitled" && onChart.code === codeToSave) setOnChart({ key: id, code: codeToSave });
+    setCurrentScriptId(id);
+    setScriptName(name);
+    log(`"${name}" saved.`);
+  }
   function saveScript() {
-    if (!currentScriptId) {
-      setSaveAsName(scriptName === "Untitled script" ? "" : scriptName);
-      setSaveAsModalOpen(true);
-      return;
-    }
-    const existing = scripts.find((s) => s.id === currentScriptId);
-    const versions = [...(existing?.versions || []), { code, savedAt: Date.now() }].slice(-20);
-    const next = scripts.map((s) => s.id === currentScriptId
-      ? { ...s, code, name: scriptName, updatedAt: Date.now(), versions }
-      : s);
-    setScripts(next);
-    if (uid) {
-      syncScriptToServer({ id: currentScriptId, name: scriptName, code, versions });
-    } else {
-      persistScripts(next);
-    }
+    if (!currentScriptId) { setDialog("save"); return; }
+    const existing = scripts.find(s => s.id === currentScriptId);
+    if (existing && existing.code === code && existing.name === scriptName) return;
+    const versions = [...(existing?.versions || []), { code, savedAt: Date.now() }].slice(-50);
+    commitScripts(scripts.map(s => (s.id === currentScriptId ? { ...s, code, name: scriptName, type: detectType(code), updatedAt: Date.now(), versions } : s)));
+    if (uid) syncScriptToServer({ id: currentScriptId, name: scriptName, code, versions, script_type: detectType(code) });
+    log(`"${scriptName}" saved.`);
   }
-
-  function confirmSaveAs() {
-    const name = saveAsName.trim();
-    if (!name) return;
-    persistAsNew(name, code, scriptType);
-    setSaveAsModalOpen(false);
-  }
-
-  function makeACopy() {
-    if (!currentScriptId) return;
-    persistAsNew(`Copy of ${scriptName}`, code, scriptType);
-  }
-
-  function commitRename(newName: string) {
-    const name = newName.trim() || scriptName;
+  function rename(name: string) {
     setScriptName(name);
     if (currentScriptId) {
-      const next = scripts.map((s) => s.id === currentScriptId ? { ...s, name, updatedAt: s.updatedAt } : s);
-      setScripts(next);
-      if (uid) {
-        syncScriptToServer({ id: currentScriptId, name });
-      } else {
-        persistScripts(next);
-      }
+      commitScripts(scripts.map(s => (s.id === currentScriptId ? { ...s, name } : s)));
+      if (uid) syncScriptToServer({ id: currentScriptId, name });
     }
-    setRenaming(false);
   }
-
-  function moveToBottom() {
+  function makeCopy() {
     if (!currentScriptId) return;
-    const maxOrder = scripts.reduce((m, s) => Math.max(m, s.order), 0);
-    const newOrder = maxOrder + 1;
-    const next = scripts.map((s) => s.id === currentScriptId ? { ...s, order: newOrder } : s);
-    setScripts(next);
-    if (uid) {
-      syncScriptToServer({ id: currentScriptId, order: newOrder });
-    } else {
-      persistScripts(next);
+    persistAsNew(`Copy of ${scriptName}`, code);
+  }
+  // Opening something else with unsaved edits asks first (TradingView keeps one open script)
+  function guardUnsaved(next: () => void) {
+    const untouchedTemplate = !currentScriptId && Object.values(TEMPLATES).some(t => t(author) === code);
+    if (!dirty || untouchedTemplate) { next(); return; }
+    setConfirm({
+      title: "Unsaved changes",
+      text: <>Save changes to &ldquo;{scriptName}&rdquo; before opening another script?</>,
+      confirm: "Save",
+      extra: "Don't save",
+      onExtra: () => { setConfirm(null); next(); },
+      onConfirm: () => { setConfirm(null); if (currentScriptId) { saveScript(); next(); } else setDialog("save"); },
+    });
+  }
+  function load(id: string | null, name: string, nextCode: string) {
+    setCurrentScriptId(id);
+    setScriptName(name);
+    setCode(nextCode);
+    setRunResult(null);
+    log(`"${name}" opened`);
+  }
+  function openSaved(id: string) {
+    const s = scripts.find(x => x.id === id);
+    if (!s) return;
+    setDialog(null);
+    guardUnsaved(() => {
+      load(s.id, s.name, s.code);
+      const touched = scripts.map(x => (x.id === s.id ? { ...x, updatedAt: Date.now() } : x));
+      commitScripts(touched);
+    });
+  }
+  function createNew(type: ScriptType) { guardUnsaved(() => load(null, "Untitled script", TEMPLATES[type](author))); }
+  function openBuiltin(name: string) {
+    const b = BUILTIN_SCRIPTS.find(x => x.name === name);
+    setDialog(null);
+    if (b) guardUnsaved(() => load(null, "Untitled script", b.code));
+  }
+  function deleteSaved(id: string) {
+    const s = scripts.find(x => x.id === id);
+    if (!s) return;
+    setConfirm({
+      title: "Delete script", text: <>Do you really want to delete &ldquo;{s.name}&rdquo;?</>, confirm: "Delete",
+      onConfirm: () => {
+        setConfirm(null);
+        commitScripts(scripts.filter(x => x.id !== id));
+        deleteScriptOnServer(id);
+        if (currentScriptId === id) setCurrentScriptId(null);
+      },
+    });
+  }
+  function publish() {
+    if (scriptType === "strategy") {
+      const closed = runResult?.strategyReport ? (runResult.strategyReport as any).totalTrades ?? runResult.strategyReport.trades?.length ?? 0 : 0;
+      if (!closed) { setDialog("reportEmpty"); return; }
     }
-    setScriptMenuOpen(false);
+    setToast("Publishing scripts isn't available yet");
   }
 
-  function openScript(s: SavedScript) {
-    setCurrentScriptId(s.id);
-    setScriptName(s.name);
-    setCode(s.code);
-    setScriptType(s.type);
-    const next = scripts.map((x) => x.id === s.id ? { ...x, updatedAt: Date.now() } : x);
-    setScripts(next);
-    if (!uid) persistScripts(next); // server tracks recency via its own updated_at on real saves
-    setScriptMenuOpen(false); setOpenScriptOpen(false);
-  }
+  // Keyboard shortcuts while the panel has focus (the editor has its own for its text)
+  const panelRef = useRef<HTMLDivElement>(null);
+  const apiRef = useRef<PineEditorApi | null>(null);
+  const keyActions = { run: () => runScript(), save: () => saveScript(), open: () => setDialog("open"), newIndicator: () => createNew("indicator"), newStrategy: () => createNew("strategy") };
+  const keysRef = useRef(keyActions);
+  keysRef.current = keyActions;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || !panelRef.current?.contains(document.activeElement)) return;
+      const k = e.key.toLowerCase();
+      if (k === "s") { e.preventDefault(); keysRef.current.save(); }
+      else if (k === "o") { e.preventDefault(); keysRef.current.open(); }
+      else if (k === "enter") { e.preventDefault(); keysRef.current.run(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
-  function createNew(type: ScriptType) {
-    setCurrentScriptId(null);
-    setScriptName("Untitled script");
-    setScriptType(type);
-    setCode(type === "strategy" ? STRATEGY_TEMPLATE : type === "library" ? LIBRARY_TEMPLATE : INDICATOR_TEMPLATE);
-    setScriptMenuOpen(false);
-  }
+  // --- Dock: size, split view, bottom, collapse ---
+  const width = dock.width || defaultPineWidth();
+  const mode = dock.mode;
+  const visible = !dock.collapsed;
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX, startW = width;
+    document.body.style.cursor = "ew-resize";
+    let frame = 0;
+    const move = (ev: MouseEvent) => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => pineDock.set({ width: clampPineWidth(startW + startX - ev.clientX) })); };
+    const up = () => { cancelAnimationFrame(frame); document.body.style.cursor = ""; document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  };
+  const [bottomHost, setBottomHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (mode !== "bottom" || !visible) { setBottomHost(null); return; }
+    let frame = 0;
+    const find = () => { const el = document.getElementById("tv-pine-bottom-host"); if (el) setBottomHost(el); else frame = requestAnimationFrame(find); };
+    find();
+    return () => cancelAnimationFrame(frame);
+  }, [mode, visible]);
 
-  function loadBuiltin(b: { name: string; code: string }) {
-    setCurrentScriptId(null);
-    setScriptName(b.name);
-    setScriptType("indicator");
-    setCode(b.code);
-    setScriptMenuOpen(false);
-  }
-
-  function restoreVersion(v: { code: string; savedAt: number }) {
-    setCode(v.code);
-    setVersionsOpen(false);
-    setScriptMenuOpen(false);
-  }
-
-  function runScript() {
-    const bars = (window as any).__chartFullData || [];
-    const result = runPineScript(code, bars);
-    setRunResult(result);
-    setActiveErrorIndex(0);
-    setErrorBannerDismissed(false);
-    if (result.errors.length === 0) {
-      window.dispatchEvent(new CustomEvent("tv:run-pine-script", { detail: { result } }));
-    } else {
-      window.dispatchEvent(new CustomEvent("tv:clear-pine-script"));
-    }
-    setPineLogsOn(true);
-  }
-
-  function navigateError(dir: 1 | -1) {
-    const count = hasErrors ? runResult!.errors.length : 0;
-    if (count === 0) return;
-    setActiveErrorIndex((i) => (i + dir + count) % count);
-  }
-
-  const currentScript = scripts.find((s) => s.id === currentScriptId) || null;
+  // --- Menus ---
+  const [menu, setMenu] = useState<null | { which: "name" | "more" | "tab"; rect: DOMRect }>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const openMenu = (which: "name" | "more" | "tab", e: React.MouseEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenu(m => (m?.which === which ? null : { which, rect }));
+  };
   const recentlyUsed = [...scripts].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5);
-  const openScriptList = [...scripts].sort((a, b) => a.order - b.order);
+  const icon = (el: React.ReactNode) => el;
   const hasSaved = !!currentScriptId;
+  const createNewItems: MenuItem[] = [
+    { label: "Indicator", icon: <Ic.IndicatorIcon />, shortcut: "Ctrl + K, Ctrl + I", onClick: () => createNew("indicator") },
+    { label: "Strategy", icon: <Ic.StrategyIcon />, shortcut: "Ctrl + K, Ctrl + S", onClick: () => createNew("strategy") },
+    { label: "Library", icon: <Ic.LibraryIcon />, onClick: () => createNew("library") },
+    { kind: "divider" },
+    { label: "Built-in…", icon: <Ic.BuiltInIcon />, onClick: () => setDialog("builtin") },
+  ];
+  const nameItems: MenuItem[] = [
+    { label: "Save script", icon: icon(<Ic.SaveCloudIcon />), shortcut: "Ctrl + S", onClick: saveScript },
+    { label: "Make a copy…", icon: <Ic.CopyIcon />, disabled: !hasSaved, onClick: makeCopy },
+    { label: "Rename…", icon: <Ic.RenameIcon />, onClick: () => setDialog(hasSaved ? "rename" : "save") },
+    { label: "Version history…", icon: <Ic.VersionHistoryIcon />, disabled: !hasSaved || (currentScript?.versions.length ?? 0) === 0, onClick: () => setDialog("versions") },
+    { label: "Move script to bottom", icon: <Ic.MoveBottomIcon />, onClick: () => pineDock.set({ mode: "bottom", bottomExpanded: true, maximized: false }) },
+    { kind: "divider" },
+    { label: "Create new", icon: <Ic.PlusIcon />, submenu: createNewItems },
+    ...(recentlyUsed.length ? [{ kind: "divider" } as MenuItem, { kind: "header", label: "Recently used" } as MenuItem, ...recentlyUsed.map(s => ({ label: s.name, onClick: () => openSaved(s.id) }) as MenuItem)] : []),
+    { kind: "divider" },
+    { label: "Open script…", icon: <Ic.FolderIcon />, shortcut: "Ctrl + O", onClick: () => setDialog("open") },
+  ];
+  const tabItems: MenuItem[] = [
+    { label: "Save script", icon: <Ic.SaveCloudIcon />, shortcut: "Ctrl + S", onClick: saveScript },
+    { label: "Rename…", icon: <Ic.RenameIcon />, onClick: () => setDialog(hasSaved ? "rename" : "save") },
+    { label: "Version history…", icon: <Ic.VersionHistoryIcon />, disabled: !hasSaved || (currentScript?.versions.length ?? 0) === 0, onClick: () => setDialog("versions") },
+    { label: "Move script to right", icon: <Ic.MoveRightIcon />, onClick: () => pineDock.set({ mode: "overlay" }) },
+    { kind: "divider" },
+    { label: isOnChart ? "Update on chart" : "Add to chart", icon: isOnChart ? <Ic.UpdateIcon /> : <Ic.AddToChartIcon />, shortcut: "Ctrl + ↵", disabled: upToDate || isRunning, onClick: runScript },
+    { kind: "divider" },
+    { label: "Close tab", icon: <Ic.CloseTabIcon />, onClick: onClose },
+  ];
+  const releaseDot = misc.releaseNotesSeen !== RELEASE_NOTES_VERSION;
+  const link = (url: string) => () => window.open(url, "_blank", "noopener");
+  const helpItems: MenuItem[] = [
+    { kind: "header", label: "Editor references" },
+    { label: "How to use", icon: <Ic.HowToUseIcon />, onClick: link("https://www.tradingview.com/pine-script-docs/primer/first-steps/") },
+    { label: "Keyboard shortcuts", icon: <Ic.KeyboardIcon />, onClick: () => setDialog("shortcuts") },
+    { kind: "divider" },
+    { kind: "header", label: "Pine references" },
+    { label: "User Manual", icon: <Ic.UserManualIcon />, right: <span style={{ color: p.muted, display: "flex" }}><Ic.ExternalIcon /></span>, onClick: link("https://www.tradingview.com/pine-script-docs/") },
+    { label: "Reference manual…", icon: <Ic.ReferenceManualIcon />, onClick: link("https://www.tradingview.com/pine-script-reference/v6/") },
+    { kind: "divider" },
+    { kind: "header", label: "Ask question" },
+    { label: "Pine freelancers", icon: <Ic.FreelancersIcon />, right: <span style={{ color: p.muted, display: "flex" }}><Ic.ExternalIcon /></span>, onClick: link("https://www.tradingview.com/pine-script-docs/where-can-i-get-more-information/") },
+    { label: "Stack Overflow", icon: <Ic.StackOverflowIcon />, right: <span style={{ color: p.muted, display: "flex" }}><Ic.ExternalIcon /></span>, onClick: link("https://stackoverflow.com/questions/tagged/pine-script") },
+    { kind: "divider" },
+    { kind: "header", label: "Request a feature" },
+    { label: "Reddit", icon: <Ic.RedditIcon />, right: <span style={{ color: p.muted, display: "flex" }}><Ic.ExternalIcon /></span>, onClick: link("https://www.reddit.com/r/pinescript/") },
+  ];
+  const moreItems: MenuItem[] = [
+    { label: "Editor settings…", icon: <Ic.EditorSettingsIcon />, onClick: () => setDialog("settings") },
+    { kind: "divider" },
+    { kind: "header", label: "Open editor" },
+    { label: "New window", icon: <Ic.NewWindowIcon />, onClick: () => window.open(window.location.href, "_blank", "width=1100,height=760") },
+    { label: "New tab", icon: <Ic.NewTabIcon />, onClick: () => window.open(window.location.href, "_blank") },
+    { kind: "divider" },
+    { kind: "header", label: "Developer tools" },
+    { label: "Profiler mode", hint: "Times each line of the script on its next run and shows the results beside the lines", right: <Switch on={profilerMode} p={p} />, onClick: () => { setProfilerMode(v => !v); if (profilerMode) setRunResult(r => (r ? { ...r, profile: undefined } : r)); } , testId: "pine-profiler" },
+    { label: "Pine logs", hint: "Shows the messages the script writes with log.info(), log.warning() and log.error()", onClick: () => setLogsPanel(true) },
+    { label: "Command Palette", hint: "Every editor command, searchable (F1)", onClick: () => apiRef.current?.commandPalette() },
+    { kind: "divider" },
+    { label: "Release notes", right: <span style={{ color: p.muted, display: "flex" }}><Ic.ExternalIcon /></span>, onClick: () => { pineMisc.set({ releaseNotesSeen: RELEASE_NOTES_VERSION }); link("https://www.tradingview.com/pine-script-docs/release-notes/")(); } },
+    { label: "Help", submenu: helpItems },
+  ];
+  // The release-notes dot beside its menu item
+  const moreItemsWithDot = moreItems.map(it => (it.kind === undefined && (it as any).label === "Release notes" && releaseDot ? { ...it, dot: true } as MenuItem : it));
 
-  const menuItemStyle: React.CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 12px", fontSize: "13px", cursor: "pointer", gap: "10px" };
-  const menuLabelStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: "8px" };
-  const sectionHeaderStyle: React.CSSProperties = { padding: "6px 12px 4px", fontSize: "11px", color: muted, fontWeight: 600, letterSpacing: "0.03em" };
-  const dividerStyle: React.CSSProperties = { height: "1px", background: border, margin: "4px 0" };
+  // --- Profiler annotations (per-line timings, as a console summary of the slowest lines) ---
+  const profileLines = useMemo(() => {
+    const prof = runResult?.profile;
+    if (!prof?.length) return null;
+    const total = prof.filter(x => x.line > 0).reduce((a, b) => a + b.ms, 0) || 1;
+    return [...prof].sort((a, b) => b.ms - a.ms).slice(0, 8).map(x => ({ ...x, pct: (x.ms / total) * 100 }));
+  }, [runResult]);
 
-  return (
-    <div
-      style={{
-        position: "fixed",
-        top: "var(--tv-header-height)",
-        bottom: "var(--tv-bottom-toolbar-height)",
-        right: 0,
-        width: minimized ? "260px" : "660px",
-        maxWidth: "90vw",
-        backgroundColor: bg,
-        borderLeft: `1px solid ${border}`,
-        boxShadow: "-4px 0 16px rgba(0,0,0,0.15)",
-        display: "flex",
-        flexDirection: "column",
-        zIndex: 900,
-        color: text,
-      }}
-    >
-      {/* Title bar */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "8px 12px", borderBottom: `1px solid ${border}`, backgroundColor: headerBg, flexShrink: 0,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", fontWeight: 600 }}>
-          <ChevronsRight size={16} color={muted} />
-          Pine Editor
+  // --- Pieces ---
+  const wide = mode !== "bottom" && width >= 860;
+  const narrow = mode !== "bottom" && width < 600;
+  const btnBase: React.CSSProperties = { height: 34, minWidth: 34, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, borderRadius: 8, background: "transparent", color: p.text, cursor: "pointer", fontSize: 16, fontFamily: "inherit", padding: 0 };
+  const bordered: React.CSSProperties = { ...btnBase, border: `1px solid ${p.border}` };
+  const runLabel = isOnChart ? "Update on chart" : "Add to chart";
+  const runButton = (
+    <Tip text={runLabel} keys={["Ctrl", "↵"]}>
+      <button type="button" aria-label={runLabel} className="pine-hover-btn" onClick={runScript} disabled={upToDate || isRunning}
+        style={{ ...bordered, padding: wide ? "0 12px 0 4px" : 0, color: upToDate ? p.faint : p.text, cursor: upToDate ? "default" : "pointer" }}>
+        {isRunning ? <span className="pine-dots"><i /><i /><i /></span> : isOnChart ? <Ic.UpdateIcon /> : <Ic.AddToChartIcon />}
+        {wide && <span>{runLabel}</span>}
+      </button>
+    </Tip>
+  );
+  const saveButton = (
+    <Tip text="Save script" keys={["Ctrl", "S"]}>
+      <button type="button" aria-label="Save script" className="pine-hover-btn" onClick={saveScript} style={{ ...btnBase, padding: wide ? "0 8px 0 4px" : 0, color: p.blue }}>
+        {dialog === "save" ? <span className="pine-dots"><i /><i /><i /></span> : <Ic.SaveCloudIcon />}
+        {wide && <span>Save</span>}
+      </button>
+    </Tip>
+  );
+  const nameButton = (
+    <button type="button" aria-label="Script menu" aria-haspopup="menu" aria-expanded={menu?.which === "name"} className="pine-hover-btn" onClick={e => openMenu("name", e)}
+      style={{ ...btnBase, padding: "0 6px", gap: 4, background: menu?.which === "name" ? p.hover : "transparent", minWidth: 0, flexShrink: 1 }}>
+      {scriptType === "strategy" ? <Ic.StrategyIcon /> : scriptType === "library" ? <Ic.LibraryIcon /> : <Ic.TypeIndicatorIcon />}
+      <h2 title={scriptName} style={{ margin: 0, fontSize: 20, fontWeight: 700, lineHeight: "24px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{scriptName}</h2>
+      <span style={{ display: "flex", transform: menu?.which === "name" ? "rotate(180deg)" : undefined }}><Ic.ChevronDownIcon /></span>
+    </button>
+  );
+
+  const editor = (
+    <div style={{ position: "relative", flex: 1, minHeight: 0 }} data-testid="pine-editor">
+      <PineMonaco
+        value={code}
+        onChange={setCode}
+        onCursor={(line, col) => setCursor({ line, col })}
+        isDark={isDark}
+        settings={settings}
+        errors={errors}
+        problemsTick={problemsTick}
+        diffBase={savedCode}
+        onReady={api => { apiRef.current = api; }}
+        keys={{ run: () => keysRef.current.run(), save: () => keysRef.current.save(), open: () => keysRef.current.open(), newIndicator: () => keysRef.current.newIndicator(), newStrategy: () => keysRef.current.newStrategy() }}
+      />
+    </div>
+  );
+
+  const consolePanel = consoleOpen && (
+    <div ref={consoleRef} data-testid="pine-console" style={{ height: 120, flexShrink: 0, overflowY: "auto", borderTop: `1px solid ${p.border}`, padding: "4px 8px", fontFamily: 'Menlo, "Ubuntu Mono", Consolas, source-code-pro, monospace', fontSize: 12, lineHeight: "26px" }}>
+      {consoleLines.map((l, i) => (
+        <div key={i} style={{ color: l.kind === "error" ? p.danger : l.kind === "warning" ? "#ff9800" : p.faint, whiteSpace: "pre-wrap" }}>
+          <span>{clock(l.t)}</span>&nbsp;&nbsp;{l.text}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          <button
-            title={minimized ? "Restore" : "Minimize"}
-            onClick={() => setMinimized((v) => !v)}
-            style={{ width: "24px", height: "24px", display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: muted, cursor: "pointer", borderRadius: "4px" }}
-          >
-            <Minus size={14} />
-          </button>
-          <button
-            title="Close"
-            onClick={onClose}
-            style={{ width: "24px", height: "24px", display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: muted, cursor: "pointer", borderRadius: "4px" }}
-          >
-            <X size={16} />
-          </button>
+      ))}
+      {profileLines && (
+        <div style={{ color: p.faint }}>
+          {profileLines.map(x => <div key={x.line}>&nbsp;&nbsp;line {x.line}: {x.ms.toFixed(2)} ms ({x.pct.toFixed(1)}%) · {x.count} runs</div>)}
         </div>
+      )}
+    </div>
+  );
+
+  const logsPanelEl = logsPanel && (
+    <div data-testid="pine-logs" style={{ height: 160, flexShrink: 0, display: "flex", flexDirection: "column", borderTop: `1px solid ${p.border}` }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 32, padding: "0 4px 0 12px", fontSize: 14, fontWeight: 600 }}>
+        Pine Logs
+        <button type="button" aria-label="Close Pine Logs" className="pine-hover-btn" onClick={() => setLogsPanel(false)} style={{ ...btnBase, height: 28, minWidth: 28 }}><Ic.CloseIcon size={22} /></button>
       </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 12px 8px", fontFamily: 'Menlo, "Ubuntu Mono", Consolas, source-code-pro, monospace', fontSize: 12, lineHeight: "20px" }}>
+        {(runResult?.logs ?? []).map((l, i) => <div key={i}>{l}</div>)}
+        {!(runResult?.logs?.length) && <div style={{ color: p.faint }}>No logs yet. Messages from log.info(), log.warning() and log.error() show here after the script runs.</div>}
+      </div>
+    </div>
+  );
 
-      {!minimized && (
-        <>
-          {/* Toolbar row */}
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "8px 12px", borderBottom: `1px solid ${border}`, flexShrink: 0, gap: "10px",
-          }}>
-            <div ref={scriptMenuRef} style={{ position: "relative" }}>
-              {renaming ? (
-                <input
-                  autoFocus
-                  defaultValue={scriptName}
-                  onBlur={(e) => commitRename(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") commitRename((e.target as HTMLInputElement).value); if (e.key === "Escape") setRenaming(false); }}
-                  style={{ fontSize: "14px", fontWeight: 600, background: "transparent", border: `1px solid ${keyColor}`, borderRadius: "4px", color: text, padding: "2px 6px", outline: "none" }}
-                />
-              ) : (
-                <div
-                  onClick={() => setScriptMenuOpen((v) => !v)}
-                  style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
-                >
-                  <TrendingUp size={16} color={keyColor} />
-                  {scriptName}
-                  <ChevronDown size={14} color={muted} />
-                </div>
-              )}
+  const footer = (
+    <div style={{ display: "flex", alignItems: "center", height: 22, flexShrink: 0, borderTop: `1px solid ${p.border}`, padding: mode === "bottom" ? "0 8px" : "0 2px 0 8px", fontSize: 12, color: p.text }}>
+      <Tip text={consoleOpen ? "Hide console" : "Show console"} placement="top">
+        <button type="button" aria-label="Toggle console" aria-pressed={consoleOpen} onClick={() => setConsoleOpen(o => !o)}
+          style={{ position: "relative", width: 34, height: 22, border: "none", padding: 0, display: "flex", alignItems: "center", justifyContent: "center", background: consoleOpen ? p.hover : "transparent", color: p.text, cursor: "pointer" }}>
+          <Ic.ConsoleIcon />
+          {unseenError && !consoleOpen && <span style={{ position: "absolute", top: 1, right: 7, width: 6, height: 6, borderRadius: "50%", background: p.danger }} />}
+        </button>
+      </Tip>
+      <span style={{ flex: 1 }} />
+      <button type="button" onClick={() => apiRef.current?.goToLine()} style={{ border: "none", background: "transparent", color: p.text, fontSize: 12, fontFamily: "inherit", cursor: "pointer", padding: "0 8px", height: 22 }}>Line {cursor.line}, Col {cursor.col}</button>
+      <a href="https://www.tradingview.com/pine-script-reference/v6/" target="_blank" rel="noopener noreferrer" title="Open Pine Reference" style={{ color: p.text, textDecoration: "none", padding: "0 8px", lineHeight: "22px" }}>Pine Script® v6</a>
+    </div>
+  );
 
-              {scriptMenuOpen && (
-                <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, width: "260px", background: menuBg, border: `1px solid ${border}`, borderRadius: "6px", boxShadow: "0 4px 20px rgba(0,0,0,0.25)", zIndex: 1500, padding: "6px 0" }}>
-                  <div style={menuItemStyle} onClick={() => { saveScript(); setScriptMenuOpen(false); }}>
-                    <span style={menuLabelStyle}><CloudUpload size={14} />Save script</span>
-                    <span style={{ color: muted, fontSize: "11px" }}>Ctrl+S</span>
-                  </div>
-                  <div style={{ ...menuItemStyle, opacity: hasSaved ? 1 : 0.4, cursor: hasSaved ? "pointer" : "default" }} onClick={() => hasSaved && (makeACopy(), setScriptMenuOpen(false))}>
-                    <span style={menuLabelStyle}><Copy size={14} />Make a copy...</span>
-                  </div>
-                  <div style={menuItemStyle} onClick={() => { setRenaming(true); setScriptMenuOpen(false); }}>
-                    <span style={menuLabelStyle}><Pencil size={14} />Rename...</span>
-                  </div>
-                  <div style={{ ...menuItemStyle, opacity: hasSaved ? 1 : 0.4, cursor: hasSaved ? "pointer" : "default" }} onClick={() => hasSaved && setVersionsOpen((v) => !v)}>
-                    <span style={menuLabelStyle}><History size={14} />Version history...</span>
-                  </div>
-                  <div style={{ ...menuItemStyle, opacity: hasSaved ? 1 : 0.4, cursor: hasSaved ? "pointer" : "default" }} onClick={moveToBottom}>
-                    <span style={menuLabelStyle}><ArrowDownToLine size={14} />Move script to bottom</span>
-                  </div>
+  const dialogs = (
+    <>
+      {(dialog === "save" || dialog === "rename") && (
+        <SaveScriptDialog p={p} title={dialog === "rename" ? "Rename script" : "Save script"}
+          initial={dialog === "rename" ? scriptName : (scriptName !== "Untitled script" ? scriptName : declaredTitle(code) || "My script")}
+          onCancel={() => setDialog(null)}
+          onSave={name => { setDialog(null); if (dialog === "rename") rename(name); else persistAsNew(name, code); }} />
+      )}
+      {dialog === "open" && (
+        <OpenScriptDialog p={p} onClose={() => setDialog(null)} onOpen={openSaved} onDelete={deleteSaved}
+          items={[...scripts].sort((a, b) => a.order - b.order).map(s => ({ id: s.id, name: s.name, type: s.type, versionLabel: `Version: ${Math.max(1, s.versions.length)}.0 (${formatStamp(s.updatedAt)})` }))} />
+      )}
+      {dialog === "builtin" && (
+        <BuiltinScriptDialog p={p} onClose={() => setDialog(null)} onOpen={openBuiltin}
+          items={[...BUILTIN_SCRIPTS].sort((a, b) => a.name.localeCompare(b.name)).map(b => ({ id: b.name, name: b.name, type: b.type, aliases: [(b.code.match(/shorttitle\s*=\s*"([^"]+)"/) || [])[1] || "", declaredTitle(b.code)] }))} />
+      )}
+      {dialog === "settings" && <EditorSettingsDialog p={p} value={settings} onCancel={() => setDialog(null)} onOk={v => { pineEditorSettings.set(v); setDialog(null); }} />}
+      {dialog === "versions" && currentScript && (
+        <VersionHistoryDialog p={p} name={currentScript.name} versions={currentScript.versions} onClose={() => setDialog(null)}
+          onOpen={i => { setDialog(null); setCode(currentScript.versions[i].code); log(`Version ${i + 1}.0 of "${currentScript.name}" opened`); }} />
+      )}
+      {dialog === "shortcuts" && <KeyboardShortcutsDialog p={p} onClose={() => setDialog(null)} />}
+      {dialog === "reportEmpty" && <StrategyReportEmptyDialog p={p} onClose={() => setDialog(null)} />}
+      {confirm && <ConfirmDialog p={p} title={confirm.title} text={confirm.text} confirm={confirm.confirm} extra={confirm.extra} onExtra={confirm.onExtra} onCancel={() => setConfirm(null)} onConfirm={confirm.onConfirm} />}
+      {menu?.which === "name" && <Menu p={p} anchor={menu.rect} items={nameItems} onClose={closeMenu} width={340} />}
+      {menu?.which === "tab" && <Menu p={p} anchor={menu.rect} items={tabItems} onClose={closeMenu} width={300} />}
+      {menu?.which === "more" && <Menu p={p} anchor={menu.rect} items={moreItemsWithDot} onClose={closeMenu} align="right" width={200} submenuSide="left" />}
+      {toast && createPortal(
+        <div role="status" style={{ position: "fixed", left: "50%", bottom: 64, transform: "translateX(-50%)", zIndex: 3300, background: "#2e2e2e", color: "#f2f2f2", borderRadius: 6, padding: "10px 16px", fontSize: 14 }}>{toast}</div>,
+        document.body,
+      )}
+    </>
+  );
 
-                  {versionsOpen && hasSaved && (
-                    <div style={{ maxHeight: "160px", overflowY: "auto", borderTop: `1px solid ${border}`, borderBottom: `1px solid ${border}`, margin: "4px 0" }}>
-                      {(currentScript?.versions || []).slice().reverse().map((v, i) => (
-                        <div key={i} style={{ ...menuItemStyle, paddingLeft: "28px" }} onClick={() => restoreVersion(v)}>
-                          <span>{timeAgo(v.savedAt)}</span>
-                          <span style={{ color: muted, fontSize: "11px" }}>Restore</span>
-                        </div>
-                      ))}
-                      {(currentScript?.versions || []).length === 0 && (
-                        <div style={{ padding: "8px 28px", fontSize: "12px", color: muted }}>No versions yet</div>
-                      )}
-                    </div>
-                  )}
+  const styles = (
+    <style>{`
+      .pine-hover-btn:hover:not(:disabled) { background: ${p.hover} !important; }
+      .pine-icon-btn { display: flex; align-items: center; justify-content: center; border: none; background: transparent; border-radius: 8px; cursor: pointer; padding: 0; }
+      .pine-icon-btn:hover { background: ${p.hover}; }
+      .pine-dots { display: inline-flex; gap: 3px; align-items: center; justify-content: center; width: 28px; }
+      .pine-dots i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; animation: pineDot 1.2s infinite ease-in-out; }
+      .pine-dots i:nth-child(2) { animation-delay: .15s; } .pine-dots i:nth-child(3) { animation-delay: .3s; }
+      @keyframes pineDot { 0%, 60%, 100% { opacity: .3; } 30% { opacity: 1; } }
+      .pine-checkbox { appearance: none; width: 18px; height: 18px; margin: 0; border: 1px solid ${p.faint}; border-radius: 4px; display: inline-grid; place-content: center; cursor: pointer; flex-shrink: 0; }
+      .pine-checkbox:checked { background: ${p.text}; border-color: ${p.text}; }
+      .pine-checkbox:checked::after { content: ""; width: 10px; height: 6px; border-left: 2px solid ${p.bg}; border-bottom: 2px solid ${p.bg}; transform: rotate(-45deg) translate(1px, -1px); }
+    `}</style>
+  );
 
-                  <div style={dividerStyle} />
-                  <FlyoutRow label="Create new" icon={<Activity size={14} />} border={border} bg={menuBg} color={text}>
-                    <div style={menuItemStyle} onClick={() => createNew("indicator")}>
-                      <span style={menuLabelStyle}><Activity size={14} />Indicator</span>
-                      <span style={{ color: muted, fontSize: "11px" }}>Ctrl+K, Ctrl+I</span>
-                    </div>
-                    <div style={menuItemStyle} onClick={() => createNew("strategy")}>
-                      <span style={menuLabelStyle}><TrendingUp size={14} />Strategy</span>
-                      <span style={{ color: muted, fontSize: "11px" }}>Ctrl+K, Ctrl+S</span>
-                    </div>
-                    <div style={menuItemStyle} onClick={() => createNew("library")}>
-                      <span style={menuLabelStyle}><Package size={14} />Library</span>
-                    </div>
-                    <div style={dividerStyle} />
-                    {BUILTINS.map((b) => (
-                      <div key={b.name} style={menuItemStyle} onClick={() => loadBuiltin(b)}>
-                        <span style={menuLabelStyle}><BarChart3 size={14} />{b.name}</span>
-                      </div>
-                    ))}
-                  </FlyoutRow>
+  // --- Bottom tab ---
+  if (mode === "bottom") {
+    if (!visible || !bottomHost) return <>{styles}{dialogs}</>;
+    return createPortal(
+      <div ref={panelRef} data-testid="pine-panel" data-dock="bottom" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", background: p.bg, color: p.text }}>
+        {styles}
+        <div style={{ display: "flex", alignItems: "center", height: 38, flexShrink: 0, padding: "0 6px" }}>
+          <button type="button" aria-label="Script menu" className="pine-hover-btn" onClick={e => openMenu("tab", e)}
+            style={{ ...btnBase, height: 32, padding: "0 6px", gap: 4, fontSize: 14, background: p.hover }}>
+            {scriptType === "strategy" ? <Ic.StrategyIcon /> : scriptType === "library" ? <Ic.LibraryIcon /> : <Ic.TypeIndicatorIcon />}
+            <span style={{ whiteSpace: "nowrap" }}>{scriptName}</span>
+            <span style={{ display: "flex", transform: menu?.which === "tab" ? "rotate(180deg)" : undefined }}><Ic.ChevronDownIcon /></span>
+          </button>
+          <span style={{ flex: 1 }} />
+          <Tip text={dock.bottomExpanded ? "Collapse panel" : "Open panel"}>
+            <button type="button" aria-label={dock.bottomExpanded ? "Collapse panel" : "Open panel"} className="pine-icon-btn" onClick={() => pineDock.set(d => ({ bottomExpanded: !d.bottomExpanded }))} style={{ width: 34, height: 34, color: p.text, transform: dock.bottomExpanded ? undefined : "rotate(180deg)" }}><Ic.CollapseIcon /></button>
+          </Tip>
+          <Tip text="Close">
+            <button type="button" aria-label="Close" className="pine-icon-btn" onClick={onClose} style={{ width: 34, height: 34, color: p.text }}><Ic.CloseIcon /></button>
+          </Tip>
+        </div>
+        {dock.bottomExpanded && <>{editor}{logsPanelEl}{consolePanel}{footer}</>}
+        {dialogs}
+      </div>,
+      bottomHost,
+    );
+  }
 
-                  {recentlyUsed.length > 0 && (
-                    <>
-                      <div style={dividerStyle} />
-                      <div style={sectionHeaderStyle}>RECENTLY USED</div>
-                      {recentlyUsed.map((s) => (
-                        <div key={s.id} style={{ ...menuItemStyle, fontWeight: s.id === currentScriptId ? 600 : 400 }} onClick={() => openScript(s)}>
-                          <span style={{ ...menuLabelStyle, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {s.type === "strategy" ? <TrendingUp size={14} /> : <Activity size={14} />}
-                            {s.name}
-                          </span>
-                        </div>
-                      ))}
-                    </>
-                  )}
-
-                  <div style={dividerStyle} />
-                  <div style={menuItemStyle} onClick={() => { setOpenScriptOpen(true); setScriptMenuOpen(false); }}>
-                    <span style={menuLabelStyle}><FolderOpen size={14} />Open script...</span>
-                    <span style={{ color: muted, fontSize: "11px" }}>Ctrl+O</span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <button title={hasErrors ? "Recompile" : "Add to chart"} onClick={runScript} style={{ width: "26px", height: "26px", display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: hasErrors ? muted : text, cursor: "pointer", borderRadius: "4px" }}>
-                {hasErrors ? <RefreshCw size={14} /> : <Play size={14} fill={text} />}
+  // --- Overlay / split view ---
+  const split = mode === "split";
+  const full = split && dock.maximized;
+  return (
+    <div ref={panelRef} data-testid="pine-panel" data-dock={mode}
+      style={{
+        position: "fixed", top: 0, bottom: 0, right: 0, width: full ? "100vw" : width, maxWidth: "100vw",
+        display: visible ? "flex" : "none", flexDirection: "column", background: p.bg, color: p.text, zIndex: 2100,
+        boxShadow: split ? "none" : isDark ? "-1px 0 0 #2a2e39" : "-1px 0 0 #ebebeb",
+        borderLeft: split ? `4px solid var(--tv-color-gap)` : "none",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif",
+      }}>
+      {styles}
+      {/* Resize from the left edge (the grip TradingView shows mid-height) */}
+      {!full && (
+        <div data-name="pine-resize" onMouseDown={startResize} style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 16, cursor: "ew-resize", zIndex: 2 }}>
+          <div style={{ position: "absolute", left: 12, top: "50%", width: 4, height: 76, marginTop: -38, borderRadius: 2, background: isDark ? "#4a4a4a" : "#9c9c9c" }} />
+        </div>
+      )}
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, padding: "0 20px 0 36px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, height: 34, marginTop: 16, flexShrink: 0 }}>
+          <Tip text={split ? "Move split-view to overlay" : "Move overlay to split-view"} placement="bottom">
+            <button type="button" aria-label={split ? "Move split-view to overlay" : "Move overlay to split-view"} className="pine-icon-btn" style={{ width: 34, height: 34, color: p.text }}
+              onClick={() => pineDock.set({ mode: split ? "overlay" : "split", maximized: false })}>
+              <Ic.SplitViewIcon style={split ? { transform: "scaleX(-1)" } : undefined} />
+            </button>
+          </Tip>
+          <span style={{ fontSize: 14 }}>Pine Editor</span>
+          <span style={{ flex: 1 }} />
+          {split && (
+            <Tip text={full ? "Restore panel" : "Maximize panel"} placement="bottom">
+              <button type="button" aria-label={full ? "Restore panel" : "Maximize panel"} className="pine-icon-btn" style={{ width: 34, height: 34, color: p.text }} onClick={() => pineDock.set(d => ({ maximized: !d.maximized }))}>
+                {full ? <Ic.RestoreIcon /> : <Ic.MaximizeIcon />}
               </button>
-              <button title="Save script" onClick={saveScript} style={{ width: "26px", height: "26px", display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: hasErrors ? muted : text, cursor: "pointer", borderRadius: "4px" }}>
-                <CloudUpload size={16} />
-              </button>
-              <button style={{
-                display: "flex", alignItems: "center", gap: "6px", padding: "5px 12px",
-                border: `1px solid ${border}`, borderRadius: "4px", background: "transparent",
-                color: hasErrors ? muted : text, fontSize: "13px", cursor: hasErrors ? "default" : "pointer",
-              }}>
-                {hasErrors ? <AlertTriangle size={14} /> : <TrendingUp size={14} />}
-                Publish script
-              </button>
-              <div ref={moreMenuRef} style={{ position: "relative" }}>
-                <button title="More" onClick={() => setMoreMenuOpen((v) => !v)} style={{ position: "relative", width: "26px", height: "26px", display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: muted, cursor: "pointer", borderRadius: "4px" }}>
-                  <MoreHorizontal size={16} />
-                  {hasErrors && <span style={{ position: "absolute", top: "2px", right: "2px", width: "6px", height: "6px", borderRadius: "50%", background: "#f23645" }} />}
-                </button>
-                {moreMenuOpen && (
-                  <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, width: "220px", background: menuBg, border: `1px solid ${border}`, borderRadius: "6px", boxShadow: "0 4px 20px rgba(0,0,0,0.25)", zIndex: 1500, padding: "6px 0" }}>
-                    <div style={menuItemStyle} onClick={() => setEditorSettingsOpen((v) => !v)}>
-                      <span style={menuLabelStyle}><Settings size={14} />Editor settings...</span>
-                    </div>
-                    {editorSettingsOpen && (
-                      <div style={{ padding: "6px 12px 10px", borderTop: `1px solid ${border}`, borderBottom: `1px solid ${border}`, margin: "4px 0" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px" }}>
-                          <span>Font size</span>
-                          <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <button onClick={() => setFontSize((f) => Math.max(10, f - 1))} style={{ width: "20px", height: "20px", border: `1px solid ${border}`, background: "transparent", color: text, borderRadius: "4px", cursor: "pointer" }}>-</button>
-                            {fontSize}
-                            <button onClick={() => setFontSize((f) => Math.min(20, f + 1))} style={{ width: "20px", height: "20px", border: `1px solid ${border}`, background: "transparent", color: text, borderRadius: "4px", cursor: "pointer" }}>+</button>
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    <div style={sectionHeaderStyle}>OPEN EDITOR</div>
-                    <div style={menuItemStyle} onClick={() => window.open(window.location.href, "_blank", "width=1000,height=720")}>
-                      <span style={menuLabelStyle}><ExternalLink size={14} />New window</span>
-                    </div>
-                    <div style={menuItemStyle} onClick={() => window.open(window.location.href, "_blank")}>
-                      <span style={menuLabelStyle}><ExternalLink size={14} />New tab</span>
-                    </div>
-
-                    <div style={dividerStyle} />
-                    <div style={sectionHeaderStyle}>DEVELOPER TOOLS</div>
-                    <div style={menuItemStyle} onClick={() => setProfilerMode((v) => !v)}>
-                      <span style={menuLabelStyle}>Profiler mode</span>
-                      {profilerMode ? <ToggleRight size={20} color={keyColor} /> : <ToggleLeft size={20} color={muted} />}
-                    </div>
-                    <div style={menuItemStyle} onClick={() => setPineLogsOn((v) => !v)}>
-                      <span style={menuLabelStyle}><ScrollText size={14} />Pine logs</span>
-                      {pineLogsOn ? <ToggleRight size={20} color={keyColor} /> : <ToggleLeft size={20} color={muted} />}
-                    </div>
-
-                    <div style={dividerStyle} />
-                    <div style={menuItemStyle}>
-                      <span>Release notes</span>
-                    </div>
-                    <FlyoutRow label="Help" border={border} bg={menuBg} color={text}>
-                      <div style={sectionHeaderStyle}>EDITOR REFERENCES</div>
-                      <div style={menuItemStyle}><span>How to use</span></div>
-                      <div style={menuItemStyle}><span>Keyboard shortcuts</span></div>
-                      <div style={dividerStyle} />
-                      <div style={sectionHeaderStyle}>PINE REFERENCES</div>
-                      <div style={menuItemStyle} onClick={() => window.open("https://www.tradingview.com/pine-script-docs/", "_blank")}>
-                        <span>User Manual</span><ExternalLink size={12} />
-                      </div>
-                      <div style={menuItemStyle} onClick={() => window.open("https://www.tradingview.com/pine-script-reference/v6/", "_blank")}>
-                        <span>Reference manual...</span><ExternalLink size={12} />
-                      </div>
-                      <div style={dividerStyle} />
-                      <div style={sectionHeaderStyle}>ASK QUESTION</div>
-                      <div style={menuItemStyle}><span>Pine freelancers</span></div>
-                      <div style={menuItemStyle} onClick={() => window.open("https://stackoverflow.com/questions/tagged/pine-script", "_blank")}>
-                        <span>Stack Overflow</span><ExternalLink size={12} />
-                      </div>
-                      <div style={dividerStyle} />
-                      <div style={sectionHeaderStyle}>REQUEST A FEATURE</div>
-                      <div style={menuItemStyle} onClick={() => window.open("https://www.reddit.com/r/PineScript/", "_blank")}>
-                        <span>Reddit</span><ExternalLink size={12} />
-                      </div>
-                    </FlyoutRow>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Code area — a real CodeMirror instance, not a hand-rolled textarea overlay */}
-          <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
-            <PineCodeEditor
-              code={code}
-              onChange={setCode}
-              onCursorChange={setCursor}
-              isDark={isDark}
-              fontSize={fontSize}
-              errors={hasErrors ? runResult!.errors : []}
-              activeErrorIndex={activeErrorIndex}
-              bannerVisible={!errorBannerDismissed}
-              onNavigateError={navigateError}
-              onDismissError={() => setErrorBannerDismissed(true)}
-            />
-
-          </div>
-
-          {/* Pine logs panel */}
-          {pineLogsOn && runResult && (
-            <div style={{ maxHeight: "140px", overflowY: "auto", borderTop: `1px solid ${border}`, padding: "8px 12px", fontSize: "12px", fontFamily: "'SFMono-Regular', Consolas, monospace", flexShrink: 0 }}>
-              {profilerMode && (
-                <div style={{ color: muted, marginBottom: "4px" }}>Execution time: {runResult.execMs.toFixed(2)}ms</div>
-              )}
-              {runResult.errors.map((e, i) => <div key={"e" + i} style={{ color: "#f23645" }}>Line {e.line}: {e.message} ({e.code})</div>)}
-              {runResult.warnings.map((w, i) => <div key={"w" + i} style={{ color: "#ff9800" }}>{w}</div>)}
-              {runResult.logs.map((l, i) => <div key={"l" + i} style={{ color: text }}>{l}</div>)}
-              {runResult.errors.length === 0 && runResult.warnings.length === 0 && runResult.logs.length === 0 && (
-                <div style={{ color: muted }}>Script ran with no errors — {runResult.plots.length} plot(s), {runResult.markers.length} marker(s).</div>
-              )}
-            </div>
+            </Tip>
           )}
-
-          {/* Status bar */}
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "4px 12px", borderTop: `1px solid ${border}`, fontSize: "11px", color: muted, flexShrink: 0,
-          }}>
-            <span>{">_"}</span>
-            <span>Line {cursor.line}, Col {cursor.col} &nbsp;&nbsp; Pine Script® v6</span>
-          </div>
-        </>
-      )}
-
-      {openScriptOpen && (
-        <div
-          onClick={() => setOpenScriptOpen(false)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center" }}
-        >
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "360px", maxHeight: "70vh", overflowY: "auto", background: menuBg, border: `1px solid ${border}`, borderRadius: "8px", boxShadow: "0 8px 32px rgba(0,0,0,0.35)" }}>
-            <div style={{ padding: "10px 14px", borderBottom: `1px solid ${border}`, fontSize: "14px", fontWeight: 600 }}>Open script</div>
-            {openScriptList.length === 0 && (
-              <div style={{ padding: "16px 14px", fontSize: "12px", color: muted }}>No saved scripts yet. Save a script first with Ctrl+S.</div>
-            )}
-            {openScriptList.map((s) => (
-              <div key={s.id} style={menuItemStyle} onClick={() => openScript(s)}>
-                <span style={menuLabelStyle}>
-                  {s.type === "strategy" ? <TrendingUp size={14} /> : <Activity size={14} />}
-                  {s.name}
-                </span>
-                <span style={{ color: muted, fontSize: "11px" }}>{timeAgo(s.updatedAt)}</span>
-              </div>
-            ))}
-          </div>
+          <Tip text="Collapse panel" placement="bottom">
+            <button type="button" aria-label="Collapse panel" className="pine-icon-btn" style={{ width: 34, height: 34, color: p.text, marginRight: 4 }} onClick={() => pineDock.set({ collapsed: true })}><Ic.CollapseIcon /></button>
+          </Tip>
+          <Tip text="Close" placement="bottom">
+            <button type="button" aria-label="Close" className="pine-icon-btn" style={{ width: 34, height: 34, color: p.text }} onClick={onClose}><Ic.CloseIcon /></button>
+          </Tip>
         </div>
-      )}
-
-      {saveAsModalOpen && (
-        <div
-          onClick={() => setSaveAsModalOpen(false)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center" }}
-        >
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "400px", background: menuBg, borderRadius: "8px", boxShadow: "0 8px 32px rgba(0,0,0,0.35)", padding: "20px 24px 24px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
-              <div style={{ fontSize: "18px", fontWeight: 700, color: text }}>Save script</div>
-              <button onClick={() => setSaveAsModalOpen(false)} style={{ width: "24px", height: "24px", display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: muted, cursor: "pointer", borderRadius: "4px" }}>
-                <X size={18} />
-              </button>
-            </div>
-            <label style={{ display: "block", fontSize: "12px", color: muted, marginBottom: "6px" }}>New script name</label>
-            <input
-              autoFocus
-              value={saveAsName}
-              onChange={(e) => setSaveAsName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") confirmSaveAs(); if (e.key === "Escape") setSaveAsModalOpen(false); }}
-              style={{
-                width: "100%", boxSizing: "border-box", fontSize: "14px", padding: "8px 10px",
-                borderRadius: "4px", border: `1px solid ${keyColor}`, outline: "none",
-                background: isDark ? "#131722" : "#ffffff", color: text,
-              }}
-            />
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "24px" }}>
-              <button
-                onClick={() => setSaveAsModalOpen(false)}
-                style={{ padding: "7px 16px", fontSize: "13px", borderRadius: "4px", border: `1px solid ${border}`, background: "transparent", color: text, cursor: "pointer" }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmSaveAs}
-                disabled={!saveAsName.trim()}
-                style={{
-                  padding: "7px 16px", fontSize: "13px", borderRadius: "4px", border: "none",
-                  background: saveAsName.trim() ? keyColor : (isDark ? "#2a2e39" : "#e0e3eb"),
-                  color: saveAsName.trim() ? "#ffffff" : muted,
-                  cursor: saveAsName.trim() ? "pointer" : "default",
-                }}
-              >
-                Save
-              </button>
-            </div>
-          </div>
+        {/* Script row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, height: 34, marginTop: 12, marginLeft: -6, flexShrink: 0 }}>
+          {nameButton}
+          {runButton}
+          {saveButton}
+          <span style={{ flex: 1 }} />
+          <Tip text="Share your script with community">
+            <button type="button" aria-label="Publish script" className="pine-hover-btn" onClick={publish} style={{ ...bordered, padding: narrow ? 0 : "0 12px 0 6px", flexShrink: 0 }}>
+              <Ic.PublishIcon />{!narrow && <span style={{ whiteSpace: "nowrap" }}>Publish script</span>}
+            </button>
+          </Tip>
+          <Tip text="More">
+            <button type="button" aria-label="More" aria-haspopup="menu" className="pine-hover-btn" onClick={e => openMenu("more", e)}
+              style={{ ...bordered, position: "relative", width: 34, flexShrink: 0, background: menu?.which === "more" ? p.hover : "transparent" }}>
+              <Ic.MoreIcon />
+              {releaseDot && <span data-testid="pine-release-dot" style={{ position: "absolute", top: -3, right: -3, width: 7, height: 7, borderRadius: "50%", background: p.danger }} />}
+            </button>
+          </Tip>
         </div>
-      )}
+        <div style={{ height: 1, background: p.border, marginTop: 13, flexShrink: 0 }} />
+        {editor}
+        {logsPanelEl}
+        {consolePanel}
+        {footer}
+      </div>
+      {dialogs}
     </div>
   );
 }

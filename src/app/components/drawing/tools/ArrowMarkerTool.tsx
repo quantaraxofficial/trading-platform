@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useState } from 'react';
 import { Shape, Group, Circle, Text } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
@@ -10,6 +10,7 @@ interface ArrowMarkerToolProps {
   stroke: string;
   strokeWidth: number;
   isSelected: boolean;
+  isHovering?: boolean;
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   onSelect: () => void;
@@ -22,10 +23,14 @@ interface ArrowMarkerToolProps {
 }
 
 export function ArrowMarkerTool({
-  id, points, stroke, strokeWidth, isSelected, chart, series, onSelect, onUpdatePoints,
+  id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints,
   text, textColor, fontSize, bold, italic
 }: ArrowMarkerToolProps) {
   useChartTick(chart);
+  // shadowBlur is a real per-pixel blur convolution that Konva redraws every frame of any
+  // native drag (move or handle resize) regardless of React re-renders — expensive enough
+  // to feel like lag, so it's switched off for the duration of a drag.
+  const [isDragging, setIsDragging] = useState(false);
   if (!chart || !series || points.length < 2) return null;
 
   const p1 = points[0];
@@ -48,45 +53,46 @@ export function ArrowMarkerTool({
 
   const angle = Math.atan2(dy, dx); // radians
 
-  // Arrow dimensions — thick like TradingView's arrow marker
-  const headLength = Math.min(len * 0.45, 60);   // arrowhead takes up ~45% of length
-  const headWidth  = headLength * 0.85;           // wide triangular head
-  const shaftWidth = headWidth * 0.35;            // narrower rectangular shaft
-  const shaftLength = Math.max(len - headLength, 0);
+  // The body is a plain straight-sided dart: two straight lines from the tail directly to
+  // the notch points (the inner corners of the arrowhead), no belly bulge. The shoulder
+  // where those lines meet the flared head is pulled inward toward the tip, cutting a
+  // shallow notch into the back of the head on both sides.
+  const headLength = Math.min(len * 0.45, 80);
+  const shaftLen = len - headLength;
+  const bodyHW = Math.max(strokeWidth * 1.5, 4);
+  const headHW = bodyHW + headLength * 0.55;
+  const notchBend = headLength * 0.28;
+  const notchX = shaftLen + notchBend;
+  const notchHW = (bodyHW + headHW) / 2;
+
+  const buildPath = (ctx: any, pad: number) => {
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(notchX, -notchHW - pad);
+    ctx.lineTo(shaftLen, -headHW - pad);
+    ctx.lineTo(len + pad, 0);
+    ctx.lineTo(shaftLen, headHW + pad);
+    ctx.lineTo(notchX, notchHW + pad);
+    ctx.lineTo(0, 0);
+    ctx.closePath();
+  };
 
   const sceneFunc = (ctx: any, shape: any) => {
-    ctx.beginPath();
-    const hw = shaftWidth / 2;
-    const hh = headWidth / 2;
-    ctx.moveTo(0, -hw);
-    ctx.lineTo(shaftLength, -hw);
-    ctx.lineTo(shaftLength, -hh);
-    ctx.lineTo(len, 0);
-    ctx.lineTo(shaftLength, hh);
-    ctx.lineTo(shaftLength, hw);
-    ctx.lineTo(0, hw);
-    ctx.closePath();
+    buildPath(ctx, 0);
     ctx.fillStyle = color;
     ctx.fill();
     ctx.fillStrokeShape(shape);
   };
 
   const hitFunc = (ctx: any, shape: any) => {
-    const hw = shaftWidth / 2 + 4;
-    const hh = headWidth / 2 + 4;
-    ctx.beginPath();
-    ctx.moveTo(0, -hw);
-    ctx.lineTo(shaftLength, -hw);
-    ctx.lineTo(shaftLength, -hh);
-    ctx.lineTo(len + 4, 0);
-    ctx.lineTo(shaftLength, hh);
-    ctx.lineTo(shaftLength, hw);
-    ctx.lineTo(0, hw);
-    ctx.closePath();
+    buildPath(ctx, 4);
     ctx.fillStrokeShape(shape);
   };
 
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+
   const handleDragEnd = (e: any) => {
+    setIsDragging(false);
     if (!onUpdatePoints) return;
     const node = e.target;
     if (node.className === 'Circle') return;
@@ -101,7 +107,7 @@ export function ArrowMarkerTool({
     node.position({ x: 0, y: 0 });
   };
 
-  const handleCircleDragEnd = (index: number) => (e: any) => {
+  const handleCircleDragMove = (index: number) => (e: any) => {
     e.cancelBubble = true;
     if (!onUpdatePoints) return;
     const logical = pixelToLogical(chart, e.target.x());
@@ -113,10 +119,16 @@ export function ArrowMarkerTool({
     }
   };
 
+  const handleCircleDragEnd = (index: number) => (e: any) => {
+    handleCircleDragMove(index)(e);
+    setIsDragging(false);
+  };
+
   return (
     <Group
       id={id}
-      draggable={isSelected}
+      draggable={isSelected || isHovering}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onClick={(e) => { e.cancelBubble = true; onSelect(); }}
       onTap={(e)  => { e.cancelBubble = true; onSelect(); }}
@@ -129,7 +141,7 @@ export function ArrowMarkerTool({
         sceneFunc={sceneFunc}
         hitFunc={hitFunc}
         shadowColor={isSelected ? '#2962ff' : 'transparent'}
-        shadowBlur={isSelected ? 6 : 0}
+        shadowBlur={isSelected && !isDragging ? 6 : 0}
         shadowOpacity={0.4}
       />
 
@@ -146,10 +158,10 @@ export function ArrowMarkerTool({
         />
       )}
 
-      {isSelected && (
+      {(isSelected || isHovering) && (
         <>
-          <Circle x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragMove={(e) => e.cancelBubble = true} onDragEnd={handleCircleDragEnd(0)} />
-          <Circle x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragMove={(e) => e.cancelBubble = true} onDragEnd={handleCircleDragEnd(points.length - 1)} />
+          <Circle x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(0)} onDragEnd={handleCircleDragEnd(0)} />
+          <Circle x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(points.length - 1)} onDragEnd={handleCircleDragEnd(points.length - 1)} />
         </>
       )}
     </Group>

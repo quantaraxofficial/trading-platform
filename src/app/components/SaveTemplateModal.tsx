@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
+import { useEscapeClose } from "../lib/useEscapeClose";
 
 interface SaveTemplateModalProps {
   onClose: (saved?: boolean) => void;
@@ -12,8 +13,10 @@ interface SaveTemplateModalProps {
 }
 
 export default function SaveTemplateModal({ onClose, theme, settingsToSave }: SaveTemplateModalProps) {
+  useEscapeClose(onClose);
   const [templateName, setTemplateName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
   const router = useRouter();
 
@@ -31,19 +34,22 @@ export default function SaveTemplateModal({ onClose, theme, settingsToSave }: Sa
     if (!templateName.trim()) return;
 
     setLoading(true);
+    setError(null);
     try {
-      await fetch(`http://localhost:8000/api/users/templates/${user.uid}/`, {
+      const res = await fetch(`http://localhost:8000/api/users/templates/${user.uid}/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           name: templateName,
           tool_type: 'chart_settings',
           settings: settingsToSave
         })
       });
+      if (!res.ok) throw new Error(`Server responded with ${res.status}`);
       onClose(true);
     } catch (e) {
       console.error('Error saving template:', e);
+      setError('Could not save the template — the server may be unreachable. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -65,14 +71,15 @@ export default function SaveTemplateModal({ onClose, theme, settingsToSave }: Sa
           </button>
         </div>
         
-        <div style={{ marginBottom: '32px' }}>
+        <div style={{ marginBottom: error ? '12px' : '32px' }}>
           <label style={{ display: 'block', fontSize: '13px', color: '#787b86', marginBottom: '8px' }}>Template name:</label>
-          <input 
-            type="text" 
+          <input
+            type="text"
             value={templateName}
-            onChange={e => setTemplateName(e.target.value)}
+            onChange={e => { setTemplateName(e.target.value); if (error) setError(null); }}
+            onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onClose(); }}
             style={{
-              width: '100%', padding: '10px 12px', borderRadius: '6px', 
+              width: '100%', padding: '10px 12px', borderRadius: '6px',
               border: `2px solid #2962ff`, // Highlighted blue border just like screenshot
               backgroundColor: 'transparent', color: text, outline: 'none',
               fontSize: '14px'
@@ -80,6 +87,9 @@ export default function SaveTemplateModal({ onClose, theme, settingsToSave }: Sa
             autoFocus
           />
         </div>
+        {error && (
+          <div style={{ marginBottom: '20px', fontSize: '13px', color: '#f23645' }}>{error}</div>
+        )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
           <button onClick={onClose} style={{ 

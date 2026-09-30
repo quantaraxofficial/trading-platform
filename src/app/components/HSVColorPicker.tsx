@@ -108,16 +108,52 @@ export function HSVColorPickerPopup({ hex, onApply, isDark }: HSVColorPickerPopu
     }
   };
 
+  // The EyeDropper API lets the user sample a color from anywhere on screen — including
+  // outside the browser window entirely — not just this picker's own gradient square.
+  // It's a real Chromium/Edge API (window.EyeDropper), absent from Firefox/Safari, so the
+  // button is disabled rather than hidden when unsupported: it stays discoverable, and the
+  // title says why it doesn't work instead of silently doing nothing.
+  const supportsEyeDropper = typeof window !== 'undefined' && 'EyeDropper' in window;
+  const [pickingFromScreen, setPickingFromScreen] = useState(false);
+  const handleEyeDropper = async () => {
+    if (!supportsEyeDropper || pickingFromScreen) return;
+    setPickingFromScreen(true);
+    try {
+      const picker = new (window as any).EyeDropper();
+      const result = await picker.open();
+      if (result?.sRGBHex) handleHexInputChange(result.sRGBHex);
+    } catch {
+      // User pressed Escape to cancel, or the picker failed to open — either way, no-op.
+    } finally {
+      setPickingFromScreen(false);
+    }
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
         <div style={{ width: '24px', height: '24px', borderRadius: '4px', backgroundColor: currentHex, border: `1px solid ${border}`, flexShrink: 0 }} />
+        <button
+          onClick={handleEyeDropper}
+          disabled={!supportsEyeDropper}
+          title={supportsEyeDropper ? 'Pick a color from anywhere on screen' : 'Not supported in this browser'}
+          style={{
+            width: '28px', height: '28px', borderRadius: '4px', border: `1px solid ${border}`,
+            backgroundColor: inputBg, color: text, flexShrink: 0, cursor: supportsEyeDropper ? 'pointer' : 'not-allowed',
+            opacity: supportsEyeDropper ? 1 : 0.4, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m2 22 1-4 9.5-9.5" /><path d="M17.5 4.5 20 2l2 2-2.5 2.5" />
+            <path d="m11.5 8.5 4 4" /><path d="M15 5 19 9" /><path d="m3 21 4-1" />
+          </svg>
+        </button>
         <input
           type="text"
           value={hexInput}
           onChange={e => handleHexInputChange(e.target.value)}
           style={{
-            flex: 1, height: '28px', padding: '0 8px', borderRadius: '4px',
+            flex: 1, minWidth: 0, height: '28px', padding: '0 8px', borderRadius: '4px',
             border: `1px solid ${border}`, backgroundColor: inputBg, color: text, fontSize: '13px',
           }}
         />

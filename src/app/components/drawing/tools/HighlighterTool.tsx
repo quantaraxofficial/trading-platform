@@ -10,6 +10,7 @@ interface HighlighterToolProps {
   stroke: string;
   strokeWidth: number;
   isSelected: boolean;
+  isHovering?: boolean;
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   onSelect: () => void;
@@ -17,7 +18,7 @@ interface HighlighterToolProps {
 }
 
 export function HighlighterTool({
-  id, points, stroke, strokeWidth, isSelected, chart, series, onSelect, onUpdatePoints
+  id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints
 }: HighlighterToolProps) {
   useChartTick(chart);
 
@@ -40,7 +41,8 @@ export function HighlighterTool({
   const x2 = logicalToPixel(chart, lastPoint.logical);
   const y2 = priceToPixel(series, lastPoint.price);
 
-  const handleStartDragEnd = (e: any) => {
+  const handleStartDragMove = (e: any) => {
+    e.cancelBubble = true;
     if (!onUpdatePoints) return;
     const logical = pixelToLogical(chart, e.target.x());
     const price   = pixelToPrice(series, e.target.y());
@@ -48,7 +50,8 @@ export function HighlighterTool({
     onUpdatePoints([{ logical, price }, ...points.slice(1)]);
   };
 
-  const handleEndDragEnd = (e: any) => {
+  const handleEndDragMove = (e: any) => {
+    e.cancelBubble = true;
     if (!onUpdatePoints) return;
     const logical = pixelToLogical(chart, e.target.x());
     const price   = pixelToPrice(series, e.target.y());
@@ -77,7 +80,7 @@ export function HighlighterTool({
   return (
     <Group
       id={id}
-      draggable={isSelected}
+      draggable={isSelected || isHovering}
       onDragEnd={handleGroupDragEnd}
       onClick={(e) => { e.cancelBubble = true; onSelect(); }}
       onTap={(e)  => { e.cancelBubble = true; onSelect(); }}
@@ -121,7 +124,7 @@ export function HighlighterTool({
       )}
 
       {/* Endpoint handles */}
-      {isSelected && x1 !== null && y1 !== null && (
+      {(isSelected || isHovering) && x1 !== null && y1 !== null && (
         <Circle
           x={x1} y={y1}
           radius={6}
@@ -129,11 +132,11 @@ export function HighlighterTool({
           stroke="#2962ff"
           strokeWidth={2}
           draggable
-          onDragMove={(e) => e.cancelBubble = true}
-          onDragEnd={handleStartDragEnd}
+          onDragMove={handleStartDragMove}
+          onDragEnd={handleStartDragMove}
         />
       )}
-      {isSelected && x2 !== null && y2 !== null && (
+      {(isSelected || isHovering) && x2 !== null && y2 !== null && (
         <Circle
           x={x2} y={y2}
           radius={6}
@@ -141,8 +144,8 @@ export function HighlighterTool({
           stroke="#2962ff"
           strokeWidth={2}
           draggable
-          onDragMove={(e) => e.cancelBubble = true}
-          onDragEnd={handleEndDragEnd}
+          onDragMove={handleEndDragMove}
+          onDragEnd={handleEndDragMove}
         />
       )}
     </Group>

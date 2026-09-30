@@ -11,6 +11,10 @@ export interface CandleData {
 }
 
 export type ReplayMode = 'idle' | 'selecting' | 'active';
+// TradingView's "Select starting point": pick a bar on the chart, a date, the first available
+// bar, or a random bar. The replay bar's main button repeats the last one chosen.
+export type ReplayStartMode = 'bar' | 'date' | 'first' | 'random';
+const START_MODE_KEY = 'tv:replayStartMode';
 
 interface ReplayContextType {
   mode: ReplayMode;
@@ -25,7 +29,7 @@ interface ReplayContextType {
   enterSelectMode: () => void;
   startReplayAt: (index: number, data: CandleData[], series: any, chart: any) => void;
   getReplayTime: () => number | null;
-  stopReplay: () => void;
+  stopReplay: (nextData?: CandleData[]) => void;
   togglePlay: () => void;
   stepBack: () => void;
   stepForward: () => void;
@@ -33,6 +37,10 @@ interface ReplayContextType {
   setSpeed: (speed: number) => void;
   updateReplayData: (newData: CandleData[]) => void;
   reSelectBar: () => void;
+  startMode: ReplayStartMode;
+  setStartMode: (m: ReplayStartMode) => void;
+  // True once a replay has been started (until it's exited): Play and the other controls work
+  hasStarted: boolean;
 }
 
 const ReplayContext = createContext<ReplayContextType | undefined>(undefined);
@@ -44,6 +52,18 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
   const [replaySpeed, setReplaySpeedState] = useState(1);
   const [fullData, setFullData] = useState<CandleData[]>([]);
   const [hoverX, setHoverX] = useState<number | null>(null);
+  const [startMode, setStartModeState] = useState<ReplayStartMode>('bar');
+  const [hasStarted, setHasStarted] = useState(false);
+  useEffect(() => {
+    try {
+      const m = localStorage.getItem(START_MODE_KEY);
+      if (m === 'bar' || m === 'date' || m === 'first' || m === 'random') setStartModeState(m);
+    } catch { /* ignore */ }
+  }, []);
+  const setStartMode = useCallback((m: ReplayStartMode) => {
+    setStartModeState(m);
+    try { localStorage.setItem(START_MODE_KEY, m); } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     console.log("[Replay] ReplayProvider mounted and system is ready.");
@@ -73,8 +93,6 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     stopInterval();
     // Speed refers to "updates per second"
     const ms = Math.max(16, Math.round(1000 / speedRef.current));
-    console.log(`[Replay] Starting interval with speed: ${speedRef.current}x (delay: ${ms}ms)`);
-    
     playIntervalRef.current = setInterval(() => {
       const next = replayIndexRef.current + 1;
       if (next >= fullDataRef.current.length) {
@@ -98,8 +116,6 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      console.log(`[Replay] Updating bar at index ${next}, time:`, nextCandle.time);
-      
       replayIndexRef.current = next;
       setReplayIndex(next);
       
@@ -121,6 +137,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
       stopInterval();
       setIsPlaying(false);
       setMode('idle');
+      setHasStarted(false);
       // Restore full data
       if (seriesRef.current && fullDataRef.current.length > 0) {
         seriesRef.current.setData(fullDataRef.current);
@@ -150,13 +167,18 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     replayIndexRef.current = clamped;
     setReplayIndex(clamped);
     setMode('active');
+    setHasStarted(true);
     setIsPlaying(false);
     applyDataUpToIndex(clamped);
   }, [applyDataUpToIndex]);
 
-  const stopReplay = useCallback(() => {
+  // `nextData`: the chart's data when it changed under the replay (a new timeframe or symbol), so
+  // leaving replay shows that instead of the replay's copy of the old bars
+  const stopReplay = useCallback((nextData?: CandleData[]) => {
     stopInterval();
+    if (Array.isArray(nextData)) { fullDataRef.current = nextData; setFullData(nextData); }
     setMode('idle');
+    setHasStarted(false);
     setIsPlaying(false);
     setHoverX(null);
     if (seriesRef.current && fullDataRef.current.length > 0) {
@@ -260,6 +282,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
       mode, isPlaying, replayIndex, replaySpeed, fullData, hoverX, setHoverX,
       enterSelectMode, startReplayAt, getReplayTime, stopReplay, togglePlay,
       stepBack, stepForward, skipToEnd, setSpeed, updateReplayData, reSelectBar,
+      startMode, setStartMode, hasStarted,
     }}>
       {children}
     </ReplayContext.Provider>

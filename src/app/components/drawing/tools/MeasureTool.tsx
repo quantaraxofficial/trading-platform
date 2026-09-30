@@ -3,6 +3,7 @@ import { Rect, Text, Group, Arrow } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
+import { formatVolume } from '../../../utils/volume';
 
 interface MeasureToolProps {
   id: string;
@@ -69,20 +70,14 @@ export function MeasureTool({ id, points, chart, series }: MeasureToolProps) {
         timeDiffStr = `${isTimeNegative ? '-' : ''}${Math.floor(timeDiffSec / 60)}m`;
       }
 
+      // The feed's real volume over the measured bars (none for forex/metals: "∅")
       let totalVol = 0;
-      for (let i = sIdx; i <= eIdx; i++) {
-        const d = fullData[i];
-        const v = Math.floor((Math.abs(d.close - d.open) + (d.high - d.low)) * 1000) || 100;
-        totalVol += v;
+      let anyVol = false;
+      for (let i = Math.min(sIdx, eIdx); i <= Math.max(sIdx, eIdx); i++) {
+        const v = fullData[i]?.volume;
+        if (typeof v === 'number') { totalVol += v; anyVol = true; }
       }
-      
-      if (totalVol > 1000000) {
-        volumeStr = `${(totalVol / 1000000).toFixed(2)} M`;
-      } else if (totalVol > 1000) {
-        volumeStr = `${(totalVol / 1000).toFixed(2)} K`;
-      } else {
-        volumeStr = `${totalVol}`;
-      }
+      volumeStr = formatVolume(anyVol ? totalVol : null);
     }
   } else {
     timeDiffStr = `${barsDiff}m`; // fallback

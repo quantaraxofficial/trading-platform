@@ -5,6 +5,7 @@ import { Search, X, User, Users, CreditCard, Activity, BarChart2, Bookmark, Tren
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { DEFAULT_FAVORITE_INDICATORS, loadFavoriteIndicators, saveFavoriteIndicators } from "@/app/utils/favoriteIndicators";
+import { useEscapeClose } from "../lib/useEscapeClose";
 
 interface IndicatorsModalProps {
   onClose: () => void;
@@ -12,6 +13,7 @@ interface IndicatorsModalProps {
 }
 
 export default function IndicatorsModal({ onClose, onSelect }: IndicatorsModalProps) {
+  useEscapeClose(onClose);
   const [search, setSearch] = useState("");
   const [favorites, setFavorites] = useState<string[]>(DEFAULT_FAVORITE_INDICATORS);
   const inputRef = useRef<HTMLInputElement>(null);

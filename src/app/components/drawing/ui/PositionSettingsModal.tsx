@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useDrawing } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
 import { NumberInput as GlobalNumberInput } from './NumberInput';
+import { useEscapeClose } from "../../../lib/useEscapeClose";
 
 interface PositionSettingsModalProps {
   type: 'long' | 'short';
@@ -126,6 +127,7 @@ const hexToRgba = (hex: string, alpha: number) => {
 };
 
 export function PositionSettingsModal({ type, onClose }: PositionSettingsModalProps) {
+  useEscapeClose(onClose);
   const { selectedShapeId, drawings, updateDrawing } = useDrawing();
   const selectedShape = drawings.find((d: any) => d.id === selectedShapeId);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -133,8 +135,8 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [activeTab, setActiveTab] = useState('Inputs');
 
-  const targetColor = selectedShape?.targetFillColor || 'rgba(76, 175, 80, 0.3)';
-  const stopColor = selectedShape?.stopFillColor || 'rgba(244, 67, 54, 0.3)';
+  const targetColor = selectedShape?.targetFillColor || 'rgba(8, 153, 129, 0.2)';
+  const stopColor = selectedShape?.stopFillColor || 'rgba(242, 54, 69, 0.2)';
   const textColor = selectedShape?.textColor || '#ffffff';
 
   // Derived hex colors for inputs
@@ -154,8 +156,11 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
   const targetPrice = selectedShape?.points?.[2]?.price || 0;
   const stopPrice = selectedShape?.points?.[3]?.price || 0;
 
-  const targetTicks = Math.round(Math.abs(targetPrice - entryPrice) * 100);
-  const stopTicks = Math.round(Math.abs(entryPrice - stopPrice) * 100);
+  // Ticks as the tool counts them: the chart's price step, or pips on 3+ decimal quotes
+  const precision: number = (typeof window !== 'undefined' && (window as any).__pricePrecision) ?? 2;
+  const tickSize = precision >= 3 ? Math.pow(10, -(precision - 1)) : Math.pow(10, -precision);
+  const targetTicks = Math.round(Math.abs(targetPrice - entryPrice) / tickSize);
+  const stopTicks = Math.round(Math.abs(entryPrice - stopPrice) / tickSize);
 
   const updateProp = (key: string, val: any) => {
     if (selectedShape) updateDrawing(selectedShape.id, { [key]: val });
@@ -224,7 +229,7 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
     const ticks = parseInt(valStr);
     if (isNaN(ticks)) return;
     const newPoints = [...selectedShape.points];
-    newPoints[2] = { ...newPoints[2], price: type === 'long' ? entryPrice + (ticks / 100) : entryPrice - (ticks / 100) };
+    newPoints[2] = { ...newPoints[2], price: type === 'long' ? entryPrice + ticks * tickSize : entryPrice - ticks * tickSize };
     updateDrawing(selectedShape.id, { points: newPoints });
   };
 
@@ -233,7 +238,7 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
     const ticks = parseInt(valStr);
     if (isNaN(ticks)) return;
     const newPoints = [...selectedShape.points];
-    newPoints[3] = { ...newPoints[3], price: type === 'long' ? entryPrice - (ticks / 100) : entryPrice + (ticks / 100) };
+    newPoints[3] = { ...newPoints[3], price: type === 'long' ? entryPrice - ticks * tickSize : entryPrice + ticks * tickSize };
     updateDrawing(selectedShape.id, { points: newPoints });
   };
 
@@ -372,7 +377,7 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
               <div style={{ width: '120px', fontSize: '13px', color: '#131722' }}>QTY precision</div>
-              <Select options={['Default']} value={qtyPrecision} onChange={(v) => updateProp('qtyPrecision', v)} style={{ width: '120px' }} />
+              <Select options={['Default', '0', '1', '2', '3', '4', '5', '6', '7', '8']} value={qtyPrecision} onChange={(v) => updateProp('qtyPrecision', v)} style={{ width: '120px' }} />
             </div>
           </div>
         )}
@@ -394,7 +399,7 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
               <div style={{ width: '100px', fontSize: '13px', color: '#131722' }}>Stop color</div>
               <div style={{ position: 'relative', width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', backgroundColor: stopColor, cursor: 'pointer', backgroundImage: 'linear-gradient(45deg, #e0e3eb 25%, transparent 25%, transparent 75%, #e0e3eb 75%, #e0e3eb), linear-gradient(45deg, #e0e3eb 25%, transparent 25%, transparent 75%, #e0e3eb 75%, #e0e3eb)', backgroundSize: '8px 8px', backgroundPosition: '0 0, 4px 4px' }}>
                 <div style={{ position: 'absolute', inset: 0, backgroundColor: stopColor }} />
-                <input type="color" value={stopHex} onChange={(e) => updateProp('stopFillColor', hexToRgba(e.target.value, 0.3))} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                <input type="color" value={stopHex} onChange={(e) => updateProp('stopFillColor', hexToRgba(e.target.value, 0.2))} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
               </div>
             </div>
 
@@ -402,7 +407,7 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
               <div style={{ width: '100px', fontSize: '13px', color: '#131722' }}>Target color</div>
               <div style={{ position: 'relative', width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', backgroundColor: targetColor, cursor: 'pointer', backgroundImage: 'linear-gradient(45deg, #e0e3eb 25%, transparent 25%, transparent 75%, #e0e3eb 75%, #e0e3eb), linear-gradient(45deg, #e0e3eb 25%, transparent 25%, transparent 75%, #e0e3eb 75%, #e0e3eb)', backgroundSize: '8px 8px', backgroundPosition: '0 0, 4px 4px' }}>
                 <div style={{ position: 'absolute', inset: 0, backgroundColor: targetColor }} />
-                <input type="color" value={targetHex} onChange={(e) => updateProp('targetFillColor', hexToRgba(e.target.value, 0.3))} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                <input type="color" value={targetHex} onChange={(e) => updateProp('targetFillColor', hexToRgba(e.target.value, 0.2))} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
               </div>
             </div>
 

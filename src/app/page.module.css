@@ -4,26 +4,32 @@
   grid-template-rows: var(--tv-header-height) 1fr var(--tv-bottom-toolbar-height);
   width: 100vw;
   height: 100vh;
-  background-color: var(--tv-color-bg);
+  /* The 4px between panels (inside the grid tracks) shows this colour, as TradingView's does */
+  background-color: var(--tv-color-gap);
   color: var(--tv-color-text);
 }
 
 .topbar {
   grid-column: 1 / 5;
   grid-row: 1 / 2;
-  border-bottom: 1px solid var(--tv-color-border);
+  height: calc(100% - 4px);
+  align-self: start;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 8px;
   background-color: var(--tv-color-bg);
-  z-index: 2000;
+  /* Stacking: header (its menus and dialogs) > drawing toolbar (its menus overlay the
+     bottom bar) > bottom bar */
+  z-index: 2002;
 }
 
 .leftToolbar {
   grid-column: 1 / 2;
   grid-row: 2 / 4;
-  border-right: 1px solid var(--tv-color-border);
+  width: calc(100% - 4px);
+  justify-self: start;
+  background-color: var(--tv-color-bg);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -31,7 +37,8 @@
   gap: 1px;
   overflow-y: visible; /* Changed from auto so dropdowns can overflow visually, though this shouldn't affect stacking */
   overflow-x: visible;
-  z-index: 2000;
+  /* One above the bottom bar, so a tall tool dropdown can overlay it (as TradingView's do) */
+  z-index: 2001;
 }
 
 .mainChart {
@@ -45,7 +52,8 @@
 .rightToolbar {
   grid-column: 3 / 4;
   grid-row: 2 / 4;
-  border-left: 1px solid var(--tv-color-border);
+  margin-left: 4px;
+  min-width: 0;
   background-color: var(--tv-color-bg);
   display: flex;
   flex-direction: column;
@@ -54,7 +62,7 @@
 .rightSidebar {
   grid-column: 4 / 5;
   grid-row: 2 / 4;
-  border-left: 1px solid var(--tv-color-border);
+  margin-left: 4px;
   background-color: var(--tv-color-bg);
   display: flex;
   flex-direction: column;
@@ -66,9 +74,49 @@
 .bottomPanel {
   grid-column: 2 / 3;
   grid-row: 3 / 4;
-  border-top: 1px solid var(--tv-color-border);
+  min-width: 0;
   display: flex;
-  align-items: center;
-  padding: 0 8px;
-  z-index: 2000;
+  flex-direction: column;
+  /* Raised above the header while the trading panel is maximized over the chart column */
+  z-index: var(--tv-bottom-panel-z, 2000);
+}
+
+/* Tablet and phone: like TradingView, the header keeps all its buttons and scrolls
+   sideways (swipe) instead of squeezing them on top of each other */
+@media (max-width: 768px) {
+  .topbar {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    justify-content: flex-start;
+    gap: 12px;
+  }
+  .topbar::-webkit-scrollbar { display: none; }
+  .topbar > * { flex-shrink: 0; }
+}
+
+/* Phone: the chart takes the full width; the watchlist, alerts and other right-hand
+   panels open from the header's menu instead */
+@media (max-width: 700px) {
+  .layout {
+    /* zero widths also let panels that sit beside these columns (e.g. Pine Editor) reach the edge */
+    --tv-right-toolbar-width: 0px;
+    --tv-right-sidebar-width: 0px;
+    grid-template-columns: var(--tv-left-toolbar-width) 1fr 0 0;
+  }
+  .rightToolbar,
+  .rightSidebar {
+    display: none;
+  }
+}
+
+/* Short touch screens: the drawing toolbar scrolls instead of running off the bottom.
+   (Touch only — scrolling would clip its hover tooltips, which touch screens don't use.) */
+@media (max-height: 760px) and (pointer: coarse) {
+  .leftToolbar {
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+  }
+  .leftToolbar::-webkit-scrollbar { display: none; }
 }

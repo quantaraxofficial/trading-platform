@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDrawing } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
+import { useEscapeClose } from "../../../lib/useEscapeClose";
 
 interface CircleSettingsModalProps {
   onClose: () => void;
@@ -43,6 +44,7 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
 const FONT_SIZES = ['8','9','10','11','12','14','16','18','20','24','28','32','36','48','60','72'];
 
 export function CircleSettingsModal({ onClose }: CircleSettingsModalProps) {
+  useEscapeClose(onClose);
   const { selectedShapeId, drawings, updateDrawing } = useDrawing();
   const selectedShape = drawings.find((d: any) => d.id === selectedShapeId);
 

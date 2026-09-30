@@ -10,6 +10,7 @@ interface CurveToolProps {
   stroke: string;
   strokeWidth: number;
   isSelected: boolean;
+  isHovering?: boolean;
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   onSelect: () => void;
@@ -21,8 +22,12 @@ interface CurveToolProps {
   lineEndStyle?: string;
 }
 
-export function CurveTool({ id, points, stroke, strokeWidth, isSelected, chart, series, onSelect, onUpdatePoints, lineStyle, fill, fillEnabled, lineStartStyle, lineEndStyle }: CurveToolProps) {
+export function CurveTool({ id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints, lineStyle, fill, fillEnabled, lineStartStyle, lineEndStyle }: CurveToolProps) {
   useChartTick(chart);
+  // shadowBlur is a real per-pixel blur convolution that Konva redraws every frame of any
+  // native drag (move or handle resize) regardless of React re-renders — expensive enough
+  // to feel like lag, so it's switched off for the duration of a drag.
+  const [isDragging, setIsDragging] = useState(false);
   if (!chart || !series || points.length < 2) return null;
 
   const p1 = points[0];
@@ -42,7 +47,10 @@ export function CurveTool({ id, points, stroke, strokeWidth, isSelected, chart, 
   const controlX = 2 * x3 - 0.5 * (x1 + x2);
   const controlY = 2 * y3 - 0.5 * (y1 + y2);
 
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+
   const handleDragEnd = (e: any) => {
+    setIsDragging(false);
     if (!onUpdatePoints) return;
     const node = e.target;
     if (node.className !== 'Circle') {
@@ -71,19 +79,12 @@ export function CurveTool({ id, points, stroke, strokeWidth, isSelected, chart, 
   };
 
   const handleCircleDragEnd = (index: number) => (e: any) => {
-    e.cancelBubble = true;
-    if (!onUpdatePoints) return;
-    const logical = pixelToLogical(chart, e.target.x());
-    const price = pixelToPrice(series, e.target.y());
-    if (logical !== null && price !== null) {
-      const newPoints = [...points];
-      newPoints[index] = { logical, price };
-      onUpdatePoints(newPoints);
-    }
+    handleCircleDragMove(index)(e);
+    setIsDragging(false);
   };
 
   return (
-    <Group id={id} draggable={isSelected} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
+    <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
       <Shape
         sceneFunc={(context, shape) => {
           context.beginPath();
@@ -96,7 +97,7 @@ export function CurveTool({ id, points, stroke, strokeWidth, isSelected, chart, 
         fill={fillEnabled ? fill : 'transparent'}
         dash={lineStyle === 'Dashed' ? [strokeWidth * 3, strokeWidth * 3] : lineStyle === 'Dotted' ? [strokeWidth, strokeWidth * 2] : undefined}
         shadowColor={isSelected ? stroke : 'transparent'}
-        shadowBlur={isSelected ? 4 : 0}
+        shadowBlur={isSelected && !isDragging ? 4 : 0}
         hitStrokeWidth={10}
       />
       {/* Arrowheads */}
@@ -130,12 +131,12 @@ export function CurveTool({ id, points, stroke, strokeWidth, isSelected, chart, 
           strokeWidth={strokeWidth}
         />
       )}
-      {isSelected && (
+      {(isSelected || isHovering) && (
         <>
-          <Circle x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragMove={handleCircleDragMove(0)} onDragEnd={handleCircleDragEnd(0)} />
-          <Circle x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragMove={handleCircleDragMove(1)} onDragEnd={handleCircleDragEnd(1)} />
+          <Circle x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(0)} onDragEnd={handleCircleDragEnd(0)} />
+          <Circle x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(1)} onDragEnd={handleCircleDragEnd(1)} />
           {points.length > 2 && (
-            <Circle x={x3} y={y3} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragMove={handleCircleDragMove(2)} onDragEnd={handleCircleDragEnd(2)} />
+            <Circle x={x3} y={y3} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(2)} onDragEnd={handleCircleDragEnd(2)} />
           )}
         </>
       )}

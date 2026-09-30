@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TrendingUp, Menu, X, User, Bell, Shield, CreditCard, Edit2, Camera, Mail, Calendar, MapPin, Award, Activity, DollarSign, BarChart3 } from 'lucide-react';
 import { TVSettingsIcon } from '../icons/TVIcons';
 import { load } from '@cashfreepayments/cashfree-js';
@@ -13,6 +13,11 @@ export default function ProfilePage() {
   const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+  // ?tab=settings (the profile menu's "Settings and billing") opens that tab
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab');
+    if (t && ['overview', 'activity', 'achievements', 'settings'].includes(t)) setActiveTab(t);
+  }, []);
   const [editMode, setEditMode] = useState(false);
   const [riskLevel, setRiskLevel] = useState('Moderate (4-6)');
 
