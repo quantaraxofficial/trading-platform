@@ -3,6 +3,8 @@ import { Shape, Group, Circle, Line } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
+import { useSnap, useSnappedDrag } from '../core/snap';
+import { HandleCircle } from '../core/Handles';
 
 interface ArcToolProps {
   id: string;
@@ -25,7 +27,9 @@ interface ArcToolProps {
 // and the curve is a parabola through that peak (a quadratic Bézier whose control point
 // is 2·peak − midpoint). Only the curve is stroked; the chord side is fill only.
 export function ArcTool({ id, points, stroke, strokeWidth, fill, isSelected, isHovering = false, isLocked = false, chart, series, onSelect, onUpdatePoints }: ArcToolProps) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  const move = useSnappedDrag(chart, series, points, onUpdatePoints);
+  useChartTick(chart, series);
   // shadowBlur is redrawn every frame of a drag — switched off for the drag's duration
   const [isDragging, setIsDragging] = useState(false);
   if (!chart || !series || points.length < 2) return null;
@@ -36,7 +40,7 @@ export function ArcTool({ id, points, stroke, strokeWidth, fill, isSelected, isH
   const by = priceToPixel(series, points[1].price);
   if (ax === null || ay === null || bx === null || by === null) return null;
 
-  const color = isSelected ? '#2962ff' : stroke;
+  const color = stroke;
 
   // Between clicks 1 and 2 there is only the chord, drawn as a plain line
   if (points.length < 3) {
@@ -69,18 +73,14 @@ export function ArcTool({ id, points, stroke, strokeWidth, fill, isSelected, isH
     return logical === null || price === null ? null : { logical, price };
   };
 
-  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); move.start(e); };
 
   const handleGroupDragEnd = (e: any) => {
     setIsDragging(false);
     if (!onUpdatePoints) return;
     const node = e.target;
     if (node.className === 'Circle') return;
-    const dx = node.x();
-    const dy = node.y();
-    const moved = points.map(p => toPoint((logicalToPixel(chart, p.logical) ?? 0) + dx, (priceToPixel(series, p.price) ?? 0) + dy));
-    if (moved.every(Boolean)) onUpdatePoints(moved as { logical: number; price: number }[]);
-    node.position({ x: 0, y: 0 });
+    move.end(e);
   };
 
   // Moving an end keeps the arc's height: the peak is re-placed on the new chord's
@@ -88,6 +88,8 @@ export function ArcTool({ id, points, stroke, strokeWidth, fill, isSelected, isH
   const handleEndMove = (index: 0 | 1) => (e: any) => {
     e.cancelBubble = true;
     if (!onUpdatePoints) return;
+    const end = snap(e.target.x(), e.target.y(), e.evt, e.target);
+    if (!end) return;
     const px = e.target.x();
     const py = e.target.y();
     const ox = index === 0 ? bx : ax;
@@ -99,7 +101,6 @@ export function ArcTool({ id, points, stroke, strokeWidth, fill, isSelected, isH
     const len = Math.hypot(ddx, ddy);
     const nnx = len > 0.0001 ? -ddy / len : 0;
     const nny = len > 0.0001 ? ddx / len : -1;
-    const end = toPoint(px, py);
     const peak = toPoint(nmx + nnx * height, nmy + nny * height);
     if (!end || !peak) return;
     const next = [...points];
@@ -126,7 +127,7 @@ export function ArcTool({ id, points, stroke, strokeWidth, fill, isSelected, isH
   const endDrag = (move: (e: any) => void) => (e: any) => { move(e); setIsDragging(false); };
 
   return (
-    <Group id={id} draggable={(isSelected || isHovering) && !isLocked} onDragStart={handleDragStart} onDragEnd={handleGroupDragEnd} onClick={onSelect} onTap={onSelect}>
+    <Group id={id} draggable={(isSelected || isHovering) && !isLocked} onDragStart={handleDragStart} onDragMove={move.drag} onDragEnd={handleGroupDragEnd} onClick={onSelect} onTap={onSelect}>
       <Shape
         sceneFunc={(ctx, shape) => {
           ctx.beginPath();
@@ -157,9 +158,9 @@ export function ArcTool({ id, points, stroke, strokeWidth, fill, isSelected, isH
 
       {(isSelected || isHovering) && (
         <>
-          <Circle x={ax} y={ay} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable={!isLocked} onDragStart={handleDragStart} onDragMove={handleEndMove(0)} onDragEnd={endDrag(handleEndMove(0))} />
-          <Circle x={bx} y={by} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable={!isLocked} onDragStart={handleDragStart} onDragMove={handleEndMove(1)} onDragEnd={endDrag(handleEndMove(1))} />
-          <Circle x={peakX} y={peakY} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable={!isLocked} onDragStart={handleDragStart} onDragMove={handlePeakMove} onDragEnd={endDrag(handlePeakMove)} />
+          <HandleCircle x={ax} y={ay} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable={!isLocked} onDragStart={handleDragStart} onDragMove={handleEndMove(0)} onDragEnd={endDrag(handleEndMove(0))} />
+          <HandleCircle x={bx} y={by} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable={!isLocked} onDragStart={handleDragStart} onDragMove={handleEndMove(1)} onDragEnd={endDrag(handleEndMove(1))} />
+          <HandleCircle x={peakX} y={peakY} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable={!isLocked} onDragStart={handleDragStart} onDragMove={handlePeakMove} onDragEnd={endDrag(handlePeakMove)} />
         </>
       )}
     </Group>

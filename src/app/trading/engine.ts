@@ -244,12 +244,19 @@ export class PaperTradingEngine {
   private listeners = new Set<Listener>();
   private noticeListeners = new Set<NoticeListener>();
   private revision = 0;
+  // The real accounts, set aside while a bar-replay session trades in its own account
+  private live: EngineState | null = null;
+  // A replay session runs on the replay's clock (the current bar's time), not the wall clock
+  private clock: number | null = null;
 
   constructor(initial?: EngineState) {
     this.state = initial ? normalizeState(initial) : createInitialState();
   }
 
   getState = () => this.state;
+  // What gets saved: always the real accounts, never a replay session's
+  getSavedState = () => this.live ?? this.state;
+  inReplay = () => this.live !== null;
   // Bumps on changes worth saving (orders, positions, accounts) but not on quote-only updates
   getRevision = () => this.revision;
 
@@ -258,20 +265,21 @@ export class PaperTradingEngine {
 
   replaceState(next: EngineState) {
     // Keep the live quotes/precision across account data loads
-    const prev = this.state;
+    const prev = this.live ?? this.state;
     const s = normalizeState(next);
     s.quotes = { ...s.quotes, ...prev.quotes };
     s.precision = { ...s.precision, ...prev.precision };
-    this.state = s;
+    if (this.live) this.live = s; else this.state = s;
     this.listeners.forEach(l => l());
   }
 
   private run<T>(fn: (d: Draft) => T, structural = true): T {
-    const d: Draft = { s: structuredClone(this.state), notices: [], now: Date.now() };
+    const d: Draft = { s: structuredClone(this.state), notices: [], now: this.clock ?? Date.now() };
     const result = fn(d);
     for (const id of Object.keys(d.s.books)) trimBook(d.s.books[id]);
     this.state = d.s;
-    if (structural || d.notices.length) this.revision++;
+    // A replay session is never saved, so its changes don't count as unsaved work
+    if (!this.live && (structural || d.notices.length)) this.revision++;
     this.listeners.forEach(l => l());
     d.notices.forEach(n => this.noticeListeners.forEach(l => l(n)));
     return result;
@@ -287,6 +295,12 @@ export class PaperTradingEngine {
   // A new price for a symbol: triggers working orders and tracks open trades' excursions
   setQuote(symbol: string, price: number, time = Date.now()) {
     if (!isFinite(price) || price <= 0) return;
+    if (this.live) {
+      // Live prices during replay are kept for the real accounts, away from the replay's
+      const lp = this.live.quotes[symbol];
+      this.live = { ...this.live, quotes: { ...this.live.quotes, [symbol]: { price, time: Math.max(time, lp?.time || 0) } } };
+      return;
+    }
     const prev = this.state.quotes[symbol];
     if (prev && prev.price === price && time <= prev.time) return;
     this.run(d => {
@@ -306,9 +320,47 @@ export class PaperTradingEngine {
     if (due) this.run(d => { for (const accId of Object.keys(d.s.books)) expireOrders(d, accId); });
   }
 
+  // ----- bar replay -----
+
+  // Bar replay trades in a fresh "Replay Trading" account (TradingView keeps replay trades
+  // apart from real ones); the real accounts come back untouched when the session ends
+  startReplaySession() {
+    if (this.live) return;
+    const live = this.state;
+    const src = live.accounts.find(a => a.id === live.activeAccountId);
+    const acc = createAccount("Replay Trading", src?.initialBalance ?? DEFAULT_BALANCE);
+    if (src) acc.leverage = { ...src.leverage };
+    this.live = live;
+    this.state = { ...live, accounts: [acc], activeAccountId: acc.id, books: { [acc.id]: createBook() }, quotes: {} };
+    this.listeners.forEach(l => l());
+  }
+
+  endReplaySession() {
+    if (!this.live) return;
+    this.state = this.live;
+    this.live = null;
+    this.clock = null;
+    this.listeners.forEach(l => l());
+  }
+
+  // A replay bar's price at that bar's time (ms): fills and order times follow the replay
+  setReplayQuote(symbol: string, price: number, time: number) {
+    if (!this.live || !isFinite(price) || price <= 0) return;
+    this.clock = time;
+    this.run(d => {
+      d.s.quotes[symbol] = { price, time };
+      for (const accId of Object.keys(d.s.books)) {
+        expireOrders(d, accId);
+        processSymbol(d, accId, symbol);
+        trackExcursions(d, accId, symbol, price);
+      }
+    }, false);
+  }
+
   // ----- connection & accounts -----
 
   setConnected(connected: boolean) {
+    if (this.live) this.live = { ...this.live, connected };
     this.run(d => { d.s.connected = connected; });
   }
 

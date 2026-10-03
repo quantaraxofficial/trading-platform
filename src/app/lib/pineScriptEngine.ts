@@ -1544,8 +1544,13 @@ function execExprStatement(node: Expr, ctx: Ctx) {
     else ctx.strategyState.pendingEntries = {};
     return;
   }
+  // A non-empty `comment` replaces the default signal text in the List of trades, as in TradingView
+  const closeComment = () => {
+    const c = node.namedArgs.comment !== undefined ? evalNode(node.namedArgs.comment, ctx) : null;
+    return typeof c === "string" && c !== "" ? c : null;
+  };
   if (name === "strategy.close_all") {
-    if (ctx.strategyState.position) closeStrategyPosition(ctx, ctx.bar.close, ctx.bar.time, "Close position order");
+    if (ctx.strategyState.position) closeStrategyPosition(ctx, ctx.bar.close, ctx.bar.time, closeComment() ?? "Close position order");
     ctx.strategyState.pendingEntries = {};
     return;
   }
@@ -1553,7 +1558,7 @@ function execExprStatement(node: Expr, ctx: Ctx) {
     // Closes a position by entry id — these scripts only ever hold one
     // position at a time, so any id match closes the (single) open one.
     const pos = ctx.strategyState.position;
-    if (pos) closeStrategyPosition(ctx, ctx.bar.close, ctx.bar.time, `Close entry(s) order ${node.args[0] !== undefined ? String(argAt(0)) : pos.id}`);
+    if (pos) closeStrategyPosition(ctx, ctx.bar.close, ctx.bar.time, closeComment() ?? `Close entry(s) order ${node.args[0] !== undefined ? String(argAt(0)) : pos.id}`);
     return;
   }
   if (name.startsWith("log.")) {

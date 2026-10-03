@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Line, Circle, Group, Text } from 'react-konva';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../../core/coordinates';
 import { useChartTick } from '../../core/useChartTick';
+import { useSnap, useSnappedDrag } from '../../core/snap';
+import { HandleCircle } from '../../core/Handles';
 
 interface TrendLineProps {
   id: string;
@@ -34,7 +36,9 @@ export function TrendLine({
   isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints, isLocked = false,
   text, onTextEdit, isEditingText = false
 }: TrendLineProps) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  const move = useSnappedDrag(chart, series, points, onUpdatePoints);
+  useChartTick(chart, series);
   // The resize handles are only rendered while (isSelected || isHovering) — but a resize
   // drag moves the very endpoint that hover-tracking hit-tests against, so a drag started
   // by hovering (not clicking to select first) very quickly carries the cursor outside
@@ -112,31 +116,25 @@ export function TrendLine({
     // node could be Group (whole shape) or Circle (handle)
     const isHandle = node.className === 'Circle';
 
-    if (!isHandle) {
-      // Dragging the whole shape
-      const dx = node.x();
-      const dy = node.y();
-
-      const newL1 = pixelToLogical(chart, x1 + dx);
-      const newP1 = pixelToPrice(series, y1 + dy);
-      const newL2 = pixelToLogical(chart, x2 + dx);
-      const newP2 = pixelToPrice(series, y2 + dy);
-
-      if (newL1 !== null && newP1 !== null && newL2 !== null && newP2 !== null) {
-        onUpdatePoints([{ logical: newL1, price: newP1 }, { logical: newL2, price: newP2 }]);
-      }
-
-      // Reset position so it re-renders based on new logical points
-      node.position({ x: 0, y: 0 });
-    }
+    if (!isHandle) move.end(e);
   };
 
   // Shared by the real Konva dragmove/dragend callback below AND by the Shift-toggle
   // effect further down: given a handle's raw (unsnapped) target position, applies the
   // 45°-angle lock when shiftHeld is true, repositions the live Konva node to match,
   // and pushes the resulting point up via onUpdatePoints.
-  const applyHandleMove = (index: number, node: any, rawX: number, rawY: number, shiftHeld: boolean) => {
+  const applyHandleMove = (index: number, node: any, rawX: number, rawY: number, shiftHeld: boolean, evt?: any) => {
     if (!onUpdatePoints) return;
+    // Without Shift the handle snaps to candles (and the magnet) exactly as placing it did
+    if (!shiftHeld) {
+      const snapped = snap(rawX, rawY, evt, node);
+      if (snapped) {
+        const newPoints = [...points];
+        newPoints[index] = snapped;
+        onUpdatePoints(newPoints);
+      }
+      return;
+    }
     let newX = rawX;
     let newY = rawY;
 
@@ -178,7 +176,7 @@ export function TrendLine({
 
   const handleCircleDrag = (index: number) => (e: any) => {
     e.cancelBubble = true; // Prevent Group drag
-    applyHandleMove(index, e.target, e.target.x(), e.target.y(), !!e.evt?.shiftKey);
+    applyHandleMove(index, e.target, e.target.x(), e.target.y(), !!e.evt?.shiftKey, e.evt);
   };
 
   // Without this, toggling Shift while the mouse sits still mid-resize does nothing
@@ -194,13 +192,13 @@ export function TrendLine({
     const node = handleRefs.current[index];
     const stage = node?.getStage?.();
 
-    const resync = (shiftHeld: boolean) => {
+    const resync = (shiftHeld: boolean, evt: KeyboardEvent) => {
       const pos = stage?.getPointerPosition?.();
       if (!pos) return;
-      applyHandleMove(index, node, pos.x, pos.y, shiftHeld);
+      applyHandleMove(index, node, pos.x, pos.y, shiftHeld, evt);
     };
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Shift') resync(true); };
-    const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Shift') resync(false); };
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Shift') resync(true, e); };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Shift') resync(false, e); };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     return () => {
@@ -214,13 +212,13 @@ export function TrendLine({
     <Group 
       id={id}
       draggable={(isSelected || isHovering) && !isLocked}
-      onDragEnd={handleDragEnd}
+      onDragStart={move.start} onDragMove={move.drag} onDragEnd={handleDragEnd}
       onClick={onSelect}
       onTap={onSelect}
     >
       <Line
         points={[displayX1, displayY1, displayX2, displayY2]}
-        stroke={isSelected ? '#2962ff' : stroke}
+        stroke={stroke}
         strokeWidth={strokeWidth}
         dash={dash}
         hitStrokeWidth={10}
@@ -312,7 +310,7 @@ export function TrendLine({
 
       {(isSelected || isHovering || isDraggingHandle) && (
         <>
-          <Circle
+          <HandleCircle
             ref={(node: any) => { handleRefs.current[0] = node; }}
             x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2}
             draggable={!isLocked}
@@ -325,7 +323,7 @@ export function TrendLine({
               x={(x1 + x2) / 2} y={(y1 + y2) / 2} radius={5} fill="white" stroke="#2962ff" strokeWidth={1}
             />
           )}
-          <Circle
+          <HandleCircle
             ref={(node: any) => { handleRefs.current[1] = node; }}
             x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={2}
             draggable={!isLocked}

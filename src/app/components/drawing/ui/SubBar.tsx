@@ -27,7 +27,9 @@ import { ArcSettingsModal } from './ArcSettingsModal';
 import { DoubleCurveSettingsModal } from './DoubleCurveSettingsModal';
 import { EmojiSettingsModal } from './EmojiSettingsModal';
 import { PositionSettingsModal } from './PositionSettingsModal';
-import { ColorPickerPopup } from './ColorPickerPopup';
+import { ColorPickerPopup, parseColorInput } from './ColorPickerPopup';
+import { TvWidthMenu, TvLineStyleMenu } from './TvLineMenus';
+import { POSITION_TARGET_FILL, POSITION_STOP_FILL } from '../tools/PositionTool';
 
 export function SubBar() {
   const { user } = useAuth();
@@ -114,16 +116,15 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
   const onColorChange = (id: string, color: string) => updateDrawing(id, { stroke: color });
   const onLockChange = (id: string, locked: boolean) => updateDrawing(id, { locked });
   
+  // The picker's colour already carries its opacity
   const handleTargetColorChange = (color: string) => {
-    const rgbaColor = hexToRgba(color, 0.4);
     setTargetFillColor(color);
-    if (selectedShapeId) updateDrawing(selectedShapeId, { targetFillColor: rgbaColor });
+    if (selectedShapeId) updateDrawing(selectedShapeId, { targetFillColor: color });
   };
 
   const handleStopColorChange = (color: string) => {
-    const rgbaColor = hexToRgba(color, 0.4);
     setStopFillColor(color);
-    if (selectedShapeId) updateDrawing(selectedShapeId, { stopFillColor: rgbaColor });
+    if (selectedShapeId) updateDrawing(selectedShapeId, { stopFillColor: color });
   };
 
   const handleTextColorChange = (color: string) => {
@@ -146,8 +147,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
   const [currentWidth, setCurrentWidth] = useState(selectedShape?.strokeWidth || 2);
   const [currentColor, setCurrentColor] = useState(selectedShape?.stroke || '#9b59b6');
   const [currentFillColor, setCurrentFillColor] = useState(selectedShape?.fill || '#ffffff');
-  const [targetFillColor, setTargetFillColor] = useState(selectedShape?.targetFillColor || '#4CAF50');
-  const [stopFillColor, setStopFillColor] = useState(selectedShape?.stopFillColor || '#F44336');
+  const [targetFillColor, setTargetFillColor] = useState(selectedShape?.targetFillColor || POSITION_TARGET_FILL);
+  const [stopFillColor, setStopFillColor] = useState(selectedShape?.stopFillColor || POSITION_STOP_FILL);
   const [isLocked, setIsLocked] = useState(selectedShape?.locked || false);
   const [currentEmojiSize, setCurrentEmojiSize] = useState(selectedShape?.emojiSize || 40);
   const [currentFontSize, setCurrentFontSize] = useState(selectedShape?.fontSize || 16);
@@ -476,8 +477,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
       setCurrentColor(selectedShape?.stroke || '#9b59b6');
     }
     setCurrentFillColor(selectedShape?.fill || '#ffffff');
-    setTargetFillColor(selectedShape?.targetFillColor || '#4CAF50');
-    setStopFillColor(selectedShape?.stopFillColor || '#F44336');
+    setTargetFillColor(selectedShape?.targetFillColor || POSITION_TARGET_FILL);
+    setStopFillColor(selectedShape?.stopFillColor || POSITION_STOP_FILL);
     setIsLocked(selectedShape?.locked || false);
     setCurrentEmojiSize(selectedShape?.emojiSize || 40);
     setTextColor(selectedShape?.textColor || '#ffffff');
@@ -759,11 +760,11 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
     }
   };
 
+  // The picker sends the colour with its opacity already applied (a plain hex means 100%)
   const handleFillColorChange = (color: string) => {
-    const finalColor = color.startsWith('#') ? hexToRgba(color, 0.15) : color;
     setCurrentFillColor(color);
     if (selectedShapeId) {
-      updateDrawing(selectedShapeId, { fill: finalColor });
+      updateDrawing(selectedShapeId, { fill: color });
     }
   };
 
@@ -783,8 +784,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
     }
   };
 
-  const handleSettingsClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const openSettings = () => {
     if (selectedShapeType === 'fibonacci') {
       setShowFibonacciSettings(true);
       setActiveTab('Style'); // Reset to Style tab when opening
@@ -792,6 +792,19 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
       setIsSettingsOpen(true);
     }
   };
+  const handleSettingsClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    openSettings();
+  };
+
+  // Double-clicking a shape on the chart opens its settings, like its gear button
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      if (selectedShapeId && (e as CustomEvent).detail?.id === selectedShapeId) openSettings();
+    };
+    window.addEventListener('tv:open-shape-settings', onOpen);
+    return () => window.removeEventListener('tv:open-shape-settings', onOpen);
+  });
 
   const handleTabClick = (tabName) => {
     setActiveTab(tabName);
@@ -1064,31 +1077,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           >
             <SubWidthLabel width={currentWidth} />
           </button>
-          {showRectangleWidthDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#ffffff', borderRadius: '6px', 
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '70px' 
-            }}>
-              {[1, 2, 3, 4].map(w => (
-                <button 
-                  key={w} 
-                  onClick={() => { handleWidthChange(w); setShowRectangleWidthDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: currentWidth === w ? '#f0f3fa' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '8px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = currentWidth === w ? '#f0f3fa' : 'transparent'}
-                >
-                  <div style={{ width: '12px', height: `${w}px`, backgroundColor: '#131722' }} />
-                  {w}px
-                </button>
-              ))}
-            </div>
-          )}
+          {showRectangleWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(w) => { handleWidthChange(w); setShowRectangleWidthDropdown(false); }} onClose={() => setShowRectangleWidthDropdown(false)} />}
         </div>
 
         {/* Line Style */}
@@ -1102,37 +1091,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           >
             <SubLineStyleIcon style={selectedShape?.lineStyle} />
           </button>
-          {showRectangleStyleDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#ffffff', borderRadius: '6px', 
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '130px' 
-            }}>
-              {['Solid', 'Dashed', 'Dotted'].map(style => (
-                <button 
-                  key={style} 
-                  onClick={() => { updateDrawing(selectedShape.id, { lineStyle: style }); setShowRectangleStyleDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: selectedShape?.lineStyle === style ? '#f0f3fa' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '10px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = selectedShape?.lineStyle === style ? '#f0f3fa' : 'transparent'}
-                >
-                  <div style={{ width: '24px', display: 'flex', alignItems: 'center' }}>
-                    <svg width="24" height="12" viewBox="0 0 24 12" fill="none" stroke="#131722" strokeWidth="2">
-                      {style === 'Solid' ? <line x1="0" y1="6" x2="24" y2="6"/> :
-                       style === 'Dashed' ? <><line x1="0" y1="6" x2="8" y2="6"/><line x1="12" y1="6" x2="20" y2="6"/></> :
-                       <><circle cx="2" cy="6" r="1" fill="#131722"/><circle cx="8" cy="6" r="1" fill="#131722"/><circle cx="14" cy="6" r="1" fill="#131722"/><circle cx="20" cy="6" r="1" fill="#131722"/></>}
-                    </svg>
-                  </div>
-                  {style === 'Solid' ? 'Line' : style === 'Dashed' ? 'Dashed line' : 'Dotted line'}
-                </button>
-              ))}
-            </div>
-          )}
+          {showRectangleStyleDropdown && <TvLineStyleMenu value={selectedShape?.lineStyle} values={['Solid', 'Dashed', 'Dotted']} onPick={(style) => { updateDrawing(selectedShape.id, { lineStyle: style }); setShowRectangleStyleDropdown(false); }} onClose={() => setShowRectangleStyleDropdown(false)} />}
         </div>
 
         {/* Settings */}
@@ -1213,31 +1172,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             <div style={{ width: '12px', height: '1px', backgroundColor: themeColor }} />
             <SubWidthLabel width={currentWidth} />
           </button>
-          {showPathWidthDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#ffffff', borderRadius: '6px', 
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '70px' 
-            }}>
-              {[1, 2, 3, 4].map(w => (
-                <button 
-                  key={w} 
-                  onClick={() => { handleWidthChange(w); setShowPathWidthDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: currentWidth === w ? '#f0f3fa' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '8px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = currentWidth === w ? '#f0f3fa' : 'transparent'}
-                >
-                  <div style={{ width: '12px', height: `${w}px`, backgroundColor: '#131722' }} />
-                  {w}px
-                </button>
-              ))}
-            </div>
-          )}
+          {showPathWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(w) => { handleWidthChange(w); setShowPathWidthDropdown(false); }} onClose={() => setShowPathWidthDropdown(false)} />}
         </div>
 
         {/* Line Style */}
@@ -1251,37 +1186,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           >
             <SubLineStyleIcon style={selectedShape?.lineStyle} />
           </button>
-          {showPathStyleDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#ffffff', borderRadius: '6px', 
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '130px' 
-            }}>
-              {['Solid', 'Dashed', 'Dotted'].map(style => (
-                <button 
-                  key={style} 
-                  onClick={() => { updateDrawing(selectedShape.id, { lineStyle: style }); setShowPathStyleDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: selectedShape?.lineStyle === style ? '#f0f3fa' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '10px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = selectedShape?.lineStyle === style ? '#f0f3fa' : 'transparent'}
-                >
-                  <div style={{ width: '24px', display: 'flex', alignItems: 'center' }}>
-                    <svg width="24" height="12" viewBox="0 0 24 12" fill="none" stroke="#131722" strokeWidth="2">
-                      {style === 'Solid' ? <line x1="0" y1="6" x2="24" y2="6"/> :
-                       style === 'Dashed' ? <><line x1="0" y1="6" x2="8" y2="6"/><line x1="12" y1="6" x2="20" y2="6"/></> :
-                       <><circle cx="2" cy="6" r="1" fill="#131722"/><circle cx="8" cy="6" r="1" fill="#131722"/><circle cx="14" cy="6" r="1" fill="#131722"/><circle cx="20" cy="6" r="1" fill="#131722"/></>}
-                    </svg>
-                  </div>
-                  {style === 'Solid' ? 'Line' : style === 'Dashed' ? 'Dashed line' : 'Dotted line'}
-                </button>
-              ))}
-            </div>
-          )}
+          {showPathStyleDropdown && <TvLineStyleMenu value={selectedShape?.lineStyle} values={['Solid', 'Dashed', 'Dotted']} onPick={(style) => { updateDrawing(selectedShape.id, { lineStyle: style }); setShowPathStyleDropdown(false); }} onClose={() => setShowPathStyleDropdown(false)} />}
         </div>
 
         {/* Settings */}
@@ -1373,31 +1278,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           >
             <SubWidthLabel width={currentWidth} />
           </button>
-          {showRotatedRectangleWidthDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#ffffff', borderRadius: '6px', 
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '70px' 
-            }}>
-              {[1, 2, 3, 4].map(w => (
-                <button 
-                  key={w} 
-                  onClick={() => { handleWidthChange(w); setShowRotatedRectangleWidthDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: currentWidth === w ? '#f0f3fa' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '8px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = currentWidth === w ? '#f0f3fa' : 'transparent'}
-                >
-                  <div style={{ width: '12px', height: `${w}px`, backgroundColor: '#131722' }} />
-                  {w}px
-                </button>
-              ))}
-            </div>
-          )}
+          {showRotatedRectangleWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(w) => { handleWidthChange(w); setShowRotatedRectangleWidthDropdown(false); }} onClose={() => setShowRotatedRectangleWidthDropdown(false)} />}
         </div>
 
         {/* Settings */}
@@ -1481,31 +1362,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           >
             <SubWidthLabel width={currentWidth} />
           </button>
-          {showArrowWidthDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#1e222d', borderRadius: '4px', 
-              boxShadow: '0 2px 8px rgba(0,0,0,0.3)', zIndex: 100, padding: '4px 0', minWidth: '70px' 
-            }}>
-              {[1, 2, 3, 4].map(w => (
-                <button 
-                  key={w} 
-                  onClick={() => { handleWidthChange(w); setShowArrowWidthDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: currentWidth === w ? '#2a2e39' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#d1d4dc', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '8px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#2a2e39'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = currentWidth === w ? '#2a2e39' : 'transparent'}
-                >
-                  <div style={{ width: '12px', height: `${w}px`, backgroundColor: '#d1d4dc' }} />
-                  {w}px
-                </button>
-              ))}
-            </div>
-          )}
+          {showArrowWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(w) => { handleWidthChange(w); setShowArrowWidthDropdown(false); }} onClose={() => setShowArrowWidthDropdown(false)} />}
         </div>
 
         {/* Line Style (Solid/Dash/Dot) */}
@@ -1519,37 +1376,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           >
             <SubLineStyleIcon style={selectedShape?.lineStyle} />
           </button>
-          {showArrowStyleDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#1e222d', borderRadius: '4px', 
-              boxShadow: '0 2px 8px rgba(0,0,0,0.3)', zIndex: 100, padding: '4px 0', minWidth: '130px' 
-            }}>
-              {['Solid', 'Dashed', 'Dotted'].map(style => (
-                <button 
-                  key={style} 
-                  onClick={() => { updateDrawing(selectedShape.id, { lineStyle: style }); setShowArrowStyleDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: selectedShape?.lineStyle === style ? '#2a2e39' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#d1d4dc', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '10px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#2a2e39'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = selectedShape?.lineStyle === style ? '#2a2e39' : 'transparent'}
-                >
-                  <div style={{ width: '24px', display: 'flex', alignItems: 'center' }}>
-                    <svg width="24" height="12" viewBox="0 0 24 12" fill="none" stroke="#d1d4dc" strokeWidth="2">
-                      {style === 'Solid' ? <line x1="0" y1="6" x2="24" y2="6"/> :
-                       style === 'Dashed' ? <><line x1="0" y1="6" x2="8" y2="6"/><line x1="12" y1="6" x2="20" y2="6"/></> :
-                       <><circle cx="2" cy="6" r="1" fill="#d1d4dc"/><circle cx="8" cy="6" r="1" fill="#d1d4dc"/><circle cx="14" cy="6" r="1" fill="#d1d4dc"/><circle cx="20" cy="6" r="1" fill="#d1d4dc"/></>}
-                    </svg>
-                  </div>
-                  {style === 'Solid' ? 'Line' : style === 'Dashed' ? 'Dashed line' : 'Dotted line'}
-                </button>
-              ))}
-            </div>
-          )}
+          {showArrowStyleDropdown && <TvLineStyleMenu value={selectedShape?.lineStyle} values={['Solid', 'Dashed', 'Dotted']} onPick={(style) => { updateDrawing(selectedShape.id, { lineStyle: style }); setShowArrowStyleDropdown(false); }} onClose={() => setShowArrowStyleDropdown(false)} />}
         </div>
 
         {/* Settings */}
@@ -1634,21 +1461,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           >
             <SubWidthLabel width={currentWidth} />
           </button>
-          {showArrowMarkerWidthDropdown && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '60px' }}>
-              {[1, 2, 3, 4].map(w => (
-                <button 
-                  key={w} 
-                  onClick={() => { handleWidthChange(w); setShowArrowMarkerWidthDropdown(false); }} 
-                  style={{ width: '100%', padding: '6px 12px', textAlign: 'left', background: currentWidth === w ? '#f0f3fa' : 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = currentWidth === w ? '#f0f3fa' : 'transparent'}
-                >
-                  {w}px
-                </button>
-              ))}
-            </div>
-          )}
+          {showArrowMarkerWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(w) => { handleWidthChange(w); setShowArrowMarkerWidthDropdown(false); }} onClose={() => setShowArrowMarkerWidthDropdown(false)} />}
         </div>
 
         {/* Text Color â€” T with color underline */}
@@ -2021,31 +1834,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             <div style={{ width: '12px', height: '1px', backgroundColor: currentColor }} />
             <SubWidthLabel width={currentWidth} />
           </button>
-          {showTriangleWidthDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#ffffff', borderRadius: '6px', 
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '70px' 
-            }}>
-              {[1, 2, 3, 4].map(w => (
-                <button 
-                  key={w} 
-                  onClick={() => { handleWidthChange(w); setShowTriangleWidthDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: currentWidth === w ? '#f0f3fa' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '8px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = currentWidth === w ? '#f0f3fa' : 'transparent'}
-                >
-                  <div style={{ width: '12px', height: `${w}px`, backgroundColor: '#131722' }} />
-                  {w}px
-                </button>
-              ))}
-            </div>
-          )}
+          {showTriangleWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(w) => { handleWidthChange(w); setShowTriangleWidthDropdown(false); }} onClose={() => setShowTriangleWidthDropdown(false)} />}
         </div>
 
         {/* Settings Hexagon */}
@@ -2175,51 +1964,11 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             
           </button>
           
-          {showWidthDropdown && (
-            <div style={{ 
-              position: 'absolute', 
-              bottom: '100%', 
-              left: '0', 
-              marginBottom: '8px', 
-              backgroundColor: '#ffffff', 
-              border: '1px solid #e0e3eb', 
-              borderRadius: '6px', 
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)', 
-              zIndex: 100, 
-              padding: '4px',
-              minWidth: '80px'
-            }}>
-              {[1, 2, 3, 4].map(width => (
-                <div 
-                  key={width}
-                  onClick={() => {
+          {showWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(width) => {
                     setCurrentWidth(width);
                     if (selectedShapeId) onStrokeWidthChange(selectedShapeId, width);
                     setShowWidthDropdown(false);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '8px 12px',
-                    cursor: 'pointer',
-                    borderRadius: '4px',
-                    backgroundColor: currentWidth === width ? '#131722' : 'transparent',
-                    color: currentWidth === width ? '#ffffff' : '#131722',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (currentWidth !== width) e.currentTarget.style.backgroundColor = '#f0f3fa';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (currentWidth !== width) e.currentTarget.style.backgroundColor = 'transparent';
-                  }}
-                >
-                  <div style={{ width: '20px', height: `${width}px`, backgroundColor: currentWidth === width ? '#ffffff' : '#131722' }}></div>
-                  <SubWidthLabel width={width} />
-                </div>
-              ))}
-            </div>
-          )}
+                  }} onClose={() => setShowWidthDropdown(false)} />}
         </div>
 
         {/* Line Style */}
@@ -2250,58 +1999,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             )}
           </button>
 
-          {showLineStyleDropdown && (
-            <div style={{ 
-              position: 'absolute', 
-              bottom: '100%', 
-              left: '0', 
-              marginBottom: '8px', 
-              backgroundColor: '#ffffff', 
-              border: '1px solid #e0e3eb', 
-              borderRadius: '6px', 
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)', 
-              zIndex: 100, 
-              padding: '4px',
-              minWidth: '140px'
-            }}>
-              {[
-                { label: 'Line', val: 'solid' },
-                { label: 'Dashed line', val: 'dashed' },
-                { label: 'Dotted line', val: 'dotted' }
-              ].map(style => (
-                <div 
-                  key={style.val}
-                  onClick={() => {
-                    if (selectedShapeId) updateDrawing(selectedShapeId, { lineStyle: style.val as any });
+          {showLineStyleDropdown && <TvLineStyleMenu value={selectedShape?.lineStyle || 'solid'} values={['solid', 'dashed', 'dotted']} onPick={(style) => {
+                    if (selectedShapeId) updateDrawing(selectedShapeId, { lineStyle: style as any });
                     setShowLineStyleDropdown(false);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '8px 12px',
-                    cursor: 'pointer',
-                    borderRadius: '4px',
-                    backgroundColor: (selectedShape?.lineStyle || 'solid') === style.val ? '#131722' : 'transparent',
-                    color: (selectedShape?.lineStyle || 'solid') === style.val ? '#ffffff' : '#131722',
-                  }}
-                  onMouseEnter={(e) => {
-                    if ((selectedShape?.lineStyle || 'solid') !== style.val) e.currentTarget.style.backgroundColor = '#f0f3fa';
-                  }}
-                  onMouseLeave={(e) => {
-                    if ((selectedShape?.lineStyle || 'solid') !== style.val) e.currentTarget.style.backgroundColor = 'transparent';
-                  }}
-                >
-                  <div style={{ 
-                    width: '24px', 
-                    height: '1px', 
-                    borderTop: `1px ${style.val === 'solid' ? 'solid' : style.val} ${ (selectedShape?.lineStyle || 'solid') === style.val ? '#ffffff' : '#131722' }` 
-                  }}></div>
-                  <span style={{ fontSize: '13px', fontWeight: 400 }}>{style.label}</span>
-                </div>
-              ))}
-            </div>
-          )}
+                  }} onClose={() => setShowLineStyleDropdown(false)} />}
         </div>
 
         {/* Settings Hexagon */}
@@ -2446,51 +2147,11 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             
           </button>
 
-          {showWidthDropdown && (
-            <div style={{
-              position: 'absolute',
-              bottom: '100%',
-              left: '0',
-              marginBottom: '8px',
-              backgroundColor: '#ffffff',
-              border: '1px solid #e0e3eb',
-              borderRadius: '6px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              zIndex: 100,
-              padding: '4px',
-              minWidth: '80px'
-            }}>
-              {[1, 2, 3, 4].map(width => (
-                <div
-                  key={width}
-                  onClick={() => {
+          {showWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(width) => {
                     setCurrentWidth(width);
                     if (selectedShapeId) onStrokeWidthChange(selectedShapeId, width);
                     setShowWidthDropdown(false);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '8px 12px',
-                    cursor: 'pointer',
-                    borderRadius: '4px',
-                    backgroundColor: currentWidth === width ? '#131722' : 'transparent',
-                    color: currentWidth === width ? '#ffffff' : '#131722',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (currentWidth !== width) e.currentTarget.style.backgroundColor = '#f0f3fa';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (currentWidth !== width) e.currentTarget.style.backgroundColor = 'transparent';
-                  }}
-                >
-                  <div style={{ width: '20px', height: `${width}px`, backgroundColor: currentWidth === width ? '#ffffff' : '#131722' }}></div>
-                  <SubWidthLabel width={width} />
-                </div>
-              ))}
-            </div>
-          )}
+                  }} onClose={() => setShowWidthDropdown(false)} />}
         </div>
 
         {/* Line Style */}
@@ -2521,58 +2182,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             )}
           </button>
 
-          {showLineStyleDropdown && (
-            <div style={{
-              position: 'absolute',
-              bottom: '100%',
-              left: '0',
-              marginBottom: '8px',
-              backgroundColor: '#ffffff',
-              border: '1px solid #e0e3eb',
-              borderRadius: '6px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              zIndex: 100,
-              padding: '4px',
-              minWidth: '140px'
-            }}>
-              {[
-                { label: 'Line', val: 'solid' },
-                { label: 'Dashed line', val: 'dashed' },
-                { label: 'Dotted line', val: 'dotted' }
-              ].map(style => (
-                <div
-                  key={style.val}
-                  onClick={() => {
-                    if (selectedShapeId) updateDrawing(selectedShapeId, { lineStyle: style.val as any });
+          {showLineStyleDropdown && <TvLineStyleMenu value={selectedShape?.lineStyle || 'solid'} values={['solid', 'dashed', 'dotted']} onPick={(style) => {
+                    if (selectedShapeId) updateDrawing(selectedShapeId, { lineStyle: style as any });
                     setShowLineStyleDropdown(false);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '8px 12px',
-                    cursor: 'pointer',
-                    borderRadius: '4px',
-                    backgroundColor: (selectedShape?.lineStyle || 'solid') === style.val ? '#131722' : 'transparent',
-                    color: (selectedShape?.lineStyle || 'solid') === style.val ? '#ffffff' : '#131722',
-                  }}
-                  onMouseEnter={(e) => {
-                    if ((selectedShape?.lineStyle || 'solid') !== style.val) e.currentTarget.style.backgroundColor = '#f0f3fa';
-                  }}
-                  onMouseLeave={(e) => {
-                    if ((selectedShape?.lineStyle || 'solid') !== style.val) e.currentTarget.style.backgroundColor = 'transparent';
-                  }}
-                >
-                  <div style={{
-                    width: '24px',
-                    height: '1px',
-                    borderTop: `1px ${style.val === 'solid' ? 'solid' : style.val} ${ (selectedShape?.lineStyle || 'solid') === style.val ? '#ffffff' : '#131722' }`
-                  }}></div>
-                  <span style={{ fontSize: '13px', fontWeight: 400 }}>{style.label}</span>
-                </div>
-              ))}
-            </div>
-          )}
+                  }} onClose={() => setShowLineStyleDropdown(false)} />}
         </div>
 
         {/* Settings Hexagon */}
@@ -2679,10 +2292,11 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             <Square size={14} className="text-gray-400" />
             <input
               type="color"
-              value={currentFillColor}
+              value={parseColorInput(currentFillColor).hex}
               onChange={(e) => {
                 e.stopPropagation();
-                handleFillColorChange(e.target.value);
+                const { opacity } = parseColorInput(currentFillColor);
+                handleFillColorChange(opacity === 100 ? e.target.value : hexToRgba(e.target.value, opacity / 100));
               }}
               className="w-5 h-5 rounded cursor-pointer"
             />
@@ -2844,31 +2458,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           >
             <SubWidthLabel width={currentWidth} />
           </button>
-          {showCircleWidthDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#ffffff', borderRadius: '6px', 
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '70px' 
-            }}>
-              {[1, 2, 3, 4].map(w => (
-                <button 
-                  key={w} 
-                  onClick={() => { handleWidthChange(w); setShowCircleWidthDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: currentWidth === w ? '#f0f3fa' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '8px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = currentWidth === w ? '#f0f3fa' : 'transparent'}
-                >
-                  <div style={{ width: '12px', height: `${w}px`, backgroundColor: '#131722' }} />
-                  {w}px
-                </button>
-              ))}
-            </div>
-          )}
+          {showCircleWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(w) => { handleWidthChange(w); setShowCircleWidthDropdown(false); }} onClose={() => setShowCircleWidthDropdown(false)} />}
         </div>
 
         {/* Settings */}
@@ -2982,31 +2572,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           >
             <SubWidthLabel width={currentWidth} />
           </button>
-          {showEllipseWidthDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#ffffff', borderRadius: '6px', 
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '70px' 
-            }}>
-              {[1, 2, 3, 4].map(w => (
-                <button 
-                  key={w} 
-                  onClick={() => { handleWidthChange(w); setShowEllipseWidthDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: currentWidth === w ? '#f0f3fa' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '8px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = currentWidth === w ? '#f0f3fa' : 'transparent'}
-                >
-                  <div style={{ width: '12px', height: `${w}px`, backgroundColor: '#131722' }} />
-                  {w}px
-                </button>
-              ))}
-            </div>
-          )}
+          {showEllipseWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(w) => { handleWidthChange(w); setShowEllipseWidthDropdown(false); }} onClose={() => setShowEllipseWidthDropdown(false)} />}
         </div>
 
         {/* Settings */}
@@ -3098,31 +2664,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             <div style={{ width: '12px', height: '1px', backgroundColor: themeColor }} />
             <SubWidthLabel width={currentWidth} />
           </button>
-          {showPolylineWidthDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#ffffff', borderRadius: '6px', 
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '70px' 
-            }}>
-              {[1, 2, 3, 4].map(w => (
-                <button 
-                  key={w} 
-                  onClick={() => { handleWidthChange(w); setShowPolylineWidthDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: currentWidth === w ? '#f0f3fa' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '8px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = currentWidth === w ? '#f0f3fa' : 'transparent'}
-                >
-                  <div style={{ width: '12px', height: `${w}px`, backgroundColor: '#131722' }} />
-                  {w}px
-                </button>
-              ))}
-            </div>
-          )}
+          {showPolylineWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(w) => { handleWidthChange(w); setShowPolylineWidthDropdown(false); }} onClose={() => setShowPolylineWidthDropdown(false)} />}
         </div>
 
         {/* Line Style */}
@@ -3136,37 +2678,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           >
             <SubLineStyleIcon style={selectedShape?.lineStyle} />
           </button>
-          {showPolylineStyleDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#ffffff', borderRadius: '6px', 
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '130px' 
-            }}>
-              {['Solid', 'Dashed', 'Dotted'].map(style => (
-                <button 
-                  key={style} 
-                  onClick={() => { updateDrawing(selectedShape.id, { lineStyle: style }); setShowPolylineStyleDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: selectedShape?.lineStyle === style ? '#f0f3fa' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '10px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = selectedShape?.lineStyle === style ? '#f0f3fa' : 'transparent'}
-                >
-                  <div style={{ width: '24px', display: 'flex', alignItems: 'center' }}>
-                    <svg width="24" height="12" viewBox="0 0 24 12" fill="none" stroke="#131722" strokeWidth="2">
-                      {style === 'Solid' ? <line x1="0" y1="6" x2="24" y2="6"/> :
-                       style === 'Dashed' ? <><line x1="0" y1="6" x2="8" y2="6"/><line x1="12" y1="6" x2="20" y2="6"/></> :
-                       <><circle cx="2" cy="6" r="1" fill="#131722"/><circle cx="8" cy="6" r="1" fill="#131722"/><circle cx="14" cy="6" r="1" fill="#131722"/><circle cx="20" cy="6" r="1" fill="#131722"/></>}
-                    </svg>
-                  </div>
-                  {style === 'Solid' ? 'Line' : style === 'Dashed' ? 'Dashed line' : 'Dotted line'}
-                </button>
-              ))}
-            </div>
-          )}
+          {showPolylineStyleDropdown && <TvLineStyleMenu value={selectedShape?.lineStyle} values={['Solid', 'Dashed', 'Dotted']} onPick={(style) => { updateDrawing(selectedShape.id, { lineStyle: style }); setShowPolylineStyleDropdown(false); }} onClose={() => setShowPolylineStyleDropdown(false)} />}
         </div>
 
         {/* Settings */}
@@ -3243,31 +2755,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             <div style={{ width: '12px', height: '1px', backgroundColor: themeColor }} />
             <SubWidthLabel width={currentWidth} />
           </button>
-          {showCurveWidthDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#ffffff', borderRadius: '6px', 
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '70px' 
-            }}>
-              {[1, 2, 3, 4].map(w => (
-                <button 
-                  key={w} 
-                  onClick={() => { handleWidthChange(w); setShowCurveWidthDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: currentWidth === w ? '#f0f3fa' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '8px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = currentWidth === w ? '#f0f3fa' : 'transparent'}
-                >
-                  <div style={{ width: '12px', height: `${w}px`, backgroundColor: '#131722' }} />
-                  {w}px
-                </button>
-              ))}
-            </div>
-          )}
+          {showCurveWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(w) => { handleWidthChange(w); setShowCurveWidthDropdown(false); }} onClose={() => setShowCurveWidthDropdown(false)} />}
         </div>
 
         {/* Line Style */}
@@ -3281,37 +2769,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           >
             <SubLineStyleIcon style={selectedShape?.lineStyle} />
           </button>
-          {showCurveStyleDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#ffffff', borderRadius: '6px', 
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '130px' 
-            }}>
-              {['Solid', 'Dashed', 'Dotted'].map(style => (
-                <button 
-                  key={style} 
-                  onClick={() => { updateDrawing(selectedShape.id, { lineStyle: style }); setShowCurveStyleDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: selectedShape?.lineStyle === style ? '#f0f3fa' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '10px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = selectedShape?.lineStyle === style ? '#f0f3fa' : 'transparent'}
-                >
-                  <div style={{ width: '24px', display: 'flex', alignItems: 'center' }}>
-                    <svg width="24" height="12" viewBox="0 0 24 12" fill="none" stroke="#131722" strokeWidth="2">
-                      {style === 'Solid' ? <line x1="0" y1="6" x2="24" y2="6"/> :
-                       style === 'Dashed' ? <><line x1="0" y1="6" x2="8" y2="6"/><line x1="12" y1="6" x2="20" y2="6"/></> :
-                       <><circle cx="2" cy="6" r="1" fill="#131722"/><circle cx="8" cy="6" r="1" fill="#131722"/><circle cx="14" cy="6" r="1" fill="#131722"/><circle cx="20" cy="6" r="1" fill="#131722"/></>}
-                    </svg>
-                  </div>
-                  {style === 'Solid' ? 'Line' : style === 'Dashed' ? 'Dashed line' : 'Dotted line'}
-                </button>
-              ))}
-            </div>
-          )}
+          {showCurveStyleDropdown && <TvLineStyleMenu value={selectedShape?.lineStyle} values={['Solid', 'Dashed', 'Dotted']} onPick={(style) => { updateDrawing(selectedShape.id, { lineStyle: style }); setShowCurveStyleDropdown(false); }} onClose={() => setShowCurveStyleDropdown(false)} />}
         </div>
 
         {/* Settings */}
@@ -3404,31 +2862,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             <div style={{ width: '12px', height: '1px', backgroundColor: themeColor }} />
             <SubWidthLabel width={currentWidth} />
           </button>
-          {showArcWidthDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#ffffff', borderRadius: '6px', 
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '70px' 
-            }}>
-              {[1, 2, 3, 4].map(w => (
-                <button 
-                  key={w} 
-                  onClick={() => { handleWidthChange(w); setShowArcWidthDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: currentWidth === w ? '#f0f3fa' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '8px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = currentWidth === w ? '#f0f3fa' : 'transparent'}
-                >
-                  <div style={{ width: '12px', height: `${w}px`, backgroundColor: '#131722' }} />
-                  {w}px
-                </button>
-              ))}
-            </div>
-          )}
+          {showArcWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(w) => { handleWidthChange(w); setShowArcWidthDropdown(false); }} onClose={() => setShowArcWidthDropdown(false)} />}
         </div>
 
         {/* Settings */}
@@ -3505,31 +2939,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             <div style={{ width: '12px', height: '1px', backgroundColor: themeColor }} />
             <SubWidthLabel width={currentWidth} />
           </button>
-          {showDoubleCurveWidthDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#ffffff', borderRadius: '6px', 
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '70px' 
-            }}>
-              {[1, 2, 3, 4].map(w => (
-                <button 
-                  key={w} 
-                  onClick={() => { handleWidthChange(w); setShowDoubleCurveWidthDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: currentWidth === w ? '#f0f3fa' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '8px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = currentWidth === w ? '#f0f3fa' : 'transparent'}
-                >
-                  <div style={{ width: '12px', height: `${w}px`, backgroundColor: '#131722' }} />
-                  {w}px
-                </button>
-              ))}
-            </div>
-          )}
+          {showDoubleCurveWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(w) => { handleWidthChange(w); setShowDoubleCurveWidthDropdown(false); }} onClose={() => setShowDoubleCurveWidthDropdown(false)} />}
         </div>
 
         {/* Line Style */}
@@ -3543,37 +2953,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           >
             <SubLineStyleIcon style={selectedShape?.lineStyle} />
           </button>
-          {showDoubleCurveStyleDropdown && (
-            <div style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-              backgroundColor: '#ffffff', borderRadius: '6px', 
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '130px' 
-            }}>
-              {['Solid', 'Dashed', 'Dotted'].map(style => (
-                <button 
-                  key={style} 
-                  onClick={() => { updateDrawing(selectedShape.id, { lineStyle: style }); setShowDoubleCurveStyleDropdown(false); }} 
-                  style={{ 
-                    width: '100%', padding: '8px 12px', textAlign: 'left', 
-                    background: selectedShape?.lineStyle === style ? '#f0f3fa' : 'transparent', 
-                    border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '10px'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = selectedShape?.lineStyle === style ? '#f0f3fa' : 'transparent'}
-                >
-                  <div style={{ width: '24px', display: 'flex', alignItems: 'center' }}>
-                    <svg width="24" height="12" viewBox="0 0 24 12" fill="none" stroke="#131722" strokeWidth="2">
-                      {style === 'Solid' ? <line x1="0" y1="6" x2="24" y2="6"/> :
-                       style === 'Dashed' ? <><line x1="0" y1="6" x2="8" y2="6"/><line x1="12" y1="6" x2="20" y2="6"/></> :
-                       <><circle cx="2" cy="6" r="1" fill="#131722"/><circle cx="8" cy="6" r="1" fill="#131722"/><circle cx="14" cy="6" r="1" fill="#131722"/><circle cx="20" cy="6" r="1" fill="#131722"/></>}
-                    </svg>
-                  </div>
-                  {style === 'Solid' ? 'Line' : style === 'Dashed' ? 'Dashed line' : 'Dotted line'}
-                </button>
-              ))}
-            </div>
-          )}
+          {showDoubleCurveStyleDropdown && <TvLineStyleMenu value={selectedShape?.lineStyle} values={['Solid', 'Dashed', 'Dotted']} onPick={(style) => { updateDrawing(selectedShape.id, { lineStyle: style }); setShowDoubleCurveStyleDropdown(false); }} onClose={() => setShowDoubleCurveStyleDropdown(false)} />}
         </div>
 
         {/* Settings */}
@@ -4357,50 +3737,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             
           </button>
           
-          {showWidthDropdown && (
-            <div style={{ 
-              position: 'absolute', 
-              bottom: '100%', 
-              left: '0', 
-              marginBottom: '8px', 
-              backgroundColor: '#ffffff', 
-              border: '1px solid #e0e3eb', 
-              borderRadius: '6px', 
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)', 
-              zIndex: 100, 
-              padding: '4px',
-              minWidth: '80px'
-            }}>
-              {[1, 2, 3, 4].map(width => (
-                <div 
-                  key={width}
-                  onClick={() => {
+          {showWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(width) => {
                     handleWidthChange(width.toString());
                     setShowWidthDropdown(false);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '8px 12px',
-                    cursor: 'pointer',
-                    borderRadius: '4px',
-                    backgroundColor: currentWidth === width ? '#131722' : 'transparent',
-                    color: currentWidth === width ? '#ffffff' : '#131722',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (currentWidth !== width) e.currentTarget.style.backgroundColor = '#f0f3fa';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (currentWidth !== width) e.currentTarget.style.backgroundColor = 'transparent';
-                  }}
-                >
-                  <div style={{ width: '24px', height: `${width}px`, backgroundColor: currentWidth === width ? '#ffffff' : '#131722' }}></div>
-                  <SubWidthLabel width={width} />
-                </div>
-              ))}
-            </div>
-          )}
+                  }} onClose={() => setShowWidthDropdown(false)} />}
         </div>
 
         {/* Settings Hexagon */}
@@ -5011,51 +4351,11 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             
           </button>
           
-          {showWidthDropdown && (
-            <div style={{ 
-              position: 'absolute', 
-              bottom: '100%', 
-              left: '0', 
-              marginBottom: '8px', 
-              backgroundColor: '#ffffff', 
-              border: '1px solid #e0e3eb', 
-              borderRadius: '6px', 
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)', 
-              zIndex: 100, 
-              padding: '4px',
-              minWidth: '80px'
-            }}>
-              {[1, 2, 3, 4].map(width => (
-                <div 
-                  key={width}
-                  onClick={() => {
+          {showWidthDropdown && <TvWidthMenu value={currentWidth} onPick={(width) => {
                     setCurrentWidth(width);
                     if (selectedShapeId) onStrokeWidthChange(selectedShapeId, width);
                     setShowWidthDropdown(false);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '8px 12px',
-                    cursor: 'pointer',
-                    borderRadius: '4px',
-                    backgroundColor: currentWidth === width ? '#131722' : 'transparent',
-                    color: currentWidth === width ? '#ffffff' : '#131722',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (currentWidth !== width) e.currentTarget.style.backgroundColor = '#f0f3fa';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (currentWidth !== width) e.currentTarget.style.backgroundColor = 'transparent';
-                  }}
-                >
-                  <div style={{ width: '20px', height: `${width}px`, backgroundColor: currentWidth === width ? '#ffffff' : '#131722' }}></div>
-                  <SubWidthLabel width={width} />
-                </div>
-              ))}
-            </div>
-          )}
+                  }} onClose={() => setShowWidthDropdown(false)} />}
         </div>
 
         {/* Settings Hexagon */}

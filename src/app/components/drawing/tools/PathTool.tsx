@@ -3,6 +3,8 @@ import { Line, Group, Circle } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
+import { useSnap, useSnappedDrag } from '../core/snap';
+import { HandleCircle } from '../core/Handles';
 
 interface PathToolProps {
   id: string;
@@ -18,14 +20,21 @@ interface PathToolProps {
   lineEndStyle?: string;
   fill?: string;
   backgroundVisible?: boolean;
+  // While drawing, the last point is the cursor: no handle there, just the arrowhead
+  hideLastHandle?: boolean;
 }
+
+// TradingView's open arrowhead: two strokes about 44 degrees off the line
+const ARROW_ANGLE = 0.77;
 
 export function PathTool({
   id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series,
   onSelect, onUpdatePoints, lineStyle, lineStartStyle, lineEndStyle,
-  fill, backgroundVisible
+  fill, backgroundVisible, hideLastHandle = false
 }: PathToolProps) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  const move = useSnappedDrag(chart, series, points, onUpdatePoints);
+  useChartTick(chart, series);
   // shadowBlur is a real per-pixel blur convolution that Konva redraws every frame of any
   // native drag (move or handle resize) regardless of React re-renders — expensive enough
   // to feel like lag, so it's switched off for the duration of a drag.
@@ -44,33 +53,24 @@ export function PathTool({
     }
   });
 
-  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); move.start(e); };
 
   const handleDragEnd = (e: any) => {
     setIsDragging(false);
     if (!onUpdatePoints) return;
     const node = e.target;
     if (node.className !== 'Circle') {
-      const dx = node.x();
-      const dy = node.y();
-      const newPoints = points.map(p => {
-        const px = logicalToPixel(chart, p.logical)! + dx;
-        const py = priceToPixel(series, p.price)! + dy;
-        return { logical: pixelToLogical(chart, px)!, price: pixelToPrice(series, py)! };
-      });
-      onUpdatePoints(newPoints);
-      node.position({ x: 0, y: 0 });
+      move.end(e);
     }
   };
 
   const handleCircleDragMove = (index: number) => (e: any) => {
     e.cancelBubble = true;
     if (!onUpdatePoints) return;
-    const logical = pixelToLogical(chart, e.target.x());
-    const price = pixelToPrice(series, e.target.y());
-    if (logical !== null && price !== null) {
+    const snapped = snap(e.target.x(), e.target.y(), e.evt, e.target);
+    if (snapped) {
       const newPoints = [...points];
-      newPoints[index] = { logical, price };
+      newPoints[index] = snapped;
       onUpdatePoints(newPoints);
     }
   };
@@ -81,7 +81,7 @@ export function PathTool({
   };
 
   return (
-    <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
+    <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragMove={move.drag} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
       <Line
         points={flattenedPoints}
         stroke="transparent"
@@ -90,7 +90,7 @@ export function PathTool({
       />
       <Line
         points={flattenedPoints}
-        stroke={isSelected ? '#2962ff' : stroke}
+        stroke={stroke}
         strokeWidth={strokeWidth}
         fill={backgroundVisible !== false ? fill : 'transparent'}
         closed={!!fill && fill !== 'transparent'}
@@ -99,25 +99,25 @@ export function PathTool({
         dash={lineStyle === 'Dashed' ? [5, 5] : lineStyle === 'Dotted' ? [2, 2] : undefined}
         listening={false}
       />
-      {(isSelected || isHovering) && pixelPoints.map((pt, i) => (
-        <Circle key={i} x={pt.x} y={pt.y} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(i)} onDragEnd={handleCircleDragEnd(i)} />
+      {(isSelected || isHovering) && pixelPoints.map((pt, i) => hideLastHandle && i === pixelPoints.length - 1 ? null : (
+        <HandleCircle key={i} x={pt.x} y={pt.y} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(i)} onDragEnd={handleCircleDragEnd(i)} />
       ))}
       {pixelPoints.length >= 2 && lineEndStyle === 'Arrow' && (() => {
         const last = pixelPoints[pixelPoints.length - 1];
         const prev = pixelPoints[pixelPoints.length - 2];
         const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
-        const headLength = 12;
+        const headLength = 15;
         return (
           <Line
             points={[
-              last.x - headLength * Math.cos(angle - Math.PI / 6),
-              last.y - headLength * Math.sin(angle - Math.PI / 6),
+              last.x - headLength * Math.cos(angle - ARROW_ANGLE),
+              last.y - headLength * Math.sin(angle - ARROW_ANGLE),
               last.x,
               last.y,
-              last.x - headLength * Math.cos(angle + Math.PI / 6),
-              last.y - headLength * Math.sin(angle + Math.PI / 6)
+              last.x - headLength * Math.cos(angle + ARROW_ANGLE),
+              last.y - headLength * Math.sin(angle + ARROW_ANGLE)
             ]}
-            stroke={isSelected ? '#2962ff' : stroke}
+            stroke={stroke}
             strokeWidth={strokeWidth}
             lineCap="round"
             lineJoin="round"
@@ -128,18 +128,18 @@ export function PathTool({
         const first = pixelPoints[0];
         const second = pixelPoints[1];
         const angle = Math.atan2(first.y - second.y, first.x - second.x);
-        const headLength = 12;
+        const headLength = 15;
         return (
           <Line
             points={[
-              first.x - headLength * Math.cos(angle - Math.PI / 6),
-              first.y - headLength * Math.sin(angle - Math.PI / 6),
+              first.x - headLength * Math.cos(angle - ARROW_ANGLE),
+              first.y - headLength * Math.sin(angle - ARROW_ANGLE),
               first.x,
               first.y,
-              first.x - headLength * Math.cos(angle + Math.PI / 6),
-              first.y - headLength * Math.sin(angle + Math.PI / 6)
+              first.x - headLength * Math.cos(angle + ARROW_ANGLE),
+              first.y - headLength * Math.sin(angle + ARROW_ANGLE)
             ]}
-            stroke={isSelected ? '#2962ff' : stroke}
+            stroke={stroke}
             strokeWidth={strokeWidth}
             lineCap="round"
             lineJoin="round"

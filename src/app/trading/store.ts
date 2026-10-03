@@ -2,14 +2,17 @@
 // chart overlay, the order ticket, the account manager and the dialogs.
 
 import { useSyncExternalStore } from "react";
-import { PaperTradingEngine, EngineState, Side, OrderType, TimeInForce, quoteOf, activeBook } from "./engine";
+import { PaperTradingEngine, EngineState, Side, OrderType, TimeInForce, quoteOf, activeBook, createInitialState } from "./engine";
 import { tradingSettings, ticketPrefs } from "./settings";
 import { defaultQtyOf } from "./instruments";
 
 export const engine = new PaperTradingEngine();
 
+// What the server renders with (no saved account loaded yet). Hydration must start from the
+// same, or a browser holding a connected paper account renders a different header.
+const SERVER_ENGINE_STATE = createInitialState();
 export function useEngineState(): EngineState {
-  return useSyncExternalStore(engine.subscribe, engine.getState, engine.getState);
+  return useSyncExternalStore(engine.subscribe, engine.getState, () => SERVER_ENGINE_STATE);
 }
 
 // ---------- UI state ----------

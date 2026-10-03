@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Smile, Coffee, Activity, Cloud, Zap, Heart, Flag, Clock, Moon, Lightbulb, ArrowLeft, Bird } from 'lucide-react';
+import { EmojiGlyph, IconGlyph } from './emojiArt';
+import { ICON_SECTIONS } from './iconData';
 
 const EMOJIS = [
   {
@@ -221,391 +222,205 @@ const STICKERS = [
   { emoji: '🦄', bg: '#2962ff', label: 'OG' },
 ];
 
-const ICONS = [
-  { category: 'GESTURES & SMILEYS', items: ['👍', '👎', '✌️', '🤞', '✊', '🖐️', '👤', '☺', '☹'] },
-  { category: 'SYMBOLS & FLAGS', items: ['🚩', '🏁', '🏴', '❤️', '⭐', '✨', '☑', '✔', '✖', '⏻', '↻', '🎯', '📍', '➕', '➖', '❓', '❗', '👁', '💬'] },
-  { category: 'NATURE', items: ['🍃', '☀', '☾', '🐞', '⚡'] },
-  { category: 'CURRENCY', items: ['€', '£', '$', '₹', '¥', '₽', '₿'] },
-  { category: 'OBJECTS', items: ['🔍', '🏠', '⌚', '📷', '⚙', '💧', '🎁'] }
-];
-
 interface EmojiPickerProps {
   onSelect: (emoji: string) => void;
   // Lets the toolbar that opens it position the picker (e.g. fixed beside its button)
   popupRef?: (el: HTMLDivElement | null) => void;
 }
 
+// TradingView's measurements: a 353px panel, 46px category bar with a 3px underline on the
+// active tab, uppercase section headers, 9 emojis per row at a 37.6px pitch, and the
+// Emojis / Stickers / Icons tabs centred at the bottom
+const CELL = 37.6;
+const NAV_TAB = 38;
+const muted = 'var(--tv-color-text-muted, #787b86)';
+const text = 'var(--tv-color-text, #131722)';
+const border = 'var(--tv-color-border, #e0e3eb)';
+const hoverBg = 'var(--tv-color-item-hover-bg, #f0f3fa)';
+const RECENT_KEY = 'tv_recent_emojis';
+
+const EMOJI_NAV: { id: string; icon: string }[] = [
+  { id: 'recent', icon: 'icon:r:clock' },
+  { id: 'Smiles & People', icon: 'icon:r:face-smile' },
+  { id: 'Animals & Nature', icon: 'icon:s:leaf' },
+  { id: 'Food & Drink', icon: 'icon:s:gift' },
+  { id: 'Activity', icon: 'icon:s:bullseye' },
+  { id: 'Travel & Places', icon: 'icon:s:rocket' },
+  { id: 'Objects', icon: 'icon:s:lightbulb' },
+  { id: 'Symbols', icon: 'icon:r:heart' },
+  { id: 'Flags', icon: 'icon:r:flag' },
+];
+
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ padding: '14px 0 6px 17px', fontSize: 11, fontWeight: 600, color: muted, letterSpacing: '0.4px', textTransform: 'uppercase' }}>
+      {children}
+    </div>
+  );
+}
+
+function Cell({ onPick, title, children }: { onPick: () => void; title?: string; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onPick}
+      style={{ width: CELL, height: CELL, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', padding: 0, color: text }}
+      onMouseEnter={e => (e.currentTarget.style.backgroundColor = hoverBg)}
+      onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Grid({ children }: { children: React.ReactNode }) {
+  return <div style={{ display: 'grid', gridTemplateColumns: `repeat(9, ${CELL}px)`, padding: '0 5px 4px' }}>{children}</div>;
+}
+
+// The top category bar: icons at a 38px pitch, the active one underlined
+function NavBar({ tabs, active, onPick }: { tabs: { id: string; icon: string }[]; active: string; onPick: (id: string) => void }) {
+  return (
+    <div style={{ display: 'flex', height: 46, padding: '0 5px', borderBottom: `1px solid ${border}`, flex: 'none' }}>
+      {tabs.map(t => {
+        const on = active === t.id;
+        return (
+          <button key={t.id} type="button" onClick={() => onPick(t.id)} aria-label={t.id}
+            style={{ width: NAV_TAB, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', cursor: 'pointer', position: 'relative', color: on ? text : muted, padding: 0 }}>
+            <IconGlyph id={t.icon} size={20} />
+            {on && <span style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 3, background: '#2962ff', borderRadius: '3px 3px 0 0' }} />}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function EmojiGridPicker({ onSelect, popupRef }: EmojiPickerProps) {
-  const [activeTab, setActiveTab] = useState('Emojis');
-  const [activeEmojiNav, setActiveEmojiNav] = useState('recent');
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState<'Emojis' | 'Stickers' | 'Icons'>('Emojis');
+  const [activeNav, setActiveNav] = useState('recent');
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const [recentlyUsed, setRecentlyUsed] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('tv_recent_emojis');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {}
-      }
-    }
-    return ['✔️', '👁️', '🔥', '🚀'];
+    if (typeof window === 'undefined') return [];
+    try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]').filter((e: unknown) => typeof e === 'string'); } catch { return []; }
   });
 
-  const handleSelect = (emoji: string) => {
-    setRecentlyUsed(prev => {
-      const next = [emoji, ...prev.filter(e => e !== emoji)].slice(0, 8);
-      localStorage.setItem('tv_recent_emojis', JSON.stringify(next));
-      return next;
+  const pick = (value: string) => {
+    if (activeTab === 'Emojis') {
+      setRecentlyUsed(prev => {
+        const next = [value, ...prev.filter(e => e !== value)].slice(0, 18);
+        try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+        return next;
+      });
+    }
+    onSelect(value);
+  };
+
+  // Scrolling the body moves the category bar's underline to the section at the top
+  const onScroll = () => {
+    const box = scrollRef.current;
+    if (!box) return;
+    const top = box.getBoundingClientRect().top;
+    let current = activeTab === 'Emojis' ? 'recent' : ICON_SECTIONS[0].category;
+    box.querySelectorAll<HTMLElement>('[data-category]').forEach(sec => {
+      if (sec.getBoundingClientRect().top <= top + 30) current = sec.dataset.category || current;
     });
-    onSelect(emoji);
+    setActiveNav(current);
   };
-
-  const handleScroll = () => {
-    if (!scrollContainerRef.current) return;
-    const container = scrollContainerRef.current;
-    const sections = container.querySelectorAll('[data-category]');
-    
-    let current = 'recent';
-    sections.forEach((section) => {
-      const rect = section.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      // If the section top is above or near the top of the container
-      if (rect.top <= containerRect.top + 30) {
-        current = section.getAttribute('data-category') || 'recent';
-      }
-    });
-    
-    // If we're at the very top, always select recent
-    if (container.scrollTop === 0) {
-      current = 'recent';
-    }
-    
-    setActiveEmojiNav(current);
+  const scrollTo = (id: string) => {
+    setActiveNav(id);
+    scrollRef.current?.querySelector(`[data-category="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'start' });
   };
+  useEffect(() => {
+    setActiveNav(activeTab === 'Icons' ? ICON_SECTIONS[0].category : 'recent');
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [activeTab]);
 
-  const handleScrollTo = (category: string) => {
-    setActiveEmojiNav(category);
-    if (!scrollContainerRef.current) return;
-    const element = scrollContainerRef.current.querySelector(`[data-category="${category}"]`);
-    if (element) {
-      // scroll to the element smoothly
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
-
-  const renderTopNav = () => {
-    if (activeTab === 'Icons') {
-      return (
-        <div style={{ display: 'flex', padding: '8px 12px', borderBottom: '1px solid var(--tv-color-border, #e0e3eb)', gap: '16px' }}>
-          {[
-            { icon: <Smile size={18} strokeWidth={1.5} />, active: true },
-            { icon: <Flag size={18} strokeWidth={1.5} />, active: false },
-            { icon: <Moon size={18} strokeWidth={1.5} />, active: false },
-            { icon: <Activity size={18} strokeWidth={1.5} />, active: false },
-            { icon: <Lightbulb size={18} strokeWidth={1.5} />, active: false },
-            { icon: <ArrowLeft size={18} strokeWidth={1.5} />, active: false },
-          ].map((tab, i) => (
-            <div 
-              key={i} 
-              style={{ 
-                color: tab.active ? '#2962ff' : 'var(--tv-color-text-muted, #787b86)',
-                borderBottom: tab.active ? '2px solid #2962ff' : '2px solid transparent',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: '-9px',
-                padding: '4px 4px 10px 4px'
-              }}
-            >
-              {tab.icon}
-            </div>
-          ))}
+  let nav: React.ReactNode = null;
+  let body: React.ReactNode;
+  if (activeTab === 'Emojis') {
+    nav = <NavBar tabs={EMOJI_NAV} active={activeNav} onPick={scrollTo} />;
+    body = (
+      <>
+        <div data-category="recent">
+          <SectionHeader>Recently used</SectionHeader>
+          {recentlyUsed.length > 0 ? (
+            <Grid>{recentlyUsed.map(e => <Cell key={e} onPick={() => pick(e)}><EmojiGlyph char={e} size={24} /></Cell>)}</Grid>
+          ) : (
+            <div style={{ padding: '2px 17px 8px', fontSize: 13, color: muted }}>Emojis you add to the chart show up here</div>
+          )}
         </div>
-      );
-    }
-
-    if (activeTab === 'Stickers') {
-      return (
-        <div style={{ padding: '12px 16px 8px', fontSize: '11px', fontWeight: 600, color: 'var(--tv-color-text-muted, #787b86)', letterSpacing: '0.5px', textTransform: 'uppercase', borderBottom: '1px solid var(--tv-color-border, #e0e3eb)' }}>
-          TradingView
-        </div>
-      );
-    }
-
-    // Default Emojis top nav
-    return (
-      <div style={{ display: 'flex', padding: '8px 12px', borderBottom: '1px solid var(--tv-color-border, #e0e3eb)', justifyContent: 'space-between' }}>
-        {[
-          { id: 'recent', icon: <Clock size={18} strokeWidth={1.5} /> },
-          { id: 'Smiles & People', icon: <Smile size={18} strokeWidth={1.5} /> },
-          { id: 'Animals & Nature', icon: <Bird size={18} strokeWidth={1.5} /> },
-          { id: 'Food & Drink', icon: <Coffee size={18} strokeWidth={1.5} /> },
-          { id: 'Activity', icon: <Activity size={18} strokeWidth={1.5} /> },
-          { id: 'Travel & Places', icon: <Cloud size={18} strokeWidth={1.5} /> },
-          { id: 'Objects', icon: <Lightbulb size={18} strokeWidth={1.5} /> },
-          { id: 'Symbols', icon: <Heart size={18} strokeWidth={1.5} /> },
-          { id: 'Flags', icon: <Flag size={18} strokeWidth={1.5} /> },
-        ].map((tab, i) => {
-          const isActive = activeEmojiNav === tab.id;
-          return (
-            <div 
-              key={i} 
-              onClick={() => handleScrollTo(tab.id)}
-              style={{ 
-                color: isActive ? '#2962ff' : 'var(--tv-color-text-muted, #787b86)',
-                borderBottom: isActive ? '2px solid #2962ff' : '2px solid transparent',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: '-9px',
-                padding: '4px 4px 10px 4px'
-              }}
-            >
-              {tab.icon}
-            </div>
-          );
-        })}
+        {EMOJIS.map(sec => (
+          <div key={sec.category} data-category={sec.category}>
+            <SectionHeader>{sec.category}</SectionHeader>
+            <Grid>{sec.items.map((e, i) => <Cell key={i} onPick={() => pick(e)}><EmojiGlyph char={e} size={24} /></Cell>)}</Grid>
+          </div>
+        ))}
+      </>
+    );
+  } else if (activeTab === 'Icons') {
+    nav = <NavBar tabs={ICON_SECTIONS.map(s => ({ id: s.category, icon: s.nav }))} active={activeNav} onPick={scrollTo} />;
+    body = ICON_SECTIONS.map(sec => (
+      <div key={sec.category} data-category={sec.category}>
+        <SectionHeader>{sec.category}</SectionHeader>
+        <Grid>{sec.items.map(id => <Cell key={id} onPick={() => pick(id)}><IconGlyph id={id} size={20} /></Cell>)}</Grid>
+      </div>
+    ));
+  } else {
+    nav = (
+      <div style={{ display: 'flex', height: 46, padding: '0 5px', borderBottom: `1px solid ${border}`, flex: 'none' }}>
+        <span style={{ width: NAV_TAB, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+          <EmojiGlyph char="🚀" size={22} />
+          <span style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 3, background: '#2962ff', borderRadius: '3px 3px 0 0' }} />
+        </span>
       </div>
     );
-  };
-
-  const renderBody = () => {
-    if (activeTab === 'Stickers') {
-      return (
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(3, 1fr)', 
-          gap: '12px', 
-          padding: '16px',
-          maxHeight: '280px',
-          overflowY: 'auto'
-        }}>
-          {STICKERS.map((sticker, i) => (
-            <button
-              key={i}
-              onClick={() => handleSelect(sticker.emoji)}
-              style={{
-                width: '100%',
-                aspectRatio: '1',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                position: 'relative'
-              }}
-            >
-              <div style={{
-                width: '80%',
-                height: '80%',
-                borderRadius: '50%',
-                backgroundColor: sticker.bg,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '40px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                transition: 'transform 0.1s'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-              >
-                {sticker.emoji}
-              </div>
-              <div style={{
-                marginTop: '4px',
-                fontSize: '12px',
-                fontWeight: 800,
-                color: sticker.bg === '#2962ff' ? '#2962ff' : sticker.bg,
-                textTransform: 'uppercase',
-                textShadow: '1px 1px 0 #fff'
-              }}>
-                {sticker.label}
-              </div>
+    body = (
+      <div>
+        <SectionHeader>Stickers</SectionHeader>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, padding: '0 12px 12px' }}>
+          {STICKERS.map(st => (
+            <button key={st.label} type="button" onClick={() => pick(st.emoji)} title={st.label}
+              style={{ aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, background: 'transparent', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = hoverBg)}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
+              <span style={{ width: 64, height: 64, borderRadius: '50%', background: st.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <EmojiGlyph char={st.emoji} size={40} />
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 800, color: st.bg, textTransform: 'uppercase' }}>{st.label}</span>
             </button>
           ))}
         </div>
-      );
-    }
-
-    if (activeTab === 'Icons') {
-      return (
-        <div style={{ maxHeight: '280px', overflowY: 'auto', paddingBottom: '12px' }}>
-          {ICONS.map((section, idx) => (
-            <div key={idx}>
-              <div style={{ padding: '12px 16px 8px', fontSize: '11px', fontWeight: 600, color: 'var(--tv-color-text-muted, #787b86)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-                {section.category}
-              </div>
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(8, 1fr)', 
-                gap: '4px', 
-                padding: '0 12px'
-              }}>
-                {section.items.map((icon, i) => (
-                  <button
-                    key={i}
-                    onClick={() => handleSelect(icon)}
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '18px',
-                      color: 'var(--tv-color-text, #131722)',
-                      background: 'transparent',
-                      border: 'none',
-                      borderRadius: '50%',
-                      cursor: 'pointer',
-                      fontFamily: 'sans-serif'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-color-item-hover-bg, #f0f3fa)'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  >
-                    {icon}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    // Default Emojis body
-    return (
-      <div 
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-        style={{ maxHeight: '280px', overflowY: 'auto' }}
-      >
-        {/* Header for Recently Used */}
-        {recentlyUsed.length > 0 && (
-          <div data-category="recent">
-            <div style={{ padding: '12px 16px 8px', fontSize: '11px', fontWeight: 600, color: 'var(--tv-color-text-muted, #787b86)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-              Recently Used
-            </div>
-            <div style={{ 
-              display: 'flex', 
-              gap: '4px', 
-              padding: '0 12px 12px',
-              flexWrap: 'wrap'
-            }}>
-              {recentlyUsed.map((emoji, i) => (
-                <button
-                  key={i}
-                  onClick={() => handleSelect(emoji)}
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '20px',
-                    background: 'transparent',
-                    border: 'none',
-                    borderRadius: '50%',
-                    cursor: 'pointer',
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-color-item-hover-bg, #f0f3fa)'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Categories */}
-        {EMOJIS.map((section, idx) => (
-          <div key={idx} data-category={section.category}>
-            <div style={{ padding: '12px 16px 8px', fontSize: '11px', fontWeight: 600, color: 'var(--tv-color-text-muted, #787b86)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-              {section.category}
-            </div>
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(8, 1fr)', 
-              gap: '4px', 
-              padding: '0 12px 12px'
-            }}>
-              {section.items.map((emoji, i) => (
-                <button
-                  key={i}
-                  onClick={() => handleSelect(emoji)}
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '20px',
-                    background: 'transparent',
-                    border: 'none',
-                    borderRadius: '50%',
-                    cursor: 'pointer',
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-color-item-hover-bg, #f0f3fa)'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
       </div>
     );
-  };
+  }
 
   return (
     <div
       ref={popupRef}
-      onClick={(e) => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
       style={{
-        position: 'absolute',
-        left: '100%',
-        top: 0,
-        marginLeft: '4px',
-        backgroundColor: 'var(--tv-color-pane-background, #ffffff)',
-        border: '1px solid var(--tv-color-border, #e0e3eb)',
-        borderRadius: '6px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-        zIndex: 100,
-        width: '320px',
-        display: 'flex',
-        flexDirection: 'column',
-        fontFamily: 'sans-serif'
+        position: 'absolute', left: '100%', top: 0, marginLeft: 4, width: 353, height: 676, maxHeight: 'calc(100vh - 120px)',
+        background: 'var(--tv-color-pane-background, #ffffff)', borderRadius: 6, boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+        zIndex: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}
     >
-      {renderTopNav()}
-      {renderBody()}
-
-      {/* Bottom Text Tab Bar */}
-      <div style={{ display: 'flex', borderTop: '1px solid var(--tv-color-border, #e0e3eb)', padding: '0 16px' }}>
-        {['Emojis', 'Stickers', 'Icons'].map((tab) => (
-          <div 
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={{
-              flex: 1,
-              textAlign: 'center',
-              padding: '12px 0',
-              fontSize: '13px',
-              color: activeTab === tab ? '#2962ff' : 'var(--tv-color-text, #131722)',
-              borderBottom: activeTab === tab ? '2px solid #2962ff' : '2px solid transparent',
-              cursor: 'pointer'
-            }}
-          >
-            {tab}
-          </div>
-        ))}
+      {nav}
+      <div ref={scrollRef} onScroll={onScroll} style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+        {body}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 26, height: 48, borderTop: `1px solid ${border}`, flex: 'none' }}>
+        {(['Emojis', 'Stickers', 'Icons'] as const).map(tab => {
+          const on = activeTab === tab;
+          return (
+            <button key={tab} type="button" onClick={() => setActiveTab(tab)}
+              style={{ position: 'relative', height: 48, padding: '0 2px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 15, color: on ? '#2962ff' : text }}>
+              {tab}
+              {on && <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: '#2962ff', borderRadius: '3px 3px 0 0' }} />}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

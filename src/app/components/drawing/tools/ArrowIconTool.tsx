@@ -3,6 +3,8 @@ import { Path, Group, Text, Rect, Circle } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
+import { useSnap } from '../core/snap';
+import { HandleCircle } from '../core/Handles';
 
 interface ArrowIconToolProps {
   id: string;
@@ -27,7 +29,8 @@ export function ArrowIconTool({
   id, points, stroke, isSelected, isHovering = false, isLocked = false, type, chart, series, onSelect, onUpdatePoints,
   text, textColor, fontSize, bold, italic
 }: ArrowIconToolProps) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  useChartTick(chart, series);
   // shadowBlur is redrawn every frame while the handle is dragged — switched off meanwhile
   const [isDragging, setIsDragging] = useState(false);
   if (!chart || !series || points.length < 1) return null;
@@ -52,10 +55,12 @@ export function ArrowIconTool({
   const handleTipDrag = (e: any) => {
     e.cancelBubble = true;
     if (!onUpdatePoints) return;
-    const logical = pixelToLogical(chart, e.target.x());
-    const price = pixelToPrice(series, e.target.y() - handleOffset);
-    if (logical === null || price === null) return;
-    onUpdatePoints([{ logical, price }]);
+    const snapped = snap(e.target.x(), e.target.y() - handleOffset, e.evt);
+    if (!snapped) return;
+    const px = logicalToPixel(chart, snapped.logical);
+    const py = priceToPixel(series, snapped.price);
+    if (px !== null && py !== null) e.target.position({ x: px, y: py + handleOffset });
+    onUpdatePoints([snapped]);
   };
 
   return (
@@ -100,7 +105,7 @@ export function ArrowIconTool({
       )}
 
       {(isSelected || isHovering) && (
-        <Circle
+        <HandleCircle
           x={x}
           y={y + handleOffset}
           radius={handleRadius}

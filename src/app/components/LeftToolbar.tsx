@@ -8,6 +8,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Circle, MousePointer2, PlayCircle, Wand2, Eraser, Star } from "lucide-react";
 import { useDrawing, DrawingType } from "./drawing/core/DrawingContext";
 import { EmojiGridPicker } from "./ui/EmojiGridPicker";
+import { PickedGlyph } from "./ui/emojiArt";
 import { placeBeside, useCloseOnAnchorScroll } from "../lib/anchoredPopup";
 import { useEscapeClose } from "../lib/useEscapeClose";
 import { Tip, TipKey } from "../trading/ui";
@@ -251,7 +252,7 @@ export default function LeftToolbar({ indicatorCount = 0, onRemoveIndicators }: 
 
   const getGroupIcon = (group: ToolGroup) => {
     if (group.id === 'icons' && activeEmoji) {
-      return <div style={{ fontSize: '18px', lineHeight: 1 }}>{activeEmoji}</div>;
+      return <PickedGlyph value={activeEmoji} size={22} />;
     }
     if (!group.items) return group.defaultIcon;
     const item = group.items.find(i => !i.isHeader && i.type === activeGroupTools[group.id]);

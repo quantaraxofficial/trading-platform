@@ -3,6 +3,7 @@ import { Line, Group } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
+import { useSnappedDrag } from '../core/snap';
 
 interface BrushToolProps {
   id: string;
@@ -18,7 +19,8 @@ interface BrushToolProps {
 }
 
 export function BrushTool({ id, points, stroke, strokeWidth, isSelected, chart, series, onSelect, onUpdatePoints, isLocked = false }: BrushToolProps) {
-  useChartTick(chart);
+  const move = useSnappedDrag(chart, series, points, onUpdatePoints);
+  useChartTick(chart, series);
   // shadowBlur is a real per-pixel blur convolution that Konva redraws every frame of any
   // native drag regardless of React re-renders — expensive enough to feel like lag, so it's
   // switched off for the duration of a drag.
@@ -36,50 +38,19 @@ export function BrushTool({ id, points, stroke, strokeWidth, isSelected, chart, 
     }
   });
 
-  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); move.start(e); };
 
   const handleDragEnd = (e: any) => {
     setIsDragging(false);
     if (!onUpdatePoints) return;
-    const node = e.target;
-    
-    const dx = node.x();
-    const dy = node.y();
-
-    const newPoints: { logical: number; price: number }[] = [];
-    let valid = true;
-
-    for (let p of points) {
-      const oldX = logicalToPixel(chart, p.logical);
-      const oldY = priceToPixel(series, p.price);
-      if (oldX === null || oldY === null) {
-        valid = false;
-        break;
-      }
-      
-      const newL = pixelToLogical(chart, oldX + dx);
-      const newP = pixelToPrice(series, oldY + dy);
-      
-      if (newL === null || newP === null) {
-        valid = false;
-        break;
-      }
-      
-      newPoints.push({ logical: newL, price: newP });
-    }
-
-    if (valid) {
-      onUpdatePoints(newPoints);
-    }
-    
-    node.position({ x: 0, y: 0 });
+    move.end(e);
   };
 
   return (
     <Group 
       id={id}
       draggable={isSelected && !isLocked}
-      onDragStart={handleDragStart}
+      onDragStart={handleDragStart} onDragMove={move.drag}
       onDragEnd={handleDragEnd}
     >
       {/* Invisible thicker line for easier selection */}

@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Text as KonvaText, Group, Rect } from 'react-konva';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../../core/coordinates';
 import { useChartTick } from '../../core/useChartTick';
+import { useSnap } from '../../core/snap';
 
 interface TextToolProps {
   id: string;
@@ -54,27 +55,8 @@ export function TextTool({
   borderColor = '#b2b5be',
   textWrap = false
 }: TextToolProps) {
-  useChartTick(chart);
-  if (points.length < 1) return null;
-
-  const [p1] = points;
-  
-  const x = logicalToPixel(chart, p1.logical);
-  const y = priceToPixel(series, p1.price);
-
-  if (x === null || y === null) return null;
-
-  // Calculate dynamic scale factor so text shrinks/grows with the chart
-  let scale = 1;
-  if (initialBarWidth) {
-    const c0 = logicalToPixel(chart, 0);
-    const c1 = logicalToPixel(chart, 1);
-    if (c0 !== null && c1 !== null) {
-      const currentBarWidth = Math.abs(c1 - c0);
-      scale = currentBarWidth / initialBarWidth;
-    }
-  }
-
+  const snap = useSnap(chart, series);
+  useChartTick(chart, series);
   const textRef = useRef<any>(null);
   const [textDims, setTextDims] = useState({ width: 0, height: 0 });
 
@@ -88,14 +70,21 @@ export function TextTool({
     }
   }, [text, fontSize, bold, italic]);
 
+  if (points.length < 1) return null;
+
+  const [p1] = points;
+  
+  const x = logicalToPixel(chart, p1.logical);
+  const y = priceToPixel(series, p1.price);
+
+  if (x === null || y === null) return null;
+
   const fontStyle = `${bold ? 'bold ' : ''}${italic ? 'italic ' : ''}`.trim() || 'normal';
 
   return (
     <Group 
       x={x} 
       y={y} 
-      scaleX={scale} 
-      scaleY={scale}
       draggable={isSelected && !isLocked}
       onClick={(e) => {
         e.cancelBubble = true;
@@ -109,16 +98,10 @@ export function TextTool({
         e.cancelBubble = true;
         if (onEdit) onEdit();
       }}
-      onDragEnd={(e) => {
-        if (!onUpdatePoints) return;
-        
-        const newX = e.target.x();
-        const newY = e.target.y();
-        const logical = pixelToLogical(chart, newX);
-        const price = pixelToPrice(series, newY);
-        if (logical !== null && price !== null) {
-          onUpdatePoints([{ logical, price }]);
-        }
+      onDragMove={(e) => {
+        if (!onUpdatePoints || e.target !== e.currentTarget) return;
+        const snapped = snap(e.target.x(), e.target.y(), e.evt, e.target);
+        if (snapped) onUpdatePoints([snapped]);
       }}
     >
       {/* Background */}
@@ -158,7 +141,7 @@ export function TextTool({
         fontSize={fontSize}
         fontStyle={fontStyle}
         fontFamily="sans-serif"
-        fill={isSelected ? '#2962ff' : (textColor || stroke)}
+        fill={textColor || stroke}
         padding={4}
         width={textWrap ? 200 : undefined} // Example wrap width, can be improved
         hitFunc={(context, shape) => {

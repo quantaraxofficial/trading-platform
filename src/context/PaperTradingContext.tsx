@@ -34,7 +34,7 @@ export const PaperTradingProvider = ({ children }: { children: ReactNode }) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const save = () => {
-      const state = plain(engine.getState());
+      const state = plain(engine.getSavedState());
       lastSaved = engine.getRevision();
       try { localStorage.setItem(localKeyFor(uid), JSON.stringify(state)); } catch { /* ignore */ }
       if (uid) setDoc(doc(db, 'userPaperTrading', uid), { engine: state }, { merge: true }).catch(err => console.warn('[PaperTrading] save failed', err));

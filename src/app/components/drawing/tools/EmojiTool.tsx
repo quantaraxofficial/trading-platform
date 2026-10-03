@@ -1,8 +1,13 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { Text as KonvaText, Group, Transformer, Rect as KonvaRect } from 'react-konva';
+import React, { useRef, useEffect } from 'react';
+import { Text as KonvaText, Group, Transformer, Image as KonvaImage, Path as KonvaPath, Rect as KonvaRect } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
+import { useSnap } from '../core/snap';
+import { isIconId, iconPath, useEmojiImage } from '../../ui/emojiArt';
+
+// TradingView places an emoji/icon 80px square, centred on its point
+export const EMOJI_DEFAULT_SIZE = 80;
 
 interface EmojiToolProps {
   id: string;
@@ -20,13 +25,17 @@ interface EmojiToolProps {
   onUpdatePoints?: (points: { logical: number; price: number }[]) => void;
   onUpdateScale?: (scaleX: number, scaleY: number, rotation: number) => void;
   isLocked?: boolean;
+  // An icon's colour (emojis keep their own colours)
+  color?: string;
 }
 
 export function EmojiTool({
-  id, points, emojiChar, scaleX = 1, scaleY = 1, rotation = 0,  initialBarWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints, onUpdateScale,
-  emojiSize = 40, isLocked = false
+  id, points, emojiChar, scaleX = 1, scaleY = 1, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints, onUpdateScale,
+  emojiSize, isLocked = false, color = '#2962ff'
 }: EmojiToolProps & { emojiSize?: number }) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  useChartTick(chart, series);
+  const image = useEmojiImage(emojiChar || null);
   const shapeRef = useRef<any>(null);
   const trRef = useRef<any>(null);
   const showHandles = isSelected || isHovering;
@@ -34,25 +43,32 @@ export function EmojiTool({
   useEffect(() => {
     if (showHandles && trRef.current && shapeRef.current) {
       trRef.current.nodes([shapeRef.current]);
-      const layer = trRef.current.getLayer();
-      if (layer) {
-        layer.batchDraw();
-      }
+      trRef.current.getLayer()?.batchDraw();
     }
   }, [showHandles]);
 
-  if (points.length < 1) return null;
-
+  if (points.length < 1 || !chart || !series) return null;
   const [p1] = points;
-  
   const x = logicalToPixel(chart, p1.logical);
   const y = priceToPixel(series, p1.price);
-
   if (x === null || y === null) return null;
 
-  const actualEmojiSize = emojiSize || 40;
-  const finalScaleX = scaleX || 1;
-  const finalScaleY = scaleY || 1;
+  const size = emojiSize || EMOJI_DEFAULT_SIZE;
+  const icon = isIconId(emojiChar) ? iconPath(emojiChar) : null;
+
+  let art: React.ReactNode;
+  if (icon) {
+    // Fit the icon's view box into the square, centred
+    const k = size / Math.max(icon[0], icon[1]);
+    art = <KonvaPath data={icon[2]} fill={color} scaleX={k} scaleY={k} x={(size - icon[0] * k) / 2} y={(size - icon[1] * k) / 2} listening={false} />;
+  } else if (image) {
+    art = <KonvaImage image={image} width={size} height={size} listening={false} />;
+  } else {
+    art = (
+      <KonvaText text={emojiChar || '😃'} fontSize={size * 0.86} width={size} height={size} align="center" verticalAlign="middle"
+        fontFamily="'Segoe UI Emoji', 'Apple Color Emoji', sans-serif" listening={false} perfectDrawEnabled={false} />
+    );
+  }
 
   return (
     <>
@@ -61,89 +77,51 @@ export function EmojiTool({
         ref={shapeRef}
         x={x}
         y={y}
-        width={actualEmojiSize}
-        height={actualEmojiSize}
-        offsetX={actualEmojiSize / 2}
-        offsetY={actualEmojiSize / 2}
-        scaleX={finalScaleX}
-        scaleY={finalScaleY}
-        rotation={rotation}
+        width={size}
+        height={size}
+        offsetX={size / 2}
+        offsetY={size / 2}
+        scaleX={scaleX || 1}
+        scaleY={scaleY || 1}
         draggable={showHandles && !isLocked}
-        onMouseDown={(e) => {
-          e.cancelBubble = true;
-          onSelect();
+        onMouseDown={(e) => { e.cancelBubble = true; onSelect(); }}
+        onTap={(e) => { e.cancelBubble = true; onSelect(); }}
+        onDragMove={(e) => {
+          if (!onUpdatePoints || e.target !== e.currentTarget) return;
+          const snapped = snap(e.target.x(), e.target.y(), e.evt, e.target);
+          if (snapped) onUpdatePoints([snapped]);
         }}
-        onTap={(e) => {
-          e.cancelBubble = true;
-          onSelect();
-        }}
-        onDragEnd={(e) => {
-          if (!onUpdatePoints) return;
-          const stage = e.target.getStage();
-          if(!stage) return;
-          
-          // Get the new X/Y after dragging the group
-          const newX = e.target.x();
-          const newY = e.target.y();
-          
-          const logical = pixelToLogical(chart, newX);
-          const price = pixelToPrice(series, newY);
-          
-          if (logical !== null && price !== null) {
-            onUpdatePoints([{ logical, price }]);
-          }
-        }}
-        onTransformEnd={(e) => {
+        onTransformEnd={() => {
           if (!onUpdateScale || !onUpdatePoints) return;
           const node = shapeRef.current;
-          
-          const newScaleX = node.scaleX();
-          const newScaleY = node.scaleY();
-          const newRotation = node.rotation();
-          
-          onUpdateScale(newScaleX, newScaleY, newRotation);
-          
-          // Also update position since transforming might change it slightly
+          onUpdateScale(node.scaleX(), node.scaleY(), 0);
+          // Corner resizes move the centre too
           const logical = pixelToLogical(chart, node.x());
           const price = pixelToPrice(series, node.y());
-          if (logical !== null && price !== null) {
-            onUpdatePoints([{ logical, price }]);
-          }
+          if (logical !== null && price !== null) onUpdatePoints([{ logical, price }]);
         }}
       >
-        <KonvaText
-          text={emojiChar || '😃'}
-          fontSize={actualEmojiSize}
-          fontFamily="'Segoe UI Emoji', 'Apple Color Emoji', sans-serif"
-          fill="black"
-          x={actualEmojiSize / 2}
-          y={actualEmojiSize / 2}
-          offsetX={actualEmojiSize / 2}
-          offsetY={actualEmojiSize / 2}
-          listening={true}
-          perfectDrawEnabled={false}
-          hitFunc={(context, shape) => {
-            context.beginPath();
-            context.rect(0, 0, actualEmojiSize, actualEmojiSize);
-            context.closePath();
-            context.fillStrokeShape(shape);
-          }}
-        />
+        {/* The whole square is grabbable, not just the art's opaque pixels */}
+        <KonvaRect width={size} height={size} fill="transparent" />
+        {art}
       </Group>
 
       {showHandles && (
+        // TradingView: a square outline with four corner handles; resizing keeps it square
+        // and there is no rotation handle
         <Transformer
           ref={trRef}
-          boundBoxFunc={(oldBox, newBox) => {
-            // limit resize
-            if (Math.abs(newBox.width) < 10 || Math.abs(newBox.height) < 10) {
-              return oldBox;
-            }
-            return newBox;
-          }}
-          rotateAnchorOffset={15}
+          keepRatio
+          rotateEnabled={false}
           enabledAnchors={isLocked ? [] : ['top-left', 'top-right', 'bottom-left', 'bottom-right']}
-          rotateEnabled={!isLocked}
+          borderStroke="#2962ff"
+          borderStrokeWidth={1}
+          anchorStroke="#2962ff"
+          anchorStrokeWidth={2}
+          anchorFill="#ffffff"
+          anchorSize={11}
+          anchorCornerRadius={6}
+          boundBoxFunc={(oldBox, newBox) => (Math.abs(newBox.width) < 10 || Math.abs(newBox.height) < 10 ? oldBox : newBox)}
         />
       )}
     </>

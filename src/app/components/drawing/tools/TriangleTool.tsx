@@ -3,6 +3,8 @@ import { Line, Group, Circle } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
+import { useSnap, useSnappedDrag } from '../core/snap';
+import { HandleCircle } from '../core/Handles';
 
 interface TriangleToolProps {
   id: string;
@@ -20,7 +22,9 @@ interface TriangleToolProps {
 }
 
 export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints, fill, backgroundVisible }: TriangleToolProps) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  const move = useSnappedDrag(chart, series, points, onUpdatePoints);
+  useChartTick(chart, series);
 
   // Local pixel positions for live-preview while dragging handles
   const [livePixels, setLivePixels] = useState<{ x: number; y: number }[] | null>(null);
@@ -47,7 +51,7 @@ export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, isHo
   const flattenedPoints: number[] = [];
   pixelPoints.forEach(p => flattenedPoints.push(p.x, p.y));
 
-  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); move.start(e); };
 
   // ── Group drag (move whole triangle) ──────────────────────────────────────
   const handleGroupDragEnd = (e: any) => {
@@ -55,15 +59,7 @@ export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, isHo
     if (!onUpdatePoints) return;
     const node = e.target;
     if (node.className === 'Circle') return; // handled separately
-    const dx = node.x();
-    const dy = node.y();
-    const newPoints = points.map(p => {
-      const px = logicalToPixel(chart, p.logical)! + dx;
-      const py = priceToPixel(series, p.price)! + dy;
-      return { logical: pixelToLogical(chart, px)!, price: pixelToPrice(series, py)! };
-    });
-    onUpdatePoints(newPoints);
-    node.position({ x: 0, y: 0 });
+    move.end(e);
   };
 
   // ── Handle drag: live preview ─────────────────────────────────────────────
@@ -71,6 +67,8 @@ export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, isHo
     e.cancelBubble = true;
     draggingIndex.current = index;
 
+    // The handle snaps (and is moved onto the snapped spot) before the preview reads it
+    snap(e.target.x(), e.target.y(), e.evt, e.target);
     // Snapshot canonical pixels and override just the dragged one
     const updated = canonicalPixels.map((pt, i) =>
       i === index ? { x: e.target.x(), y: e.target.y() } : pt
@@ -84,11 +82,10 @@ export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, isHo
     setIsDragging(false);
 
     if (!onUpdatePoints) return;
-    const logical = pixelToLogical(chart, e.target.x());
-    const price = pixelToPrice(series, e.target.y());
-    if (logical !== null && price !== null) {
+    const snapped = snap(e.target.x(), e.target.y(), e.evt, e.target);
+    if (snapped) {
       const newPoints = [...points];
-      newPoints[index] = { logical, price };
+      newPoints[index] = snapped;
       onUpdatePoints(newPoints);
     }
     // Clear live state — parent will re-render with updated logical coords
@@ -99,23 +96,23 @@ export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, isHo
     <Group
       id={id}
       draggable={isSelected || isHovering}
-      onDragStart={handleDragStart}
+      onDragStart={handleDragStart} onDragMove={move.drag}
       onDragEnd={handleGroupDragEnd}
       onClick={onSelect}
       onTap={onSelect}
     >
       <Line
         points={flattenedPoints}
-        stroke={isSelected ? '#2962ff' : stroke}
+        stroke={stroke}
         strokeWidth={strokeWidth}
         fill={backgroundVisible !== false ? (fill || 'rgba(41, 98, 255, 0.08)') : 'transparent'}
         closed={true}
         shadowColor={isSelected ? stroke : 'transparent'}
         shadowBlur={isSelected && !isDragging ? 4 : 0}
-        listening={!isSelected} // let circles take events when selected
+        hitStrokeWidth={Math.max(strokeWidth + 10, 15)}
       />
       {(isSelected || isHovering) && pixelPoints.map((pt, i) => (
-        <Circle
+        <HandleCircle
           key={i}
           x={pt.x}
           y={pt.y}

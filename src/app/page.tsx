@@ -190,23 +190,24 @@ function AppLayout() {
   useEffect(() => { intervalRef.current = selectedInterval; }, [selectedInterval]);
   const hasLoadedOnce = useRef(false);
 
-  // Sync symbol changes to URL
+  // The URL mirrors the symbol. It's written synchronously: an async router round-trip could
+  // land after a newer pick and flip the chart back to the older symbol, over and over.
   useEffect(() => {
-    const currentSymbol = searchParams.get("symbol");
-    if (symbol !== currentSymbol) {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("symbol", symbol);
-      router.push(`?${params.toString()}`, { scroll: false });
-    }
-  }, [symbol, router, searchParams]);
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("symbol") === symbol) return;
+    url.searchParams.set("symbol", symbol);
+    window.history.pushState(null, "", url);
+  }, [symbol]);
 
-  // Handle browser back/forward buttons
+  // ...and it's read back only on the browser's Back/Forward
   useEffect(() => {
-    const urlSymbol = searchParams.get("symbol");
-    if (urlSymbol && urlSymbol !== symbol) {
-      setSymbol(urlSymbol);
-    }
-  }, [searchParams]);
+    const onPop = () => {
+      const urlSymbol = new URLSearchParams(window.location.search).get("symbol");
+      if (urlSymbol) setSymbol(urlSymbol);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   useEffect(() => {
     document.title = `${symbol} | TradePilot`;

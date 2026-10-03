@@ -1244,6 +1244,16 @@ export default function ChartContainer({
     rt.busy = true; rt.last = Date.now();
     runBacktest(backtestRange, capitalOverride, undefined, true).finally(() => { rt.busy = false; });
   };
+  // Like TradingView, a script on the chart recalculates for the new symbol/timeframe;
+  // called once that switch's bars are on the chart.
+  const pineRerunOnLoadRef = useRef<() => void>(() => {});
+  pineRerunOnLoadRef.current = () => {
+    const last = lastPineRunRef.current;
+    if (!last) return;
+    last.pineTf = appIntervalToPineTf(intervalRef.current);
+    last.symbol = symbolRef.current;
+    runBacktest(backtestRange, capitalOverride);
+  };
 
   // "Show on chart" (the report's trades): scroll the chart to a bar, or to a trade's entry..exit
   function showTimeOnChart(from: number, to?: number) {
@@ -1786,6 +1796,22 @@ export default function ChartContainer({
   symbolRef.current = symbol;
   const intervalRef = useRef(interval);
   intervalRef.current = interval;
+
+  // Bar replay trades in its own account, filled at the replay's prices and bar times
+  useEffect(() => {
+    if (mode === 'active') engine.startReplaySession();
+    else engine.endReplaySession();
+  }, [mode]);
+  useEffect(() => () => engine.endReplaySession(), []);
+  useEffect(() => {
+    if (mode !== 'active') return;
+    const bar = fullDataRef.current[replayIndex];
+    if (!bar) return;
+    const t = (bar.time as number) * 1000;
+    // The bar's path: open, the nearer extreme, the farther one, close
+    const path = bar.close >= bar.open ? [bar.open, bar.low, bar.high, bar.close] : [bar.open, bar.high, bar.low, bar.close];
+    for (const p of path) engine.setReplayQuote(symbol, p, t);
+  }, [mode, replayIndex, symbol]);
 
   // Update document title dynamically
   useEffect(() => {
@@ -2659,6 +2685,7 @@ export default function ChartContainer({
           const oldStockData = fullDataRef.current; // Save before overwriting
           fullDataRef.current = stockData;
           (window as any).__chartFullData = stockData;
+          pineRerunOnLoadRef.current();
           
           // Cache this interval's data in agg cache for future use
           if (AGGREGATABLE_INTERVALS[interval] && stockData.length > 0) {

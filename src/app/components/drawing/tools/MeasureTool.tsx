@@ -13,7 +13,7 @@ interface MeasureToolProps {
 }
 
 export function MeasureTool({ id, points, chart, series }: MeasureToolProps) {
-  useChartTick(chart);
+  useChartTick(chart, series);
   const textRef = useRef<any>(null);
   const [textDim, setTextDim] = useState({ width: 120, height: 50 });
 

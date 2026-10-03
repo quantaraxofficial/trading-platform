@@ -1,9 +1,12 @@
 "use client";
 
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { Stage, Layer, Rect as KonvaRect } from 'react-konva';
+import { Stage, Layer, Group, Rect as KonvaRect } from 'react-konva';
 import { useDrawing } from './core/DrawingContext';
 import { pixelToLogical, pixelToPrice, logicalToPixel, priceToPixel } from './core/coordinates';
+import { snapToChart, effectiveMagnet } from './core/snap';
+import { afterChartFrame } from './core/chartFrame';
+import { isIconId } from '../ui/emojiArt';
 import { TrendLine } from './tools/TrendLine';
 import { RectangleTool } from './tools/Rectangle';
 import { TextTool } from './tools/Text';
@@ -177,9 +180,13 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
     // Live ticks / replay steps change candle bodies without moving the time scale
     const redraw = () => layer.batchDraw();
     series.subscribeDataChanged(redraw);
+    // When the chart's mapping changes, the drawings have just re-rendered inside its paint:
+    // draw them now, in the same frame as the candles, not on Konva's next frame
+    const offFrame = afterChartFrame(chart, series, () => layer.draw());
     layer.batchDraw();
     return () => {
       layer.off('draw.candleCut');
+      offFrame();
       try { series.unsubscribeDataChanged(redraw); } catch { /* series already disposed */ }
     };
   }, [chart, series]);
@@ -731,6 +738,9 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
     const pointerPos = stage.getPointerPosition();
     if (!pointerPos) return;
     lastPointerPosRef.current = pointerPos;
+    // Only the left button places points (a right-click finishes a path, it doesn't add to it)
+    if (activeTool && e.evt && e.evt.button !== undefined && e.evt.button !== 0) return;
+    downsRef.current = [downsRef.current[1], { x: pointerPos.x, y: pointerPos.y }];
 
     // Ctrl+drag on empty canvas starts a selection rectangle. Ctrl+drag
     // starting directly on a hovered/selected shape (e.target !== stage) is
@@ -803,88 +813,10 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
       return;
     }
 
-    let rawLogical = pixelToLogical(chart, pointerPos.x);
-    let rawPrice = pixelToPrice(series, pointerPos.y);
-    let rawTime = chart.timeScale().coordinateToTime(pointerPos.x) || null;
-    
-    // Interpolate exact time for fractional logical coordinates to preserve visual alignment across timeframes
-    if (rawLogical !== null) {
-      const fullData = (window as any).__chartFullData || [];
-      const index1 = Math.floor(rawLogical);
-      const index2 = index1 + 1;
-      if (index1 >= 0 && index2 < fullData.length) {
-        const time1 = fullData[index1].time;
-        const time2 = fullData[index2].time;
-        const fraction = rawLogical - index1;
-        rawTime = time1 + fraction * (time2 - time1);
-      } else if (index1 >= fullData.length - 1 && fullData.length >= 2) {
-        const lastTime = fullData[fullData.length - 1].time;
-        const prevTime = fullData[fullData.length - 2].time;
-        const diff = lastTime - prevTime;
-        const fraction = rawLogical - (fullData.length - 1);
-        rawTime = lastTime + fraction * diff;
-      }
-    }
-
-    if (rawLogical === null || rawPrice === null) return;
-
-    // Apply Magnet Mode Snapping
-    const isMagnetActive = (magnetMode !== 'off' && !isCtrlPressed) || (magnetMode === 'off' && isCtrlPressed);
-    const effectiveMagnetMode = isMagnetActive ? (magnetMode === 'weak' && !isCtrlPressed ? 'weak' : 'strong') : 'off';
-
-    let logical = rawLogical;
-    let price = rawPrice;
-    let time = rawTime;
-
-    if (effectiveMagnetMode !== 'off') {
-      const fullData = (window as any).__chartFullData || [];
-      const roundedLogical = Math.round(logical);
-      
-      if (roundedLogical >= 0 && roundedLogical < fullData.length) {
-        const candle = fullData[roundedLogical];
-        if (candle) {
-          const pixelY = pointerPos.y;
-          const oY = priceToPixel(series, candle.open) ?? pixelY;
-          const hY = priceToPixel(series, candle.high) ?? pixelY;
-          const lY = priceToPixel(series, candle.low) ?? pixelY;
-          const cY = priceToPixel(series, candle.close) ?? pixelY;
-          
-          const dists = [
-            { val: candle.open, dist: Math.abs(pixelY - oY) },
-            { val: candle.high, dist: Math.abs(pixelY - hY) },
-            { val: candle.low, dist: Math.abs(pixelY - lY) },
-            { val: candle.close, dist: Math.abs(pixelY - cY) }
-          ];
-          
-          dists.sort((a, b) => a.dist - b.dist);
-          const closest = dists[0];
-          
-          if (effectiveMagnetMode === 'strong' || (effectiveMagnetMode === 'weak' && closest.dist < 30)) {
-            logical = roundedLogical;
-            price = closest.val;
-            time = candle.time;
-          }
-        }
-      }
-    }
-
-    // Every shape's points always snap horizontally to the nearest candle's own center
-    // (its wick midline), independent of the Magnet Mode toggle — price stays fully free
-    // so the point can still be placed anywhere along that vertical line, UNLESS Magnet
-    // Mode already pinned it to that candle's O/H/L/C just above: this block used to
-    // reset price back to the raw cursor position unconditionally, which silently undid
-    // magnet's vertical snap for every point-based tool (trendline included) the instant
-    // it ran. Continuous freehand tools (brush/highlighter) are excluded — snapping would
-    // make strokes look steppy instead of smooth.
-    if (activeTool && activeTool !== 'brush' && activeTool !== 'highlighter') {
-      const fullData = (window as any).__chartFullData || [];
-      const snappedLogical = Math.round(rawLogical);
-      if (snappedLogical >= 0 && snappedLogical < fullData.length) {
-        logical = snappedLogical;
-        if (effectiveMagnetMode === 'off') price = rawPrice;
-        time = fullData[snappedLogical].time;
-      }
-    }
+    const snapped = snapToChart(chart, series, pointerPos.x, pointerPos.y, effectiveMagnet(magnetMode, isCtrlPressed),
+      !activeTool || activeTool === 'brush' || activeTool === 'highlighter');
+    if (!snapped) return;
+    let { logical, price, time } = snapped as { logical: number; price: number; time: any };
 
     // Trend line: holding Shift while placing the second point locks the line's angle
     // to the nearest multiple of 45°.
@@ -955,7 +887,8 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
             type: 'emoji',
             visible: true,
             locked: false,
-            stroke: '#000000',
+            // An Icons-tab icon is drawn in this colour; an emoji keeps its own
+            stroke: isIconId(activeEmoji) ? '#2962ff' : '#000000',
             strokeWidth: 1,
             points: newPoints,
             emojiChar: activeEmoji || '😀',
@@ -967,56 +900,10 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
           setSelectedShapeId(newId);
           finishActiveTool();
         } else {
-          let finalPoints = newPoints;
-          if (activeTool === 'double_curve' && newPoints.length === 2) {
-            finalPoints = deriveDoubleCurvePoints(newPoints[0], newPoints[1]) ?? finalPoints;
-          }
-          
-          // A circle is stored like an ellipse — [center, right-edge point, top-edge point]
-          // — so its horizontal radius is measured in bars and its vertical radius in
-          // price. That keeps it anchored to the chart the way every other shape is:
-          // it stretches with each axis on zoom instead of a single pixel radius
-          // (distance to the drag point) that ballooned when either axis was zoomed.
-          // At the moment of creation it is exactly the circle the user dragged.
-          if (activeTool === 'circle' && newPoints.length === 2) {
-            const c = newPoints[0];
-            const cx = logicalToPixel(chart, c.logical);
-            const cy = priceToPixel(series, c.price);
-            const ex = logicalToPixel(chart, newPoints[1].logical);
-            const ey = priceToPixel(series, newPoints[1].price);
-            if (cx !== null && cy !== null && ex !== null && ey !== null) {
-              const r = Math.hypot(ex - cx, ey - cy);
-              const edgeLogical = pixelToLogical(chart, cx + r);
-              const topPrice = pixelToPrice(series, cy - r);
-              if (r >= 1 && edgeLogical !== null && topPrice !== null) {
-                const fullData: any[] = (window as any).__chartFullData || [];
-                const n = fullData.length;
-                // Time at a fractional bar index, extrapolated past either end of the data
-                const spacing = n > 1 ? (fullData[n - 1].time - fullData[0].time) / (n - 1) : 0;
-                const timeAt = (l: number) => {
-                  if (n === 0) return (c as any).time;
-                  if (l <= 0) return fullData[0].time + l * spacing;
-                  if (l >= n - 1) return fullData[n - 1].time + (l - (n - 1)) * spacing;
-                  const i = Math.floor(l);
-                  return fullData[i].time + (l - i) * (fullData[i + 1].time - fullData[i].time);
-                };
-                finalPoints = [
-                  c,
-                  { logical: edgeLogical, price: c.price, time: timeAt(edgeLogical) },
-                  { logical: c.logical, price: topPrice, time: (c as any).time },
-                ];
-              }
-            }
-          }
+          let finalPoints = shapePoints(activeTool, newPoints);
 
           let additionalProps = {};
 
-          if (activeTool === 'horizontal_ray') {
-            // Every other line/shape tool falling through this generic path defaults to
-            // pink ('#e91e63' below) unless the user has customized that type's defaults
-            // before — blue reads as a normal price-level line rather than a markup/note.
-            additionalProps = { stroke: '#2962ff' };
-          }
 
           if (activeTool === 'long_position' || activeTool === 'short_position') {
             const isLong = activeTool === 'long_position';
@@ -1058,23 +945,8 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
             };
           }
 
-          if (activeTool === 'fibonacci') {
-            // Seed the same 24-level defaults the settings modal displays, so a freshly
-            // drawn fib renders identically to what the Style tab shows before any edits.
-            additionalProps = {
-              fibLevels: DEFAULT_FIB_LEVELS,
-            };
-          }
 
-          if (activeTool === 'curve' && newPoints.length === 2) {
-            finalPoints = deriveCurvePoints(newPoints[0], newPoints[1]) ?? finalPoints;
-          }
 
-          if (activeTool === 'arc') {
-            additionalProps = {
-              fill: 'rgba(233, 30, 99, 0.2)'
-            };
-          }
 
           if (activeTool === 'zoom_in') {
             const logical1 = finalPoints[0].logical;
@@ -1099,7 +971,6 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
           }
 
           const newId = `${activeTool}-${Date.now()}`;
-          const isMarkup = activeTool === 'arrow_mark_up' || activeTool === 'arrow_mark_down';
           
           console.log(`[DrawingCreated] type=${activeTool} id=${newId}`);
           finalPoints.forEach((p: any, i: number) => {
@@ -1111,8 +982,7 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
             type: activeTool as any,
             visible: true,
             locked: false,
-            stroke: isMarkup ? '#009688' : '#e91e63', // matching the pinkish theme for arc
-            strokeWidth: 2,
+            ...toolBaseStyle(activeTool),
             points: finalPoints,
             ...additionalProps
           });
@@ -1133,69 +1003,10 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
     if (!pointerPos) return;
     lastPointerPosRef.current = pointerPos;
 
-    let rawLogical = pixelToLogical(chart, pointerPos.x);
-    let rawPrice = pixelToPrice(series, pointerPos.y);
-    let rawTime = chart.timeScale().coordinateToTime(pointerPos.x) || null;
-    
-    if (rawLogical === null || rawPrice === null) return;
-
-    // Apply Magnet Mode Snapping
-    const isMagnetActive = (magnetMode !== 'off' && !isCtrlPressed) || (magnetMode === 'off' && isCtrlPressed);
-    const effectiveMagnetMode = isMagnetActive ? (magnetMode === 'weak' && !isCtrlPressed ? 'weak' : 'strong') : 'off';
-
-    let logical = rawLogical;
-    let price = rawPrice;
-    let time = rawTime;
-
-    if (effectiveMagnetMode !== 'off') {
-      const fullData = (window as any).__chartFullData || [];
-      const roundedLogical = Math.round(logical);
-      
-      if (roundedLogical >= 0 && roundedLogical < fullData.length) {
-        const candle = fullData[roundedLogical];
-        if (candle) {
-          const pixelY = pointerPos.y;
-          const oY = priceToPixel(series, candle.open) ?? pixelY;
-          const hY = priceToPixel(series, candle.high) ?? pixelY;
-          const lY = priceToPixel(series, candle.low) ?? pixelY;
-          const cY = priceToPixel(series, candle.close) ?? pixelY;
-          
-          const dists = [
-            { val: candle.open, dist: Math.abs(pixelY - oY) },
-            { val: candle.high, dist: Math.abs(pixelY - hY) },
-            { val: candle.low, dist: Math.abs(pixelY - lY) },
-            { val: candle.close, dist: Math.abs(pixelY - cY) }
-          ];
-          
-          dists.sort((a, b) => a.dist - b.dist);
-          const closest = dists[0];
-          
-          if (effectiveMagnetMode === 'strong' || (effectiveMagnetMode === 'weak' && closest.dist < 30)) {
-            logical = roundedLogical;
-            price = closest.val;
-            time = candle.time;
-          }
-        }
-      }
-    }
-
-    // Every shape's points always snap horizontally to the nearest candle's own center
-    // (its wick midline), independent of the Magnet Mode toggle — price stays fully free
-    // so the point can still be placed anywhere along that vertical line, UNLESS Magnet
-    // Mode already pinned it to that candle's O/H/L/C just above: this block used to
-    // reset price back to the raw cursor position unconditionally, which silently undid
-    // magnet's vertical snap for every point-based tool (trendline included) the instant
-    // it ran. Continuous freehand tools (brush/highlighter) are excluded — snapping would
-    // make strokes look steppy instead of smooth.
-    if (activeTool && activeTool !== 'brush' && activeTool !== 'highlighter') {
-      const fullData = (window as any).__chartFullData || [];
-      const snappedLogical = Math.round(rawLogical);
-      if (snappedLogical >= 0 && snappedLogical < fullData.length) {
-        logical = snappedLogical;
-        if (effectiveMagnetMode === 'off') price = rawPrice;
-        time = fullData[snappedLogical].time;
-      }
-    }
+    const snapped = snapToChart(chart, series, pointerPos.x, pointerPos.y, effectiveMagnet(magnetMode, isCtrlPressed),
+      !activeTool || activeTool === 'brush' || activeTool === 'highlighter');
+    if (!snapped) return;
+    let { logical, price, time } = snapped as { logical: number; price: number; time: any };
 
     // Trend line: holding Shift while placing the second point locks the live preview's
     // angle to the nearest multiple of 45°.
@@ -1232,24 +1043,66 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
     setPreviewPoint({ logical, price, time });
   };
 
-  const handleDblClick = () => {
-    if (!activeTool) return;
+  const handleDblClick = (e: any) => {
+    if (!activeTool) {
+      // Double-clicking a drawing selects it and opens its settings
+      const stage = e?.target?.getStage?.();
+      let node = e?.target;
+      while (node && node !== stage) {
+        const id = node.attrs?.id;
+        const d = id && drawings.find(x => x.id === id);
+        if (d) {
+          setSelectedShapeId(id);
+          // SubBar mounts for the new selection first, then hears this
+          requestAnimationFrame(() => window.dispatchEvent(new CustomEvent('tv:open-shape-settings', { detail: { id } })));
+          return;
+        }
+        node = node.parent;
+      }
+      return;
+    }
     const config = TOOL_CONFIG[activeTool];
-    if (config?.type === 'N-point' && pendingPoints.length >= 2) {
-      addDrawing({
-        id: `${activeTool}-${Date.now()}`,
-        type: activeTool as any,
-        visible: true,
-        locked: false,
-        stroke: '#2962ff',
-        strokeWidth: 2,
-        points: pendingPoints
-      });
-      setPendingPoints([]);
-      setPreviewPoint(null);
-      finishActiveTool();
+    // Konva calls any two quick clicks a double-click, even far apart; placing points fast
+    // isn't one. Only two presses on the same spot finish the shape.
+    const [d1, d2] = downsRef.current;
+    if (!d1 || !d2 || Math.hypot(d1.x - d2.x, d1.y - d2.y) > 6) return;
+    if (config?.type === 'N-point' && pendingPoints.length >= 1) {
+      // The double-clicked spot is the last point. Its own presses may not have reached
+      // pendingPoints yet when this fires, so it's added here (and de-duplicated)
+      const pos = e?.target?.getStage?.()?.getPointerPosition?.();
+      const pt = pos ? snapToChart(chart, series, pos.x, pos.y, effectiveMagnet(magnetMode, isCtrlPressed)) : null;
+      finishNPoint(true, pt ?? undefined);
     }
   };
+
+  // Finishes a Path/Polyline with the points placed so far. A double-click's second press
+  // lands on the same spot, so a repeated point is dropped. TradingView leaves the shape
+  // selected, except when it's finished with Esc.
+  // The last two presses on the layer, to tell a real double-click from two quick clicks
+  const downsRef = useRef<({ x: number; y: number } | undefined)[]>([undefined, undefined]);
+  const finishNPoint = (select: boolean, last?: { logical: number; price: number; time: any }) => {
+    const placed = last ? [...pendingPoints, last] : pendingPoints;
+    const pts = placed.filter((p, i) => i === 0 || p.logical !== placed[i - 1].logical || p.price !== placed[i - 1].price);
+    if (activeTool && pts.length >= 2) {
+      const id = `${activeTool}-${Date.now()}`;
+      addDrawing({ id, type: activeTool as any, visible: true, locked: false, ...toolBaseStyle(activeTool), points: pts });
+      if (select) setSelectedShapeId(id);
+    }
+    setPendingPoints([]);
+    setPreviewPoint(null);
+    finishActiveTool();
+  };
+
+  // Esc on a path that already has two points keeps it, unselected (with one point it's
+  // dropped by the global Esc). Capture phase, so it runs before that Esc clears the tool.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || activeTool !== 'path' || isTypingTarget(e.target)) return;
+      if (pendingPoints.length >= 2) finishNPoint(false);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1257,20 +1110,7 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
       if (e.key === 'Enter') {
         if (!activeTool) return;
         const config = TOOL_CONFIG[activeTool];
-        if (config?.type === 'N-point' && pendingPoints.length >= 2) {
-          addDrawing({
-            id: `${activeTool}-${Date.now()}`,
-            type: activeTool as any,
-            visible: true,
-            locked: false,
-            stroke: '#2962ff',
-            strokeWidth: 2,
-            points: pendingPoints
-          });
-          setPendingPoints([]);
-          setPreviewPoint(null);
-          finishActiveTool();
-        }
+        if (config?.type === 'N-point' && pendingPoints.length >= 2) finishNPoint(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -1358,19 +1198,12 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
     if (activeTool) {
       const config = TOOL_CONFIG[activeTool];
       
+      // Finishing or leaving a drawing with a right-click opens no chart menu (TradingView)
+      e.evt?.stopPropagation?.();
       // For N-point tools (like Path/Polyline), right-click FINISHES the drawing
       if (config?.type === 'N-point' && pendingPoints.length >= 2) {
-        const finishedId = `${activeTool}-${Date.now()}`;
-        addDrawing({
-          id: finishedId,
-          type: activeTool as any,
-          visible: true,
-          locked: false,
-          stroke: '#2962ff',
-          strokeWidth: 2,
-          points: pendingPoints
-        });
-        setSelectedShapeId(finishedId);
+        finishNPoint(true);
+        return;
       }
 
       finishActiveTool();
@@ -1503,6 +1336,526 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
     return { d, px, py, rot };
   }, [editingTextId]);
 
+  // The style a tool's drawing is created with; addDrawing layers the user's last-used
+  // style for that tool on top. The live preview is built the same way.
+  const toolBaseStyle = (tool: string): Record<string, any> => {
+    const style: Record<string, any> = { stroke: '#e91e63', strokeWidth: 2 };
+    if (tool === 'arrow_mark_up' || tool === 'arrow_mark_down') style.stroke = '#009688';
+    if (tool === 'horizontal_ray' || TOOL_CONFIG[tool]?.type === 'N-point') style.stroke = '#2962ff';
+    if (tool === 'fibonacci') style.fibLevels = DEFAULT_FIB_LEVELS;
+    if (tool === 'arc') style.fill = 'rgba(233, 30, 99, 0.2)';
+    if (tool === 'path') style.lineEndStyle = 'Arrow';
+    return style;
+  };
+
+  // The points a drawing is stored with, from the points the user placed
+  const shapePoints = (tool: string, placed: any[]): any[] => {
+    if (tool === 'curve' && placed.length === 2) return deriveCurvePoints(placed[0], placed[1]) ?? placed;
+    if (tool === 'double_curve' && placed.length === 2) return deriveDoubleCurvePoints(placed[0], placed[1]) ?? placed;
+    // A circle is stored like an ellipse — [center, right-edge point, top-edge point] — so
+    // its horizontal radius is in bars and its vertical radius in price, and it stretches
+    // with each axis on zoom. At creation it is exactly the circle the user dragged.
+    if (tool === 'circle' && placed.length === 2) {
+      const c = placed[0];
+      const cx = logicalToPixel(chart, c.logical);
+      const cy = priceToPixel(series, c.price);
+      const ex = logicalToPixel(chart, placed[1].logical);
+      const ey = priceToPixel(series, placed[1].price);
+      if (cx === null || cy === null || ex === null || ey === null) return placed;
+      const r = Math.hypot(ex - cx, ey - cy);
+      const edgeLogical = pixelToLogical(chart, cx + r);
+      const topPrice = pixelToPrice(series, cy - r);
+      if (r < 1 || edgeLogical === null || topPrice === null) return placed;
+      const fullData: any[] = (window as any).__chartFullData || [];
+      const n = fullData.length;
+      // Time at a fractional bar index, extrapolated past either end of the data
+      const spacing = n > 1 ? (fullData[n - 1].time - fullData[0].time) / (n - 1) : 0;
+      const timeAt = (l: number) => {
+        if (n === 0) return (c as any).time;
+        if (l <= 0) return fullData[0].time + l * spacing;
+        if (l >= n - 1) return fullData[n - 1].time + (l - (n - 1)) * spacing;
+        const i = Math.floor(l);
+        return fullData[i].time + (l - i) * (fullData[i + 1].time - fullData[i].time);
+      };
+      return [
+        c,
+        { logical: edgeLogical, price: c.price, time: timeAt(edgeLogical) },
+        { logical: c.logical, price: topPrice, time: (c as any).time },
+      ];
+    }
+    return placed;
+  };
+
+  // The shape being drawn, exactly as it will be created (same style, same stored points),
+  // so the preview matches the placed drawing
+  const previewDrawing = (() => {
+    if (!activeTool || pendingPoints.length === 0 || !previewPoint) return null;
+    if (activeTool === 'measure' || activeTool === 'zoom_in' || TOOL_CONFIG[activeTool]?.type === 'continuous') return null;
+    return {
+      ...toolBaseStyle(activeTool),
+      ...((defaultSettings as any)[activeTool] || {}),
+      id: 'preview', type: activeTool, visible: true, locked: false,
+      points: shapePoints(activeTool, [...pendingPoints, previewPoint]),
+    } as any;
+  })();
+
+  // Renders a drawing as the chart shows it; the preview goes through here too
+  const renderDrawing = (committed: any, asSelected = false) => {
+            const drawing = liveEdit && liveEdit.id === committed.id ? { ...committed, ...liveEdit.updates } : committed;
+            const isSel = asSelected || selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id);
+            if (drawing.type === 'trendline') {
+              return (
+                <TrendLine 
+                  key={drawing.id}
+                  id={drawing.id}
+                  points={drawing.points}
+                  stroke={drawing.stroke}
+                  strokeWidth={drawing.strokeWidth}
+                  lineStyle={drawing.lineStyle}
+                  extendLeft={drawing.extendLeft}
+                  extendRight={drawing.extendRight}
+                  showMiddlePoint={drawing.showMiddlePoint}
+                  showPriceLabels={drawing.showPriceLabels}
+                  showStats={drawing.showStats}
+                  statsPosition={drawing.statsPosition}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
+                  chart={chart}
+                  series={series}
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  isLocked={drawing.locked}
+                  text={(drawing as any).text}
+                  onTextEdit={() => setEditingTextId(drawing.id)}
+                  isEditingText={editingTextId === drawing.id}
+                />
+              );
+            } else if (drawing.type === 'rectangle') {
+              return (
+                <RectangleTool 
+                  key={drawing.id}
+                  id={drawing.id}
+                  points={drawing.points}
+                  stroke={drawing.stroke}
+                  strokeWidth={drawing.strokeWidth}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
+                  chart={chart}
+                  series={series}
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  isLocked={drawing.locked}
+                  // New properties passed here
+                  fill={drawing.fill}
+                  backgroundVisible={(drawing as any).backgroundVisible}
+                  text={(drawing as any).text}
+                  onTextEdit={() => setEditingTextId(drawing.id)}
+                  isEditingText={editingTextId === drawing.id}
+                  textColor={(drawing as any).textColor}
+                  fontSize={(drawing as any).fontSize}
+                  bold={(drawing as any).bold}
+                  italic={(drawing as any).italic}
+                  textAlign={(drawing as any).textAlign}
+                  textVerticalAlign={(drawing as any).textVerticalAlign}
+                  middleLineVisible={(drawing as any).middleLineVisible}
+                  middleLineColor={(drawing as any).middleLineColor}
+                  middleLineStyle={(drawing as any).middleLineStyle}
+                  extendLeft={(drawing as any).extendLeft}
+                  extendRight={(drawing as any).extendRight}
+                  lineStyle={(drawing as any).lineStyle}
+                />
+              );
+            } else if (drawing.type === 'text') {
+              return (
+                <TextTool 
+                  key={drawing.id}
+                  id={drawing.id}
+                  points={drawing.points}
+                  stroke={drawing.stroke}
+                  // @ts-ignore
+                  text={drawing.text}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
+                  chart={chart}
+                  series={series}
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdateText={(newText) => updateDrawing(drawing.id, { text: newText } as any)}
+                  onEdit={() => setEditingTextId(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  initialBarWidth={(drawing as any).initialBarWidth}
+                  isLocked={drawing.locked}
+                  fontSize={(drawing as any).fontSize}
+                  textColor={(drawing as any).textColor}
+                  bold={(drawing as any).bold}
+                  italic={(drawing as any).italic}
+                  showBackground={(drawing as any).showBackground}
+                  backgroundColor={(drawing as any).backgroundColor}
+                  backgroundOpacity={(drawing as any).backgroundOpacity}
+                  showBorder={(drawing as any).showBorder}
+                  borderColor={(drawing as any).borderColor}
+                  textWrap={(drawing as any).textWrap}
+                />
+              );
+            } else if (drawing.type === 'long_position') {
+              return (
+                <LongPositionTool
+                  key={drawing.id}
+                  id={drawing.id}
+                  points={drawing.points}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
+                  chart={chart}
+                  series={series}
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  targetFillColor={drawing.targetFillColor}
+                  stopFillColor={drawing.stopFillColor}
+                  textColor={drawing.textColor}
+                  fontSize={drawing.fontSize}
+                  showPriceLabels={drawing.showPriceLabels}
+                  alwaysShowStats={drawing.alwaysShowStats}
+                  accountSize={drawing.accountSize}
+                  lotSize={drawing.lotSize}
+                  risk={drawing.risk}
+                  riskType={drawing.riskType}
+                  qtyPrecision={drawing.qtyPrecision}
+                />
+              );
+            } else if (drawing.type === 'short_position') {
+              return (
+                <ShortPositionTool
+                  key={drawing.id}
+                  id={drawing.id}
+                  points={drawing.points}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
+                  chart={chart}
+                  series={series}
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  targetFillColor={drawing.targetFillColor}
+                  stopFillColor={drawing.stopFillColor}
+                  textColor={drawing.textColor}
+                  fontSize={drawing.fontSize}
+                  showPriceLabels={drawing.showPriceLabels}
+                  alwaysShowStats={drawing.alwaysShowStats}
+                  accountSize={drawing.accountSize}
+                  lotSize={drawing.lotSize}
+                  risk={drawing.risk}
+                  riskType={drawing.riskType}
+                  qtyPrecision={drawing.qtyPrecision}
+                />
+              );
+            } else if (drawing.type === 'fibonacci') {
+              return (
+                <FibonacciTool 
+                  key={drawing.id}
+                  id={drawing.id}
+                  points={drawing.points}
+                  stroke={drawing.stroke}
+                  strokeWidth={drawing.strokeWidth}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
+                  chart={chart}
+                  series={series}
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  isLocked={drawing.locked}
+                  showTrendLine={(drawing as any).showTrendLine}
+                  trendLineColor={(drawing as any).trendLineColor}
+                  trendLineStyle={(drawing as any).trendLineStyle}
+                  trendLineWidth={(drawing as any).trendLineWidth}
+                  fibLevels={(drawing as any).fibLevels}
+                  useOneColor={(drawing as any).useOneColor}
+                  oneColor={(drawing as any).oneColor}
+                  extendLeft={(drawing as any).extendLeft}
+                  extendRight={(drawing as any).extendRight}
+                  levelsLineWidth={(drawing as any).levelsLineWidth}
+                  levelsLineStyle={(drawing as any).levelsLineStyle}
+                  showBackground={(drawing as any).showBackground}
+                  backgroundOpacity={(drawing as any).backgroundOpacity}
+                  fibReverse={(drawing as any).fibReverse}
+                  fibShowLevels={(drawing as any).fibShowLevels}
+                  fibLevelFormat={(drawing as any).fibLevelFormat}
+                  fibPrices={(drawing as any).fibPrices}
+                  fibShowText={(drawing as any).fibShowText}
+                  fibLabelHAlign={(drawing as any).fibLabelHAlign}
+                  fibLabelVAlign={(drawing as any).fibLabelVAlign}
+                  fibFontSize={(drawing as any).fibFontSize}
+                />
+              );
+            } else if (drawing.type === 'brush') {
+              return (
+                <BrushTool 
+                  key={drawing.id}
+                  id={drawing.id}
+                  points={drawing.points}
+                  stroke={drawing.stroke}
+                  strokeWidth={drawing.strokeWidth}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
+                  chart={chart}
+                  series={series}
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  isLocked={drawing.locked}
+                />
+              );
+            } else if (drawing.type === 'measure') {
+              return (
+                <MeasureTool key={drawing.id} id={drawing.id} points={drawing.points} chart={chart} series={series} />
+              );
+            } else if (drawing.type === 'highlighter') {
+              return (
+                <HighlighterTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
+              );
+            } else if (drawing.type === 'arrow_marker') {
+              return (
+                <ArrowMarkerTool 
+                  key={drawing.id} 
+                  id={drawing.id} 
+                  points={drawing.points} 
+                  stroke={drawing.stroke} 
+                  strokeWidth={drawing.strokeWidth} 
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
+                  chart={chart} 
+                  series={series} 
+                  onSelect={() => selectDrawing(drawing.id)} 
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
+                  text={drawing.text}
+                  textColor={drawing.textColor}
+                  fontSize={drawing.fontSize}
+                  bold={drawing.bold}
+                  italic={drawing.italic}
+                  isLocked={drawing.locked}
+                />
+              );
+            } else if (drawing.type === 'arrow') {
+              return (
+                <ArrowTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} lineStyle={(drawing as any).lineStyle} extendLeft={(drawing as any).extendLeft} extendRight={(drawing as any).extendRight} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
+              );
+            } else if (drawing.type === 'arrow_mark_up' || drawing.type === 'arrow_mark_down') {
+              return (
+                <ArrowIconTool 
+                  key={drawing.id} 
+                  id={drawing.id} 
+                  points={drawing.points} 
+                  stroke={drawing.stroke} 
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
+                  type={drawing.type}
+                  chart={chart}
+                  series={series}
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  text={drawing.text}
+                  textColor={drawing.textColor}
+                  fontSize={drawing.fontSize}
+                  bold={drawing.bold}
+                  italic={drawing.italic}
+                  isLocked={drawing.locked}
+                />
+              );
+            } else if (drawing.type === 'rotated_rectangle') {
+              return (
+                <RotatedRectangleTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
+              );
+            } else if (drawing.type === 'path') {
+              return (
+                <PathTool 
+                  key={drawing.id} 
+                  id={drawing.id} 
+                  points={drawing.points} 
+                  stroke={drawing.stroke} 
+                  strokeWidth={drawing.strokeWidth} 
+                  lineStyle={(drawing as any).lineStyle} 
+                  lineStartStyle={(drawing as any).lineStartStyle}
+                  lineEndStyle={(drawing as any).lineEndStyle}
+                  fill={drawing.fill}
+                  backgroundVisible={(drawing as any).backgroundVisible}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
+                  chart={chart} 
+                  series={series} 
+                  onSelect={() => selectDrawing(drawing.id)} 
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
+                  isLocked={drawing.locked} 
+                  hideLastHandle={drawing.id === 'preview'}
+                />
+              );
+            } else if (drawing.type === 'polyline') {
+              return (
+                <PolylineTool 
+                  key={drawing.id} 
+                  id={drawing.id} 
+                  points={drawing.points} 
+                  stroke={drawing.stroke} 
+                  strokeWidth={drawing.strokeWidth} 
+                  lineStyle={(drawing as any).lineStyle}
+                  lineStartStyle={(drawing as any).lineStartStyle}
+                  lineEndStyle={(drawing as any).lineEndStyle}
+                  fill={drawing.fill}
+                  backgroundVisible={(drawing as any).backgroundVisible}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
+                  chart={chart} 
+                  series={series} 
+                  onSelect={() => selectDrawing(drawing.id)} 
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
+                  isLocked={drawing.locked} 
+                />
+              );
+            } else if (drawing.type === 'circle') {
+              return (
+                <CircleTool 
+                  key={drawing.id} 
+                  id={drawing.id} 
+                  points={drawing.points} 
+                  stroke={drawing.stroke} 
+                  strokeWidth={drawing.strokeWidth} 
+                  fill={drawing.fill}
+                  backgroundVisible={(drawing as any).backgroundVisible}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
+                  chart={chart} 
+                  series={series} 
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  isLocked={drawing.locked}
+                  text={(drawing as any).text}
+                  onTextEdit={() => setEditingTextId(drawing.id)}
+                  isEditingText={editingTextId === drawing.id}
+                  textColor={(drawing as any).textColor}
+                  fontSize={(drawing as any).fontSize}
+                />
+              );
+            } else if (drawing.type === 'ellipse') {
+              return (
+                <EllipseTool 
+                  key={drawing.id} 
+                  id={drawing.id} 
+                  points={drawing.points} 
+                  stroke={drawing.stroke} 
+                  strokeWidth={drawing.strokeWidth} 
+                  fill={drawing.fill}
+                  backgroundVisible={(drawing as any).backgroundVisible}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
+                  chart={chart} 
+                  series={series} 
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  isLocked={drawing.locked}
+                  text={(drawing as any).text}
+                  onTextEdit={() => setEditingTextId(drawing.id)}
+                  isEditingText={editingTextId === drawing.id}
+                  textColor={(drawing as any).textColor}
+                  fontSize={(drawing as any).fontSize}
+                />
+              );
+            } else if (drawing.type === 'triangle') {
+              return (
+                <TriangleTool 
+                  key={drawing.id} 
+                  id={drawing.id} 
+                  points={drawing.points} 
+                  stroke={drawing.stroke} 
+                  strokeWidth={drawing.strokeWidth} 
+                  fill={drawing.fill}
+                  backgroundVisible={(drawing as any).backgroundVisible}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
+                  chart={chart} 
+                  series={series} 
+                  onSelect={() => selectDrawing(drawing.id)} 
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
+                  isLocked={drawing.locked} 
+                />
+              );
+            } else if (drawing.type === 'arc') {
+              return (
+                <ArcTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} fill={(drawing as any).fill} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
+              );
+            } else if (drawing.type === 'curve') {
+              return (
+                <CurveTool 
+                  key={drawing.id} 
+                  id={drawing.id} 
+                  points={drawing.points} 
+                  stroke={drawing.stroke} 
+                  strokeWidth={drawing.strokeWidth} 
+                  lineStyle={(drawing as any).lineStyle}
+                  fill={drawing.fill}
+                  fillEnabled={(drawing as any).fillEnabled}
+                  lineStartStyle={(drawing as any).lineStartStyle}
+                  lineEndStyle={(drawing as any).lineEndStyle}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
+                  chart={chart} 
+                  series={series} 
+                  onSelect={() => selectDrawing(drawing.id)} 
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
+                  isLocked={drawing.locked} 
+                />
+              );
+            } else if (drawing.type === 'double_curve') {
+              return (
+                <DoubleCurveTool 
+                  key={drawing.id} 
+                  id={drawing.id} 
+                  points={drawing.points} 
+                  stroke={drawing.stroke} 
+                  strokeWidth={drawing.strokeWidth} 
+                  lineStyle={(drawing as any).lineStyle}
+                  fill={drawing.fill}
+                  fillEnabled={(drawing as any).fillEnabled}
+                  lineStartStyle={(drawing as any).lineStartStyle}
+                  lineEndStyle={(drawing as any).lineEndStyle}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
+                  chart={chart} 
+                  series={series} 
+                  onSelect={() => selectDrawing(drawing.id)} 
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
+                  isLocked={drawing.locked} 
+                />
+              );
+            } else if (drawing.type === 'horizontal_ray') {
+              return (
+                <HorizontalRayTool
+                  key={drawing.id}
+                  id={drawing.id}
+                  points={drawing.points}
+                  stroke={drawing.stroke}
+                  strokeWidth={drawing.strokeWidth}
+                  lineStyle={(drawing as any).lineStyle}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
+                  chart={chart}
+                  series={series}
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  isLocked={drawing.locked}
+                  text={(drawing as any).text}
+                  textColor={(drawing as any).textColor}
+                  fontSize={(drawing as any).fontSize}
+                  bold={(drawing as any).bold}
+                  italic={(drawing as any).italic}
+                  textVAlign={(drawing as any).textVAlign}
+                  textHAlign={(drawing as any).textHAlign}
+                  priceLabel={(drawing as any).priceLabel}
+                />
+              );
+            } else if (drawing.type === 'emoji') {
+              return (
+                <EmojiTool
+                  key={drawing.id}
+                  id={drawing.id}
+                  points={drawing.points}
+                  emojiChar={drawing.emojiChar || '😀'}
+                  scaleX={drawing.scaleX}
+                  scaleY={drawing.scaleY}
+                  rotation={drawing.rotation}
+                  initialBarWidth={drawing.initialBarWidth}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
+                  chart={chart}
+                  series={series}
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  onUpdateScale={(scaleX, scaleY, rotation) => updateDrawing(drawing.id, { scaleX, scaleY, rotation })}
+                  isLocked={drawing.locked}
+                  emojiSize={(drawing as any).emojiSize}
+                  color={drawing.stroke}
+                />
+              );
+            }
+            return null;
+  };
+
   return (
     <>
     <div 
@@ -1558,471 +1911,9 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
             )
           )}
 
-          {drawings.filter(d => d.visible).map(committed => {
-            const drawing = liveEdit && liveEdit.id === committed.id ? { ...committed, ...liveEdit.updates } : committed;
-            if (drawing.type === 'trendline') {
-              return (
-                <TrendLine 
-                  key={drawing.id}
-                  id={drawing.id}
-                  points={drawing.points}
-                  stroke={drawing.stroke}
-                  strokeWidth={drawing.strokeWidth}
-                  lineStyle={drawing.lineStyle}
-                  extendLeft={drawing.extendLeft}
-                  extendRight={drawing.extendRight}
-                  showMiddlePoint={drawing.showMiddlePoint}
-                  showPriceLabels={drawing.showPriceLabels}
-                  showStats={drawing.showStats}
-                  statsPosition={drawing.statsPosition}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
-                  chart={chart}
-                  series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
-                  isLocked={drawing.locked}
-                  text={(drawing as any).text}
-                  onTextEdit={() => setEditingTextId(drawing.id)}
-                  isEditingText={editingTextId === drawing.id}
-                />
-              );
-            } else if (drawing.type === 'rectangle') {
-              return (
-                <RectangleTool 
-                  key={drawing.id}
-                  id={drawing.id}
-                  points={drawing.points}
-                  stroke={drawing.stroke}
-                  strokeWidth={drawing.strokeWidth}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
-                  chart={chart}
-                  series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
-                  isLocked={drawing.locked}
-                  // New properties passed here
-                  fill={drawing.fill}
-                  backgroundVisible={(drawing as any).backgroundVisible}
-                  text={(drawing as any).text}
-                  onTextEdit={() => setEditingTextId(drawing.id)}
-                  isEditingText={editingTextId === drawing.id}
-                  textColor={(drawing as any).textColor}
-                  fontSize={(drawing as any).fontSize}
-                  bold={(drawing as any).bold}
-                  italic={(drawing as any).italic}
-                  textAlign={(drawing as any).textAlign}
-                  textVerticalAlign={(drawing as any).textVerticalAlign}
-                  middleLineVisible={(drawing as any).middleLineVisible}
-                  middleLineColor={(drawing as any).middleLineColor}
-                  middleLineStyle={(drawing as any).middleLineStyle}
-                  extendLeft={(drawing as any).extendLeft}
-                  extendRight={(drawing as any).extendRight}
-                  lineStyle={(drawing as any).lineStyle}
-                />
-              );
-            } else if (drawing.type === 'text') {
-              return (
-                <TextTool 
-                  key={drawing.id}
-                  id={drawing.id}
-                  points={drawing.points}
-                  stroke={drawing.stroke}
-                  // @ts-ignore
-                  text={drawing.text}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
-                  chart={chart}
-                  series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdateText={(newText) => updateDrawing(drawing.id, { text: newText } as any)}
-                  onEdit={() => setEditingTextId(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
-                  initialBarWidth={(drawing as any).initialBarWidth}
-                  isLocked={drawing.locked}
-                  fontSize={(drawing as any).fontSize}
-                  textColor={(drawing as any).textColor}
-                  bold={(drawing as any).bold}
-                  italic={(drawing as any).italic}
-                  showBackground={(drawing as any).showBackground}
-                  backgroundColor={(drawing as any).backgroundColor}
-                  backgroundOpacity={(drawing as any).backgroundOpacity}
-                  showBorder={(drawing as any).showBorder}
-                  borderColor={(drawing as any).borderColor}
-                  textWrap={(drawing as any).textWrap}
-                />
-              );
-            } else if (drawing.type === 'long_position') {
-              return (
-                <LongPositionTool
-                  key={drawing.id}
-                  id={drawing.id}
-                  points={drawing.points}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
-                  chart={chart}
-                  series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
-                  targetFillColor={drawing.targetFillColor}
-                  stopFillColor={drawing.stopFillColor}
-                  textColor={drawing.textColor}
-                  fontSize={drawing.fontSize}
-                  showPriceLabels={drawing.showPriceLabels}
-                  alwaysShowStats={drawing.alwaysShowStats}
-                  accountSize={drawing.accountSize}
-                  lotSize={drawing.lotSize}
-                  risk={drawing.risk}
-                  riskType={drawing.riskType}
-                  qtyPrecision={drawing.qtyPrecision}
-                />
-              );
-            } else if (drawing.type === 'short_position') {
-              return (
-                <ShortPositionTool
-                  key={drawing.id}
-                  id={drawing.id}
-                  points={drawing.points}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
-                  chart={chart}
-                  series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
-                  targetFillColor={drawing.targetFillColor}
-                  stopFillColor={drawing.stopFillColor}
-                  textColor={drawing.textColor}
-                  fontSize={drawing.fontSize}
-                  showPriceLabels={drawing.showPriceLabels}
-                  alwaysShowStats={drawing.alwaysShowStats}
-                  accountSize={drawing.accountSize}
-                  lotSize={drawing.lotSize}
-                  risk={drawing.risk}
-                  riskType={drawing.riskType}
-                  qtyPrecision={drawing.qtyPrecision}
-                />
-              );
-            } else if (drawing.type === 'fibonacci') {
-              return (
-                <FibonacciTool 
-                  key={drawing.id}
-                  id={drawing.id}
-                  points={drawing.points}
-                  stroke={drawing.stroke}
-                  strokeWidth={drawing.strokeWidth}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
-                  chart={chart}
-                  series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
-                  isLocked={drawing.locked}
-                  showTrendLine={(drawing as any).showTrendLine}
-                  trendLineColor={(drawing as any).trendLineColor}
-                  trendLineStyle={(drawing as any).trendLineStyle}
-                  trendLineWidth={(drawing as any).trendLineWidth}
-                  fibLevels={(drawing as any).fibLevels}
-                  useOneColor={(drawing as any).useOneColor}
-                  oneColor={(drawing as any).oneColor}
-                  extendLeft={(drawing as any).extendLeft}
-                  extendRight={(drawing as any).extendRight}
-                  levelsLineWidth={(drawing as any).levelsLineWidth}
-                  levelsLineStyle={(drawing as any).levelsLineStyle}
-                  showBackground={(drawing as any).showBackground}
-                  backgroundOpacity={(drawing as any).backgroundOpacity}
-                  fibReverse={(drawing as any).fibReverse}
-                  fibShowLevels={(drawing as any).fibShowLevels}
-                  fibLevelFormat={(drawing as any).fibLevelFormat}
-                  fibPrices={(drawing as any).fibPrices}
-                  fibShowText={(drawing as any).fibShowText}
-                  fibLabelHAlign={(drawing as any).fibLabelHAlign}
-                  fibLabelVAlign={(drawing as any).fibLabelVAlign}
-                  fibFontSize={(drawing as any).fibFontSize}
-                />
-              );
-            } else if (drawing.type === 'brush') {
-              return (
-                <BrushTool 
-                  key={drawing.id}
-                  id={drawing.id}
-                  points={drawing.points}
-                  stroke={drawing.stroke}
-                  strokeWidth={drawing.strokeWidth}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
-                  chart={chart}
-                  series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
-                  isLocked={drawing.locked}
-                />
-              );
-            } else if (drawing.type === 'measure') {
-              return (
-                <MeasureTool key={drawing.id} id={drawing.id} points={drawing.points} chart={chart} series={series} />
-              );
-            } else if (drawing.type === 'highlighter') {
-              return (
-                <HighlighterTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
-              );
-            } else if (drawing.type === 'arrow_marker') {
-              return (
-                <ArrowMarkerTool 
-                  key={drawing.id} 
-                  id={drawing.id} 
-                  points={drawing.points} 
-                  stroke={drawing.stroke} 
-                  strokeWidth={drawing.strokeWidth} 
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
-                  chart={chart} 
-                  series={series} 
-                  onSelect={() => selectDrawing(drawing.id)} 
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
-                  text={drawing.text}
-                  textColor={drawing.textColor}
-                  fontSize={drawing.fontSize}
-                  bold={drawing.bold}
-                  italic={drawing.italic}
-                  isLocked={drawing.locked}
-                />
-              );
-            } else if (drawing.type === 'arrow') {
-              return (
-                <ArrowTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} lineStyle={(drawing as any).lineStyle} extendLeft={(drawing as any).extendLeft} extendRight={(drawing as any).extendRight} isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
-              );
-            } else if (drawing.type === 'arrow_mark_up' || drawing.type === 'arrow_mark_down') {
-              return (
-                <ArrowIconTool 
-                  key={drawing.id} 
-                  id={drawing.id} 
-                  points={drawing.points} 
-                  stroke={drawing.stroke} 
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
-                  type={drawing.type}
-                  chart={chart}
-                  series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
-                  text={drawing.text}
-                  textColor={drawing.textColor}
-                  fontSize={drawing.fontSize}
-                  bold={drawing.bold}
-                  italic={drawing.italic}
-                  isLocked={drawing.locked}
-                />
-              );
-            } else if (drawing.type === 'rotated_rectangle') {
-              return (
-                <RotatedRectangleTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
-              );
-            } else if (drawing.type === 'path') {
-              return (
-                <PathTool 
-                  key={drawing.id} 
-                  id={drawing.id} 
-                  points={drawing.points} 
-                  stroke={drawing.stroke} 
-                  strokeWidth={drawing.strokeWidth} 
-                  lineStyle={(drawing as any).lineStyle} 
-                  lineStartStyle={(drawing as any).lineStartStyle}
-                  lineEndStyle={(drawing as any).lineEndStyle}
-                  fill={drawing.fill}
-                  backgroundVisible={(drawing as any).backgroundVisible}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
-                  chart={chart} 
-                  series={series} 
-                  onSelect={() => selectDrawing(drawing.id)} 
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
-                  isLocked={drawing.locked} 
-                />
-              );
-            } else if (drawing.type === 'polyline') {
-              return (
-                <PolylineTool 
-                  key={drawing.id} 
-                  id={drawing.id} 
-                  points={drawing.points} 
-                  stroke={drawing.stroke} 
-                  strokeWidth={drawing.strokeWidth} 
-                  lineStyle={(drawing as any).lineStyle}
-                  lineStartStyle={(drawing as any).lineStartStyle}
-                  lineEndStyle={(drawing as any).lineEndStyle}
-                  fill={drawing.fill}
-                  backgroundVisible={(drawing as any).backgroundVisible}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
-                  chart={chart} 
-                  series={series} 
-                  onSelect={() => selectDrawing(drawing.id)} 
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
-                  isLocked={drawing.locked} 
-                />
-              );
-            } else if (drawing.type === 'circle') {
-              return (
-                <CircleTool 
-                  key={drawing.id} 
-                  id={drawing.id} 
-                  points={drawing.points} 
-                  stroke={drawing.stroke} 
-                  strokeWidth={drawing.strokeWidth} 
-                  fill={drawing.fill}
-                  backgroundVisible={(drawing as any).backgroundVisible}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
-                  chart={chart} 
-                  series={series} 
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
-                  isLocked={drawing.locked}
-                  text={(drawing as any).text}
-                  onTextEdit={() => setEditingTextId(drawing.id)}
-                  isEditingText={editingTextId === drawing.id}
-                  textColor={(drawing as any).textColor}
-                  fontSize={(drawing as any).fontSize}
-                />
-              );
-            } else if (drawing.type === 'ellipse') {
-              return (
-                <EllipseTool 
-                  key={drawing.id} 
-                  id={drawing.id} 
-                  points={drawing.points} 
-                  stroke={drawing.stroke} 
-                  strokeWidth={drawing.strokeWidth} 
-                  fill={drawing.fill}
-                  backgroundVisible={(drawing as any).backgroundVisible}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
-                  chart={chart} 
-                  series={series} 
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
-                  isLocked={drawing.locked}
-                  text={(drawing as any).text}
-                  onTextEdit={() => setEditingTextId(drawing.id)}
-                  isEditingText={editingTextId === drawing.id}
-                  textColor={(drawing as any).textColor}
-                  fontSize={(drawing as any).fontSize}
-                />
-              );
-            } else if (drawing.type === 'triangle') {
-              return (
-                <TriangleTool 
-                  key={drawing.id} 
-                  id={drawing.id} 
-                  points={drawing.points} 
-                  stroke={drawing.stroke} 
-                  strokeWidth={drawing.strokeWidth} 
-                  fill={drawing.fill}
-                  backgroundVisible={(drawing as any).backgroundVisible}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
-                  chart={chart} 
-                  series={series} 
-                  onSelect={() => selectDrawing(drawing.id)} 
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
-                  isLocked={drawing.locked} 
-                />
-              );
-            } else if (drawing.type === 'arc') {
-              return (
-                <ArcTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} fill={(drawing as any).fill} isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
-              );
-            } else if (drawing.type === 'curve') {
-              return (
-                <CurveTool 
-                  key={drawing.id} 
-                  id={drawing.id} 
-                  points={drawing.points} 
-                  stroke={drawing.stroke} 
-                  strokeWidth={drawing.strokeWidth} 
-                  lineStyle={(drawing as any).lineStyle}
-                  fill={drawing.fill}
-                  fillEnabled={(drawing as any).fillEnabled}
-                  lineStartStyle={(drawing as any).lineStartStyle}
-                  lineEndStyle={(drawing as any).lineEndStyle}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
-                  chart={chart} 
-                  series={series} 
-                  onSelect={() => selectDrawing(drawing.id)} 
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
-                  isLocked={drawing.locked} 
-                />
-              );
-            } else if (drawing.type === 'double_curve') {
-              return (
-                <DoubleCurveTool 
-                  key={drawing.id} 
-                  id={drawing.id} 
-                  points={drawing.points} 
-                  stroke={drawing.stroke} 
-                  strokeWidth={drawing.strokeWidth} 
-                  lineStyle={(drawing as any).lineStyle}
-                  fill={drawing.fill}
-                  fillEnabled={(drawing as any).fillEnabled}
-                  lineStartStyle={(drawing as any).lineStartStyle}
-                  lineEndStyle={(drawing as any).lineEndStyle}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id} 
-                  chart={chart} 
-                  series={series} 
-                  onSelect={() => selectDrawing(drawing.id)} 
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
-                  isLocked={drawing.locked} 
-                />
-              );
-            } else if (drawing.type === 'horizontal_ray') {
-              return (
-                <HorizontalRayTool
-                  key={drawing.id}
-                  id={drawing.id}
-                  points={drawing.points}
-                  stroke={drawing.stroke}
-                  strokeWidth={drawing.strokeWidth}
-                  lineStyle={(drawing as any).lineStyle}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
-                  chart={chart}
-                  series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
-                  isLocked={drawing.locked}
-                  text={(drawing as any).text}
-                  textColor={(drawing as any).textColor}
-                  fontSize={(drawing as any).fontSize}
-                  bold={(drawing as any).bold}
-                  italic={(drawing as any).italic}
-                  textVAlign={(drawing as any).textVAlign}
-                  textHAlign={(drawing as any).textHAlign}
-                  priceLabel={(drawing as any).priceLabel}
-                />
-              );
-            } else if (drawing.type === 'emoji') {
-              return (
-                <EmojiTool
-                  key={drawing.id}
-                  id={drawing.id}
-                  points={drawing.points}
-                  emojiChar={drawing.emojiChar || '😀'}
-                  scaleX={drawing.scaleX}
-                  scaleY={drawing.scaleY}
-                  rotation={drawing.rotation}
-                  initialBarWidth={drawing.initialBarWidth}
-                  isSelected={selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id)} isHovering={hoveredShapeId === drawing.id}
-                  chart={chart}
-                  series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
-                  onUpdateScale={(scaleX, scaleY, rotation) => updateDrawing(drawing.id, { scaleX, scaleY, rotation })}
-                  isLocked={drawing.locked}
-                  emojiSize={(drawing as any).emojiSize}
-                />
-              );
-            }
-            return null;
-          })}
+          {drawings.filter(d => d.visible).map(d => renderDrawing(d))}
 
-          {activeTool === 'trendline' && pendingPoints.length > 0 && previewPoint && (
-            <TrendLine 
-              id="preview"
-              points={[pendingPoints[0], previewPoint]}
-              stroke="#2962ff"
-              strokeWidth={2}
-              isSelected={false}
-              chart={chart}
-              series={series}
-              onSelect={() => {}}
-            />
-          )}
+          {previewDrawing && <Group listening={false}>{renderDrawing(previewDrawing, true)}</Group>}
 
           {(activeTool === 'measure' || isShiftMeasuring) && pendingPoints.length > 0 && previewPoint && (
             <MeasureTool 
@@ -2033,19 +1924,6 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
             />
           )}
 
-          {activeTool === 'rectangle' && pendingPoints.length > 0 && previewPoint && (
-            <RectangleTool
-              id="preview"
-              points={[pendingPoints[0], previewPoint]}
-              stroke="#2962ff"
-              strokeWidth={1}
-              fill="rgba(41, 98, 255, 0.1)"
-              isSelected={false}
-              chart={chart}
-              series={series}
-              onSelect={() => {}}
-            />
-          )}
 
           {activeTool === 'zoom_in' && pendingPoints.length > 0 && previewPoint && (() => {
             const px1 = logicalToPixel(chart, pendingPoints[0].logical);
@@ -2072,91 +1950,9 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
             }
             return null;
           })()}
-          {activeTool === 'fibonacci' && pendingPoints.length > 0 && previewPoint && (() => {
-            // Mirror addDrawing()'s merge order (defaultSettings on top of the base
-            // seed) so the live preview looks exactly like the fib that will actually
-            // be created, instead of the tool's own hardcoded fallback style.
-            const fibDefaults: any = defaultSettings?.fibonacci || {};
-            return (
-              <FibonacciTool
-                id="preview"
-                points={[pendingPoints[0], previewPoint]}
-                stroke={fibDefaults.stroke ?? "#2962ff"}
-                strokeWidth={fibDefaults.strokeWidth ?? 2}
-                isSelected={true}
-                chart={chart}
-                series={series}
-                onSelect={() => {}}
-                showTrendLine={fibDefaults.showTrendLine}
-                trendLineColor={fibDefaults.trendLineColor}
-                trendLineStyle={fibDefaults.trendLineStyle}
-                trendLineWidth={fibDefaults.trendLineWidth}
-                fibLevels={fibDefaults.fibLevels ?? DEFAULT_FIB_LEVELS}
-                useOneColor={fibDefaults.useOneColor}
-                oneColor={fibDefaults.oneColor}
-                extendLeft={fibDefaults.extendLeft}
-                extendRight={fibDefaults.extendRight}
-                levelsLineWidth={fibDefaults.levelsLineWidth}
-                levelsLineStyle={fibDefaults.levelsLineStyle}
-                showBackground={fibDefaults.showBackground}
-                backgroundOpacity={fibDefaults.backgroundOpacity}
-                fibReverse={fibDefaults.fibReverse}
-                fibShowLevels={fibDefaults.fibShowLevels}
-                fibLevelFormat={fibDefaults.fibLevelFormat}
-                fibPrices={fibDefaults.fibPrices}
-                fibShowText={fibDefaults.fibShowText}
-                fibLabelHAlign={fibDefaults.fibLabelHAlign}
-                fibLabelVAlign={fibDefaults.fibLabelVAlign}
-                fibFontSize={fibDefaults.fibFontSize}
-              />
-            );
-          })()}
 
 
 
-          {/* Generic previews for other shapes */}
-          {activeTool && pendingPoints.length > 0 && previewPoint && (
-            (() => {
-              const previewPts = [...pendingPoints, previewPoint];
-              const props = {
-                id: 'preview',
-                points: previewPts,
-                stroke: '#2962ff',
-                strokeWidth: 2,
-                isSelected: true,
-                chart,
-                series,
-                onSelect: () => {}
-              };
-
-              switch (activeTool) {
-                case 'arrow_marker':
-                  return <ArrowMarkerTool {...props} />;
-                case 'arrow':
-                  return <ArrowTool {...props} />;
-                case 'rotated_rectangle':
-                  return <RotatedRectangleTool {...props} />;
-                case 'path':
-                  return <PathTool {...props} />;
-                case 'polyline':
-                  return <PolylineTool {...props} />;
-                case 'circle':
-                  return <CircleTool {...props} />;
-                case 'ellipse':
-                  return <EllipseTool {...props} />;
-                case 'triangle':
-                  return <TriangleTool {...props} />;
-                case 'arc':
-                  return <ArcTool {...props} />;
-                case 'curve':
-                  return <CurveTool {...props} points={(previewPts.length === 2 && deriveCurvePoints(previewPts[0], previewPts[1])) || previewPts} />;
-                case 'double_curve':
-                  return <DoubleCurveTool {...props} points={(previewPts.length === 2 && deriveDoubleCurvePoints(previewPts[0], previewPts[1])) || previewPts} />;
-                default:
-                  return null;
-              }
-            })()
-          )}
 
           {/* Ctrl+drag selection rectangle */}
           {selectionRect && (

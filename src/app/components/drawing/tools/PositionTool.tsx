@@ -4,6 +4,8 @@ import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
 import { qtyStepOf } from '../../../trading/instruments';
+import { useSnap } from '../core/snap';
+import { HandleCircle, HandleRect } from '../core/Handles';
 
 // TradingView's Long / Short position. Both zones (profit and stop) are drawn in full; the
 // trade is then played out on the real bars: it opens on the first bar after the tool's start
@@ -99,7 +101,8 @@ export function PositionTool({
   riskType = '%',
   qtyPrecision = 'Default',
 }: PositionToolProps & { side: PositionSide }) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  useChartTick(chart, series);
   // Points when a whole-tool drag began (the drag is applied to these, in whole bars)
   const dragStartRef = useRef<{ logical: number; price: number }[] | null>(null);
   if (!chart || !series || points.length < 4) return null;
@@ -171,11 +174,11 @@ export function PositionTool({
     const ox = logicalToPixel(chart, start[0].logical);
     const oy = priceToPixel(series, start[0].price);
     if (ox === null || oy === null) return;
-    const l = pixelToLogical(chart, ox + dx);
-    const pr = pixelToPrice(series, oy + dy);
-    if (l === null || pr === null) return;
-    const dLogical = Math.round(l - start[0].logical);
-    const dPrice = pr - start[0].price;
+    // The entry point snaps (candle, and magnet) and the rest of the tool follows it
+    const s = snap(ox + dx, oy + dy, e.evt);
+    if (!s) return;
+    const dLogical = Math.round(s.logical - start[0].logical);
+    const dPrice = s.price - start[0].price;
     onUpdatePoints(start.map(p => ({ logical: p.logical + dLogical, price: p.price + dPrice })));
   };
   const handleDragEnd = (e: any) => {
@@ -192,10 +195,10 @@ export function PositionTool({
     if (!onUpdatePoints) return;
     const pos = e.target.getStage()?.getPointerPosition();
     if (!pos) return;
-    const rawLogical = pixelToLogical(chart, pos.x);
-    const price = pixelToPrice(series, pos.y);
-    if (rawLogical === null || price === null) return;
-    const logical = Math.round(rawLogical);
+    const snapped = snap(pos.x, pos.y, e.evt);
+    if (!snapped) return;
+    const logical = Math.round(snapped.logical);
+    const price = snapped.price;
     const [e0, r0, t0, s0] = points;
     const minGap = Math.pow(10, -((window as any).__pricePrecision ?? 2));
     let next = points;
@@ -289,13 +292,13 @@ export function PositionTool({
       {/* Handles: TradingView's four */}
       {showUI && (
         <>
-          <Circle x={leftX} y={entryY} radius={5} fill="white" stroke="#2962ff" strokeWidth={2} draggable
+          <HandleCircle x={leftX} y={entryY} radius={5} fill="white" stroke="#2962ff" strokeWidth={2} draggable
             onDragMove={handleHandleDrag(0)} />
-          <Rect x={rightX} y={entryY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#2962ff" strokeWidth={2} draggable
+          <HandleRect x={rightX} y={entryY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#2962ff" strokeWidth={2} draggable
             onDragMove={handleHandleDrag(1)} />
-          <Rect x={leftX} y={targetY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#2962ff" strokeWidth={2} draggable
+          <HandleRect x={leftX} y={targetY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#2962ff" strokeWidth={2} draggable
             onDragMove={handleHandleDrag(2)} />
-          <Rect x={leftX} y={stopY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#2962ff" strokeWidth={2} draggable
+          <HandleRect x={leftX} y={stopY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#2962ff" strokeWidth={2} draggable
             onDragMove={handleHandleDrag(3)} />
         </>
       )}

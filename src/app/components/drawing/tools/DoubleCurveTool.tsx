@@ -3,6 +3,8 @@ import { Group, Circle, Line } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
+import { useSnap, useSnappedDrag } from '../core/snap';
+import { HandleCircle } from '../core/Handles';
 
 interface DoubleCurveToolProps {
   id: string;
@@ -23,7 +25,9 @@ interface DoubleCurveToolProps {
 }
 
 export function DoubleCurveTool({ id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints, lineStyle, fill, fillEnabled, lineStartStyle, lineEndStyle }: DoubleCurveToolProps) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  const move = useSnappedDrag(chart, series, points, onUpdatePoints);
+  useChartTick(chart, series);
   // shadowBlur is a real per-pixel blur convolution that Konva redraws every frame of any
   // native drag (move or handle resize) regardless of React re-renders — expensive enough
   // to feel like lag, so it's switched off for the duration of a drag.
@@ -39,33 +43,24 @@ export function DoubleCurveTool({ id, points, stroke, strokeWidth, isSelected, i
 
   const flattenedPoints = pixelPoints.flatMap(pt => [pt.x, pt.y]);
 
-  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); move.start(e); };
 
   const handleDragEnd = (e: any) => {
     setIsDragging(false);
     if (!onUpdatePoints) return;
     const node = e.target;
     if (node.className !== 'Circle') {
-      const dx = node.x();
-      const dy = node.y();
-      const newPoints = points.map(p => {
-        const px = (logicalToPixel(chart, p.logical) ?? 0) + dx;
-        const py = (priceToPixel(series, p.price) ?? 0) + dy;
-        return { logical: pixelToLogical(chart, px)!, price: pixelToPrice(series, py)! };
-      });
-      onUpdatePoints(newPoints);
-      node.position({ x: 0, y: 0 });
+      move.end(e);
     }
   };
 
   const handleCircleDragMove = (index: number) => (e: any) => {
     e.cancelBubble = true;
     if (!onUpdatePoints) return;
-    const logical = pixelToLogical(chart, e.target.x());
-    const price = pixelToPrice(series, e.target.y());
-    if (logical !== null && price !== null) {
+    const snapped = snap(e.target.x(), e.target.y(), e.evt, e.target);
+    if (snapped) {
       const newPoints = [...points];
-      newPoints[index] = { logical, price };
+      newPoints[index] = snapped;
       onUpdatePoints(newPoints);
     }
   };
@@ -76,10 +71,10 @@ export function DoubleCurveTool({ id, points, stroke, strokeWidth, isSelected, i
   };
 
   return (
-    <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
+    <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragMove={move.drag} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
       <Line
         points={flattenedPoints}
-        stroke={isSelected ? '#2962ff' : stroke}
+        stroke={stroke}
         strokeWidth={strokeWidth}
         fill={fillEnabled ? fill : 'transparent'}
         dash={lineStyle === 'Dashed' ? [strokeWidth * 3, strokeWidth * 3] : lineStyle === 'Dotted' ? [strokeWidth, strokeWidth * 2] : undefined}
@@ -94,7 +89,7 @@ export function DoubleCurveTool({ id, points, stroke, strokeWidth, isSelected, i
       {lineStartStyle === 'Arrow' && pixelPoints.length >= 2 && (
         <Line
           points={[pixelPoints[0].x, pixelPoints[0].y, pixelPoints[1].x, pixelPoints[1].y]}
-          stroke={isSelected ? '#2962ff' : stroke}
+          stroke={stroke}
           strokeWidth={strokeWidth}
           lineCap="round"
           lineJoin="round"
@@ -102,7 +97,7 @@ export function DoubleCurveTool({ id, points, stroke, strokeWidth, isSelected, i
       )}
       {/* Note: Simplified arrowhead for DoubleCurve for now as it uses Konva Line with tension */}
       {(isSelected || isHovering) && pixelPoints.map((pt, i) => (
-        <Circle
+        <HandleCircle
           key={i}
           x={pt.x}
           y={pt.y}

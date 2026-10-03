@@ -26,7 +26,11 @@ export function hexToRgba(hex: string, alpha: number) {
 
 export function parseColorInput(colorStr: string) {
   if (!colorStr) return { hex: '#000000', opacity: 100 };
-  if (colorStr.startsWith('#')) return { hex: colorStr, opacity: 100 };
+  if (colorStr.startsWith('#')) {
+    // #rrggbbaa carries its own opacity
+    if (/^#[0-9a-f]{8}$/i.test(colorStr)) return { hex: colorStr.slice(0, 7), opacity: Math.round(parseInt(colorStr.slice(7), 16) / 255 * 100) };
+    return { hex: colorStr, opacity: 100 };
+  }
   const match = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
   if (match) {
     const hex = `#${parseInt(match[1]).toString(16).padStart(2, '0')}${parseInt(match[2]).toString(16).padStart(2, '0')}${parseInt(match[3]).toString(16).padStart(2, '0')}`;

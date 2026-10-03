@@ -3,6 +3,8 @@ import { Rect, Circle, Group, Text, Line } from 'react-konva';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../../core/coordinates';
 import { useChartTick } from '../../core/useChartTick';
 import { textLinesHitFunc } from '../../core/textHit';
+import { useSnap, useSnappedDrag } from '../../core/snap';
+import { HandleCircle, HandleRect } from '../../core/Handles';
 
 interface RectangleProps {
   id: string;
@@ -42,7 +44,9 @@ export function RectangleTool({
   textAlign, textVerticalAlign, middleLineVisible, middleLineColor, middleLineStyle,
   extendLeft, extendRight, lineStyle, isLocked = false
 }: RectangleProps) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  const move = useSnappedDrag(chart, series, points, onUpdatePoints);
+  useChartTick(chart, series);
   const groupRef = useRef<any>(null);
 
   if (points.length !== 2) return null;
@@ -72,7 +76,7 @@ export function RectangleTool({
     width = stageWidth - left;
   }
 
-  const rectColor = isSelected ? '#2962ff' : (stroke || '#9b59b6');
+  const rectColor = stroke || '#9b59b6';
   const bgColor = backgroundVisible !== false ? (fill || (stroke || '#9b59b6') + '33') : 'transparent';
 
   // Helper: compute time from a logical coordinate using chart data
@@ -102,12 +106,11 @@ export function RectangleTool({
     const pos = stage.getPointerPosition();
     if (!pos) return;
 
-    const logical = pixelToLogical(chart, pos.x);
-    const price = pixelToPrice(series, pos.y);
-    if (logical === null || price === null) return;
+    const snapped = snap(pos.x, pos.y, e.evt, e.target);
+    if (!snapped) return;
 
     const newPoints = [...points];
-    newPoints[index] = { logical, price, time: getTimeForLogical(logical) };
+    newPoints[index] = snapped;
     onUpdatePoints(newPoints);
   };
 
@@ -118,9 +121,9 @@ export function RectangleTool({
     const pos = stage.getPointerPosition();
     if (!pos) return;
 
-    const logical = pixelToLogical(chart, pos.x);
-    const price = pixelToPrice(series, pos.y);
-    if (logical === null || price === null) return;
+    const snapped = snap(pos.x, pos.y, e.evt);
+    if (!snapped) return;
+    const { logical, price, time } = snapped;
 
     const newPoints = [...points];
     // Compare price to find top/bottom
@@ -137,47 +140,21 @@ export function RectangleTool({
     } else if (side === 'bottom') {
       newPoints[botIdx] = { ...newPoints[botIdx], price };
     } else if (side === 'left') {
-      newPoints[leftIdx] = { ...newPoints[leftIdx], logical, time: getTimeForLogical(logical) };
+      newPoints[leftIdx] = { ...newPoints[leftIdx], logical, time };
     } else if (side === 'right') {
-      newPoints[rightIdx] = { ...newPoints[rightIdx], logical, time: getTimeForLogical(logical) };
+      newPoints[rightIdx] = { ...newPoints[rightIdx], logical, time };
     }
     onUpdatePoints(newPoints);
   };
 
-  const handleGroupDragEnd = (e: any) => {
-    if (!onUpdatePoints) return;
-    // VERY IMPORTANT: Prevent child handles (Circles and Rects) from triggering the group drag logic
-    if (e.target !== e.currentTarget) return;
-
-    const node = e.target;
-    const dx = node.x();
-    const dy = node.y();
-
-    // Reset group position since we update points
-    node.x(0);
-    node.y(0);
-
-    const newPoints = points.map(p => {
-      const px = logicalToPixel(chart, p.logical);
-      const py = priceToPixel(series, p.price);
-      if (px === null || py === null) return p;
-      
-      const newLogical = pixelToLogical(chart, px + dx);
-      const newPrice = pixelToPrice(series, py + dy);
-      if (newLogical === null || newPrice === null) return p;
-      
-      return { logical: newLogical, price: newPrice, time: getTimeForLogical(newLogical) };
-    });
-
-    onUpdatePoints(newPoints);
-  };
+  const handleGroupDragEnd = (e: any) => { move.end(e); };
 
   return (
     <Group 
       id={id} 
       ref={groupRef}
       draggable={(isSelected || isHovering) && !isLocked}
-      onDragEnd={handleGroupDragEnd}
+      onDragStart={move.start} onDragMove={move.drag} onDragEnd={handleGroupDragEnd}
       onClick={(e) => { e.cancelBubble = true; onSelect(); }}
       onTap={(e) => { e.cancelBubble = true; onSelect(); }}
     >
@@ -243,15 +220,15 @@ export function RectangleTool({
       {(isSelected || isHovering) && (
         <>
           {/* Corner handles (Circles) */}
-          <Circle 
+          <HandleCircle 
             x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} 
             draggable={!isLocked} onDragMove={(e) => handleDragMove(0, e)} 
           />
-          <Circle 
+          <HandleCircle 
             x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} 
             draggable={!isLocked} onDragMove={(e) => handleDragMove(1, e)} 
           />
-          <Circle 
+          <HandleCircle 
             x={x2} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} 
             draggable={!isLocked} onDragMove={(e) => {
               e.cancelBubble = true;
@@ -259,13 +236,13 @@ export function RectangleTool({
               const stage = e.target.getStage();
               const pos = stage.getPointerPosition();
               if (!pos) return;
-              const logical = pixelToLogical(chart, pos.x);
-              const price = pixelToPrice(series, pos.y);
-              if (logical === null || price === null) return;
-              onUpdatePoints([{ logical: p1.logical, price, time: (p1 as any).time }, { logical, price: p2.price, time: getTimeForLogical(logical) }]);
+              const snapped = snap(pos.x, pos.y, e.evt, e.target);
+              if (!snapped) return;
+              const { logical, price, time } = snapped;
+              onUpdatePoints([{ logical: p1.logical, price, time: (p1 as any).time }, { logical, price: p2.price, time }]);
             }} 
           />
-          <Circle 
+          <HandleCircle 
             x={x1} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} 
             draggable={!isLocked} onDragMove={(e) => {
               e.cancelBubble = true;
@@ -273,27 +250,27 @@ export function RectangleTool({
               const stage = e.target.getStage();
               const pos = stage.getPointerPosition();
               if (!pos) return;
-              const logical = pixelToLogical(chart, pos.x);
-              const price = pixelToPrice(series, pos.y);
-              if (logical === null || price === null) return;
-              onUpdatePoints([{ logical, price: p1.price, time: getTimeForLogical(logical) }, { logical: p2.logical, price, time: (p2 as any).time }]);
+              const snapped = snap(pos.x, pos.y, e.evt, e.target);
+              if (!snapped) return;
+              const { logical, price, time } = snapped;
+              onUpdatePoints([{ logical, price: p1.price, time }, { logical: p2.logical, price, time: (p2 as any).time }]);
             }} 
           />
 
           {/* Side handles (Rounded Squares) */}
-          <Rect 
+          <HandleRect 
             x={left + width / 2 - 5} y={top - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} 
             draggable={!isLocked} onDragMove={(e) => handleSideDrag('top', e)} 
           />
-          <Rect 
+          <HandleRect 
             x={left + width / 2 - 5} y={top + height - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} 
             draggable={!isLocked} onDragMove={(e) => handleSideDrag('bottom', e)} 
           />
-          <Rect 
+          <HandleRect 
             x={left - 5} y={top + height / 2 - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} 
             draggable={!isLocked} onDragMove={(e) => handleSideDrag('left', e)} 
           />
-          <Rect 
+          <HandleRect 
             x={left + width - 5} y={top + height / 2 - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} 
             draggable={!isLocked} onDragMove={(e) => handleSideDrag('right', e)} 
           />

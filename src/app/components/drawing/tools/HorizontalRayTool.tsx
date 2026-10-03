@@ -2,6 +2,8 @@ import React, { useEffect, useRef } from 'react';
 import { Line, Circle, Group, Text } from 'react-konva';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
+import { useSnap, useSnappedDrag } from '../core/snap';
+import { HandleCircle } from '../core/Handles';
 
 interface HorizontalRayToolProps {
   id: string;
@@ -37,7 +39,9 @@ export function HorizontalRayTool({
   text, textColor, fontSize = 14, bold = false, italic = false,
   textVAlign = 'Bottom', textHAlign = 'Center', priceLabel = true,
 }: HorizontalRayToolProps) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  const move = useSnappedDrag(chart, series, points, onUpdatePoints);
+  useChartTick(chart, series);
 
   // The "Price label" option puts a real badge on the chart's own price axis at this
   // ray's price — the same native mechanism the app already uses for TP/SL/order lines
@@ -90,18 +94,7 @@ export function HorizontalRayTool({
   // Whole-shape drag (grabbing the line body): Konva reports the Group's own (dx, dy)
   // offset here, not an absolute position, since the Line's points are baked in as
   // absolute coordinates rather than relative to the Group.
-  const handleGroupDragEnd = (e: any) => {
-    if (!onUpdatePoints) return;
-    const node = e.target;
-    const dx = node.x();
-    const dy = node.y();
-    const newLogical = pixelToLogical(chart, x1 + dx);
-    const newPrice = pixelToPrice(series, y1 + dy);
-    if (newLogical !== null && newPrice !== null) {
-      onUpdatePoints([{ logical: newLogical, price: newPrice }]);
-    }
-    node.position({ x: 0, y: 0 });
-  };
+  const handleGroupDragEnd = (e: any) => { move.end(e); };
 
   // Handle drag: the Circle's own x/y IS the absolute position directly, unrelated to the
   // Group's offset (which stays put — onDragStart below stops this from also bubbling up
@@ -109,11 +102,8 @@ export function HorizontalRayTool({
   const handleAnchorDrag = (e: any) => {
     e.cancelBubble = true;
     if (!onUpdatePoints) return;
-    const logical = pixelToLogical(chart, e.target.x());
-    const price = pixelToPrice(series, e.target.y());
-    if (logical !== null && price !== null) {
-      onUpdatePoints([{ logical, price }]);
-    }
+    const snapped = snap(e.target.x(), e.target.y(), e.evt, e.target);
+    if (snapped) onUpdatePoints([snapped]);
   };
 
   // Text sits somewhere along the ray's VISIBLE span (from its anchor, or the left edge of
@@ -135,13 +125,13 @@ export function HorizontalRayTool({
     <Group
       id={id}
       draggable={(isSelected || isHovering) && !isLocked}
-      onDragEnd={handleGroupDragEnd}
+      onDragStart={move.start} onDragMove={move.drag} onDragEnd={handleGroupDragEnd}
       onClick={onSelect}
       onTap={onSelect}
     >
       <Line
         points={[x1, y1, farRight, y1]}
-        stroke={isSelected ? '#2962ff' : stroke}
+        stroke={stroke}
         strokeWidth={strokeWidth}
         dash={dash}
         hitStrokeWidth={10}
@@ -162,7 +152,7 @@ export function HorizontalRayTool({
         />
       )}
       {(isSelected || isHovering) && (
-        <Circle
+        <HandleCircle
           x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2}
           draggable={!isLocked}
           onDragStart={(e) => { e.cancelBubble = true; }}

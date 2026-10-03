@@ -3,6 +3,8 @@ import { Shape, Group, Circle } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
+import { useSnap, useSnappedDrag } from '../core/snap';
+import { HandleCircle } from '../core/Handles';
 
 interface CurveToolProps {
   id: string;
@@ -23,7 +25,9 @@ interface CurveToolProps {
 }
 
 export function CurveTool({ id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints, lineStyle, fill, fillEnabled, lineStartStyle, lineEndStyle }: CurveToolProps) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  const move = useSnappedDrag(chart, series, points, onUpdatePoints);
+  useChartTick(chart, series);
   // shadowBlur is a real per-pixel blur convolution that Konva redraws every frame of any
   // native drag (move or handle resize) regardless of React re-renders — expensive enough
   // to feel like lag, so it's switched off for the duration of a drag.
@@ -47,33 +51,24 @@ export function CurveTool({ id, points, stroke, strokeWidth, isSelected, isHover
   const controlX = 2 * x3 - 0.5 * (x1 + x2);
   const controlY = 2 * y3 - 0.5 * (y1 + y2);
 
-  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); move.start(e); };
 
   const handleDragEnd = (e: any) => {
     setIsDragging(false);
     if (!onUpdatePoints) return;
     const node = e.target;
     if (node.className !== 'Circle') {
-      const dx = node.x();
-      const dy = node.y();
-      const newPoints = points.map(p => {
-        const px = logicalToPixel(chart, p.logical)! + dx;
-        const py = priceToPixel(series, p.price)! + dy;
-        return { logical: pixelToLogical(chart, px)!, price: pixelToPrice(series, py)! };
-      });
-      onUpdatePoints(newPoints);
-      node.position({ x: 0, y: 0 });
+      move.end(e);
     }
   };
 
   const handleCircleDragMove = (index: number) => (e: any) => {
     e.cancelBubble = true;
     if (!onUpdatePoints) return;
-    const logical = pixelToLogical(chart, e.target.x());
-    const price = pixelToPrice(series, e.target.y());
-    if (logical !== null && price !== null) {
+    const snapped = snap(e.target.x(), e.target.y(), e.evt, e.target);
+    if (snapped) {
       const newPoints = [...points];
-      newPoints[index] = { logical, price };
+      newPoints[index] = snapped;
       onUpdatePoints(newPoints);
     }
   };
@@ -84,7 +79,7 @@ export function CurveTool({ id, points, stroke, strokeWidth, isSelected, isHover
   };
 
   return (
-    <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
+    <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragMove={move.drag} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
       <Shape
         sceneFunc={(context, shape) => {
           context.beginPath();
@@ -92,7 +87,7 @@ export function CurveTool({ id, points, stroke, strokeWidth, isSelected, isHover
           context.quadraticCurveTo(controlX, controlY, x2, y2);
           context.fillStrokeShape(shape);
         }}
-        stroke={isSelected ? '#2962ff' : stroke}
+        stroke={stroke}
         strokeWidth={strokeWidth}
         fill={fillEnabled ? fill : 'transparent'}
         dash={lineStyle === 'Dashed' ? [strokeWidth * 3, strokeWidth * 3] : lineStyle === 'Dotted' ? [strokeWidth, strokeWidth * 2] : undefined}
@@ -112,7 +107,7 @@ export function CurveTool({ id, points, stroke, strokeWidth, isSelected, isHover
             context.lineTo(x1 - 10 * Math.cos(angle + Math.PI / 6), y1 - 10 * Math.sin(angle + Math.PI / 6));
             context.fillStrokeShape(shape);
           }}
-          stroke={isSelected ? '#2962ff' : stroke}
+          stroke={stroke}
           strokeWidth={strokeWidth}
         />
       )}
@@ -127,16 +122,16 @@ export function CurveTool({ id, points, stroke, strokeWidth, isSelected, isHover
             context.lineTo(x2 - 10 * Math.cos(angle + Math.PI / 6), y2 - 10 * Math.sin(angle + Math.PI / 6));
             context.fillStrokeShape(shape);
           }}
-          stroke={isSelected ? '#2962ff' : stroke}
+          stroke={stroke}
           strokeWidth={strokeWidth}
         />
       )}
       {(isSelected || isHovering) && (
         <>
-          <Circle x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(0)} onDragEnd={handleCircleDragEnd(0)} />
-          <Circle x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(1)} onDragEnd={handleCircleDragEnd(1)} />
+          <HandleCircle x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(0)} onDragEnd={handleCircleDragEnd(0)} />
+          <HandleCircle x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(1)} onDragEnd={handleCircleDragEnd(1)} />
           {points.length > 2 && (
-            <Circle x={x3} y={y3} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(2)} onDragEnd={handleCircleDragEnd(2)} />
+            <HandleCircle x={x3} y={y3} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(2)} onDragEnd={handleCircleDragEnd(2)} />
           )}
         </>
       )}

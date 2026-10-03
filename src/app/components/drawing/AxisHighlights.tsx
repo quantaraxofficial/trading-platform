@@ -71,7 +71,7 @@ function axisPoints(d: Drawing): { prices: PriceLabel[]; times: number[] } {
 export default function AxisHighlights({ chart, series, drawings, selectedIds, width, height }: {
   chart: any; series: any; drawings: Drawing[]; selectedIds: string[]; width: number; height: number;
 }) {
-  useChartTick(chart);
+  useChartTick(chart, series);
   // Vertical scrolling / autoscale moves prices without moving the time scale
   const [, setTick] = useState(0);
   useEffect(() => {

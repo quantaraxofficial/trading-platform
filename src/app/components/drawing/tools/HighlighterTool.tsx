@@ -3,6 +3,8 @@ import { Line, Group, Circle } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
+import { useSnappedDrag } from '../core/snap';
+import { HandleCircle } from '../core/Handles';
 
 interface HighlighterToolProps {
   id: string;
@@ -20,7 +22,8 @@ interface HighlighterToolProps {
 export function HighlighterTool({
   id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints
 }: HighlighterToolProps) {
-  useChartTick(chart);
+  const move = useSnappedDrag(chart, series, points, onUpdatePoints);
+  useChartTick(chart, series);
 
   if (!chart || !series || points.length < 2) return null;
 
@@ -59,19 +62,7 @@ export function HighlighterTool({
     onUpdatePoints([...points.slice(0, -1), { logical, price }]);
   };
 
-  const handleGroupDragEnd = (e: any) => {
-    if (!onUpdatePoints) return;
-    const node = e.target;
-    const dx = node.x();
-    const dy = node.y();
-    const newPoints = points.map(p => {
-      const px = logicalToPixel(chart, p.logical)! + dx;
-      const py = priceToPixel(series, p.price)! + dy;
-      return { logical: pixelToLogical(chart, px)!, price: pixelToPrice(series, py)! };
-    });
-    onUpdatePoints(newPoints);
-    node.position({ x: 0, y: 0 });
-  };
+  const handleGroupDragEnd = (e: any) => { move.end(e); };
 
   // Color with proper opacity for highlight effect — do NOT use globalCompositeOperation
   // as it leaks into the Konva canvas context and breaks all subsequent shapes
@@ -81,7 +72,7 @@ export function HighlighterTool({
     <Group
       id={id}
       draggable={isSelected || isHovering}
-      onDragEnd={handleGroupDragEnd}
+      onDragStart={move.start} onDragMove={move.drag} onDragEnd={handleGroupDragEnd}
       onClick={(e) => { e.cancelBubble = true; onSelect(); }}
       onTap={(e)  => { e.cancelBubble = true; onSelect(); }}
     >
@@ -125,7 +116,7 @@ export function HighlighterTool({
 
       {/* Endpoint handles */}
       {(isSelected || isHovering) && x1 !== null && y1 !== null && (
-        <Circle
+        <HandleCircle
           x={x1} y={y1}
           radius={6}
           fill="white"
@@ -137,7 +128,7 @@ export function HighlighterTool({
         />
       )}
       {(isSelected || isHovering) && x2 !== null && y2 !== null && (
-        <Circle
+        <HandleCircle
           x={x2} y={y2}
           radius={6}
           fill="white"

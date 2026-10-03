@@ -3,6 +3,8 @@ import { Line, Group, Circle, Rect } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
+import { useSnap, useSnappedDrag } from '../core/snap';
+import { HandleCircle } from '../core/Handles';
 
 interface RotatedRectangleToolProps {
   id: string;
@@ -23,7 +25,9 @@ export function RotatedRectangleTool({
   id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints,
   fill, backgroundVisible
 }: RotatedRectangleToolProps) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  const move = useSnappedDrag(chart, series, points, onUpdatePoints);
+  useChartTick(chart, series);
   if (!chart || !series || points.length < 2) return null;
 
   const firstCenter = points[0];
@@ -41,7 +45,7 @@ export function RotatedRectangleTool({
   const h = Math.hypot(vx, vy);
 
   let flatPoints: number[] = [];
-  const color = isSelected ? '#2962ff' : (stroke || '#4caf50');
+  const color = stroke || '#4caf50';
   const bgColor = backgroundVisible !== false ? (fill || (stroke || '#4caf50') + '33') : 'transparent';
 
   let cornerPoints: {x: number, y: number}[] = [];
@@ -68,21 +72,7 @@ export function RotatedRectangleTool({
     flatPoints = [c1x, c1y, c1x, c1y, c2x, c2y, c2x, c2y];
   }
 
-  const handleDragEnd = (e: any) => {
-    if (!onUpdatePoints) return;
-    if (e.target !== e.currentTarget) return;
-    const node = e.target;
-    const dx = node.x();
-    const dy = node.y();
-    node.position({ x: 0, y: 0 });
-
-    const newPoints = points.map(p => {
-      const px = logicalToPixel(chart, p.logical)! + dx;
-      const py = priceToPixel(series, p.price)! + dy;
-      return { logical: pixelToLogical(chart, px)!, price: pixelToPrice(series, py)! };
-    });
-    onUpdatePoints(newPoints);
-  };
+  const handleDragEnd = (e: any) => { move.end(e); };
 
   const handleHandleDrag = (index: number, e: any) => {
     e.cancelBubble = true;
@@ -91,17 +81,16 @@ export function RotatedRectangleTool({
     const pos = stage.getPointerPosition();
     if (!pos) return;
 
-    const logical = pixelToLogical(chart, pos.x);
-    const price = pixelToPrice(series, pos.y);
-    if (logical !== null && price !== null) {
+    const snapped = snap(pos.x, pos.y, e.evt, e.target);
+    if (snapped) {
       const newPoints = [...points];
-      newPoints[index === 0 ? 0 : points.length - 1] = { logical, price };
+      newPoints[index === 0 ? 0 : points.length - 1] = snapped;
       onUpdatePoints(newPoints);
     }
   };
 
   return (
-    <Group id={id} draggable={isSelected || isHovering} onDragEnd={handleDragEnd} onClick={(e) => { e.cancelBubble = true; onSelect(); }} onTap={(e) => { e.cancelBubble = true; onSelect(); }}>
+    <Group id={id} draggable={isSelected || isHovering} onDragStart={move.start} onDragMove={move.drag} onDragEnd={handleDragEnd} onClick={(e) => { e.cancelBubble = true; onSelect(); }} onTap={(e) => { e.cancelBubble = true; onSelect(); }}>
       <Line
         points={flatPoints}
         stroke={color}
@@ -112,8 +101,8 @@ export function RotatedRectangleTool({
       {(isSelected || isHovering) && (
         <>
           {/* Main define points */}
-          <Circle x={c1x} y={c1y} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} draggable onDragMove={(e) => handleHandleDrag(0, e)} />
-          <Circle x={c2x} y={c2y} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} draggable onDragMove={(e) => handleHandleDrag(1, e)} />
+          <HandleCircle x={c1x} y={c1y} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} draggable onDragMove={(e) => handleHandleDrag(0, e)} />
+          <HandleCircle x={c2x} y={c2y} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} draggable onDragMove={(e) => handleHandleDrag(1, e)} />
           
           {/* Visual Corner Handles */}
           {cornerPoints.map((p, i) => (

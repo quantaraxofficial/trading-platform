@@ -4,6 +4,8 @@ import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
 import { textLinesHitFunc } from '../core/textHit';
+import { useSnap, useSnappedDrag } from '../core/snap';
+import { HandleCircle } from '../core/Handles';
 
 interface EllipseToolProps {
   id: string;
@@ -36,7 +38,9 @@ export function EllipseTool({
   id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series,
   onSelect, onUpdatePoints, fill, backgroundVisible, isLocked, text, onTextEdit, isEditingText = false, textColor, fontSize
 }: EllipseToolProps) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  const move = useSnappedDrag(chart, series, points, onUpdatePoints);
+  useChartTick(chart, series);
   // shadowBlur is a real per-pixel blur convolution, expensive enough that recomputing
   // it on every drag-move frame is visible as lag — so it's switched off for the
   // duration of a drag and only re-enabled once the shape settles.
@@ -83,7 +87,7 @@ export function EllipseTool({
   // a live preview one) exists to derive a curvature from.
   const hasCurvature = points.length >= 3;
 
-  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); move.start(e); };
 
   // Whole-shape move: shift all stored points by the same pixel delta, unchanged pattern
   // used by every other draggable tool in this file.
@@ -92,15 +96,7 @@ export function EllipseTool({
     if (!onUpdatePoints) return;
     const node = e.target;
     if (node.className !== 'Circle') {
-      const dx2 = node.x();
-      const dy2 = node.y();
-      const newPoints = points.map(p => {
-        const px = logicalToPixel(chart, p.logical)! + dx2;
-        const py = priceToPixel(series, p.price)! + dy2;
-        return { logical: pixelToLogical(chart, px)!, price: pixelToPrice(series, py)! };
-      });
-      onUpdatePoints(newPoints);
-      node.position({ x: 0, y: 0 });
+      move.end(e);
     }
   };
 
@@ -110,9 +106,8 @@ export function EllipseTool({
   const handleEndpointMove = (index: 0 | 1) => (e: any) => {
     e.cancelBubble = true;
     if (!onUpdatePoints) return;
-    const newLogical = pixelToLogical(chart, e.target.x());
-    const newPrice = pixelToPrice(series, e.target.y());
-    if (newLogical === null || newPrice === null) return;
+    const snapped = snap(e.target.x(), e.target.y(), e.evt, e.target);
+    if (!snapped) return;
 
     const otherIndex = index === 0 ? 1 : 0;
     const other = points[otherIndex];
@@ -131,7 +126,7 @@ export function EllipseTool({
     const newPerpY = newMajorLen > 0.0001 ? newDx / newMajorLen : 1;
 
     const newPoints = [...points];
-    newPoints[index] = { logical: newLogical, price: newPrice };
+    newPoints[index] = snapped;
     if (points.length >= 3) {
       const newCx = newMx + newPerpX * radiusY;
       const newCy = newMy + newPerpY * radiusY;
@@ -176,16 +171,16 @@ export function EllipseTool({
   };
 
   return (
-    <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
+    <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragMove={move.drag} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
       {hasCurvature ? (
         <KonvaEllipse
           x={mx} y={my} radiusX={radiusX} radiusY={radiusY} rotation={angle}
-          stroke={isSelected ? '#2962ff' : stroke} strokeWidth={strokeWidth}
+          stroke={stroke} strokeWidth={strokeWidth}
           fill={backgroundVisible !== false ? (fill || (stroke || '#2962ff') + '33') : 'transparent'}
           shadowColor={isSelected ? stroke : 'transparent'} shadowBlur={isSelected && !isDragging ? 4 : 0}
         />
       ) : (
-        <Line points={[ax, ay, bx, by]} stroke={isSelected ? '#2962ff' : stroke} strokeWidth={strokeWidth} />
+        <Line points={[ax, ay, bx, by]} stroke={stroke} strokeWidth={strokeWidth} />
       )}
       {/* Text stays horizontal regardless of the ellipse's own tilt — rotating it with
           `angle` (which can be any value depending on how the ellipse was drawn) made it
@@ -231,12 +226,12 @@ export function EllipseTool({
       )}
       {(isSelected || isHovering) && (
         <>
-          <Circle x={ax} y={ay} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleEndpointMove(0)} onDragEnd={handleEndpointEnd(0)} />
-          <Circle x={bx} y={by} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleEndpointMove(1)} onDragEnd={handleEndpointEnd(1)} />
+          <HandleCircle x={ax} y={ay} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleEndpointMove(0)} onDragEnd={handleEndpointEnd(0)} />
+          <HandleCircle x={bx} y={by} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleEndpointMove(1)} onDragEnd={handleEndpointEnd(1)} />
           {hasCurvature && (
             <>
-              <Circle x={topX} y={topY} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCurvatureMove('top')} onDragEnd={handleCurvatureEnd('top')} />
-              <Circle x={bottomX} y={bottomY} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCurvatureMove('bottom')} onDragEnd={handleCurvatureEnd('bottom')} />
+              <HandleCircle x={topX} y={topY} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCurvatureMove('top')} onDragEnd={handleCurvatureEnd('top')} />
+              <HandleCircle x={bottomX} y={bottomY} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCurvatureMove('bottom')} onDragEnd={handleCurvatureEnd('bottom')} />
             </>
           )}
         </>

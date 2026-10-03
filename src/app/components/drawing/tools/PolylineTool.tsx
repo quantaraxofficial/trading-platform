@@ -3,6 +3,8 @@ import { Line, Group, Circle } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
+import { useSnap, useSnappedDrag } from '../core/snap';
+import { HandleCircle } from '../core/Handles';
 
 interface PolylineToolProps {
   id: string;
@@ -27,7 +29,9 @@ export function PolylineTool({
   onSelect, onUpdatePoints, lineStyle, lineStartStyle, lineEndStyle,
   fill, backgroundVisible
 }: PolylineToolProps) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  const move = useSnappedDrag(chart, series, points, onUpdatePoints);
+  useChartTick(chart, series);
   // shadowBlur is a real per-pixel blur convolution that Konva redraws every frame of any
   // native drag (move or handle resize) regardless of React re-renders — expensive enough
   // to feel like lag, so it's switched off for the duration of a drag.
@@ -46,33 +50,24 @@ export function PolylineTool({
     }
   });
 
-  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); move.start(e); };
 
   const handleDragEnd = (e: any) => {
     setIsDragging(false);
     if (!onUpdatePoints) return;
     const node = e.target;
     if (node.className !== 'Circle') {
-      const dx = node.x();
-      const dy = node.y();
-      const newPoints = points.map(p => {
-        const px = logicalToPixel(chart, p.logical)! + dx;
-        const py = priceToPixel(series, p.price)! + dy;
-        return { logical: pixelToLogical(chart, px)!, price: pixelToPrice(series, py)! };
-      });
-      onUpdatePoints(newPoints);
-      node.position({ x: 0, y: 0 });
+      move.end(e);
     }
   };
 
   const handleCircleDragMove = (index: number) => (e: any) => {
     e.cancelBubble = true;
     if (!onUpdatePoints) return;
-    const logical = pixelToLogical(chart, e.target.x());
-    const price = pixelToPrice(series, e.target.y());
-    if (logical !== null && price !== null) {
+    const snapped = snap(e.target.x(), e.target.y(), e.evt, e.target);
+    if (snapped) {
       const newPoints = [...points];
-      newPoints[index] = { logical, price };
+      newPoints[index] = snapped;
       onUpdatePoints(newPoints);
     }
   };
@@ -83,7 +78,7 @@ export function PolylineTool({
   };
 
   return (
-    <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
+    <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragMove={move.drag} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
       <Line
         points={flattenedPoints}
         stroke="transparent"
@@ -92,7 +87,7 @@ export function PolylineTool({
       />
       <Line
         points={flattenedPoints}
-        stroke={isSelected ? '#2962ff' : stroke}
+        stroke={stroke}
         strokeWidth={strokeWidth}
         fill={backgroundVisible !== false ? fill : 'transparent'}
         closed={!!fill && fill !== 'transparent'}
@@ -102,7 +97,7 @@ export function PolylineTool({
         listening={false}
       />
       {(isSelected || isHovering) && pixelPoints.map((pt, i) => (
-        <Circle key={i} x={pt.x} y={pt.y} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(i)} onDragEnd={handleCircleDragEnd(i)} />
+        <HandleCircle key={i} x={pt.x} y={pt.y} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(i)} onDragEnd={handleCircleDragEnd(i)} />
       ))}
       {pixelPoints.length >= 2 && lineEndStyle === 'Arrow' && (() => {
         const last = pixelPoints[pixelPoints.length - 1];
@@ -119,7 +114,7 @@ export function PolylineTool({
               last.x - headLength * Math.cos(angle + Math.PI / 6),
               last.y - headLength * Math.sin(angle + Math.PI / 6)
             ]}
-            stroke={isSelected ? '#2962ff' : stroke}
+            stroke={stroke}
             strokeWidth={strokeWidth}
             lineCap="round"
             lineJoin="round"
@@ -141,7 +136,7 @@ export function PolylineTool({
               first.x - headLength * Math.cos(angle + Math.PI / 6),
               first.y - headLength * Math.sin(angle + Math.PI / 6)
             ]}
-            stroke={isSelected ? '#2962ff' : stroke}
+            stroke={stroke}
             strokeWidth={strokeWidth}
             lineCap="round"
             lineJoin="round"
@@ -150,4 +145,4 @@ export function PolylineTool({
       })()}
     </Group>
   );
-}
+}

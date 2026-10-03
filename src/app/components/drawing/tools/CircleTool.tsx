@@ -4,6 +4,8 @@ import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
 import { textLinesHitFunc } from '../core/textHit';
+import { useSnap, useSnappedDrag } from '../core/snap';
+import { HandleCircle } from '../core/Handles';
 
 interface CircleToolProps {
   id: string;
@@ -29,7 +31,9 @@ export function CircleTool({
   id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series,
   onSelect, onUpdatePoints, fill, backgroundVisible, text, onTextEdit, isEditingText = false, textColor, fontSize
 }: CircleToolProps) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  const move = useSnappedDrag(chart, series, points, onUpdatePoints);
+  useChartTick(chart, series);
   // shadowBlur is a real per-pixel blur convolution, expensive enough that recomputing
   // it on every drag-move frame is visible as lag — so it's switched off for the
   // duration of a drag and only re-enabled once the shape settles.
@@ -64,36 +68,25 @@ export function CircleTool({
     if (!onUpdatePoints) return;
     const node = e.target;
     if (node.className !== 'Circle' || node.attrs.radius !== 6) {
-      const dx = node.x();
-      const dy = node.y();
-      const newPoints = points.map(p => {
-        const px = logicalToPixel(chart, p.logical)! + dx;
-        const py = priceToPixel(series, p.price)! + dy;
-        return { logical: pixelToLogical(chart, px)!, price: pixelToPrice(series, py)! };
-      });
-      onUpdatePoints(newPoints);
-      node.position({ x: 0, y: 0 });
+      move.end(e);
     }
   };
 
-  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); };
+  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); move.start(e); };
 
   // Dragging the center handle moves the whole circle, keeping its size
   const handleAnchoredMove = (e: any) => {
     e.cancelBubble = true;
     if (!onUpdatePoints) return;
-    const dx = e.target.x() - x1;
-    const dy = e.target.y() - y1;
+    const c = snap(e.target.x(), e.target.y(), e.evt, e.target);
+    if (!c) return;
+    const dL = c.logical - points[0].logical;
+    const dP = c.price - points[0].price;
     const moved = points.map(p => {
-      const px = logicalToPixel(chart, p.logical);
-      const py = priceToPixel(series, p.price);
-      if (px === null || py === null) return p;
-      const logical = pixelToLogical(chart, px + dx);
-      const price = pixelToPrice(series, py + dy);
-      if (logical === null || price === null) return p;
+      const logical = p.logical + dL;
       const time = p.time !== undefined && points[0].time !== undefined && points[1].time !== undefined && points[1].logical !== points[0].logical
-        ? p.time + (logical - p.logical) * ((points[1].time - points[0].time) / (points[1].logical - points[0].logical)) : p.time;
-      return { ...p, logical, price, time };
+        ? p.time + dL * ((points[1].time - points[0].time) / (points[1].logical - points[0].logical)) : p.time;
+      return { ...p, logical, price: p.price + dP, time };
     });
     onUpdatePoints(moved);
   };
@@ -123,11 +116,10 @@ export function CircleTool({
   const handleCircleDragMove = (index: number) => (e: any) => {
     e.cancelBubble = true;
     if (!onUpdatePoints) return;
-    const logical = pixelToLogical(chart, e.target.x());
-    const price = pixelToPrice(series, e.target.y());
-    if (logical !== null && price !== null) {
+    const snapped = snap(e.target.x(), e.target.y(), e.evt, e.target);
+    if (snapped) {
       const newPoints = [...points];
-      newPoints[index] = { logical, price };
+      newPoints[index] = snapped;
       onUpdatePoints(newPoints);
     }
   };
@@ -141,13 +133,13 @@ export function CircleTool({
   const handleAnchoredResizeEnd = (e: any) => { handleAnchoredResize(e); setIsDragging(false); };
 
   return (
-    <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
+    <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragMove={move.drag} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
       <KonvaEllipse
         x={x1}
         y={y1}
         radiusX={radiusX}
         radiusY={radiusY}
-        stroke={isSelected ? '#2962ff' : stroke}
+        stroke={stroke}
         strokeWidth={strokeWidth}
         fill={backgroundVisible !== false ? (fill || (stroke || '#9b59b6') + '33') : 'transparent'}
         shadowColor={isSelected ? stroke : 'transparent'}
@@ -193,13 +185,13 @@ export function CircleTool({
           {isAnchored ? (
             <>
               {/* Center handle moves the whole circle; the right-edge handle resizes it */}
-              <Circle x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleAnchoredMove} onDragEnd={handleAnchoredMoveEnd} />
-              <Circle x={handleX} y={handleY} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleAnchoredResize} onDragEnd={handleAnchoredResizeEnd} />
+              <HandleCircle x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleAnchoredMove} onDragEnd={handleAnchoredMoveEnd} />
+              <HandleCircle x={handleX} y={handleY} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleAnchoredResize} onDragEnd={handleAnchoredResizeEnd} />
             </>
           ) : (
             <>
-              <Circle x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(0)} onDragEnd={handleCircleDragEnd(0)} />
-              <Circle x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(points.length - 1)} onDragEnd={handleCircleDragEnd(points.length - 1)} />
+              <HandleCircle x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(0)} onDragEnd={handleCircleDragEnd(0)} />
+              <HandleCircle x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(points.length - 1)} onDragEnd={handleCircleDragEnd(points.length - 1)} />
             </>
           )}
         </>

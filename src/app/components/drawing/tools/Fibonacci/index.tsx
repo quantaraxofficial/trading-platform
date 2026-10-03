@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Group, Line, Text as KonvaText, Circle, Rect } from 'react-konva';
 import { logicalToPixel, priceToPixel, calculateFibonacciLevels, pixelToLogical, pixelToPrice } from '../../core/coordinates';
 import { useChartTick } from '../../core/useChartTick';
+import { useSnap, useSnappedDrag } from '../../core/snap';
+import { HandleCircle } from '../../core/Handles';
 
 // Removes a set of exclusion intervals from [start, end], returning the remaining
 // visible segments — used to punch gaps in a level line (around its label, and around
@@ -73,7 +75,9 @@ export function FibonacciTool({
   fibReverse, fibShowLevels = true, fibLevelFormat = 'Values', fibPrices = true,
   fibShowText = true, fibLabelHAlign = 'Left', fibLabelVAlign = 'Middle', fibFontSize = 11,
 }: FibonacciProps) {
-  useChartTick(chart);
+  const snap = useSnap(chart, series);
+  const move = useSnappedDrag(chart, series, points, onUpdatePoints);
+  useChartTick(chart, series);
   if (points.length !== 2) return null;
 
   const [p1, p2] = points;
@@ -131,24 +135,7 @@ export function FibonacciTool({
     const node = e.target;
     const isHandle = node.className === 'Circle';
 
-    if (!isHandle) {
-      const dx = node.x();
-      const dy = node.y();
-      
-      const newL1 = pixelToLogical(chart, x1 + dx);
-      const newP1 = pixelToPrice(series, y1 + dy);
-      const newL2 = pixelToLogical(chart, x2 + dx);
-      const newP2 = pixelToPrice(series, y2 + dy);
-
-      if (newL1 !== null && newP1 !== null && newL2 !== null && newP2 !== null) {
-        onUpdatePoints([
-          { logical: newL1, price: newP1, time: getTimeForLogical(newL1) },
-          { logical: newL2, price: newP2, time: getTimeForLogical(newL2) }
-        ]);
-      }
-      
-      node.position({ x: 0, y: 0 });
-    }
+    if (!isHandle) move.end(e);
   };
 
   const handleCircleDrag = (index: number) => (e: any) => {
@@ -158,71 +145,17 @@ export function FibonacciTool({
     const newX = e.target.x();
     const newY = e.target.y();
 
-    const rawLogical = pixelToLogical(chart, newX);
-    const price = pixelToPrice(series, newY);
-
-    if (rawLogical !== null && price !== null) {
-      // Snap horizontally to the nearest candle's own center (its wick midline) —
-      // price stays fully free so the endpoint can still be placed anywhere along
-      // that vertical line, matching how a fresh fib is drawn.
-      const logical = Math.round(rawLogical);
+    const snapped = snap(newX, newY, e.evt, e.target);
+    if (snapped) {
       const newPoints = [...points];
-      newPoints[index] = { logical, price, time: getTimeForLogical(logical) };
+      newPoints[index] = snapped;
       onUpdatePoints(newPoints);
     }
   };
 
   const stageWidth = chart.chartElement().clientWidth;
 
-  return (
-    <Group
-      id={id}
-      draggable={(isSelected || isHovering) && !isLocked}
-      onDragEnd={handleDragEnd}
-      onClick={onSelect}
-      onTap={onSelect}
-      listening={true}
-    >
-      {/* Trendline connecting the two points */}
-      {showTrendLine && (
-        <Line
-          points={[x1, y1, x2, y2]}
-          stroke={trendLineColor || "#787b86"}
-          strokeWidth={trendLineWidth || 1}
-          dash={trendLineStyle === 'dashed' ? [5, 5] : trendLineStyle === 'dotted' ? [2, 2] : undefined}
-          hitStrokeWidth={10}
-        />
-      )}
-      
-      {/* Fibonacci Backgrounds */}
-      {showBackground && levelsToRender.slice(0, -1).map((level, i) => {
-        const nextLevel = levelsToRender[i + 1];
-        const yStart = priceToPixel(series, level.price);
-        const yEnd = priceToPixel(series, nextLevel.price);
-        
-        if (yStart === null || yEnd === null) return null;
-
-        let lineStartX = Math.min(x1, x2);
-        let lineEndX = Math.max(x1, x2);
-        if (extendLeft) lineStartX = 0;
-        if (extendRight) lineEndX = stageWidth;
-
-        return (
-          <Rect
-            key={`bg-${i}`}
-            x={lineStartX}
-            y={Math.min(yStart, yEnd)}
-            width={lineEndX - lineStartX}
-            height={Math.abs(yEnd - yStart)}
-            fill={level.color}
-            opacity={backgroundOpacity}
-            listening={false}
-          />
-        );
-      })}
-
-      {/* Fibonacci Levels */}
-      {levelsToRender.map((level, i) => {
+  const levelEls = levelsToRender.map((level, i) => {
         const levelY = priceToPixel(series, level.price);
         if (levelY === null) return null;
         
@@ -333,19 +266,71 @@ export function FibonacciTool({
             )}
           </Group>
         );
+      });
+
+  return (
+    <Group
+      id={id}
+      draggable={(isSelected || isHovering) && !isLocked}
+      onDragStart={move.start} onDragMove={move.drag} onDragEnd={handleDragEnd}
+      onClick={onSelect}
+      onTap={onSelect}
+      listening={true}
+    >
+      {/* Trendline connecting the two points */}
+      {showTrendLine && (
+        <Line
+          points={[x1, y1, x2, y2]}
+          stroke={trendLineColor || "#787b86"}
+          strokeWidth={trendLineWidth || 1}
+          dash={trendLineStyle === 'dashed' ? [5, 5] : trendLineStyle === 'dotted' ? [2, 2] : undefined}
+          hitStrokeWidth={10}
+        />
+      )}
+      
+      {!isHovering && levelEls}
+
+      {/* Fibonacci Backgrounds */}
+      {showBackground && levelsToRender.slice(0, -1).map((level, i) => {
+        const nextLevel = levelsToRender[i + 1];
+        const yStart = priceToPixel(series, level.price);
+        const yEnd = priceToPixel(series, nextLevel.price);
+        
+        if (yStart === null || yEnd === null) return null;
+
+        let lineStartX = Math.min(x1, x2);
+        let lineEndX = Math.max(x1, x2);
+        if (extendLeft) lineStartX = 0;
+        if (extendRight) lineEndX = stageWidth;
+
+        return (
+          <Rect
+            key={`bg-${i}`}
+            x={lineStartX}
+            y={Math.min(yStart, yEnd)}
+            width={lineEndX - lineStartX}
+            height={Math.abs(yEnd - yStart)}
+            fill={level.color}
+            opacity={backgroundOpacity}
+            listening={false}
+          />
+        );
       })}
+
+      {/* Levels go over the coloured bands while the fib is hovered, under them otherwise */}
+      {isHovering && levelEls}
 
       {/* Selection handles */}
       {(isSelected || isHovering) && (
         <>
-          <Circle 
+          <HandleCircle 
             x={x1} y={y1} radius={5} fill="white" stroke="#2962ff" strokeWidth={2} 
             draggable={!isLocked} 
             onDragStart={(e) => e.cancelBubble = true}
             onDragMove={handleCircleDrag(0)}
             onDragEnd={handleCircleDrag(0)}
           />
-          <Circle 
+          <HandleCircle 
             x={x2} y={y2} radius={5} fill="white" stroke="#2962ff" strokeWidth={2} 
             draggable={!isLocked} 
             onDragStart={(e) => e.cancelBubble = true}
