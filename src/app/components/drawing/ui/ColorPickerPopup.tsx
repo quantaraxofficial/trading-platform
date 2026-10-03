@@ -7,15 +7,22 @@ import { useEscapeClose } from '../../../lib/useEscapeClose';
 // rows running light-to-dark for each hue — shared by every color button in the app
 // that opens this popup, so they all offer the same palette.
 export const TV_COLORS = [
-  ["#ffffff", "#f0f3fa", "#e0e3eb", "#b2b5be", "#787b86", "#434651", "#2a2e39", "#1e222d", "#131722", "#000000"],
-  ["#f23645", "#ff9800", "#ffeb3b", "#4caf50", "#089981", "#00bcd4", "#2962ff", "#673ab7", "#9c27b0", "#e91e63"],
-  ["#fce8e8", "#fdf0e3", "#fef9e6", "#e8f5e9", "#e2f2ef", "#e0f7fa", "#e8f0fe", "#f3e5f5", "#f8e1f4", "#fce4ec"],
-  ["#f8b6b6", "#fbc89a", "#fdf0a4", "#a5d6a7", "#8accc1", "#b2ebf2", "#9bb5fe", "#d1c4e9", "#eab6e6", "#f8bbd0"],
-  ["#f27979", "#f99e52", "#fce362", "#66bb6a", "#4db6ac", "#4dd0e1", "#648fff", "#9575cd", "#ce85d6", "#f06292"],
-  ["#e53935", "#fb8c00", "#fdd835", "#43a047", "#00897b", "#00acc1", "#1e88e5", "#5e35b1", "#ab47bc", "#d81b60"],
-  ["#c62828", "#ef6c00", "#fbc02d", "#2e7d32", "#00695c", "#00838f", "#1565c0", "#4527a0", "#8e24aa", "#ad1457"],
-  ["#8e0000", "#e65100", "#f57f17", "#1b5e20", "#004d40", "#006064", "#0d47a1", "#311b92", "#6a1b9a", "#880e4f"],
+  ['#ffffff', '#dbdbdb', '#b8b8b8', '#9c9c9c', '#808080', '#636363', '#4a4a4a', '#2e2e2e', '#0f0f0f', '#000000'],
+  ['#f23645', '#ff9800', '#ffeb3b', '#4caf50', '#089981', '#00bcd4', '#2962ff', '#673ab7', '#9c27b0', '#e91e63'],
+  ['#fccbcd', '#ffe0b2', '#fff9c4', '#c8e6c9', '#ace5dc', '#b2ebf2', '#bbd9fb', '#d1c4e9', '#e1bee7', '#f8bbd0'],
+  ['#faa1a4', '#ffcc80', '#fff59d', '#a5d6a7', '#70ccbd', '#80deea', '#90bff9', '#b39ddb', '#ce93d8', '#f48fb1'],
+  ['#f77c80', '#ffb74d', '#fff176', '#81c784', '#42bda8', '#4dd0e1', '#5b9cf6', '#9575cd', '#ba68c8', '#f06292'],
+  ['#f7525f', '#ffa726', '#ffee58', '#66bb6a', '#22ab94', '#26c6da', '#3179f5', '#7e57c2', '#ab47bc', '#ec407a'],
+  ['#b22833', '#f57c00', '#fbc02d', '#388e3c', '#056656', '#0097a7', '#1848cc', '#512da8', '#7b1fa2', '#c2185b'],
+  ['#801922', '#e65100', '#f57f17', '#1b5e20', '#00332a', '#006064', '#0c3299', '#311b92', '#4a148c', '#880e4f'],
 ];
+
+// TradingView's popup: 17px swatches 6px apart, and the line-style values tools store
+const SW = 17;
+const GAP = 6;
+const GRID_W = SW * 10 + GAP * 9;
+const LINE_STYLES = ['Solid', 'Dashed', 'Dotted'];
+const CUSTOM_COLORS_KEY = 'tv:customColors';
 
 export function hexToRgba(hex: string, alpha: number) {
   const r = parseInt(hex.slice(1, 3), 16) || 0;
@@ -77,53 +84,92 @@ export function ColorPickerPopup({ colorStr, onChange, onClose, thickness, onThi
     onChange(newOpacity === 100 ? newHex : hexToRgba(newHex, newOpacity / 100));
   };
 
+  // TradingView keeps colours made with "+" as swatches next to it
+  const [customColors, setCustomColors] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(CUSTOM_COLORS_KEY) || '[]').filter((c: unknown) => typeof c === 'string'); } catch { return []; }
+  });
+  const addCustomColor = (c: string) => {
+    setCustomColors(prev => {
+      const next = [c, ...prev.filter(x => x.toLowerCase() !== c.toLowerCase())].slice(0, 9);
+      try { localStorage.setItem(CUSTOM_COLORS_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+      return next;
+    });
+  };
+
+  const swatch = (c: string, key: string | number) => {
+    const on = hex.toLowerCase() === c.toLowerCase();
+    return (
+      <div key={key} onClick={() => applyColor(c, opacity)} title={c}
+        style={{
+          width: SW, height: SW, borderRadius: 3, cursor: 'pointer', backgroundColor: c, boxSizing: 'border-box',
+          border: c.toLowerCase() === '#ffffff' ? '1px solid #dbdbdb' : 'none',
+          boxShadow: on ? '0 0 0 1.5px #ffffff, 0 0 0 3px #0f0f0f' : undefined,
+        }}
+      />
+    );
+  };
+  const label = (t: string) => <div style={{ margin: '14px 0 8px', fontSize: 14, color: '#6a6d78' }}>{t}</div>;
+  const segments = (count: number, isOn: (i: number) => boolean, pick: (i: number) => void, draw: (i: number, color: string) => React.ReactNode) => (
+    <div style={{ display: 'flex', border: '1px solid #dbdbdb', borderRadius: 6, overflow: 'hidden' }}>
+      {Array.from({ length: count }, (_, i) => {
+        const on = isOn(i);
+        return (
+          <button key={i} type="button" onClick={() => pick(i)}
+            style={{
+              flex: 1, height: 32, background: on ? '#2e2e2e' : 'transparent', border: 'none', borderLeft: i > 0 ? '1px solid #dbdbdb' : 'none',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+            }}>
+            {draw(i, on ? '#ffffff' : '#2e2e2e')}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div
       style={{
-        position: 'absolute', backgroundColor: '#ffffff', border: '1px solid #e0e3eb',
-        borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 100000,
-        padding: '12px', width: showCustomPicker ? '236px' : '216px', boxSizing: 'content-box', overflow: 'hidden', ...style,
+        position: 'absolute', backgroundColor: '#ffffff', borderRadius: 6, boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)', zIndex: 100000,
+        padding: '12px 13px', width: showCustomPicker ? 236 : GRID_W, boxSizing: 'content-box', overflow: 'hidden', ...style,
       }}
       onClick={stopAll}
     >
       {showCustomPicker ? (
         <HSVColorPickerPopup
           hex={hex}
-          onApply={(newHex) => { applyColor(newHex, opacity); setShowCustomPicker(false); }}
+          onApply={(newHex) => { addCustomColor(newHex); applyColor(newHex, opacity); setShowCustomPicker(false); }}
         />
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 18px)', gap: '4px' }}>
-            {TV_COLORS.flat().map((c, i) => (
-              <div key={i} onClick={() => applyColor(c, opacity)}
-                style={{
-                  width: '18px', height: '18px', borderRadius: '2px', cursor: 'pointer', backgroundColor: c,
-                  border: hex.toLowerCase() === c.toLowerCase() ? '2px solid #2962ff' : '1px solid rgba(0,0,0,0.1)',
-                  boxSizing: 'border-box',
-                }}
-              />
-            ))}
-            <div onClick={() => setShowCustomPicker(true)}
-              style={{
-                position: 'relative', width: '18px', height: '18px', borderRadius: '2px', cursor: 'pointer',
-                border: '1px dashed #b2b5be', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#787b86',
-              }}
-              title="Custom color"
-            >
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(10, ${SW}px)`, gap: GAP }}>
+            {TV_COLORS.slice(0, 2).flat().map((c, i) => swatch(c, i))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(10, ${SW}px)`, gap: GAP, marginTop: GAP * 2 }}>
+            {TV_COLORS.slice(2).flat().map((c, i) => swatch(c, i))}
+          </div>
+
+          <div style={{ height: 1, backgroundColor: '#dbdbdb', margin: '15px 0 10px' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(10, ${SW}px)`, gap: GAP, alignItems: 'center' }}>
+            {customColors.map((c, i) => swatch(c, `c${i}`))}
+            <div onClick={() => setShowCustomPicker(true)} title="Add custom color"
+              style={{ width: SW, height: SW, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0f0f0f' }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M7 0v14M0 7h14" /></svg>
             </div>
           </div>
 
-          <div style={{ height: '1px', backgroundColor: '#e0e3eb', margin: '12px 0' }} />
-          <div style={{ marginBottom: '4px', fontSize: '12px', color: '#787b86' }}>Opacity</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ flex: 1, position: 'relative', height: '20px', display: 'flex', alignItems: 'center' }}>
-              <div style={{ position: 'absolute', inset: '8px 0', borderRadius: '2px', backgroundImage: `linear-gradient(to right, transparent, ${hex})`, backgroundColor: '#eee' }} />
-              <input type="range" min="0" max="100" value={opacity} onChange={e => applyColor(hex, parseInt(e.target.value))}
-                style={{ position: 'absolute', inset: 0, width: '100%', cursor: 'pointer', opacity: 0, zIndex: 2 }} />
-              <div style={{ position: 'absolute', left: `${opacity}%`, width: '12px', height: '12px', backgroundColor: '#fff', border: '2px solid #2962ff', borderRadius: '50%', transform: 'translateX(-50%)', pointerEvents: 'none' }} />
+          {label('Opacity')}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ flex: 1, position: 'relative', height: 20, display: 'flex', alignItems: 'center' }}>
+              <div style={{
+                position: 'absolute', left: 0, right: 0, height: 10, borderRadius: 5, border: '1px solid #b8b8b8', boxSizing: 'border-box',
+                backgroundImage: `linear-gradient(to right, transparent, ${hex}), repeating-conic-gradient(#d1d4dc 0% 25%, #ffffff 0% 50%)`,
+                backgroundSize: '100% 100%, 8px 8px',
+              }} />
+              <input type="range" min="0" max="100" value={opacity} onChange={e => applyColor(hex, parseInt(e.target.value))} aria-label="Opacity"
+                style={{ position: 'absolute', inset: 0, width: '100%', cursor: 'pointer', opacity: 0, zIndex: 2, margin: 0 }} />
+              <div style={{ position: 'absolute', left: `calc(${opacity}% - ${opacity * 0.14}px)`, width: 14, height: 14, backgroundColor: '#fff', border: '2px solid #0f0f0f', borderRadius: '50%', boxSizing: 'border-box', pointerEvents: 'none' }} />
             </div>
-            <div style={{ width: '44px', height: '24px', border: '1px solid #e0e3eb', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#131722' }}>
+            <div style={{ width: 48, height: 32, border: '1px solid #dbdbdb', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 8, boxSizing: 'border-box', fontSize: 14, color: '#0f0f0f' }}>
               {opacity}%
             </div>
           </div>
@@ -132,45 +178,21 @@ export function ColorPickerPopup({ colorStr, onChange, onClose, thickness, onThi
 
       {!showCustomPicker && onThicknessChange && (
         <>
-          <div style={{ height: '1px', backgroundColor: '#e0e3eb', margin: '12px 0' }} />
-          <div style={{ marginBottom: '8px', fontSize: '12px', color: '#787b86' }}>Thickness</div>
-          <div style={{ display: 'flex', border: '1px solid #e0e3eb', borderRadius: '4px', overflow: 'hidden' }}>
-            {[1, 2, 3, 4].map(w => (
-              <button key={w} onClick={() => onThicknessChange(w)}
-                style={{
-                  flex: 1, height: '32px', background: thickness === w ? '#131722' : 'transparent',
-                  border: 'none', borderRight: w < 4 ? '1px solid #e0e3eb' : 'none', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <div style={{ width: '16px', height: `${w}px`, backgroundColor: thickness === w ? '#ffffff' : '#131722' }} />
-              </button>
-            ))}
-          </div>
+          {label('Thickness')}
+          {segments(4, i => thickness === i + 1, i => onThicknessChange(i + 1), (i, color) => (
+            <span style={{ width: 31, height: i + 1, background: color, display: 'block' }} />
+          ))}
         </>
       )}
 
       {!showCustomPicker && onLineStyleChange && (
         <>
-          <div style={{ height: '1px', backgroundColor: '#e0e3eb', margin: '12px 0' }} />
-          <div style={{ marginBottom: '8px', fontSize: '12px', color: '#787b86' }}>Line style</div>
-          <div style={{ display: 'flex', border: '1px solid #e0e3eb', borderRadius: '4px', overflow: 'hidden' }}>
-            {['Solid', 'Dashed', 'Dotted'].map(s => (
-              <button key={s} onClick={() => onLineStyleChange(s)}
-                style={{
-                  flex: 1, height: '32px', background: lineStyle === s ? '#131722' : 'transparent',
-                  border: 'none', borderRight: s !== 'Dotted' ? '1px solid #e0e3eb' : 'none', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <svg width="24" height="12" viewBox="0 0 24 12" fill="none" stroke={lineStyle === s ? '#ffffff' : '#131722'} strokeWidth="2">
-                  {s === 'Solid' ? <line x1="0" y1="6" x2="24" y2="6" /> :
-                   s === 'Dashed' ? <><line x1="0" y1="6" x2="8" y2="6" /><line x1="12" y1="6" x2="20" y2="6" /></> :
-                   <><circle cx="2" cy="6" r="1" fill={lineStyle === s ? '#ffffff' : '#131722'} /><circle cx="8" cy="6" r="1" fill={lineStyle === s ? '#ffffff' : '#131722'} /><circle cx="14" cy="6" r="1" fill={lineStyle === s ? '#ffffff' : '#131722'} /><circle cx="20" cy="6" r="1" fill={lineStyle === s ? '#ffffff' : '#131722'} /></>}
-                </svg>
-              </button>
-            ))}
-          </div>
+          {label('Line style')}
+          {segments(3, i => (lineStyle || 'Solid').toLowerCase() === LINE_STYLES[i].toLowerCase(), i => onLineStyleChange(LINE_STYLES[i]), (i, color) => (
+            <svg width="31" height="2" viewBox="0 0 31 2" aria-hidden>
+              <line x1="0" y1="1" x2="31" y2="1" stroke={color} strokeWidth="2" strokeDasharray={i === 1 ? '4 3' : i === 2 ? '2 2' : undefined} />
+            </svg>
+          ))}
         </>
       )}
     </div>

@@ -183,10 +183,50 @@ export const DEFAULT_FIB_LEVELS = [
   { id: '4.764', enabled: false, value: 4.764, color: '#787b86' },
 ];
 
+// TradingView's coordinate box: 100x34, selects its text on focus, applies on Enter or on
+// leaving the field (a value that isn't a number is dropped)
+function CoordInput({ value, onCommit, autoFocus, ariaLabel }: { value: string; onCommit: (t: string) => void; autoFocus?: boolean; ariaLabel: string }) {
+  const [text, setText] = useState(value);
+  const [focused, setFocused] = useState(false);
+  useEffect(() => { if (!focused) setText(value); }, [value, focused]);
+  return (
+    <input
+      aria-label={ariaLabel}
+      autoFocus={autoFocus}
+      value={focused ? text : value}
+      onFocus={e => { setText(value); setFocused(true); e.currentTarget.select(); }}
+      onChange={e => setText(e.target.value)}
+      onBlur={() => { setFocused(false); if (text !== value) onCommit(text); }}
+      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+      style={{ width: 100, height: 34, boxSizing: 'border-box', border: `1px solid ${focused ? '#2962ff' : '#dbdbdb'}`, borderRadius: 6, padding: '0 12px', fontSize: 14, color: '#0f0f0f', outline: 'none', background: '#ffffff' }}
+    />
+  );
+}
+
 export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSettingsModalProps) {
   useEscapeClose(onClose);
   const { drawings, updateDrawing, selectedShapeId } = useDrawing();
   const drawing = drawings.find((d: any) => d.id === selectedShapeId);
+
+  // Coordinates tab: a point's price, or its bar (the time follows the bar, so the point
+  // stays put across timeframe changes)
+  const setPoint = (idx: number, field: 'price' | 'bar', text: string) => {
+    if (!drawing) return;
+    const v = parseFloat(text);
+    if (!isFinite(v)) return;
+    const pts = drawing.points.map((q: any) => ({ ...q }));
+    if (field === 'price') {
+      pts[idx].price = v;
+    } else {
+      const bar = Math.round(v);
+      const data: any[] = (window as any).__chartFullData || [];
+      const n = data.length;
+      const spacing = n > 1 ? (data[n - 1].time - data[0].time) / (n - 1) : 0;
+      pts[idx].logical = bar;
+      pts[idx].time = bar >= 0 && bar < n ? data[bar].time : n ? (bar < 0 ? data[0].time + bar * spacing : data[n - 1].time + (bar - (n - 1)) * spacing) : pts[idx].time;
+    }
+    updateDrawing(drawing.id, { points: pts });
+  };
 
   const [position, setPosition] = useState(initialPosition || { 
     x: typeof window !== 'undefined' ? window.innerWidth / 2 - 200 : 0, 
@@ -534,9 +574,18 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
           </>
         )}
 
-        {activeTab === 'Coordinates' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <span style={{ fontSize: '13px', color: '#787b86' }}>Interactive point placement</span>
+        {activeTab === 'Coordinates' && drawing && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '4px 0' }}>
+            {drawing.points.map((p: any, idx: number) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center' }}>
+                <span style={{ width: 110, fontSize: 14, color: '#0f0f0f' }}>#{idx + 1} (price, bar)</span>
+                <CoordInput ariaLabel={`Point ${idx + 1} price`} autoFocus={idx === 0}
+                  value={p.price.toFixed((window as any).__pricePrecision ?? 2)}
+                  onCommit={t => setPoint(idx, 'price', t)} />
+                <span style={{ width: 9 }} />
+                <CoordInput ariaLabel={`Point ${idx + 1} bar`} value={String(Math.round(p.logical))} onCommit={t => setPoint(idx, 'bar', t)} />
+              </div>
+            ))}
           </div>
         )}
 

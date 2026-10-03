@@ -131,23 +131,6 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     }, ms);
   }, [applyDataUpToIndex]);
 
-  const enterSelectMode = useCallback(() => {
-    // Toggle off if already active
-    if (mode !== 'idle') {
-      stopInterval();
-      setIsPlaying(false);
-      setMode('idle');
-      setHasStarted(false);
-      // Restore full data
-      if (seriesRef.current && fullDataRef.current.length > 0) {
-        seriesRef.current.setData(fullDataRef.current);
-        if (chartRef.current) chartRef.current.timeScale().fitContent();
-      }
-      return;
-    }
-    setMode('selecting');
-  }, [mode]);
-
   const reSelectBar = useCallback(() => {
     stopInterval();
     setIsPlaying(false);
@@ -198,6 +181,13 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     setReplayIndex(0);
     replayIndexRef.current = 0;
   }, []);
+
+  // The Replay button toggles: a second press leaves replay exactly like "Exit Replay",
+  // keeping the chart where it is (fitting all content made it jump)
+  const enterSelectMode = useCallback(() => {
+    if (mode !== 'idle') { stopReplay(); return; }
+    setMode('selecting');
+  }, [mode, stopReplay]);
 
   const togglePlay = useCallback(() => {
     setIsPlaying(prev => {

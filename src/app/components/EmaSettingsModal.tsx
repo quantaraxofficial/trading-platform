@@ -1,9 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { X, ChevronDown, Plus, Activity } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import { X, ChevronDown, Plus } from "lucide-react";
 import { DualRangeSlider } from "./drawing/ui/DualRangeSlider";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import { ColorPickerPopup } from "./drawing/ui/ColorPickerPopup";
+import { PlotTypeMenu, PlotTypeIcon, PLOT_TYPES } from "./PlotTypeMenu";
+import type { PlotType } from "./chartPrimitives/CandleBodyAwareLine";
 
 function CheckBox({ checked, onChange, label, subtext, labelStyle }: any) {
   return (
@@ -103,7 +107,7 @@ function SelectDropdown({ value, options, onChange, style, theme }: any) {
 interface EmaSettingsModalProps {
   onClose: () => void;
   theme: string;
-  config: { length: number; source: string; offset: number; color: string };
+  config: { length: number; source: string; offset: number; color: string; lineWidth?: number; lineStyle?: string; plotType?: PlotType; priceLine?: boolean };
   onChangeConfig: (newConfig: any) => void;
 }
 
@@ -118,6 +122,46 @@ export default function EmaSettingsModal({ onClose, theme, config, onChangeConfi
   const sectionLabelColor = "#787b86";
 
   const [localConfig, setLocalConfig] = useState(config);
+  // The popup floats over the dialog (its body scrolls and would clip it), under the button
+  const [plotPopup, setPlotPopup] = useState<{ top: number; left: number } | null>(null);
+  const plotRef = useRef<HTMLDivElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
+  const togglePlotPopup = () => {
+    if (plotPopup) { setPlotPopup(null); return; }
+    const r = plotRef.current?.getBoundingClientRect();
+    if (r) setPlotPopup({ top: r.bottom + 4, left: r.left });
+  };
+  // A click anywhere outside the plot button / its popup closes the popup
+  useEffect(() => {
+    if (!plotPopup) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!plotRef.current?.contains(t) && !popupRef.current?.contains(t)) setPlotPopup(null);
+    };
+    document.addEventListener("mousedown", onDown, true);
+    return () => document.removeEventListener("mousedown", onDown, true);
+  }, [plotPopup]);
+  // The plot-type menu (the button beside the colour), floated the same way
+  const [typeMenu, setTypeMenu] = useState<{ top: number; left: number } | null>(null);
+  const typeRef = useRef<HTMLDivElement>(null);
+  const typeMenuRef = useRef<HTMLDivElement>(null);
+  const toggleTypeMenu = () => {
+    if (typeMenu) { setTypeMenu(null); return; }
+    const r = typeRef.current?.getBoundingClientRect();
+    if (r) setTypeMenu({ top: r.bottom + 4, left: r.left });
+  };
+  useEffect(() => {
+    if (!typeMenu) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!typeRef.current?.contains(t) && !typeMenuRef.current?.contains(t)) setTypeMenu(null);
+    };
+    document.addEventListener("mousedown", onDown, true);
+    return () => document.removeEventListener("mousedown", onDown, true);
+  }, [typeMenu]);
+  const plotType: PlotType = localConfig.plotType ?? "line";
+  const lw = localConfig.lineWidth ?? 1;
+  const ls = localConfig.lineStyle ?? "Solid";
 
   const [visibility, setVisibility] = useState({
     ticks: { enabled: true, from: 1, to: 1000 },
@@ -234,17 +278,53 @@ export default function EmaSettingsModal({ onClose, theme, config, onChangeConfi
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <CheckBox checked={true} onChange={() => {}} label="EMA" labelStyle={{ color: textColor }} />
                 <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <div style={{ display: "flex", border: `1px solid ${borderColor}`, borderRadius: "4px", padding: "4px", alignItems: "center" }}>
-                    <div style={{ width: "24px", height: "24px", backgroundColor: localConfig.color, borderRadius: "2px", cursor: "pointer", position: "relative" }}>
-                      <input type="color" value={localConfig.color} onChange={e => setLocalConfig({...localConfig, color: e.target.value})} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
-                    </div>
-                    <div style={{ width: "1px", height: "24px", backgroundColor: borderColor, margin: "0 8px" }} />
-                    <div style={{ width: "32px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                      <div style={{ width: "24px", height: "2px", backgroundColor: localConfig.color }} />
-                    </div>
+                  {/* TradingView's plot button: the colour, then the line as drawn (thickness and style) */}
+                  <div ref={plotRef} style={{ position: "relative" }}>
+                    <button type="button" aria-label="Plot color and line" onClick={togglePlotPopup}
+                      style={{ display: "flex", alignItems: "center", gap: 8, height: 34, padding: "0 8px 0 4px", borderRadius: 6, cursor: "pointer",
+                        border: `1px solid ${plotPopup ? "#2962ff" : isDark ? "#434651" : "#dbdbdb"}`, background: "transparent" }}>
+                      <span style={{ width: 24, height: 24, borderRadius: 4, background: localConfig.color, boxSizing: "border-box",
+                        border: localConfig.color.toLowerCase() === "#ffffff" ? "1px solid #dbdbdb" : "none" }} />
+                      <svg width="30" height="6" viewBox="0 0 30 6" aria-hidden>
+                        <line x1="0" y1="3" x2="30" y2="3" stroke={localConfig.color} strokeWidth={lw}
+                          strokeDasharray={ls === "Dashed" ? "4 3" : ls === "Dotted" ? `${lw} ${lw * 2}` : undefined} />
+                      </svg>
+                    </button>
+                    {plotPopup && createPortal(
+                      <div ref={popupRef}>
+                        <ColorPickerPopup
+                          colorStr={localConfig.color}
+                          onChange={c => setLocalConfig({ ...localConfig, color: c })}
+                          onClose={() => setPlotPopup(null)}
+                          thickness={lw}
+                          onThicknessChange={w => setLocalConfig({ ...localConfig, lineWidth: w })}
+                          lineStyle={ls}
+                          onLineStyleChange={v => setLocalConfig({ ...localConfig, lineStyle: v })}
+                          style={{ position: "fixed", top: plotPopup.top, left: plotPopup.left, zIndex: 100001 }}
+                        />
+                      </div>,
+                      document.body,
+                    )}
                   </div>
-                  <div style={{ width: "34px", height: "34px", border: `1px solid ${borderColor}`, borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                    <Activity size={18} color={textColor} />
+                  <div ref={typeRef}>
+                    <button type="button" aria-label="Plot type" title={PLOT_TYPES.find(t => t.id === plotType)?.label} onClick={toggleTypeMenu}
+                      style={{ width: 34, height: 34, padding: 0, borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                        border: `1px solid ${typeMenu ? "#2962ff" : isDark ? "#434651" : "#dbdbdb"}`, background: "transparent", color: textColor }}>
+                      <PlotTypeIcon type={plotType} />
+                    </button>
+                    {typeMenu && createPortal(
+                      <div ref={typeMenuRef} style={{ position: "fixed", top: typeMenu.top, left: typeMenu.left, zIndex: 100001 }}>
+                        <PlotTypeMenu
+                          value={plotType}
+                          priceLine={!!localConfig.priceLine}
+                          onSelect={t => { setLocalConfig({ ...localConfig, plotType: t }); setTypeMenu(null); }}
+                          onPriceLine={on => setLocalConfig({ ...localConfig, priceLine: on })}
+                          onClose={() => setTypeMenu(null)}
+                          isDark={isDark}
+                        />
+                      </div>,
+                      document.body,
+                    )}
                   </div>
                 </div>
               </div>

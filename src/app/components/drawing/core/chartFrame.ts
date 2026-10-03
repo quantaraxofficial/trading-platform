@@ -3,9 +3,12 @@ import { flushSync } from 'react-dom';
 // Keeps drawings locked to the chart while it zooms and pans. Range-change events arrive
 // after lightweight-charts has painted, so anything redrawn from them lags a frame behind
 // the candles (it shakes), and price-scale moves fire no event at all. Instead a series
-// primitive is told by lightweight-charts itself, inside its paint, that a frame is about
-// to be drawn; if the time/price mapping changed, every subscriber re-renders there and
-// then (one synchronous React pass), and the "after" hooks draw their canvases right away.
+// primitive is asked by lightweight-charts itself for its pane views while it draws a frame;
+// if the time/price mapping changed, every subscriber re-renders there and then (one
+// synchronous React pass), and the "after" hooks draw their canvases right away.
+// (Not in updateAllViews: that also runs synchronously from series.setData() etc., often
+// inside React effects, where flushSync isn't allowed. paneViews is only asked for while
+// painting, or hit-testing from a mouse event.)
 
 type Fn = () => void;
 interface Hub { tick: Set<Fn>; after: Set<Fn>; detach: Fn; sig: string }
@@ -24,15 +27,15 @@ function hubFor(chart: any, series: any): Hub {
   if (hub) return hub;
   const h: Hub = { tick: new Set(), after: new Set(), detach: () => {}, sig: '' };
   const primitive = {
-    updateAllViews() {
+    paneViews() {
       let sig: string;
-      try { sig = mappingSignature(chart, series); } catch { return; }
-      if (sig === h.sig) return;
+      try { sig = mappingSignature(chart, series); } catch { return []; }
+      if (sig === h.sig) return [];
       h.sig = sig;
       if (h.tick.size) flushSync(() => h.tick.forEach(f => f()));
       h.after.forEach(f => f());
+      return [];
     },
-    paneViews: () => [],
   };
   series.attachPrimitive(primitive);
   h.detach = () => { try { series.detachPrimitive(primitive); } catch { /* series already removed */ } };

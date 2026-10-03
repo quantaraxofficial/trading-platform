@@ -21,7 +21,7 @@ import {
   exitLabel, exitModeName, exitValue, exitPriceFrom, formatExitValue, defaultExitTicks, EXIT_MODE_INFO,
 } from "./ticketMath";
 import {
-  C, Toggle, Tip, Popover, MenuItem, MenuDivider, TvLogo, SwapIcon, ChevronDown, ChevronUp, ChevronLeft, CloseIcon,
+  C, Toggle, Tip, Popover, MenuItem, MenuDivider, BrandLogo, SwapIcon, ChevronDown, ChevronUp, ChevronLeft, CloseIcon,
   InfoIcon, HelpIcon, MoreIcon, PresetsIcon, PinIcon, HexSettingsIcon, CloudUpIcon, TrashIcon, PlusIcon, CheckIcon, UfoIllustration,
 } from "./ui";
 
@@ -349,7 +349,7 @@ function TicketBody({ placement }: { placement: "floating" | "docked" }) {
         <>
           {/* Header */}
           <div onMouseDown={startDrag} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 12px 8px 16px", cursor: placement === "floating" ? "move" : "default", userSelect: "none" }}>
-            <TvLogo size={24} />
+            <BrandLogo size={24} />
             <span style={{ fontWeight: 600, fontSize: 14 }}>{symbol}</span>
             {modifying && <span style={{ color: C.muted, fontSize: 13 }}>· Modify order {modifying.id}</span>}
             <span style={{ flex: 1 }} />
@@ -1140,7 +1140,7 @@ export function ExitLevelsView({ symbol, side, typeLabel, qty, entry, prec, ctx,
       </div>
       <div style={{ overflowY: "auto", padding: "14px 16px", flex: 1, minHeight: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <TvLogo size={36} />
+          <BrandLogo size={36} />
           <div>
             <div style={{ fontWeight: 600, fontSize: 14 }}>{symbol}</div>
             <div style={{ color: C.muted, fontSize: 13 }}>{side === "buy" ? "Buy" : "Sell"} {typeLabel} {formatQty(qty)} @ {isFinite(entry) ? formatPrice(entry, prec) : "—"}</div>

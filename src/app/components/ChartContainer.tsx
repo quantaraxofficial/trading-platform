@@ -346,6 +346,9 @@ async function fetchStockDataUncached(symbol: string = 'AAPL', interval: string 
   }
 }
 
+// The EMA settings' line style as lightweight-charts' lineStyle (0 solid, 1 dotted, 2 dashed)
+const emaLineStyle = (s?: string) => (s === 'Dotted' ? 1 : s === 'Dashed' ? 2 : 0);
+
 // Helper: remap drawing points from one dataset to another, extrapolating for out-of-range times
 function remapDrawingPoints(drawings: any[], stockData: any[], label: string, oldStockData?: any[]) {
   if (!drawings || drawings.length === 0 || stockData.length === 0) return drawings;
@@ -1732,7 +1735,10 @@ export default function ChartContainer({
         const config = emaConfigsRef.current[ema.id] || { length: 9, source: 'Close', offset: 0, color: '#2962ff' };
         const series = chartRef.current!.addSeries(LineSeries, {
           color: config.color,
-          lineWidth: 1.5,
+          lineWidth: config.lineWidth ?? 1,
+          lineStyle: emaLineStyle(config.lineStyle),
+          // the "Price line" switch in the plot-type menu (off by default, as on TradingView)
+          priceLineVisible: config.priceLine ?? false,
           priceFormat: priceFormatFor(pricePrecisionRef.current),
           crosshairMarkerVisible: false,
           visible: emaVisibilitiesRef.current[ema.id] ?? true,
@@ -1740,7 +1746,8 @@ export default function ChartContainer({
           // this series stays invisible but still drives the price-axis label.
           lineVisible: false
         });
-        series.attachPrimitive(new CandleBodyAwareLine());
+        const emaId = ema.id;
+        series.attachPrimitive(new CandleBodyAwareLine(() => emaConfigsRef.current[emaId]?.plotType));
         emasRef.current[ema.id] = series;
         if (!emaConfigsRef.current[ema.id]) setEmaConfigs(prev => ({ ...prev, [ema.id]: config }));
         if (emaVisibilitiesRef.current[ema.id] === undefined) setEmaVisibilities(prev => ({ ...prev, [ema.id]: true }));
@@ -1771,7 +1778,10 @@ export default function ChartContainer({
     Object.keys(emasRef.current).forEach(id => {
       emasRef.current[id].applyOptions({
         visible: emaVisibilities[id] ?? true,
-        color: emaConfigs[id]?.color || '#2962ff'
+        color: emaConfigs[id]?.color || '#2962ff',
+        lineWidth: emaConfigs[id]?.lineWidth ?? 1,
+        lineStyle: emaLineStyle(emaConfigs[id]?.lineStyle),
+        priceLineVisible: emaConfigs[id]?.priceLine ?? false,
       });
     });
     updateEmaData(fullDataRef.current);
@@ -2384,13 +2394,13 @@ export default function ChartContainer({
     // Replay's "Select starting point" (as on TradingView): a date from the dialog, the first bar
     // the provider has, or a random bar anywhere in the history. The chart is cut just before the
     // chosen bar, so it's the first one Play reveals; history outside the loaded range is fetched.
-    const replayFrom = async (detail: { kind: 'date' | 'first' | 'random'; date?: string; time?: string }) => {
+    const replayFrom = async (detail: { kind: 'date' | 'first' | 'random' | 'saved'; date?: string; time?: string; at?: number }) => {
       const iv = intervalRef.current;
       const daily = /day|week|month/.test(iv);
       const barMs = getIntervalMs(iv);
       const dateOf = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
       let data: any[] = fullDataRef.current;
-      const earliest = detail.kind === 'date' ? null : await getEarliestBarTime(symbolRef.current, iv);
+      const earliest = detail.kind === 'date' || detail.kind === 'saved' ? null : await getEarliestBarTime(symbolRef.current, iv);
       // "First available" needs the provider's first bar; without it there's nothing true to show
       if (detail.kind === 'first' && earliest === null) { onApiLimit({}); return; }
 
@@ -2398,6 +2408,9 @@ export default function ChartContainer({
       let target: number;
       if (detail.kind === 'first') {
         target = earliest ?? (data[0]?.time ?? 0);
+      } else if (detail.kind === 'saved') {
+        // a replay saved on leaving it: carry on from the bar it was on
+        target = detail.at ?? 0;
       } else if (detail.kind === 'random') {
         const lo = earliest ?? (data[0]?.time ?? 0);
         const hi = data.length ? data[data.length - 1].time : Math.floor(Date.now() / 1000);
@@ -2424,8 +2437,8 @@ export default function ChartContainer({
       let startIdx: number;
       if (detail.kind === 'first') {
         startIdx = 0;
-      } else if (detail.kind === 'random') {
-        // The random moment's own bar: the last one at or before it
+      } else if (detail.kind === 'random' || detail.kind === 'saved') {
+        // The random moment's own bar (or the saved replay's): the last one at or before it
         let i = data.findIndex((b: any) => b.time > target);
         if (i < 0) i = data.length;
         startIdx = Math.max(0, i - 1);

@@ -83,9 +83,17 @@ function subtractRanges(start: number, end: number, exclusions: [number, number]
   return segments;
 }
 
+// TradingView's plot styles (the indicator's "plot type" menu in its Style tab)
+export type PlotType =
+  | 'line' | 'lineBreaks' | 'step' | 'stepBreaks' | 'stepDiamonds' | 'histogram'
+  | 'cross' | 'area' | 'areaBreaks' | 'columns' | 'circles';
+
 export class CandleBodyAwareLine {
   private _chart: IChartApi | null = null;
   private _series: ISeriesApi<'Line'> | null = null;
+
+  // `plotType` is read on every draw, so a change shows on the next paint
+  constructor(private _plotType: () => PlotType | undefined = () => 'line') {}
 
   attached(param: SeriesAttachedParameter<Time>) {
     this._chart = param.chart as IChartApi;
@@ -119,39 +127,67 @@ export class CandleBodyAwareLine {
     if (opts.visible === false) return;
     const color = opts.color || '#2962ff';
     const lineWidth = opts.lineWidth || 2;
+    const type: PlotType = this._plotType() || 'line';
 
-    const rawPoints = series.data() as unknown as { time: number; value: number }[];
-    if (!rawPoints || rawPoints.length < 2) return;
+    const allPoints = series.data() as unknown as { time: number; value?: number }[];
+    if (!allPoints || allPoints.length === 0) return;
 
     const ts = chart.timeScale();
     const fullData: any[] = (window as any).__chartFullData || [];
     const replayCutoff = (window as any).__replayVisibleCutoff;
 
-    target.useMediaCoordinateSpace(({ context: ctx }: any) => {
+    // Only the bars in view (plus one either side, so lines run off the edges)
+    const vr = ts.getVisibleLogicalRange();
+    const lo = vr ? Math.max(0, Math.floor(vr.from) - 1) : 0;
+    const hi = vr ? Math.min(allPoints.length - 1, Math.ceil(vr.to) + 1) : allPoints.length - 1;
+    if (hi < lo) return;
+    const rawPoints = allPoints.slice(lo, hi + 1);
+
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }: any) => {
       const pixelPoints: (PixelPoint | null)[] = rawPoints.map((p) => {
+        if (typeof p.value !== 'number') return null;
         const x = ts.timeToCoordinate(p.time as any);
-        const y = series.priceToCoordinate((p as any).value);
+        const y = series.priceToCoordinate(p.value);
         return x === null || y === null ? null : { x, y };
       });
 
-      ctx.save();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = lineWidth;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
+      // Connected runs: the "with breaks" styles stop at a missing value, the others bridge it
+      const breaks = type === 'lineBreaks' || type === 'stepBreaks' || type === 'areaBreaks';
+      const runs: PixelPoint[][] = [];
+      let run: PixelPoint[] = [];
+      for (const p of pixelPoints) {
+        if (p) run.push(p);
+        else if (breaks && run.length) { runs.push(run); run = []; }
+      }
+      if (run.length) runs.push(run);
+      const points = runs.flat();
+
+      // Histogram, columns and area reach down to zero, as TradingView's do (clamped to the pane)
+      const h = mediaSize.height;
+      const zeroY = series.priceToCoordinate(0);
+      const baseY = zeroY === null ? h + 1 : Math.max(-1, Math.min(h + 1, zeroY));
 
       // Bar spacing is uniform across the whole pane at any given zoom level, so
       // the body width only needs to be computed once per draw, not per candle.
       const barSpacingPx = Math.abs(
         (ts.logicalToCoordinate(1 as any) ?? 0) - (ts.logicalToCoordinate(0 as any) ?? 0)
       ) || 6;
-      const bodyHalfWidthPx = candlestickBodyWidthCss(barSpacingPx) / 2;
+      const bodyWidthPx = candlestickBodyWidthCss(barSpacingPx);
+      const bodyHalfWidthPx = bodyWidthPx / 2;
 
-      for (let i = 0; i < pixelPoints.length - 1; i++) {
-        const a = pixelPoints[i];
-        const b = pixelPoints[i + 1];
-        if (!a || !b) continue;
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
 
+      // A line segment, with the stretches that pass through candle bodies left out
+      const strokeDucked = (a: PixelPoint, b: PixelPoint) => {
+        if (a.x === b.x) {
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          return;
+        }
         const exclusions: [number, number][] = [];
         if (fullData.length > 0) {
           const fromLogical = ts.coordinateToLogical(Math.min(a.x, b.x));
@@ -192,6 +228,99 @@ export class CandleBodyAwareLine {
           ctx.lineTo(to, yAt(to));
           ctx.stroke();
         }
+      };
+
+      // The line's dash pattern (lightweight-charts' lineStyle: 1 dotted, 2 dashed, 0 solid)
+      const setDash = () => {
+        if (opts.lineStyle === 1) { ctx.setLineDash([lineWidth, lineWidth * 2]); ctx.lineCap = 'butt'; }
+        else if (opts.lineStyle === 2) { ctx.setLineDash([lineWidth * 3 + 3, lineWidth * 2 + 2]); ctx.lineCap = 'butt'; }
+      };
+      const clearDash = () => { ctx.setLineDash([]); ctx.lineCap = 'round'; };
+
+      const drawLines = () => {
+        setDash();
+        for (const r of runs) for (let i = 0; i < r.length - 1; i++) strokeDucked(r[i], r[i + 1]);
+        clearDash();
+      };
+      // The value holds until the next bar, then steps to it
+      const drawSteps = () => {
+        setDash();
+        for (const r of runs) {
+          for (let i = 0; i < r.length - 1; i++) {
+            const a = r[i], b = r[i + 1];
+            const corner = { x: b.x, y: a.y };
+            strokeDucked(a, corner);
+            strokeDucked(corner, b);
+          }
+        }
+        clearDash();
+      };
+
+      switch (type) {
+        case 'step':
+        case 'stepBreaks':
+          drawSteps();
+          break;
+        case 'stepDiamonds': {
+          drawSteps();
+          const d = 2.5 + lineWidth;
+          for (const p of points) {
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y - d); ctx.lineTo(p.x + d, p.y); ctx.lineTo(p.x, p.y + d); ctx.lineTo(p.x - d, p.y);
+            ctx.closePath(); ctx.fill();
+          }
+          break;
+        }
+        case 'histogram': {
+          const w = Math.max(1, lineWidth);
+          for (const p of points) {
+            ctx.fillRect(Math.round(p.x - w / 2), Math.min(p.y, baseY), w, Math.abs(baseY - p.y));
+          }
+          break;
+        }
+        case 'columns': {
+          const w = Math.max(1, Math.round(bodyWidthPx));
+          for (const p of points) {
+            ctx.fillRect(Math.round(p.x - w / 2), Math.min(p.y, baseY), w, Math.abs(baseY - p.y));
+          }
+          break;
+        }
+        case 'cross': {
+          const c = 2 + lineWidth * 1.5;
+          ctx.lineCap = 'butt';
+          ctx.beginPath();
+          for (const p of points) {
+            ctx.moveTo(p.x - c, p.y); ctx.lineTo(p.x + c, p.y);
+            ctx.moveTo(p.x, p.y - c); ctx.lineTo(p.x, p.y + c);
+          }
+          ctx.stroke();
+          break;
+        }
+        case 'circles': {
+          const rad = 1.5 + lineWidth;
+          ctx.beginPath();
+          for (const p of points) { ctx.moveTo(p.x + rad, p.y); ctx.arc(p.x, p.y, rad, 0, Math.PI * 2); }
+          ctx.fill();
+          break;
+        }
+        case 'area':
+        case 'areaBreaks': {
+          ctx.globalAlpha = 0.2;
+          for (const r of runs) {
+            if (r.length < 2) continue;
+            ctx.beginPath();
+            ctx.moveTo(r[0].x, baseY);
+            for (const p of r) ctx.lineTo(p.x, p.y);
+            ctx.lineTo(r[r.length - 1].x, baseY);
+            ctx.closePath();
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+          drawLines();
+          break;
+        }
+        default:
+          drawLines();
       }
 
       ctx.restore();

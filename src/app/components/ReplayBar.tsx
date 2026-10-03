@@ -5,6 +5,7 @@ import { useReplay, type ReplayStartMode } from "./ReplayContext";
 import ReplayDateDialog from "./ReplayDateDialog";
 import { getEarliestBarTime } from "../utils/earliestBar";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import { getSavedReplay, type SavedReplay } from "../lib/savedReplay";
 
 const SPEED_OPTIONS = [
   { label: "10x", desc: "10 upd per 1 sec", value: 10 },
@@ -38,6 +39,18 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
   const [showStartMenu, setShowStartMenu] = useState(false);
   const startMenuRef = useRef<HTMLDivElement>(null);
   const [showDateDialog, setShowDateDialog] = useState(false);
+  // A replay of this symbol saved via "Leave current replay?" can be continued from the menu
+  const [saved, setSaved] = useState<SavedReplay | null>(null);
+  useEffect(() => {
+    const read = () => setSaved(symbol ? getSavedReplay(symbol) : null);
+    read();
+    window.addEventListener("tv:saved-replay-changed", read);
+    return () => window.removeEventListener("tv:saved-replay-changed", read);
+  }, [symbol]);
+  const continueSaved = () => {
+    setShowStartMenu(false);
+    if (saved) window.dispatchEvent(new CustomEvent("tv:replay-start", { detail: { kind: "saved", at: saved.time } }));
+  };
   const [firstDay, setFirstDay] = useState<string | null>(null);
   const intraday = !/day|week|month/.test(interval);
   const closeStartMenu = useCallback(() => setShowStartMenu(false), []);
@@ -143,6 +156,25 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
               background: "var(--tv-color-pane-bg)", border: "1px solid var(--tv-color-border)", borderRadius: 8,
               boxShadow: "0 4px 16px rgba(0,0,0,0.2)", zIndex: 1001,
             }}>
+              {saved && (
+                <>
+                  <button type="button" role="menuitem" onClick={continueSaved} className="tv-bb-btn"
+                    title={`Saved ${new Date(saved.savedAt).toLocaleString()}`}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10, width: "100%", height: 38, padding: "0 12px", border: "none", borderRadius: 0,
+                      justifyContent: "flex-start", fontSize: 14, fontFamily: "inherit", cursor: "pointer", color: "var(--tv-hdr-text)",
+                    }}>
+                    <svg width="24" height="24" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden>
+                      <path d="M6.5 14a7.5 7.5 0 1 0 2.2-5.3M6.5 5.5v3.7h3.7" /><path d="M12.5 10.5v7l5-3.5-5-3.5z" />
+                    </svg>
+                    <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", lineHeight: "16px" }}>
+                      Continue saved replay
+                      <span style={{ fontSize: 11, color: "var(--tv-legend-args)" }}>{new Date(saved.time * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</span>
+                    </span>
+                  </button>
+                  <div style={{ height: 1, margin: "6px 0", background: "var(--tv-color-border)" }} />
+                </>
+              )}
               <div style={{ padding: "6px 12px", fontSize: 11, fontWeight: 600, letterSpacing: "0.4px", color: "var(--tv-legend-args)" }}>SELECT STARTING POINT</div>
               {START_MODES.map(m => {
                 const on = m.id === startMode;

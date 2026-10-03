@@ -8,7 +8,7 @@
 import React, { useRef, useState } from "react";
 import AccountManager from "./AccountManager";
 import { BrokerMenu } from "./TradeButton";
-import { Tip, MinimizeIcon, MaximizeIcon, RestoreIcon } from "./ui";
+import { Tip, MinimizeIcon, MaximizeIcon, RestoreIcon, BrandMark } from "./ui";
 
 export const PANEL_ROW_HEIGHT = 38;
 
@@ -49,7 +49,7 @@ export default function TradingPanel({ open, maximized, onToggleOpen, onToggleMa
               }}
             >
               <span style={{ position: "relative", display: "inline-flex" }}>
-                <TvMark />
+                <BrandMark />
                 <span aria-hidden style={{ position: "absolute", right: -6, top: -3, width: 4, height: 4, borderRadius: "50%", background: "var(--tv-color-live)" }} />
               </span>
               <span style={{ marginLeft: 15, whiteSpace: "nowrap" }}>Paper Trading</span>
@@ -94,14 +94,6 @@ export default function TradingPanel({ open, maximized, onToggleOpen, onToggleMa
     </div>
   );
 }
-
-// TradingView's mark on its own (no rounded square), as the broker tab shows it
-const TvMark = () => (
-  <svg width="17" height="13" viewBox="0 0 36 28" fill="currentColor" aria-hidden>
-    <path d="M14 22H7V11H0V4h14v18zM28 22h-8l7.5-18h8L28 22z" />
-    <circle cx="20" cy="8" r="4" />
-  </svg>
-);
 
 const SmallChevron = ({ up }: { up?: boolean }) => (
   <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.1" aria-hidden>

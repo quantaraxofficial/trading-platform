@@ -6,7 +6,7 @@
 
 import React, { useRef, useState } from "react";
 import { engine, useEngineState, tradingUi, openAccountManager, closeTicket, closeDock } from "./store";
-import { C, Popover, MenuItem, MenuDivider, TvLogo, ChevronDown, ChevronUp, HexSettingsIcon, Tip } from "./ui";
+import { C, Popover, MenuItem, MenuDivider, BrandLogo, ChevronDown, ChevronUp, HexSettingsIcon, Tip } from "./ui";
 
 export default function TradeButton({ height }: { height: string }) {
   const state = useEngineState();
@@ -34,7 +34,7 @@ export default function TradeButton({ height }: { height: string }) {
       <button type="button" title="Trading panel" onClick={openAccountManager}
         onMouseEnter={() => setHover("main")} onMouseLeave={() => setHover(null)}
         style={{ ...base, padding: "0 8px 0 4px", borderRadius: "18px 0 0 18px", background: hover === "main" ? "var(--tv-color-item-active)" : "transparent" }}>
-        <TvLogo size={22} /> Trade
+        <BrandLogo size={22} /> Trade
       </button>
       <button ref={arrowRef} type="button" aria-label="Broker menu" onClick={() => setOpen(o => !o)}
         onMouseEnter={() => setHover("arrow")} onMouseLeave={() => setHover(null)}

@@ -13,7 +13,7 @@ import { useTradingSettings, useTicketPrefs } from "./settings";
 import { AssetClass, ASSET_CLASS_LABEL, DEFAULT_LEVERAGE, formatMoney, formatPrice, formatQty, qtyStepOf, qtyDecimals, roundQty } from "./instruments";
 import { TicketCtx, defaultExitTicks } from "./ticketMath";
 import { useEscapeClose } from "../lib/useEscapeClose";
-import { C, TvLogo, SymbolAvatar, CloseIcon } from "./ui";
+import { C, BrandLogo, SymbolAvatar, CloseIcon } from "./ui";
 import { DialogBtn, ExitRow, ExitDraft, Field, inputStyle, secondaryStyle, AddLevelLink, ExitLevelsView, Checkbox, LevelDraft, levelsRiskReward } from "./OrderTicket";
 
 export default function TradingDialogs() {
@@ -84,7 +84,7 @@ function BrokerDialog({ then, onClose }: { then?: { side: "buy" | "sell"; symbol
             boxShadow: hover ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
           }}
         >
-          <TvLogo size={48} />
+          <BrandLogo size={48} />
           <span style={{ fontSize: 14 }}>Paper Trading</span>
           <span style={{ fontSize: 11, color: C.muted, lineHeight: "14px", textAlign: "center" }}>Brokerage simulator by<br />TradingView</span>
         </button>
@@ -101,7 +101,7 @@ function ConnectDialog({ then, onClose }: { then?: { side: "buy" | "sell"; symbo
   };
   return (
     <Modal onClose={onClose} width={480} label="Paper Trading">
-      <ModalHeader title="Paper Trading" icon={<TvLogo size={48} />} onClose={onClose} border={false} />
+      <ModalHeader title="Paper Trading" icon={<BrandLogo size={48} />} onClose={onClose} border={false} />
       <div style={{ padding: "4px 40px 32px" }}>
         <button type="button" onClick={connect} autoFocus style={{
           width: "100%", height: 48, borderRadius: 8, border: "none", background: "var(--tv-trade-dark-btn)", color: "var(--tv-trade-dark-btn-text)",
@@ -276,7 +276,7 @@ function PositionDialog({ symbol, onClose }: { symbol: string; onClose: () => vo
       ) : (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 12px 8px 16px" }}>
-            <TvLogo size={24} />
+            <BrandLogo size={24} />
             <span style={{ fontWeight: 600, fontSize: 14, flex: 1 }}>{symbol}</span>
             <button type="button" aria-label="Close" onClick={onClose} style={{ width: 32, height: 32, border: "none", borderRadius: 6, background: "transparent", color: C.text, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <CloseIcon size={20} />

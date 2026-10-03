@@ -37,6 +37,8 @@ import { TVAlertIcon, TVReplayIcon, TVGoToDateIcon, TVPineIcon, TVSettingsIcon, 
 import type { IndicatorTemplate } from "./utils/indicatorTemplates";
 import MobileMenuDrawer, { MobilePanel, MobilePanelSheet } from "./components/MobileMenuDrawer";
 import KeyboardShortcutsDialog from "./components/KeyboardShortcutsDialog";
+import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
+import { saveReplay } from "./lib/savedReplay";
 
 const DRAWINGS_PANEL_KEY = "tv:drawingsPanelVisible";
 const RIGHT_PANEL_KEY = "tv:rightPanelOpen";
@@ -181,7 +183,8 @@ function AppLayout() {
 
   // Initialize symbol from URL or default to AAPL
   const [symbol, setSymbol] = useState(() => searchParams.get("symbol") || "AAPL");
-  const { mode, enterSelectMode } = useReplay();
+  const { mode, enterSelectMode, hasStarted, getReplayTime } = useReplay();
+  const [leaveReplayOpen, setLeaveReplayOpen] = useState(false);
 
   // Refs to always have latest values for debounced/async callbacks
   const symbolRef = useRef(symbol);
@@ -428,7 +431,8 @@ function AppLayout() {
             setActiveIndicators(data.indicators);
           }
         })
-        .catch(err => console.error("Error loading chart state:", err))
+        // the backend being down or failing just means the chart opens with its defaults
+        .catch(err => console.warn("Chart state not loaded, using defaults:", err.message))
         .finally(() => setIsStateLoaded(true));
     } else {
       setIsStateLoaded(true);
@@ -553,6 +557,14 @@ function AppLayout() {
       router.push("/login");
       return;
     }
+    // Leaving a replay that's under way asks first (TradingView's "Leave current replay?")
+    if (mode === 'active' && hasStarted) { setLeaveReplayOpen(true); return; }
+    enterSelectMode();
+  };
+  const leaveReplay = (save: boolean) => {
+    setLeaveReplayOpen(false);
+    const time = getReplayTime();
+    if (save && time !== null) saveReplay(symbol, { interval: selectedInterval, time, savedAt: Date.now() });
     enterSelectMode();
   };
 
@@ -829,6 +841,7 @@ function AppLayout() {
         <QuickSearchDialog actions={quickActions} onClose={() => setShowQuickSearch(false)} />
       )}
 
+      {leaveReplayOpen && <ReplayLeaveDialog onStay={() => setLeaveReplayOpen(false)} onLeave={leaveReplay} />}
       {showShortcuts && <KeyboardShortcutsDialog onClose={() => setShowShortcuts(false)} />}
 
       {showMobileMenu && (

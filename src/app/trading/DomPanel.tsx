@@ -12,7 +12,7 @@ import { engine, useEngineState, useTradingUi, tradingUi, openTicket, closeDock 
 import { activeBook, orderPrice, precisionOf, quoteOf, positionViews, tifExpiry, Order, Side, TimeInForce } from "./engine";
 import { useTicketPrefs, ticketPrefs, useTradingSettings } from "./settings";
 import { formatPrice, formatQty, formatSignedMoney, roundQty, qtyStepOf } from "./instruments";
-import { C, Tip, Popover, MenuItem, MenuDivider, TvLogo, MoreIcon, CloseIcon, HexSettingsIcon, ChevronDown, ChevronUp } from "./ui";
+import { C, Tip, Popover, MenuItem, MenuDivider, BrandLogo, MoreIcon, CloseIcon, HexSettingsIcon, ChevronDown, ChevronUp } from "./ui";
 import { DockTabs, HeaderBtn, Checkbox, SelectBox, inputStyle } from "./OrderTicket";
 
 const ROW_H = 20;
@@ -151,7 +151,7 @@ export default function DomPanel() {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", background: C.panel, color: C.text, fontSize: 13 }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 12px 8px 16px" }}>
-        <TvLogo size={24} />
+        <BrandLogo size={24} />
         <span style={{ fontWeight: 600, fontSize: 14, flex: 1 }}>{symbol}</span>
         <HeaderBtn btnRef={moreRef} active={menu} onClick={() => setMenu(m => !m)} label="DOM settings"><MoreIcon /></HeaderBtn>
         <HeaderBtn onClick={closeDock} label="Close"><CloseIcon size={20} /></HeaderBtn>

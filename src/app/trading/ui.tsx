@@ -182,15 +182,22 @@ export function MenuItem({ children, onClick, selected, icon, right, danger }: {
 
 export const MenuDivider = () => <div style={{ height: 1, background: C.border, margin: "6px 0" }} />;
 
-// TradingView's logo mark in a dark rounded square
-export function TvLogo({ size = 24 }: { size?: number }) {
+// The app's own mark (as on the sign-in page): a trend arrow in a purple-to-indigo square
+export function BrandLogo({ size = 24 }: { size?: number }) {
   return (
-    <span style={{ width: size, height: size, borderRadius: size / 4, background: "var(--tv-trade-logo-bg)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-      <svg width={size * 0.62} height={size * 0.62} viewBox="0 0 36 28" fill="var(--tv-trade-logo-fg)" aria-hidden>
-        <path d="M14 22H7V11H0V4h14v18zM28 22h-8l7.5-18h8L28 22z" />
-        <circle cx="20" cy="8" r="4" />
-      </svg>
+    <span style={{ width: size, height: size, borderRadius: size / 4, background: "linear-gradient(90deg, #9333ea, #4f46e5)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <BrandMark size={size * 0.62} color="#ffffff" />
     </span>
+  );
+}
+
+// The trend arrow on its own
+export function BrandMark({ size = 17, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+      <polyline points="16 7 22 7 22 13" />
+    </svg>
   );
 }
 

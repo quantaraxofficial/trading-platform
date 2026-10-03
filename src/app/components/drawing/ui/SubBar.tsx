@@ -153,7 +153,6 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
   const [currentEmojiSize, setCurrentEmojiSize] = useState(selectedShape?.emojiSize || 40);
   const [currentFontSize, setCurrentFontSize] = useState(selectedShape?.fontSize || 16);
   const [showFontSizeDropdown, setShowFontSizeDropdown] = useState(false);
-  const [showFibonacciSettings, setShowFibonacciSettings] = useState(false);
   const [activeTab, setActiveTab] = useState('Style');
   const [showDropdown, setShowDropdown] = useState(false);
   const [showWidthDropdown, setShowWidthDropdown] = useState(false);
@@ -786,7 +785,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
   const openSettings = () => {
     if (selectedShapeType === 'fibonacci') {
-      setShowFibonacciSettings(true);
+      setIsFibonacciSettingsOpen(true);
       setActiveTab('Style'); // Reset to Style tab when opening
     } else {
       setIsSettingsOpen(true);
@@ -953,9 +952,9 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
     // Also update the main SubBar color to keep them in sync
     setCurrentColor(color);
     
-    // Update the actual Fibonacci drawing
-    if (onColorChange && selectedShape) {
-      onColorChange(selectedShape.id, color);
+    // Like TradingView, the toolbar colour paints every level: the fib switches to one colour
+    if (selectedShape) {
+      updateDrawing(selectedShape.id, { stroke: color, useOneColor: true, oneColor: color } as any);
     }
     
     // Update chart color
@@ -4315,11 +4314,12 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         <div style={{ position: 'relative' }}>
           <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Line Color" style={{ position: 'relative', width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubPencilIcon />
-          <div style={{ position: 'absolute', bottom: '6px', left: '6px', right: '6px', height: '4px', borderRadius: '2px', background: 'linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8b00ff)' }}></div>
+          {/* One colour for all levels shows that colour; otherwise the levels' rainbow */}
+          <div style={{ position: 'absolute', bottom: '6px', left: '6px', right: '6px', height: '4px', borderRadius: '2px', background: (selectedShape as any)?.useOneColor ? ((selectedShape as any).oneColor || currentColor) : 'linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8b00ff)' }}></div>
         </button>
           {showBorderColorPicker && (
             <ColorPickerPopup
-              colorStr={currentColor || '#9b59b6'}
+              colorStr={(selectedShape as any)?.useOneColor ? ((selectedShape as any).oneColor || currentColor) : (currentColor || '#9b59b6')}
               onChange={c => handleFibonacciColorChange(c)}
               onClose={() => setShowBorderColorPicker(false)}
               style={{ top: '100%', left: 0, marginTop: '8px' }}
