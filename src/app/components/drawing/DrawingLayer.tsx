@@ -2,10 +2,12 @@
 
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { Stage, Layer, Group, Rect as KonvaRect } from 'react-konva';
+import Konva from 'konva';
 import { useDrawing } from './core/DrawingContext';
 import { pixelToLogical, pixelToPrice, logicalToPixel, priceToPixel } from './core/coordinates';
 import { snapToChart, effectiveMagnet } from './core/snap';
 import { afterChartFrame } from './core/chartFrame';
+import { chartModeCursor } from '../chartCursor';
 import { isIconId } from '../ui/emojiArt';
 import { TrendLine } from './tools/TrendLine';
 import { RectangleTool } from './tools/Rectangle';
@@ -40,6 +42,24 @@ interface DrawingLayerProps {
   series: any;
   width: number;
   height: number;
+  theme?: string;
+}
+
+// Shapes whose selected label spot takes typing (an I-beam there on TradingView)
+const TEXT_SPOT_TYPES = ['trendline', 'rectangle', 'circle', 'ellipse'];
+
+// TradingView's cursor over a part of a drawing: a handle shows its own resize arrows if it
+// has them (`cursor` attr) or else the plain arrow; the label spot of a selected shape the
+// I-beam; anything else on the shape (line, border, fill) the pointing hand.
+function shapePartCursor(node: any, drawing: { id: string; type: string } | undefined, selected: boolean): string {
+  for (let n = node; n && n.getType?.() !== 'Stage'; n = n.getParent?.()) {
+    const c = n.getAttr?.('cursor');
+    if (c) return c;
+    if (n.getAttr?.('tvHandle')) return 'default';
+    if (drawing && n.id?.() === drawing.id) break;
+  }
+  if (selected && node?.className === 'Text' && drawing && TEXT_SPOT_TYPES.includes(drawing.type)) return 'text';
+  return 'pointer';
 }
 
 // lightweight-charts' own candle body width, in device pixels (optimalCandlestickWidth)
@@ -51,7 +71,7 @@ function optimalCandlestickWidth(barSpacing: number, pixelRatio: number): number
   return Math.max(Math.floor(pixelRatio), Math.min(res, scaled));
 }
 
-export default function DrawingLayer({ chart, series, width, height }: DrawingLayerProps) {
+export default function DrawingLayer({ chart, series, width, height, theme = 'light' }: DrawingLayerProps) {
   const { activeTool, setActiveTool, drawings, setDrawings, addDrawing, selectedShapeId, setSelectedShapeId, updateDrawing, deleteDrawing, activeEmoji, selectedShapeIds, setSelectedShapeIds, clearSelection, magnetMode, defaultSettings, keepDrawing, allDrawingsHidden } = useDrawing();
   // Once a drawing is finished the tool goes back to the cursor, unless "Keep drawing" is on
   const finishActiveTool = () => { if (!keepDrawing) setActiveTool(null); };
@@ -214,6 +234,12 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
   // using the coordinates the chart's crosshair handler hands us, entirely
   // independent of the wrapper's CSS pointer-events state.
   const [hoveredShapeId, setHoveredShapeId] = useState<string | null>(null);
+  // The cursor for the part of a drawing under the mouse, and the one held during a drag
+  // (a handle's own cursor, or the closed hand when a whole shape is moved)
+  const [hoverCursor, setHoverCursor] = useState<string | null>(null);
+  const [dragCursor, setDragCursor] = useState<string | null>(null);
+  const selectedIdRef = useRef(selectedShapeId);
+  selectedIdRef.current = selectedShapeId;
   // Set true for the duration of any native Konva drag (a shape's whole-body
   // drag, not a handle drag). While true, hover tracking below is frozen:
   // a fast diagonal drag can momentarily carry the pointer off a thin
@@ -408,6 +434,14 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
     // fires regardless of any element's pointer-events, so it isn't
     // affected by that handoff.
     const handleWindowMouseMove = (e: MouseEvent) => {
+      // Mid-drag the cursor stays the dragged node's: a handle's own (resize arrows / plain
+      // arrow), or the closed hand for a whole shape. Read from Konva itself, since some tools
+      // stop their handles' dragstart from bubbling up to the stage.
+      const dragged: any = Konva.DD.isDragging ? Konva.DD.node : null;
+      if (dragged) {
+        setDragCursor(dragged.getAttr('cursor') || (dragged.getAttr('tvHandle') ? 'default' : 'grabbing'));
+        return;
+      }
       if (isAnyDraggingRef.current) return;
       const isCursorTool = activeTool && ['cross', 'dot', 'arrow_cursor', 'eraser', 'magic', 'demonstration'].includes(activeTool);
       if (activeTool && !isCursorTool) { setHoveredShapeId(null); return; }
@@ -431,13 +465,18 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
           }
           current = current.parent;
         }
-        setHoveredShapeId(foundId && foundId !== 'preview' ? foundId : null);
+        const id = foundId && foundId !== 'preview' ? foundId : null;
+        setHoveredShapeId(id);
+        setHoverCursor(id ? shapePartCursor(shape, drawingsRef.current.find(d => d.id === id), selectedIdRef.current === id) : null);
         return;
       }
       setHoveredShapeId(null);
+      setHoverCursor(null);
     };
 
     window.addEventListener('mousemove', handleWindowMouseMove);
+    const handleWindowMouseUp = () => setDragCursor(null);
+    window.addEventListener('mouseup', handleWindowMouseUp);
 
     // Middle-click (mouse wheel button) on a shape deletes it immediately, without
     // needing to select it or switch to the eraser tool first. This has to be a
@@ -522,6 +561,7 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
       window.removeEventListener('tv-price-scale-changed', update);
       chart.unsubscribeClick(handleChartClick);
       window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
       window.removeEventListener('mousedown', handleWindowMiddleClick);
       stageRef.current?.off('dragstart', handleAnyDragStart);
       stageRef.current?.off('dragend', handleAnyDragEnd);
@@ -1215,14 +1255,16 @@ export default function DrawingLayer({ chart, series, width, height }: DrawingLa
 
   if (!width || !height) return null;
 
-  let cursorStyle = 'default';
-  if (activeTool === 'text') {
-    cursorStyle = 'text';
-  } else if (activeTool) {
-    cursorStyle = 'crosshair';
-  }
-
   const isCursorTool = activeTool && ['cross', 'dot', 'arrow_cursor', 'eraser', 'magic', 'demonstration'].includes(activeTool);
+  // As on TradingView: any drawing tool shows the crosshair (over drawings too, which don't
+  // react while a tool is active); otherwise a drag keeps its cursor, a hovered drawing shows
+  // the cursor for the part under the mouse (the Eraser keeps its own), and empty chart the
+  // selected cursor mode's
+  let cursorStyle: string;
+  if (activeTool && !isCursorTool) cursorStyle = activeTool === 'zoom_in' ? 'zoom-in' : 'crosshair';
+  else if (dragCursor) cursorStyle = dragCursor;
+  else if (hoveredShapeId && hoverCursor && activeTool !== 'eraser') cursorStyle = hoverCursor;
+  else cursorStyle = chartModeCursor(activeTool, theme).cursor;
   // Determine if we should capture events. We need to capture if drawing (and not a cursor tool) OR if a shape is selected (for dragging)
   // OR if we are currently editing a text overlay OR if multi-selecting OR if Ctrl is held (for starting Ctrl+drag) OR if a shape is
   // currently hovered: a shape's own resize handles (and its body, for whole-shape drag) only ever render while hovered or selected, so

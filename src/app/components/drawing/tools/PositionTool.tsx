@@ -204,7 +204,12 @@ export function PositionTool({
     let next = points;
     if (index === 0) {
       const startL = Math.min(logical, r0.logical - 1);
-      next = [{ logical: startL, price }, { logical: r0.logical, price }, { logical: startL, price: t0.price }, { logical: startL, price: s0.price }];
+      // The entry (breakeven) line stays inside its zones, a tick short of the stop and the
+      // target, as on TradingView; TP and SL keep their prices
+      const lo = Math.min(t0.price, s0.price) + minGap;
+      const hi = Math.max(t0.price, s0.price) - minGap;
+      const entry = lo <= hi ? Math.min(hi, Math.max(lo, price)) : (t0.price + s0.price) / 2;
+      next = [{ logical: startL, price: entry }, { logical: r0.logical, price: entry }, { logical: startL, price: t0.price }, { logical: startL, price: s0.price }];
     } else if (index === 1) {
       next = [e0, { logical: Math.max(logical, e0.logical + 1), price: e0.price }, t0, s0];
     } else if (index === 2) {
@@ -294,11 +299,11 @@ export function PositionTool({
         <>
           <HandleCircle x={leftX} y={entryY} radius={5} fill="white" stroke="#2962ff" strokeWidth={2} draggable
             onDragMove={handleHandleDrag(0)} />
-          <HandleRect x={rightX} y={entryY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#2962ff" strokeWidth={2} draggable
+          <HandleRect cursor="ew-resize" x={rightX} y={entryY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#2962ff" strokeWidth={2} draggable
             onDragMove={handleHandleDrag(1)} />
-          <HandleRect x={leftX} y={targetY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#2962ff" strokeWidth={2} draggable
+          <HandleRect cursor="ns-resize" x={leftX} y={targetY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#2962ff" strokeWidth={2} draggable
             onDragMove={handleHandleDrag(2)} />
-          <HandleRect x={leftX} y={stopY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#2962ff" strokeWidth={2} draggable
+          <HandleRect cursor="ns-resize" x={leftX} y={stopY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#2962ff" strokeWidth={2} draggable
             onDragMove={handleHandleDrag(3)} />
         </>
       )}

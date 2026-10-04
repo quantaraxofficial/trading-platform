@@ -114,7 +114,11 @@ export function RectangleTool({
     onUpdatePoints(newPoints);
   };
 
-  const handleSideDrag = (side: 'top' | 'bottom' | 'left' | 'right', e: any) => {
+  // A side handle moves one edge: the price (top/bottom) or the bar (left/right) of its own
+  // point. Tied to the point rather than to "whichever point is on that side now", so
+  // dragging it across the opposite edge flips the rectangle instead of switching to the
+  // other edge mid-drag (which made the whole rectangle slide along with the cursor).
+  const handleEdgeDrag = (index: 0 | 1, axis: 'price' | 'bar', e: any) => {
     e.cancelBubble = true;
     if (!onUpdatePoints) return;
     const stage = e.target.getStage();
@@ -126,28 +130,18 @@ export function RectangleTool({
     const { logical, price, time } = snapped;
 
     const newPoints = [...points];
-    // Compare price to find top/bottom
-    const p1IsTop = points[0].price > points[1].price;
-    const topIdx = p1IsTop ? 0 : 1;
-    const botIdx = 1 - topIdx;
-
-    const p1IsLeft = points[0].logical < points[1].logical;
-    const leftIdx = p1IsLeft ? 0 : 1;
-    const rightIdx = 1 - leftIdx;
-
-    if (side === 'top') {
-      newPoints[topIdx] = { ...newPoints[topIdx], price };
-    } else if (side === 'bottom') {
-      newPoints[botIdx] = { ...newPoints[botIdx], price };
-    } else if (side === 'left') {
-      newPoints[leftIdx] = { ...newPoints[leftIdx], logical, time };
-    } else if (side === 'right') {
-      newPoints[rightIdx] = { ...newPoints[rightIdx], logical, time };
-    }
+    newPoints[index] = axis === 'price'
+      ? { ...newPoints[index], price }
+      : { ...newPoints[index], logical, time };
     onUpdatePoints(newPoints);
   };
 
   const handleGroupDragEnd = (e: any) => { move.end(e); };
+
+  // TradingView's resize arrows: diagonal on the corners (by where the corner sits now, so a
+  // flipped rectangle still points the right way), vertical/horizontal on the sides
+  const cornerCursor = (hx: number, hy: number) =>
+    ((hx < left + width / 2) === (hy < top + height / 2)) ? 'nwse-resize' : 'nesw-resize';
 
   return (
     <Group 
@@ -221,15 +215,15 @@ export function RectangleTool({
         <>
           {/* Corner handles (Circles) */}
           <HandleCircle 
-            x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} 
+            x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} cursor={cornerCursor(x1, y1)}
             draggable={!isLocked} onDragMove={(e) => handleDragMove(0, e)} 
           />
           <HandleCircle 
-            x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} 
+            x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} cursor={cornerCursor(x2, y2)}
             draggable={!isLocked} onDragMove={(e) => handleDragMove(1, e)} 
           />
           <HandleCircle 
-            x={x2} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} 
+            x={x2} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} cursor={cornerCursor(x2, y1)}
             draggable={!isLocked} onDragMove={(e) => {
               e.cancelBubble = true;
               if (!onUpdatePoints) return;
@@ -243,7 +237,7 @@ export function RectangleTool({
             }} 
           />
           <HandleCircle 
-            x={x1} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} 
+            x={x1} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} cursor={cornerCursor(x1, y2)}
             draggable={!isLocked} onDragMove={(e) => {
               e.cancelBubble = true;
               if (!onUpdatePoints) return;
@@ -257,22 +251,22 @@ export function RectangleTool({
             }} 
           />
 
-          {/* Side handles (Rounded Squares) */}
+          {/* Side handles (rounded squares), each on its own point's edge */}
           <HandleRect 
-            x={left + width / 2 - 5} y={top - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} 
-            draggable={!isLocked} onDragMove={(e) => handleSideDrag('top', e)} 
+            x={(x1 + x2) / 2 - 5} y={y1 - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} cursor="ns-resize"
+            draggable={!isLocked} onDragMove={(e) => handleEdgeDrag(0, 'price', e)} 
           />
           <HandleRect 
-            x={left + width / 2 - 5} y={top + height - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} 
-            draggable={!isLocked} onDragMove={(e) => handleSideDrag('bottom', e)} 
+            x={(x1 + x2) / 2 - 5} y={y2 - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} cursor="ns-resize"
+            draggable={!isLocked} onDragMove={(e) => handleEdgeDrag(1, 'price', e)} 
           />
           <HandleRect 
-            x={left - 5} y={top + height / 2 - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} 
-            draggable={!isLocked} onDragMove={(e) => handleSideDrag('left', e)} 
+            x={x1 - 5} y={(y1 + y2) / 2 - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} cursor="ew-resize"
+            draggable={!isLocked} onDragMove={(e) => handleEdgeDrag(0, 'bar', e)} 
           />
           <HandleRect 
-            x={left + width - 5} y={top + height / 2 - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} 
-            draggable={!isLocked} onDragMove={(e) => handleSideDrag('right', e)} 
+            x={x2 - 5} y={(y1 + y2) / 2 - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} cursor="ew-resize"
+            draggable={!isLocked} onDragMove={(e) => handleEdgeDrag(1, 'bar', e)} 
           />
         </>
       )}

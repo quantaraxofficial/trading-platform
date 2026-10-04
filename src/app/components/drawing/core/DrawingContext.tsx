@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
 export type DrawingType =
   | 'trendline' | 'horizontal_line' | 'horizontal_ray' | 'text' | 'rectangle' | 'fibonacci'
@@ -165,6 +165,18 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
   
   const [history, setHistory] = useState<BaseDrawing[][]>([[]]);
   const [historyIndex, setHistoryIndex] = useState(0);
+  // The latest drawings / history position, for functions called from long-lived listeners
+  // (e.g. the window middle-click delete): building the next list from a stale `drawings`
+  // would bring back shapes deleted since that listener was registered. Written straight
+  // away on each change so two edits before the next render still chain.
+  const drawingsRef = useRef(drawings);
+  drawingsRef.current = drawings;
+  const historyIndexRef = useRef(historyIndex);
+  historyIndexRef.current = historyIndex;
+  const commitDrawings = (next: BaseDrawing[]) => {
+    drawingsRef.current = next;
+    setDrawings(next);
+  };
 
   const [defaultSettings, setDefaultSettings] = useState<Partial<Record<DrawingType, Partial<BaseDrawing>>>>({});
 
@@ -316,14 +328,17 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
 
   // Push to history when drawings change meaningfully
   const pushToHistory = (newDrawings: BaseDrawing[]) => {
+    const index = historyIndexRef.current;
     setHistory(prev => {
-      const newHistory = prev.slice(0, historyIndex + 1);
+      const newHistory = prev.slice(0, index + 1);
       // Shallow copy is sufficient because we treat drawing objects as immutable
       newHistory.push([...newDrawings]);
       if (newHistory.length > 50) newHistory.shift();
       return newHistory;
     });
-    setHistoryIndex(prev => Math.min(prev + 1, 49));
+    const nextIndex = Math.min(index + 1, 49);
+    historyIndexRef.current = nextIndex;
+    setHistoryIndex(nextIndex);
   };
 
   const addDrawing = (drawing: BaseDrawing) => {
@@ -338,8 +353,8 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
       visible: drawing.visible,
       locked: drawing.locked
     };
-    const newDrawings = [...drawings, newDrawing];
-    setDrawings(newDrawings);
+    const newDrawings = [...drawingsRef.current, newDrawing];
+    commitDrawings(newDrawings);
     pushToHistory(newDrawings);
     logAction('DRAWING_ADDED', { id: drawing.id, type: drawing.type, points: drawing.points });
   };
@@ -371,8 +386,8 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteDrawing = (id: string) => {
-    const newDrawings = drawings.filter(d => d.id !== id);
-    setDrawings(newDrawings);
+    const newDrawings = drawingsRef.current.filter(d => d.id !== id);
+    commitDrawings(newDrawings);
     if (selectedShapeId === id) setSelectedShapeId(null);
     setSelectedShapeIds(prev => { const next = new Set(prev); next.delete(id); return next; });
     pushToHistory(newDrawings);
@@ -381,8 +396,8 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
 
   const deleteMultipleDrawings = (ids: string[]) => {
     const idSet = new Set(ids);
-    const newDrawings = drawings.filter(d => !idSet.has(d.id));
-    setDrawings(newDrawings);
+    const newDrawings = drawingsRef.current.filter(d => !idSet.has(d.id));
+    commitDrawings(newDrawings);
     if (selectedShapeId && idSet.has(selectedShapeId)) setSelectedShapeId(null);
     setSelectedShapeIds(new Set());
     pushToHistory(newDrawings);
@@ -390,7 +405,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
   };
 
   const clearDrawings = () => {
-    setDrawings([]);
+    commitDrawings([]);
     setSelectedShapeId(null);
     setSelectedShapeIds(new Set());
     pushToHistory([]);
@@ -462,11 +477,12 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
         id: Math.random().toString(36).substring(2, 9),
         points: d.points.map((p: any) => ({ ...p, logical: p.logical + 5, price: p.price }))
       }));
-      setDrawings(prev => [...prev, ...newDrawings]);
+      const next = [...drawingsRef.current, ...newDrawings];
+      commitDrawings(next);
       // Select the pasted drawings
       setSelectedShapeIds(new Set(newDrawings.map((d: any) => d.id)));
       setSelectedShapeId(null);
-      pushToHistory([...drawings, ...newDrawings]);
+      pushToHistory(next);
       return true;
     };
     const handlePasteRequest = () => { pasteCopiedDrawings(); };

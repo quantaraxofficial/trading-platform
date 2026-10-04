@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, useCallback, forwardRef } from "react";
 import { createPortal } from "react-dom";
 import { createChart, ColorType, ISeriesApi, IChartApi, CandlestickSeries, HistogramSeries, LineSeries, PriceScaleMode, TickMarkType } from "lightweight-charts";
 import { CandleBodyAwareLine } from "./chartPrimitives/CandleBodyAwareLine";
+import { ReplayWatermark } from "./chartPrimitives/ReplayWatermark";
+import { chartModeCursor } from "./chartCursor";
 import dynamic from "next/dynamic";
 const DrawingLayer = dynamic(() => import("./drawing/DrawingLayer"), { ssr: false });
 import { SubBar } from "./drawing/ui/SubBar";
@@ -842,46 +844,7 @@ export default function ChartContainer({
   useEffect(() => {
     if (!chart || !chartContainerRef.current) return;
 
-    let crosshairMode = 0; // CrosshairMode.Normal
-    let cursorStyle = 'crosshair';
-
-    const eraserSvg = encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${theme === 'dark' ? '#d1d4dc' : '#131722'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>`);
-    const magicSvg = encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${theme === 'dark' ? '#d1d4dc' : '#131722'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>`);
-    const dotSvg = encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="${theme === 'dark' ? '#d1d4dc' : '#131722'}"><circle cx="12" cy="12" r="2"/></svg>`);
-    const redDotSvg = encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="red"><circle cx="12" cy="12" r="4"/></svg>`);
-    const zoomInSvg = encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${theme === 'dark' ? '#d1d4dc' : '#131722'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>`);
-
-    switch (activeTool) {
-      case 'arrow_cursor':
-        crosshairMode = 2; // Hidden
-        cursorStyle = 'default';
-        break;
-      case 'eraser':
-        crosshairMode = 2; // Hidden
-        cursorStyle = `url('data:image/svg+xml;utf8,${eraserSvg}') 0 24, auto`;
-        break;
-      case 'magic':
-        crosshairMode = 0; // Normal
-        cursorStyle = `url('data:image/svg+xml;utf8,${magicSvg}') 0 0, auto`;
-        break;
-      case 'demonstration':
-        crosshairMode = 2; // Hidden
-        cursorStyle = `url('data:image/svg+xml;utf8,${redDotSvg}') 12 12, auto`;
-        break;
-      case 'dot':
-        crosshairMode = 0;
-        cursorStyle = `url('data:image/svg+xml;utf8,${dotSvg}') 12 12, crosshair`;
-        break;
-      case 'zoom_in':
-        crosshairMode = 0;
-        cursorStyle = `url('data:image/svg+xml;utf8,${zoomInSvg}') 11 11, crosshair`;
-        break;
-      case 'cross':
-      default:
-        crosshairMode = 0; 
-        cursorStyle = 'crosshair';
-        break;
-    }
+    const { cursor: cursorStyle, crosshairMode } = chartModeCursor(activeTool, theme);
 
     try {
       chart.applyOptions({ crosshair: { mode: crosshairMode } });
@@ -891,7 +854,34 @@ export default function ChartContainer({
     panes.forEach(pane => {
       (pane as HTMLElement).style.cursor = cursorStyle;
     });
-  }, [activeTool, chart]);
+
+    // Panning the chart shows TradingView's closed hand: not on the press itself, only once
+    // the mouse moves with the button held; the mode's cursor comes back on release
+    const container = chartContainerRef.current;
+    let grabbed: HTMLElement | null = null;
+    let startX = 0, startY = 0;
+    const onDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      const cell = (e.target as HTMLElement).closest?.('.tv-lightweight-charts table tr td') as HTMLElement | null;
+      // the pane cells only: the axes keep their resize cursors while they're dragged
+      if (!cell || getComputedStyle(e.target as HTMLElement).cursor.includes('resize')) return;
+      grabbed = cell; startX = e.clientX; startY = e.clientY;
+    };
+    const onMove = (e: MouseEvent) => {
+      if (!grabbed || !(e.buttons & 1)) return;
+      if (Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) < 3) return;
+      grabbed.style.cursor = 'grabbing';
+    };
+    const onUp = () => { if (grabbed) grabbed.style.cursor = cursorStyle; grabbed = null; };
+    container.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      container.removeEventListener('mousedown', onDown);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [activeTool, chart, theme]);
 
   // Sync Price Lines for Positions and Orders
   // Execution marks: an arrow on the bar each paper-trading fill happened in (blue up below
@@ -1434,6 +1424,9 @@ export default function ChartContainer({
 
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  // TradingView's "Replay" watermark in the chart's background while replay mode is on
+  const replayWatermarkRef = useRef<ReplayWatermark | null>(null);
+  useEffect(() => { replayWatermarkRef.current?.update(); }, [mode]);
 
   const replayIndexRef = useRef(0);
   useEffect(() => { replayIndexRef.current = replayIndex; }, [replayIndex]);
@@ -2000,6 +1993,10 @@ export default function ChartContainer({
       wickUpColor: candleColorsRef.current.wickVisible ? candleColorsRef.current.wickUpColor : 'transparent', 
       wickDownColor: candleColorsRef.current.wickVisible ? candleColorsRef.current.wickDownColor : 'transparent',
     });
+
+    const replayWatermark = new ReplayWatermark(() => modeRef.current !== 'idle');
+    newChart.panes()[0].attachPrimitive(replayWatermark);
+    replayWatermarkRef.current = replayWatermark;
 
     newChart.timeScale().subscribeVisibleLogicalRangeChange(() => {
       if (updateSessionDOMRef.current) updateSessionDOMRef.current();
@@ -3478,7 +3475,7 @@ export default function ChartContainer({
       {/* Drawing layer + SubBar (now persistent during replay) */}
       {chart && series && dimensions.width > 0 && (
         <>
-          <DrawingLayer chart={chart} series={series} width={dimensions.width} height={dimensions.height} />
+          <DrawingLayer chart={chart} series={series} width={dimensions.width} height={dimensions.height} theme={theme} />
           {mode === 'idle' && (
             <TradingOverlay chart={chart} series={series} symbol={symbol} width={dimensions.width} height={dimensions.height} plusButton={psPlusButton} />
           )}

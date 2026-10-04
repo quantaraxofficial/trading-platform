@@ -5,6 +5,8 @@ import { Circle, Rect } from 'react-konva';
 // re-applies x/y when they change, so a plain handle stays stuck to the mouse mid-drag
 // (off the edge it belongs to, or between candles). These put the handle back where the
 // shape says it is after every move, so it only travels along its own path.
+// They're tagged `tvHandle` for the drawing layer's cursor: a handle shows its `cursor` prop
+// if it has one (e.g. a rectangle's resize arrows), otherwise the plain arrow, as on TradingView.
 function useHandlePosition(props: { x?: number; y?: number; onDragMove?: (e: any) => void }, fwd: React.ForwardedRef<any>) {
   const node = useRef<any>(null);
   const pos = useRef({ x: 0, y: 0 });
@@ -30,12 +32,12 @@ function useHandlePosition(props: { x?: number; y?: number; onDragMove?: (e: any
 
 export const HandleCircle = forwardRef<any, React.ComponentProps<typeof Circle>>((props, fwd) => {
   const h = useHandlePosition(props, fwd);
-  return <Circle {...props} ref={h.ref} onDragMove={h.onDragMove} />;
+  return <Circle tvHandle {...props} ref={h.ref} onDragMove={h.onDragMove} />;
 });
 HandleCircle.displayName = 'HandleCircle';
 
 export const HandleRect = forwardRef<any, React.ComponentProps<typeof Rect>>((props, fwd) => {
   const h = useHandlePosition(props, fwd);
-  return <Rect {...props} ref={h.ref} onDragMove={h.onDragMove} />;
+  return <Rect tvHandle {...props} ref={h.ref} onDragMove={h.onDragMove} />;
 });
 HandleRect.displayName = 'HandleRect';
