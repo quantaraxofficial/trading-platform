@@ -16,7 +16,7 @@ const ICONS = {
   reset: <path fill="currentColor" d="M10 6.38V8L6 5.5 10 3v1.85A5.25 5.25 0 1 1 3.75 10a.75.75 0 0 1 1.5 0A3.75 3.75 0 1 0 10 6.38Z" />,
 };
 
-export default function ChartNavButtons({ chart, container, onReset }: { chart: any; container: HTMLElement | null; onReset: () => void }) {
+export default function ChartNavButtons({ chart, container, onReset, mode = "Visible on mouse over" }: { chart: any; container: HTMLElement | null; onReset: () => void; mode?: string }) {
   const [show, setShow] = useState(false);
   const holdRef = useRef<{ timer?: ReturnType<typeof setTimeout>; interval?: ReturnType<typeof setInterval> }>({});
 
@@ -81,7 +81,7 @@ export default function ChartNavButtons({ chart, container, onReset }: { chart: 
       onMouseEnter={() => setShow(true)}
       style={{
         position: "absolute", left: Math.round(paneW / 2 - total / 2), top: paneH - 32 - BTN, zIndex: 12,
-        display: "flex", alignItems: "center", opacity: show ? 1 : 0, pointerEvents: show ? "auto" : "none",
+        display: "flex", alignItems: "center", opacity: show || mode === "Always visible" ? 1 : 0, pointerEvents: show || mode === "Always visible" ? "auto" : "none",
         transition: "opacity 0.2s",
       }}
     >

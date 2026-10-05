@@ -142,7 +142,7 @@ export default function TradingOverlay({ chart, series, symbol, width, height, p
   const lineAt = (key: string, y: number, color: string, dashed: boolean, faded: boolean) => (
     <div key={`line-${key}`} style={{
       position: "absolute", top: Math.round(y), height: 0, borderTop: `1px ${dashed ? "dashed" : "solid"} ${color}`, opacity: faded ? 0.55 : 1,
-      left: settings.extendedPriceLines ? 0 : settings.alignment === "Right" ? Math.max(0, paneW - RIGHT_GAP - 360) : 0,
+      left: settings.extendedPriceLines ? 0 : settings.alignment === "Right" ? Math.max(0, paneW - RIGHT_GAP - 360) : (settings.alignment as string) === "Center" ? Math.max(0, (paneW - 360) / 2) : 0,
       width: settings.extendedPriceLines ? paneW : 360 + RIGHT_GAP, pointerEvents: "none",
     }} />
   );
@@ -164,7 +164,7 @@ export default function TradingOverlay({ chart, series, symbol, width, height, p
   const row = (key: string, y: number, children: React.ReactNode, faded = false) => (
     <div key={`row-${key}`} data-role={roleOf(key)} data-key={key} style={{
       position: "absolute", top: Math.round(y) - BOX_H / 2, height: BOX_H, display: "flex", alignItems: "center", gap: 6,
-      ...(settings.alignment === "Right" ? { right: scaleWidth + RIGHT_GAP } : { left: RIGHT_GAP }),
+      ...(settings.alignment === "Right" ? { right: scaleWidth + RIGHT_GAP } : (settings.alignment as string) === "Center" ? { left: paneW / 2, transform: "translateX(-50%)" } : { left: RIGHT_GAP }),
       opacity: faded ? 0.6 : 1, pointerEvents: "auto", whiteSpace: "nowrap", zIndex: 1,
     }}>{children}</div>
   );

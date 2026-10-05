@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useDrawing } from "./drawing/core/DrawingContext";
 import { DRAWING_TOOL_BY_TYPE } from "./drawing/toolCatalog";
 
@@ -12,22 +13,37 @@ export default function FavoritesToolbar() {
   const posStartRef = useRef({ x: 0, y: 0 });
   const toolbarRef = useRef<HTMLDivElement>(null);
 
-  // Load saved position from localStorage
+  // The toolbar floats over the whole page (as on TradingView): window coordinates, kept
+  // inside the window. Positions saved before were relative to the chart area.
+  const [mounted, setMounted] = useState(false);
+  const clamp = useCallback((p: { x: number; y: number }) => {
+    const w = toolbarRef.current?.offsetWidth ?? 120, h = toolbarRef.current?.offsetHeight ?? 36;
+    return { x: Math.max(0, Math.min(window.innerWidth - w, p.x)), y: Math.max(0, Math.min(window.innerHeight - h, p.y)) };
+  }, []);
   useEffect(() => {
+    setMounted(true);
     try {
-      const saved = localStorage.getItem("tv_favorites_toolbar_pos");
-      if (saved) {
-        setPosition(JSON.parse(saved));
-      }
+      const saved = localStorage.getItem("tv_favorites_toolbar_pos2");
+      if (saved) { setPosition(JSON.parse(saved)); return; }
+      const old = localStorage.getItem("tv_favorites_toolbar_pos");
+      const main = document.querySelector("main")?.getBoundingClientRect();
+      const p = old ? JSON.parse(old) : { x: 100, y: 80 };
+      setPosition({ x: (main?.left ?? 0) + p.x, y: (main?.top ?? 0) + p.y });
     } catch {}
   }, []);
+  // Back inside the window when it shrinks
+  useEffect(() => {
+    const onResize = () => setPosition(p => { const c = clamp(p); return c.x === p.x && c.y === p.y ? p : c; });
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [clamp]);
 
   // Save position on change
   useEffect(() => {
-    if (!isDragging) {
-      localStorage.setItem("tv_favorites_toolbar_pos", JSON.stringify(position));
+    if (!isDragging && mounted) {
+      localStorage.setItem("tv_favorites_toolbar_pos2", JSON.stringify(position));
     }
-  }, [position, isDragging]);
+  }, [position, isDragging, mounted]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -43,10 +59,10 @@ export default function FavoritesToolbar() {
     const handleMouseMove = (e: MouseEvent) => {
       const dx = e.clientX - dragStartRef.current.x;
       const dy = e.clientY - dragStartRef.current.y;
-      setPosition({
+      setPosition(clamp({
         x: posStartRef.current.x + dx,
         y: posStartRef.current.y + dy,
-      });
+      }));
     };
 
     const handleMouseUp = () => {
@@ -59,18 +75,20 @@ export default function FavoritesToolbar() {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDragging]);
+  }, [isDragging, clamp]);
 
-  if (!isFavoritesToolbarVisible || favoriteTools.length === 0) return null;
+  if (!mounted || !isFavoritesToolbarVisible || favoriteTools.length === 0) return null;
 
-  return (
+  return createPortal(
     <div
       ref={toolbarRef}
+      data-favorites-toolbar
       style={{
-        position: "absolute",
+        position: "fixed",
         left: position.x,
         top: position.y,
-        zIndex: 50,
+        // above every panel of the page (watchlist, bottom panel, toolbars), under dialogs
+        zIndex: 2500,
         display: "flex",
         alignItems: "center",
         gap: "0px",
@@ -159,6 +177,7 @@ export default function FavoritesToolbar() {
           </div>
         );
       })}
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -64,6 +64,10 @@ function AppLayout() {
   const [intervalLabel, setIntervalLabel] = useState("15m");
   const [targetTimestamp, setTargetTimestamp] = useState<number | null>(null);
   const [targetBarSpacing, setTargetBarSpacing] = useState<number | null>(null);
+  // Where the chart is scrolled to / its zoom, as the user pans: kept in refs, not state —
+  // updating page state on every pan/zoom frame re-rendered the whole app each frame
+  const viewTimestampRef = useRef<number | null>(null);
+  const viewBarSpacingRef = useRef<number | null>(null);
   const [triggerSettings, setTriggerSettings] = useState(0);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [activeIndicators, setActiveIndicators] = useState<{id: string, name: string, visible?: boolean}[]>([]);
@@ -425,8 +429,8 @@ function AppLayout() {
             const label = intervalToLabel(data.interval);
             if (label) setIntervalLabel(label);
           }
-          if (data.timestamp) setTargetTimestamp(data.timestamp);
-          if (data.bar_spacing) setTargetBarSpacing(data.bar_spacing);
+          if (data.timestamp) { setTargetTimestamp(data.timestamp); viewTimestampRef.current = data.timestamp; }
+          if (data.bar_spacing) { setTargetBarSpacing(data.bar_spacing); viewBarSpacingRef.current = data.bar_spacing; }
           if (data.indicators && Array.isArray(data.indicators) && data.indicators.length > 0) {
             setActiveIndicators(data.indicators);
           }
@@ -457,8 +461,8 @@ function AppLayout() {
           body: JSON.stringify({ 
             symbol, 
             interval: selectedInterval,
-            timestamp: targetTimestamp,
-            bar_spacing: targetBarSpacing
+            timestamp: viewTimestampRef.current,
+            bar_spacing: viewBarSpacingRef.current
           })
         }).catch(err => console.warn("[Page] Failed to save state on symbol/interval change", err));
       }, 300);
@@ -492,8 +496,8 @@ function AppLayout() {
       const payload = JSON.stringify({
         symbol,
         interval: selectedInterval,
-        timestamp: targetTimestamp,
-        bar_spacing: targetBarSpacing,
+        timestamp: viewTimestampRef.current,
+        bar_spacing: viewBarSpacingRef.current,
         indicators: activeIndicators
       });
       // Use sendBeacon for reliable delivery during page unload
@@ -504,7 +508,7 @@ function AppLayout() {
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [user, symbol, selectedInterval, targetTimestamp, targetBarSpacing, activeIndicators]);
+  }, [user, symbol, selectedInterval, activeIndicators]);
 
   // Header "Save" / Ctrl+S: write the current layout to the account right away (signed out → sign in).
   // "Publish": sharing ideas needs an account; there is no ideas feed to publish to yet.
@@ -527,8 +531,8 @@ function AppLayout() {
       body: JSON.stringify({
         symbol,
         interval: selectedInterval,
-        timestamp: targetTimestamp,
-        bar_spacing: targetBarSpacing,
+        timestamp: viewTimestampRef.current,
+        bar_spacing: viewBarSpacingRef.current,
         indicators: activeIndicators
       })
     })
@@ -707,8 +711,8 @@ function AppLayout() {
             onOpenOrderPanel={(side) => requestTrade(side, symbol)}
             onChartStateChange={(newTimestamp, newBarSpacing) => {
               // Keep local state in sync so beforeunload can persist latest values
-              setTargetTimestamp(newTimestamp);
-              setTargetBarSpacing(newBarSpacing);
+              viewTimestampRef.current = newTimestamp;
+              viewBarSpacingRef.current = newBarSpacing;
               if (user) {
                 // Debounced save — use refs to always read latest symbol/interval
                 clearTimeout((window as any).__saveChartStateTimer);

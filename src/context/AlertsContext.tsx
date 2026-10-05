@@ -145,6 +145,9 @@ export const AlertsProvider = ({ children }: { children: ReactNode }) => {
               console.error("Audio playback failed", e);
             }
 
+            // In-app toast (the chart shows it; Settings → Alerts → Automatically hide toasts)
+            if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('tv:alert-toast', { detail: { title: `Alert on ${a.symbol}`, body: a.message || `${a.symbol} crossed ${a.value}` } }));
+
             // Send Desktop Notification
             if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
               new Notification(`Alert Triggered: ${a.symbol}`, {

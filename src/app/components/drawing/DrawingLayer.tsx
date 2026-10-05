@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { applyChartWheel } from '../../lib/chartWheel';
 import { Stage, Layer, Group, Rect as KonvaRect } from 'react-konva';
 import Konva from 'konva';
 import { useDrawing } from './core/DrawingContext';
@@ -359,19 +360,12 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     return () => window.removeEventListener('mousedown', handleMouseDown);
   }, []);
 
-  // We need to trigger a re-render when the chart is panned or zoomed
-  // so that the Konva shapes stick to the chart coordinates.
-  const [, setTick] = useState(0);
+  // Panning / zooming doesn't re-render this layer: each drawing follows the chart itself
+  // (useChartTick, in the chart's own paint) and the candle cut redraws after each chart frame.
+  // Re-rendering the whole layer per frame also re-rendered the Konva stage's context bridge
+  // and every drawing a second time, which made pan, zoom and drags stutter.
   useEffect(() => {
     if (!chart) return;
-    const update = () => setTick(t => t + 1);
-    chart.timeScale().subscribeVisibleTimeRangeChange(update);
-    chart.timeScale().subscribeVisibleLogicalRangeChange(update);
-    // The price scale (manual zoom via the axis, mode/invert/autoscale toggles) has no
-    // subscribe-to-change API of its own — ChartContainer dispatches this event whenever
-    // it mutates the price scale so shapes stay pinned to the chart in real time instead
-    // of only catching up whenever some unrelated re-render happens to follow.
-    window.addEventListener('tv-price-scale-changed', update);
 
     // Listen for clicks on the chart to select or erase shapes when not in drawing mode
     const handleChartClick = (param: any) => {
@@ -568,9 +562,6 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     window.addEventListener('keyup', handleKeyUp);
 
     return () => {
-      chart.timeScale().unsubscribeVisibleTimeRangeChange(update);
-      chart.timeScale().unsubscribeVisibleLogicalRangeChange(update);
-      window.removeEventListener('tv-price-scale-changed', update);
       chart.unsubscribeClick(handleChartClick);
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
@@ -1307,50 +1298,17 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   activeDrawingIdsRef.current = [selectedShapeId, hoveredShapeId, ...Array.from(selectedShapeIds)].filter((v): v is string => !!v);
   const shouldCaptureEvents = (activeTool !== null && !isCursorTool) || selectedShapeId !== null || editingTextId !== null || selectedShapeIds.size > 0 || isCtrlDragging || isCtrlPressed || isShiftMeasuring || isShiftPressed || hoveredShapeId !== null;
 
-  // Forward wheel events to the underlying chart so the user can zoom/scroll
-  // while a drawing tool is still active.
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    if (!chart) return;
-
-    const timeScale = chart.timeScale();
-    const logicalRange = timeScale.getVisibleLogicalRange();
-    if (!logicalRange) return;
-
-    const rangeSize = logicalRange.to - logicalRange.from;
-
-    if (e.ctrlKey || e.metaKey) {
-      // Ctrl + scroll  → zoom (same as native chart behaviour)
-      const zoomFactor = e.deltaY > 0 ? 1.12 : 0.88;
-      const pointer = chart.timeScale().coordinateToLogical(
-        e.nativeEvent.offsetX
-      ) ?? (logicalRange.from + logicalRange.to) / 2;
-      const newSize = rangeSize * zoomFactor;
-      const ratio = (pointer - logicalRange.from) / rangeSize;
-      timeScale.setVisibleLogicalRange({
-        from: pointer - ratio * newSize,
-        to:   pointer + (1 - ratio) * newSize,
-      });
-    } else if (e.shiftKey) {
-      // Shift + scroll → horizontal pan
-      const panBy = (e.deltaY / 100) * rangeSize * 0.15;
-      timeScale.setVisibleLogicalRange({
-        from: logicalRange.from + panBy,
-        to:   logicalRange.to + panBy,
-      });
-    } else {
-      // Plain scroll → zoom centred on pointer (mirrors TradingView default)
-      const zoomFactor = e.deltaY > 0 ? 1.12 : 0.88;
-      const pointer = timeScale.coordinateToLogical(e.nativeEvent.offsetX)
-        ?? (logicalRange.from + logicalRange.to) / 2;
-      const newSize = rangeSize * zoomFactor;
-      const ratio = (pointer - logicalRange.from) / rangeSize;
-      timeScale.setVisibleLogicalRange({
-        from: pointer - ratio * newSize,
-        to:   pointer + (1 - ratio) * newSize,
-      });
-    }
-  };
+  // Wheel over the drawing layer (when it takes the mouse): the chart's own TradingView wheel.
+  // A native non-passive listener — React's onWheel is passive and can't stop the page scroll.
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el || !chart) return;
+    const onWheel = (e: WheelEvent) => {
+      if (applyChartWheel(chart, e, e.clientX - el.getBoundingClientRect().left)) e.preventDefault();
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [chart]);
 
   // Anchor position/rotation for the text-edit overlay, frozen for the whole editing
   // session instead of recomputed on every DrawingLayer re-render. Depending only on
@@ -2036,7 +1994,6 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
         pointerEvents: shouldCaptureEvents ? 'auto' : 'none', 
         cursor: cursorStyle 
       }}
-      onWheel={shouldCaptureEvents ? handleWheel : undefined}
     >
       <Stage
         width={width - 60}

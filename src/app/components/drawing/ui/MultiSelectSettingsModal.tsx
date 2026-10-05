@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { useDrawing } from '../core/DrawingContext';
+import { useDrawing, useSettingsSession } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
 
@@ -43,7 +43,8 @@ function LocalNumberInput({ value, onChange, style, placeholder }: { value: stri
 }
 
 export function MultiSelectSettingsModal({ onClose, initialPosition }: MultiSelectSettingsModalProps) {
-  useEscapeClose(onClose);
+  const cancelEdit = useSettingsSession(onClose);
+  useEscapeClose(cancelEdit);
   const { drawings, selectedShapeIds, updateMultipleDrawings } = useDrawing();
   const ids = Array.from(selectedShapeIds);
   const selectedDrawings = drawings.filter((d: any) => selectedShapeIds.has(d.id));
@@ -138,7 +139,7 @@ export function MultiSelectSettingsModal({ onClose, initialPosition }: MultiSele
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '18px', fontWeight: 600, color: '#131722' }}>Selected Drawings</span>
         </div>
-        <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px' }}>
+        <button onClick={cancelEdit} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px' }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
@@ -289,7 +290,7 @@ export function MultiSelectSettingsModal({ onClose, initialPosition }: MultiSele
           Template <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={onClose} style={{ padding: '0 16px', height: '34px', background: '#fff', border: '1px solid #131722', borderRadius: '4px', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={cancelEdit} style={{ padding: '0 16px', height: '34px', background: '#fff', border: '1px solid #131722', borderRadius: '4px', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
           <button onClick={handleOk} style={{ padding: '0 24px', height: '34px', background: '#2a2e39', border: 'none', borderRadius: '4px', color: '#fff', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Ok</button>
         </div>
       </div>

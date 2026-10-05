@@ -125,6 +125,10 @@ interface DrawingContextType {
   clearSelection: () => void;
   // History for Undo/Redo
   undo: () => void;
+  // A settings dialog's edits: begin when it opens; cancel puts the drawings and the undo
+  // history back as they were (its live changes leave nothing behind)
+  beginEditSession: () => EditSession;
+  cancelEditSession: (s: EditSession) => void;
   redo: () => void;
   canUndo: boolean;
   canRedo: boolean;
@@ -342,20 +346,63 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     }
   }, [drawings, user, symbol, isInitialLoad]);
 
-  // Push to history when drawings change meaningfully
+  // Push to history when drawings change meaningfully (refs written at once, so an undo
+  // straight after sees the entry)
+  const historyRef = useRef(history);
+  historyRef.current = history;
   const pushToHistory = (newDrawings: BaseDrawing[]) => {
+    historyPendingRef.current = false;   // this entry covers any edit waiting to be recorded
     const index = historyIndexRef.current;
-    setHistory(prev => {
-      const newHistory = prev.slice(0, index + 1);
-      // Shallow copy is sufficient because we treat drawing objects as immutable
-      newHistory.push([...newDrawings]);
-      if (newHistory.length > 50) newHistory.shift();
-      return newHistory;
-    });
-    const nextIndex = Math.min(index + 1, 49);
+    const cur = historyRef.current[index];
+    if (cur && JSON.stringify(cur) === JSON.stringify(newDrawings)) return;   // nothing changed
+    const newHistory = historyRef.current.slice(0, index + 1);
+    // Shallow copy is sufficient because we treat drawing objects as immutable
+    newHistory.push([...newDrawings]);
+    if (newHistory.length > 50) newHistory.shift();
+    const nextIndex = newHistory.length - 1;
+    historyRef.current = newHistory;
     historyIndexRef.current = nextIndex;
+    setHistory(newHistory);
     setHistoryIndex(nextIndex);
   };
+
+  // Edits (moving, resizing, restyling, locking, hiding…) are undoable too. They're recorded
+  // once things settle: after the mouse button is released (a drag is one step, not one per
+  // frame), and a moment after the last change otherwise (typing in a settings field)
+  const historyPendingRef = useRef(false);
+  const historyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pointerHeldRef = useRef(false);
+  const flushHistory = () => {
+    if (historyTimerRef.current) { clearTimeout(historyTimerRef.current); historyTimerRef.current = null; }
+    if (!historyPendingRef.current) return;
+    historyPendingRef.current = false;
+    pushToHistory(drawingsRef.current);
+  };
+  const flushHistoryRef = useRef(flushHistory);
+  flushHistoryRef.current = flushHistory;
+  const markEdited = () => {
+    historyPendingRef.current = true;
+    if (historyTimerRef.current) clearTimeout(historyTimerRef.current);
+    historyTimerRef.current = setTimeout(() => { historyTimerRef.current = null; if (!pointerHeldRef.current) flushHistoryRef.current(); }, 300);
+  };
+  useEffect(() => {
+    const down = () => { pointerHeldRef.current = true; };
+    const up = () => {
+      pointerHeldRef.current = false;
+      // after the release's own handlers have committed the drag
+      if (historyPendingRef.current) setTimeout(() => { if (!pointerHeldRef.current) flushHistoryRef.current(); }, 0);
+    };
+    window.addEventListener('pointerdown', down, true);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
+    window.addEventListener('blur', up);
+    return () => {
+      window.removeEventListener('pointerdown', down, true);
+      window.removeEventListener('pointerup', up, true);
+      window.removeEventListener('pointercancel', up, true);
+      window.removeEventListener('blur', up);
+    };
+  }, []);
 
   const addDrawing = (drawing: BaseDrawing) => {
     const toolDefaults = defaultSettings[drawing.type] || {};
@@ -376,6 +423,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateDrawing = (id: string, updates: Partial<BaseDrawing>) => {
+    markEdited();
     setDrawings(prev => prev.map(d => {
       if (d.id === id) {
         const newDrawing = { ...d, ...updates };
@@ -397,6 +445,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateMultipleDrawings = (ids: string[], updates: Partial<BaseDrawing>) => {
+    markEdited();
     setDrawings(prev => prev.map(d => ids.includes(d.id) ? { ...d, ...updates } : d));
     logAction('DRAWINGS_BATCH_MODIFIED', { ids, updates });
   };
@@ -431,6 +480,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
 
   const toggleLockAllDrawings = () => {
     const nextLocked = !allDrawingsLocked;
+    markEdited();
     setDrawings(prev => prev.map(d => ({ ...d, locked: nextLocked })));
     logAction('DRAWINGS_LOCK_TOGGLED', { locked: nextLocked });
   };
@@ -439,6 +489,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
 
   const toggleHideAllDrawings = () => {
     const nextHidden = !allDrawingsHidden;
+    markEdited();
     setDrawings(prev => prev.map(d => ({ ...d, visible: !nextHidden })));
     logAction('DRAWINGS_VISIBILITY_TOGGLED', { hidden: nextHidden });
   };
@@ -456,17 +507,37 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     setSelectedShapeIds(new Set());
   };
 
+  const beginEditSession = (): EditSession => {
+    flushHistory();
+    return { drawings: drawingsRef.current, history: historyRef.current, index: historyIndexRef.current };
+  };
+  const cancelEditSession = (sess: EditSession) => {
+    if (historyTimerRef.current) { clearTimeout(historyTimerRef.current); historyTimerRef.current = null; }
+    historyPendingRef.current = false;
+    commitDrawings(sess.drawings);
+    historyRef.current = sess.history;
+    historyIndexRef.current = sess.index;
+    setHistory(sess.history);
+    setHistoryIndex(sess.index);
+  };
+
   const undo = () => {
-    if (historyIndex > 0) {
-      setDrawings(JSON.parse(JSON.stringify(history[historyIndex - 1])));
-      setHistoryIndex(prev => prev - 1);
+    flushHistory();   // an edit not yet recorded is the step being undone
+    const i = historyIndexRef.current;
+    if (i > 0) {
+      commitDrawings(JSON.parse(JSON.stringify(historyRef.current[i - 1])));
+      historyIndexRef.current = i - 1;
+      setHistoryIndex(i - 1);
     }
   };
 
   const redo = () => {
-    if (historyIndex < history.length - 1) {
-      setDrawings(JSON.parse(JSON.stringify(history[historyIndex + 1])));
-      setHistoryIndex(prev => prev + 1);
+    flushHistory();
+    const i = historyIndexRef.current;
+    if (i < historyRef.current.length - 1) {
+      commitDrawings(JSON.parse(JSON.stringify(historyRef.current[i + 1])));
+      historyIndexRef.current = i + 1;
+      setHistoryIndex(i + 1);
     }
   };
   
@@ -516,12 +587,10 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
         if (e.key === 'z' && !e.shiftKey && !e.altKey) { e.preventDefault(); undo(); return; }
         // Ctrl+Y or Ctrl+Shift+Z = Redo
         if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); return; }
-        // Ctrl+A = Select all drawings
-        if (e.key === 'a') {
+        // Ctrl+A does nothing on the chart, as on TradingView (it doesn't select the drawings,
+        // and the page's text mustn't get highlighted either)
+        if (e.key === 'a' || e.key === 'A') {
           e.preventDefault();
-          const allIds = new Set(drawings.map(d => d.id));
-          setSelectedShapeIds(allIds);
-          setSelectedShapeId(null);
           return;
         }
         // Ctrl+Alt+H = Hide all drawings (toggle visibility)
@@ -606,6 +675,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     drawings, setDrawings, addDrawing, updateDrawing, updateMultipleDrawings, deleteDrawing, deleteMultipleDrawings, clearDrawings,
     selectedShapeId, setSelectedShapeId,
     selectedShapeIds, setSelectedShapeIds, addToSelection, removeFromSelection, clearSelection,
+    beginEditSession, cancelEditSession,
     undo, redo, canUndo: historyIndex > 0, canRedo: historyIndex < history.length - 1,
     shiftDrawings,
     symbol, setSymbol,
@@ -623,6 +693,16 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
       {children}
     </DrawingContext.Provider>
   );
+}
+
+export type EditSession = { drawings: BaseDrawing[]; history: BaseDrawing[][]; index: number };
+
+// For a drawing's settings dialog: returns the function its Cancel / Escape / close button runs
+export function useSettingsSession(onClose: () => void) {
+  const ctx = useDrawing();
+  const sessRef = React.useRef<EditSession | null>(null);
+  if (!sessRef.current) sessRef.current = ctx.beginEditSession();
+  return () => { if (sessRef.current) ctx.cancelEditSession(sessRef.current); onClose(); };
 }
 
 export function useDrawing() {

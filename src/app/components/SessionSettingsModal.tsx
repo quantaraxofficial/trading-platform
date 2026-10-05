@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { X, ChevronDown } from "lucide-react";
 import { DualRangeSlider } from "./drawing/ui/DualRangeSlider";
 import { useEscapeClose } from "../lib/useEscapeClose";
@@ -254,8 +254,12 @@ export const defaultSessionConfig = {
   }
 };
 
-export default function SessionSettingsModal({ isOpen, onClose, config, onSave, theme }: any) {
-  useEscapeClose(onClose, !!isOpen);
+export default function SessionSettingsModal({ isOpen, onClose, config, onSave, onPreview, theme }: any) {
+  // Changes show on the chart as they're made (onPreview); Cancel / Escape / ✕ restore the
+  // settings the dialog opened with
+  const initialRef = useRef<any>(null);
+  const cancel = () => { if (initialRef.current) onPreview?.(initialRef.current); onClose(); };
+  useEscapeClose(cancel, !!isOpen);
   const [activeTab, setActiveTab] = useState("Style");
   const [localConfig, setLocalConfig] = useState(config || defaultSessionConfig);
   const [colorPickerOpen, setColorPickerOpen] = useState("");
@@ -269,6 +273,10 @@ export default function SessionSettingsModal({ isOpen, onClose, config, onSave, 
   useEffect(() => {
     if (isOpen) setLocalConfig(config || defaultSessionConfig);
   }, [isOpen, config]);
+  useEffect(() => { initialRef.current = isOpen ? (config || defaultSessionConfig) : null; }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (isOpen && initialRef.current && localConfig !== config) onPreview?.(localConfig);
+  }, [localConfig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isOpen) return null;
 
@@ -378,7 +386,7 @@ export default function SessionSettingsModal({ isOpen, onClose, config, onSave, 
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: `1px solid ${border}` }}>
           <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: text }}>Asian Session Range</h2>
-          <X size={20} color={isDark ? "#787b86" : "#131722"} style={{ cursor: "pointer" }} onClick={onClose} />
+          <X size={20} color={isDark ? "#787b86" : "#131722"} style={{ cursor: "pointer" }} onClick={cancel} />
         </div>
 
         {/* Tabs */}
@@ -571,7 +579,7 @@ export default function SessionSettingsModal({ isOpen, onClose, config, onSave, 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderTop: `1px solid ${border}` }}>
           <div style={{ fontSize: "14px", color: isDark ? "#2962ff" : "#2962ff", cursor: "pointer" }} onClick={() => setLocalConfig(defaultSessionConfig)}>Defaults</div>
           <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={onClose} style={{ padding: "8px 24px", borderRadius: "4px", border: `1px solid ${border}`, backgroundColor: "transparent", color: text, cursor: "pointer", fontSize: "14px" }}>Cancel</button>
+            <button onClick={cancel} style={{ padding: "8px 24px", borderRadius: "4px", border: `1px solid ${border}`, backgroundColor: "transparent", color: text, cursor: "pointer", fontSize: "14px" }}>Cancel</button>
             <button onClick={() => onSave(localConfig)} style={{ padding: "8px 24px", borderRadius: "4px", border: "none", backgroundColor: "#2962ff", color: "white", cursor: "pointer", fontSize: "14px", fontWeight: "500" }}>Ok</button>
           </div>
         </div>
