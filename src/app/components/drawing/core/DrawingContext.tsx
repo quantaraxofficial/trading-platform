@@ -5,6 +5,17 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 export type DrawingType =
   | 'trendline' | 'horizontal_line' | 'horizontal_ray' | 'text' | 'rectangle' | 'fibonacci'
   | 'ray' | 'info_line' | 'extended_line' | 'trend_angle' | 'vertical_line' | 'cross_line'
+  // Fibonacci & Gann, patterns, Elliott waves, cycles, forecasting, volume-based and measurers
+  // (drawn by tools/advanced — see its registry)
+  | 'fib_trend_ext' | 'fib_channel' | 'fib_timezone' | 'fib_speed_resist_fan' | 'fib_trend_time' | 'fib_circles'
+  | 'fib_spiral' | 'fib_speed_resist_arcs' | 'fib_wedge' | 'pitchfan'
+  | 'gannbox' | 'gannbox_fixed' | 'gannbox_square' | 'gannbox_fan'
+  | 'xabcd_pattern' | 'cypher_pattern' | 'head_and_shoulders' | 'abcd_pattern' | 'triangle_pattern' | 'three_drives_pattern'
+  | 'elliott_impulse_wave' | 'elliott_correction' | 'elliott_triangle_wave' | 'elliott_double_combo' | 'elliott_triple_combo'
+  | 'cyclic_lines' | 'time_cycles' | 'sine_line'
+  | 'forecast' | 'bars_pattern' | 'ghost_feed' | 'projection'
+  | 'anchored_vwap' | 'fixed_range_volume_profile' | 'anchored_volume_profile'
+  | 'price_range' | 'date_range' | 'date_and_price_range'
   | 'brush' | 'highlighter' | 'arrow_marker' | 'arrow' | 'arrow_mark_up' | 'arrow_mark_down'
   | 'rotated_rectangle' | 'path' | 'circle' | 'ellipse' | 'polyline' | 'triangle' 
   | 'arc' | 'curve' | 'double_curve' | 'measure' | 'long_position' | 'short_position' | 'emoji'

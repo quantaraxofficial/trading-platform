@@ -2,6 +2,23 @@ import React from "react";
 import { Circle, Type, MousePointer2, PlayCircle, Wand2, Eraser } from "lucide-react";
 import type { DrawingType } from "./core/DrawingContext";
 import { TvToolIcon } from "../icons/tvToolIcons";
+import { ADVANCED_TOOLS } from "./tools/advanced/registry";
+
+// Extra search words for the registry's tools (their names are searched anyway)
+const ADVANCED_KEYWORDS: Record<string, string[]> = {
+  fib_trend_ext: ['fibonacci', 'extension'], fib_channel: ['fibonacci'], fib_timezone: ['fibonacci', 'time'],
+  fib_speed_resist_fan: ['fibonacci', 'fan'], fib_trend_time: ['fibonacci', 'time'], fib_circles: ['fibonacci'],
+  fib_spiral: ['fibonacci'], fib_speed_resist_arcs: ['fibonacci', 'arcs'], fib_wedge: ['fibonacci'], pitchfan: ['fan'],
+  gannbox: ['gann'], gannbox_fixed: ['gann'], gannbox_square: ['gann'], gannbox_fan: ['gann'],
+  xabcd_pattern: ['harmonic', 'pattern'], cypher_pattern: ['harmonic', 'pattern'], head_and_shoulders: ['pattern'],
+  abcd_pattern: ['pattern'], triangle_pattern: ['pattern'], three_drives_pattern: ['pattern'],
+  elliott_impulse_wave: ['elliott', 'wave'], elliott_correction: ['elliott', 'wave'], elliott_triangle_wave: ['elliott', 'wave'],
+  elliott_double_combo: ['elliott', 'wave'], elliott_triple_combo: ['elliott', 'wave'],
+  cyclic_lines: ['cycle'], time_cycles: ['cycle'], sine_line: ['cycle', 'wave'],
+  forecast: ['prediction', 'forecast'], bars_pattern: ['copy', 'bars'], ghost_feed: ['candles', 'forecast'], projection: ['sector'],
+  anchored_vwap: ['vwap', 'volume'], fixed_range_volume_profile: ['volume', 'profile', 'frvp'], anchored_volume_profile: ['volume', 'profile'],
+  price_range: ['measure'], date_range: ['measure'], date_and_price_range: ['measure'],
+};
 import {
   TVCrosshairIcon,
   TVMeasureIcon,
@@ -80,6 +97,11 @@ export const DRAWING_TOOLS: DrawingToolInfo[] = [
   { type: "double_curve", label: "Double curve", icon: tv(TVDoubleCurveIcon) },
   { type: "text", label: "Text", keywords: ["note", "label", "annotation"], icon: lucide(<Type size={18} strokeWidth={2} />) },
   { type: "measure", label: "Measure", keywords: ["ruler", "distance"], icon: tv(TVMeasureIcon) },
+  // Fibonacci & Gann, patterns, Elliott waves, cycles, forecasting, volume-based and measurers
+  ...Object.entries(ADVANCED_TOOLS).map(([type, t]) => ({
+    type: type as DrawingType, label: t.label, keywords: ADVANCED_KEYWORDS[type] || [],
+    icon: () => <TvToolIcon id={t.tvIcon} size={28} />,
+  })),
 ];
 
 export const DRAWING_TOOL_BY_TYPE: Record<string, DrawingToolInfo> = Object.fromEntries(

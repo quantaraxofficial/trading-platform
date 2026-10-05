@@ -12,6 +12,8 @@ import { isIconId } from '../ui/emojiArt';
 import { TrendLine } from './tools/TrendLine';
 import { RectangleTool } from './tools/Rectangle';
 import { InfiniteLineTool } from './tools/InfiniteLineTool';
+import { MultiPointTool } from './tools/advanced/MultiPointTool';
+import { ADVANCED_TOOLS } from './tools/advanced/registry';
 import { TextTool } from './tools/Text';
 import { FibonacciTool } from './tools/Fibonacci';
 import { DEFAULT_FIB_LEVELS } from './ui/FibonacciSettingsModal';
@@ -629,6 +631,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     path: { type: 'N-point' },
     polyline: { type: 'N-point' },
     
+    // Fibonacci & Gann, patterns, Elliott, cycles, forecasting, volume-based, measurers
+    ...Object.fromEntries(Object.entries(ADVANCED_TOOLS).map(([k, t]) => [k, t.points === Infinity ? { type: 'N-point' as const } : { type: 'click-point' as const, maxPoints: t.points }])),
     brush: { type: 'continuous' },
     highlighter: { type: 'continuous' },
   };
@@ -999,6 +1003,14 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
 
 
 
+          // Tools that capture something when drawn (Bars pattern's bars, Anchored VWAP's anchor…)
+          const created = ADVANCED_TOOLS[activeTool]?.onCreate?.(finalPoints);
+          if (created) {
+            const { points: adjusted, ...rest } = created;
+            if (adjusted) finalPoints = adjusted;
+            additionalProps = { ...additionalProps, ...rest };
+          }
+
           if (activeTool === 'zoom_in') {
             const logical1 = finalPoints[0].logical;
             const logical2 = finalPoints[1].logical;
@@ -1136,7 +1148,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     const pts = placed.filter((p, i) => i === 0 || p.logical !== placed[i - 1].logical || p.price !== placed[i - 1].price);
     if (activeTool && pts.length >= 2) {
       const id = `${activeTool}-${Date.now()}`;
-      addDrawing({ id, type: activeTool as any, visible: true, locked: false, ...toolBaseStyle(activeTool), points: pts });
+      const { points: adjusted, ...rest } = ADVANCED_TOOLS[activeTool]?.onCreate?.(pts) || {};
+      addDrawing({ id, type: activeTool as any, visible: true, locked: false, ...toolBaseStyle(activeTool), ...rest, points: adjusted || pts });
       if (select) setSelectedShapeId(id);
     }
     setPendingPoints([]);
@@ -1397,6 +1410,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     if (tool === 'horizontal_ray' || TOOL_CONFIG[tool]?.type === 'N-point') style.stroke = '#2962ff';
     if (['ray', 'info_line', 'extended_line', 'trend_angle', 'horizontal_line', 'vertical_line', 'cross_line'].includes(tool)) style.stroke = '#2962ff';
     if (tool === 'fibonacci') style.fibLevels = DEFAULT_FIB_LEVELS;
+    if (ADVANCED_TOOLS[tool]) { style.stroke = ADVANCED_TOOLS[tool].stroke; Object.assign(style, ADVANCED_TOOLS[tool].extra || {}); }
     if (tool === 'arc') style.fill = 'rgba(233, 30, 99, 0.2)';
     if (tool === 'path') style.lineEndStyle = 'Arrow';
     return style;
@@ -1457,6 +1471,26 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   const renderDrawing = (committed: any, asSelected = false) => {
             const drawing = liveEdit && liveEdit.id === committed.id ? { ...committed, ...liveEdit.updates } : committed;
             const isSel = asSelected || selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id);
+            const adv = ADVANCED_TOOLS[drawing.type];
+            if (adv) {
+              return (
+                <MultiPointTool
+                  key={drawing.id}
+                  id={drawing.id}
+                  drawing={drawing}
+                  points={drawing.points}
+                  required={adv.points}
+                  render={adv.render}
+                  constrain={adv.constrain}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
+                  chart={chart}
+                  series={series}
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  isLocked={drawing.locked}
+                />
+              );
+            }
             if (TREND_LINE_TYPES.includes(drawing.type)) {
               // Ray runs off to the right, Extended line both ways (each can be changed in settings)
               const t = drawing.type;

@@ -5,6 +5,7 @@
 // groups, the zoom tools, the drawing modes and Remove objects.
 
 import { TvToolIcon } from "./icons/tvToolIcons";
+import { ADVANCED_TOOLS, TOOLBAR_SECTIONS } from "./drawing/tools/advanced/registry";
 import React, { useState, useRef, useEffect } from "react";
 import { Circle, MousePointer2, PlayCircle, Wand2, Eraser, Star } from "lucide-react";
 import { useDrawing, DrawingType } from "./drawing/core/DrawingContext";
@@ -85,6 +86,26 @@ const Hinted = ({ name, hint }: { name: string; hint: React.ReactNode }) => (
 const Chevron = () => (
   <svg width="6" height="10" viewBox="0 0 6 10" fill="none" stroke="currentColor" strokeWidth="1.2"><path d="M1 1l4 4-4 4" /></svg>
 );
+
+// A flyout's sections from the drawing registry, in TradingView's order; tools defined outside
+// the registry (Fib retracement, Long / Short position) bring their own label and icon
+function sectionItems(
+  sections: { title: string; types: string[] }[],
+  own: Record<string, { label: string; icon: React.ReactNode; keys?: string[] }>,
+) {
+  const menuIcon = 28;
+  const items: any[] = [];
+  for (const sec of sections) {
+    items.push({ isHeader: true, label: sec.title });
+    for (const type of sec.types) {
+      const o = own[type];
+      const t = ADVANCED_TOOLS[type];
+      if (o) items.push({ type: type as DrawingType, label: o.label, icon: o.icon, keys: o.keys });
+      else if (t) items.push({ type: type as DrawingType, label: t.label, icon: <TvToolIcon id={t.tvIcon} size={menuIcon} /> });
+    }
+  }
+  return items;
+}
 
 export default function LeftToolbar({ indicatorCount = 0, onRemoveIndicators }: { indicatorCount?: number; onRemoveIndicators?: () => void }) {
   const {
@@ -203,20 +224,24 @@ export default function LeftToolbar({ indicatorCount = 0, onRemoveIndicators }: 
       id: 'fibonacci',
       defaultIcon: <TVFibonacciIcon size={icon} />,
       tooltip: "Fib retracement",
-      items: [
-        { isHeader: true, label: "FIBONACCI" },
-        { type: "fibonacci" as DrawingType, label: "Fib retracement", icon: <TVFibonacciIcon size={menuIcon} />, keys: ["Alt", "F"] },
-      ]
+      items: sectionItems(TOOLBAR_SECTIONS.fibonacci, {
+        fibonacci: { label: "Fib retracement", icon: <TVFibonacciIcon size={menuIcon} />, keys: ["Alt", "F"] },
+      }),
+    },
+    {
+      id: 'patterns',
+      defaultIcon: <TvToolIcon id="LineTool5PointsPattern" size={icon} />,
+      tooltip: "XABCD pattern",
+      items: sectionItems(TOOLBAR_SECTIONS.patterns, {}),
     },
     {
       id: 'prediction',
       defaultIcon: <TVLongPositionIcon size={icon} />,
       tooltip: "Long position",
-      items: [
-        { isHeader: true, label: "PROJECTION" },
-        { type: "long_position" as DrawingType, label: "Long position", icon: <TVLongPositionIcon size={menuIcon} /> },
-        { type: "short_position" as DrawingType, label: "Short position", icon: <TVShortPositionIcon size={menuIcon} /> },
-      ]
+      items: sectionItems(TOOLBAR_SECTIONS.prediction, {
+        long_position: { label: "Long position", icon: <TVLongPositionIcon size={menuIcon} /> },
+        short_position: { label: "Short position", icon: <TVShortPositionIcon size={menuIcon} /> },
+      }),
     },
     {
       id: 'shapes',
@@ -364,7 +389,7 @@ export default function LeftToolbar({ indicatorCount = 0, onRemoveIndicators }: 
             }}
           />
         ) : group.items ? (
-          <div role="menu" ref={el => placeBeside(el, buttonElsRef.current[group.id], 2, toolbarTop())} style={{ ...menuStyle, width: group.id === 'shapes' ? '270px' : '250px' }}>
+          <div role="menu" ref={el => placeBeside(el, buttonElsRef.current[group.id], 2, toolbarTop())} style={{ ...menuStyle, width: group.id === 'patterns' || group.id === 'prediction' ? '320px' : group.id === 'shapes' ? '270px' : '250px' }}>
             {group.items.map((item, idx) => item.isHeader ? (
               item.label
                 ? <div key={idx} style={{ padding: '8px 14px 4px', fontSize: '11px', fontWeight: 600, color: 'var(--tv-color-text-muted)', letterSpacing: '0.4px' }}>{item.label}</div>
