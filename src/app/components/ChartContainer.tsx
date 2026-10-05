@@ -3,7 +3,10 @@
 import { useEffect, useRef, useState, useCallback, forwardRef } from "react";
 import { createPortal } from "react-dom";
 import { createChart, ColorType, ISeriesApi, IChartApi, CandlestickSeries, HistogramSeries, LineSeries, PriceScaleMode, TickMarkType } from "lightweight-charts";
-import { CandleBodyAwareLine } from "./chartPrimitives/CandleBodyAwareLine";
+import { CandleBodyAwareLine, candlestickBodyWidthCss } from "./chartPrimitives/CandleBodyAwareLine";
+import { SeriesSelection } from "./chartPrimitives/SeriesSelection";
+import ChartNavButtons from "./ChartNavButtons";
+import { watchlists as wlStore, wl as wlActions } from "./watchlist/store";
 import { ReplayWatermark } from "./chartPrimitives/ReplayWatermark";
 import { chartModeCursor } from "./chartCursor";
 import dynamic from "next/dynamic";
@@ -12,7 +15,7 @@ import { SubBar } from "./drawing/ui/SubBar";
 import { useDrawing } from "./drawing/core/DrawingContext";
 import { useReplay } from "./ReplayContext";
 import ReplayBar from "./ReplayBar";
-import { Eye, Code, Trash2, MoreHorizontal, EyeOff, Clock, Star, Copy, RotateCcw, ChevronDown, ChevronUp, PlusSquare, ChevronRight, Settings as SettingsIcon, Zap, Check } from "lucide-react";
+import { Eye, Code, Trash2, MoreHorizontal, EyeOff, Clock, Star, Copy, RotateCcw, ChevronDown, ChevronUp, PlusSquare, ChevronRight, Settings as SettingsIcon, Zap, Check, Activity, Info, ListPlus, FilePenLine } from "lucide-react";
 import VolumeSettingsModal from "./VolumeSettingsModal";
 import EmaSettingsModal from "./EmaSettingsModal";
 import SessionSettingsModal, { defaultSessionConfig } from "./SessionSettingsModal";
@@ -502,7 +505,7 @@ export default function ChartContainer({
 }: ChartContainerProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
-  const { activeTool, shiftDrawings, setSymbol: setDrawingSymbol, setDrawings } = useDrawing();
+  const { activeTool, shiftDrawings, setSymbol: setDrawingSymbol, setDrawings, selectedShapeId } = useDrawing();
   const { mode, replayIndex, startReplayAt, getReplayTime, stopReplay, togglePlay, stepBack, stepForward, setHoverX, hoverX, updateReplayData } = useReplay();
   const { checkAlerts } = useAlerts();
   const tradingState = useEngineState();
@@ -562,7 +565,18 @@ export default function ChartContainer({
   // vertical line state in select mode
   const [vLineX, setVLineX] = useState<number | null>(null);
   const [vLineTime, setVLineTime] = useState<number | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, clientX: number, clientY: number, price: number | null, time: number | null, visible: boolean } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, clientX: number, clientY: number, price: number | null, time: number | null, visible: boolean, onCandle?: boolean } | null>(null);
+  // The price series selected by clicking a candle (TradingView's dots along it)
+  const [seriesSelected, setSeriesSelected] = useState(false);
+  const seriesSelectionRef = useRef<SeriesSelection | null>(null);
+  useEffect(() => { seriesSelectionRef.current?.setSelected(seriesSelected); }, [seriesSelected]);
+  // selecting a drawing, or Esc, clears it
+  useEffect(() => { if (selectedShapeId) setSeriesSelected(false); }, [selectedShapeId]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSeriesSelected(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   // "Lock vertical cursor line by time": the bar time the vertical line stays on
   const [lockedCursorTime, setLockedCursorTime] = useState<number | null>(null);
   const [showTableView, setShowTableView] = useState(false);
@@ -867,7 +881,21 @@ export default function ChartContainer({
       if (!cell || getComputedStyle(e.target as HTMLElement).cursor.includes('resize')) return;
       grabbed = cell; startX = e.clientX; startY = e.clientY;
     };
+    // Over a candle the pane shows the pointing hand (it can be clicked / right-clicked / double-clicked)
+    let hoverCell: HTMLElement | null = null;
+    const onHover = (e: MouseEvent) => {
+      if (grabbed || e.buttons) return;
+      const target = e.target as HTMLElement;
+      const cell = target.closest?.('.tv-lightweight-charts table tr td') as HTMLElement | null;
+      if (hoverCell && hoverCell !== cell) { hoverCell.style.cursor = cursorStyle; hoverCell = null; }
+      if (!cell || getComputedStyle(target).cursor.includes('resize')) return;
+      const r = container.getBoundingClientRect();
+      const over = candleAtRef.current(e.clientX - r.left, e.clientY - r.top) >= 0;
+      cell.style.cursor = over ? 'pointer' : cursorStyle;
+      hoverCell = over ? cell : null;
+    };
     const onMove = (e: MouseEvent) => {
+      onHover(e);
       if (!grabbed || !(e.buttons & 1)) return;
       if (Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) < 3) return;
       grabbed.style.cursor = 'grabbing';
@@ -1419,6 +1447,28 @@ export default function ChartContainer({
   const refreshRunIdRef = useRef(0); // Lets a stale refresh's trailing guard-clear no-op if a newer switch has since started
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  // The bar whose candle (body or wick) is under a point of the pane, or -1
+  const candleAt = (x: number, y: number): number => {
+    const chart = chartRef.current, s = candleSeriesRef.current, bars = fullDataRef.current;
+    if (!chart || !s || !bars.length) return -1;
+    const ts = chart.timeScale();
+    const l = ts.coordinateToLogical(x);
+    if (l === null) return -1;
+    const i = Math.round(l);
+    const cut = (window as any).__replayVisibleCutoff;
+    if (i < 0 || i >= bars.length || (typeof cut === 'number' && i > cut)) return -1;
+    const bx = ts.logicalToCoordinate(i as any);
+    if (bx === null) return -1;
+    const spacing = Math.abs((ts.logicalToCoordinate((i + 1) as any) ?? bx + 6) - bx);
+    if (Math.abs(x - bx) > Math.max(2, candlestickBodyWidthCss(spacing) / 2) + 1) return -1;
+    const yh = s.priceToCoordinate(bars[i].high), yl = s.priceToCoordinate(bars[i].low);
+    if (yh === null || yl === null) return -1;
+    return y >= Math.min(yh, yl) - 2 && y <= Math.max(yh, yl) + 2 ? i : -1;
+  };
+  const candleAtRef = useRef(candleAt);
+  candleAtRef.current = candleAt;
+  const activeToolRef = useRef(activeTool);
+  activeToolRef.current = activeTool;
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const emasRef = useRef<Record<string, ISeriesApi<"Line">>>({});
 
@@ -1997,6 +2047,16 @@ export default function ChartContainer({
     const replayWatermark = new ReplayWatermark(() => modeRef.current !== 'idle');
     newChart.panes()[0].attachPrimitive(replayWatermark);
     replayWatermarkRef.current = replayWatermark;
+
+    // Clicking a candle selects the price series; a click anywhere else clears it
+    const seriesSelection = new SeriesSelection();
+    candleSeries.attachPrimitive(seriesSelection as any);
+    seriesSelectionRef.current = seriesSelection;
+    newChart.subscribeClick((param: any) => {
+      const tool = activeToolRef.current;
+      if (tool && !['cross', 'dot', 'arrow_cursor', 'demonstration', 'magic'].includes(tool)) return;
+      setSeriesSelected(!!param.point && candleAtRef.current(param.point.x, param.point.y) >= 0);
+    });
 
     newChart.timeScale().subscribeVisibleLogicalRangeChange(() => {
       if (updateSessionDOMRef.current) updateSessionDOMRef.current();
@@ -2927,6 +2987,15 @@ export default function ChartContainer({
   return (
     <div 
       style={{ position: "relative", width: "100%", height: "100%" }}
+      onDoubleClick={(e) => {
+        // a candle's double-click opens Settings on its Symbol tab, as TradingView's does
+        // only on the chart itself (a drawing over the candle has its own double-click)
+        if (!(e.target as HTMLElement).closest?.('.tv-lightweight-charts')) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        if (candleAt(e.clientX - rect.left, e.clientY - rect.top) < 0) return;
+        setChartSettingsTab('symbol');
+        setShowChartSettings(true);
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         if (!chartRef.current || !candleSeriesRef.current) return;
@@ -2937,7 +3006,9 @@ export default function ChartContainer({
         const logical = chartRef.current.timeScale().coordinateToLogical(x as any);
         const bars = fullDataRef.current;
         const idx = logical === null ? -1 : Math.max(0, Math.min(bars.length - 1, Math.round(logical)));
-        setContextMenu({ x, y, clientX: e.clientX, clientY: e.clientY, price, time: idx >= 0 && bars[idx] ? bars[idx].time : null, visible: true });
+        const onCandle = !!(e.target as HTMLElement).closest?.('.tv-lightweight-charts') && candleAt(x, y) >= 0;
+        if (onCandle) setSeriesSelected(true);
+        setContextMenu({ x, y, clientX: e.clientX, clientY: e.clientY, price, time: idx >= 0 && bars[idx] ? bars[idx].time : null, visible: true, onCandle });
       }}
     >
       {/* Watermark - bottom left like TradingView */}
@@ -3497,6 +3568,31 @@ export default function ChartContainer({
       />
 
       {contextMenu?.visible && (
+        contextMenu.onCandle ? (
+          <SeriesContextMenu
+            pos={{ x: contextMenu.clientX, y: contextMenu.clientY }}
+            price={contextMenu.price}
+            precision={pricePrecision}
+            symbol={symbol}
+            theme={theme}
+            onClose={() => setContextMenu(null)}
+            onAddAlert={() => { setShowAlertModal(true); setContextMenu(null); }}
+            onAddOrder={() => { if (contextMenu.price !== null) addOrderAt(contextMenu.price); setContextMenu(null); }}
+            onAddIndicator={() => { window.dispatchEvent(new CustomEvent('tv:open-indicators')); setContextMenu(null); }}
+            onSymbolInfo={() => { window.dispatchEvent(new CustomEvent('tv:open-sidebar-panel', { detail: 'watchlist' })); setContextMenu(null); }}
+            onCopyPrice={(text: string) => { navigator.clipboard?.writeText(text).catch(() => {}); setContextMenu(null); }}
+            canPaste={!!(window as any).__copiedDrawings?.length}
+            onPaste={() => { window.dispatchEvent(new CustomEvent('tv:paste-drawings')); setContextMenu(null); }}
+            onTableView={() => { setShowTableView(true); setContextMenu(null); }}
+            onAddNote={() => {
+              wlActions.setDetails({ notes: true });
+              window.dispatchEvent(new CustomEvent('tv:open-sidebar-panel', { detail: 'watchlist' }));
+              window.dispatchEvent(new CustomEvent('tv:edit-note', { detail: symbol }));
+              setContextMenu(null);
+            }}
+            onSettings={() => { setChartSettingsTab('symbol'); setShowChartSettings(true); setContextMenu(null); }}
+          />
+        ) : (
         <ChartContextMenu
           pos={{ x: contextMenu.clientX, y: contextMenu.clientY }}
           price={contextMenu.price}
@@ -3532,7 +3628,9 @@ export default function ChartContainer({
           onTableView={() => { setShowTableView(true); setContextMenu(null); }}
           onObjectTree={() => { window.dispatchEvent(new CustomEvent('tv:open-sidebar-panel', { detail: 'object_tree' })); setContextMenu(null); }}
         />
+        )
       )}
+      <ChartNavButtons chart={chart} container={chartContainerRef.current} onReset={() => resetChartViewRef.current()} />
       {lockedCursorTime !== null && chartRef.current && (
         <LockedCursorLine chart={chartRef.current} time={lockedCursorTime} theme={theme} tz={chartTimezone} />
       )}
@@ -3975,6 +4073,33 @@ function LockedCursorLine({ chart, time, theme, tz }: { chart: any; time: number
 }
 
 // TradingView's right-click menu on the chart
+// Right-click on a candle: TradingView's menu for the price series
+function SeriesContextMenu({ pos, price, precision = 3, symbol, theme, onClose, onAddAlert, onAddOrder, onAddIndicator, onSymbolInfo, onCopyPrice, canPaste, onPaste, onTableView, onAddNote, onSettings }: any) {
+  const p = price !== null ? price.toLocaleString('en-US', { minimumFractionDigits: precision, maximumFractionDigits: precision }) : '0';
+  const lists = wlStore.useValue().lists;
+  const ic = { size: 18, strokeWidth: 1.25 } as const;
+  const items: TvMenuItem[] = [
+    { label: `Add alert on ${symbol} at ${p}…`, icon: <MenuAlertIcon />, shortcut: 'Alt + A', onClick: onAddAlert },
+    { label: `Add order on ${symbol} at ${p}…`, icon: <MenuAddOrderIcon />, shortcut: 'Shift + T', onClick: onAddOrder },
+    { label: `Add indicator/strategy on ${symbol}…`, icon: <Activity {...ic} />, onClick: onAddIndicator },
+    { kind: 'divider' },
+    { label: 'Symbol info…', icon: <Info {...ic} />, onClick: onSymbolInfo },
+    { kind: 'divider' },
+    { label: `Copy price ${p}`, onClick: () => onCopyPrice(p) },
+    { label: 'Paste', shortcut: 'Ctrl + V', disabled: !canPaste, onClick: onPaste },
+    { kind: 'divider' },
+    { label: 'Table view', onClick: onTableView },
+    { kind: 'divider' },
+    {
+      label: `Add ${symbol} to watchlist`, icon: <ListPlus {...ic} />,
+      submenu: lists.map(l => ({ label: l.name, onClick: () => { wlActions.addSymbol(symbol, l.id); onClose(); } })),
+    },
+    { label: `Add text note for ${symbol}`, icon: <FilePenLine {...ic} />, shortcut: 'Alt + N', onClick: onAddNote },
+    { kind: 'divider' },
+    { label: 'Settings…', icon: <MenuSettingsIcon />, onClick: onSettings },
+  ];
+  return <TvMenu items={items} position={pos} isDark={theme === 'dark'} onClose={onClose} ariaLabel='Series' testId='series-context-menu' />;
+}
 function ChartContextMenu({ pos, price, precision = 3, symbol, theme, onClose, viewChanged, onReset, drawingCount, indicatorCount, onRemoveDrawings, onRemoveIndicators, onSettings, onAddAlert, onCopyPrice, onPaste, canPaste, onQuickOrder, onAddOrder, quickQty, buyType, sellType, cursorLocked, onToggleCursorLock, onTableView, onObjectTree }: any) {
   const p = price !== null ? price.toFixed(precision) : "0";
   // The limit order comes first, with its shortcut (a buy below the market, a sell above it)
