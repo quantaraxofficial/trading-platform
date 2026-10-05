@@ -133,14 +133,14 @@ export function MultiSelectSubBar() {
     borderRadius: '4px',
     background: 'transparent',
     cursor: 'pointer',
-    color: '#131722',
+    color: 'var(--tv-sub-text)',
     padding: 0,
   };
 
   const dividerStyle: React.CSSProperties = {
     width: '1px',
     height: '24px',
-    backgroundColor: '#e0e3eb',
+    backgroundColor: 'var(--tv-sub-border)',
     margin: '0 2px',
   };
 
@@ -156,7 +156,7 @@ export function MultiSelectSubBar() {
         display: 'flex',
         alignItems: 'center',
         gap: '4px',
-        background: '#ffffff',
+        background: 'var(--tv-sub-bg)',
         borderRadius: '8px',
         boxShadow: '0 2px 12px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.06)',
         padding: '6px',
@@ -176,7 +176,7 @@ export function MultiSelectSubBar() {
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'grab',
-          color: '#b2b5be',
+          color: 'var(--tv-sub-muted)',
           padding: '0 4px',
         }}
         title="Drag to move"
@@ -196,12 +196,12 @@ export function MultiSelectSubBar() {
             setShowTextColorPicker(false);
             setShowMoreDropdown(false);
           }}
-          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
           onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           title="Line width"
         >
           <svg width="24" height="20" viewBox="0 0 24 20">
-            <line x1="0" y1="10" x2="24" y2="10" stroke="#131722" strokeWidth={currentWidth} strokeLinecap="square" />
+            <line x1="0" y1="10" x2="24" y2="10" stroke="var(--tv-sub-text)" strokeWidth={currentWidth} strokeLinecap="square" />
           </svg>
           <span style={{ minWidth: '24px', textAlign: 'center' }}>{currentWidth}px</span>
         </button>
@@ -211,13 +211,13 @@ export function MultiSelectSubBar() {
             top: '100%',
             left: 0,
             marginTop: '4px',
-            backgroundColor: '#ffffff',
+            backgroundColor: 'var(--tv-sub-bg)',
             borderRadius: '6px',
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
             zIndex: 300,
             padding: '4px 0',
             minWidth: '120px',
-            border: '1px solid #e0e3eb',
+            border: '1px solid var(--tv-sub-border)',
           }}>
             {LINE_WIDTHS.map(w => (
               <button
@@ -230,17 +230,17 @@ export function MultiSelectSubBar() {
                   width: '100%',
                   padding: '8px 16px',
                   border: 'none',
-                  background: currentWidth === w ? '#f0f3fa' : 'transparent',
+                  background: currentWidth === w ? 'var(--tv-sub-hover)' : 'transparent',
                   cursor: 'pointer',
                   fontSize: '13px',
-                  color: '#131722',
+                  color: 'var(--tv-sub-text)',
                   outline: 'none',
                 }}
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
                 onMouseLeave={e => currentWidth !== w && (e.currentTarget.style.backgroundColor = 'transparent')}
               >
                 <svg width="32" height="16" viewBox="0 0 32 16">
-                  <line x1="0" y1="8" x2="32" y2="8" stroke="#131722" strokeWidth={w} strokeLinecap="square" />
+                  <line x1="0" y1="8" x2="32" y2="8" stroke="var(--tv-sub-text)" strokeWidth={w} strokeLinecap="square" />
                 </svg>
                 <span>{w}px</span>
               </button>
@@ -261,14 +261,14 @@ export function MultiSelectSubBar() {
             setShowTextColorPicker(false);
             setShowMoreDropdown(false);
           }}
-          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
           onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           title="Line style"
         >
           <svg width="24" height="20" viewBox="0 0 24 20">
-            {currentStyle === 'Solid' ? <line x1="0" y1="10" x2="24" y2="10" stroke="#131722" strokeWidth={2} strokeLinecap="square" /> :
-             currentStyle === 'Dashed' ? <><line x1="0" y1="10" x2="8" y2="10" stroke="#131722" strokeWidth={2}/><line x1="16" y1="10" x2="24" y2="10" stroke="#131722" strokeWidth={2}/></> :
-             <><circle cx="2" cy="10" r="1.5" fill="#131722"/><circle cx="10" cy="10" r="1.5" fill="#131722"/><circle cx="18" cy="10" r="1.5" fill="#131722"/></>}
+            {currentStyle === 'Solid' ? <line x1="0" y1="10" x2="24" y2="10" stroke="var(--tv-sub-text)" strokeWidth={2} strokeLinecap="square" /> :
+             currentStyle === 'Dashed' ? <><line x1="0" y1="10" x2="8" y2="10" stroke="var(--tv-sub-text)" strokeWidth={2}/><line x1="16" y1="10" x2="24" y2="10" stroke="var(--tv-sub-text)" strokeWidth={2}/></> :
+             <><circle cx="2" cy="10" r="1.5" fill="var(--tv-sub-text)"/><circle cx="10" cy="10" r="1.5" fill="var(--tv-sub-text)"/><circle cx="18" cy="10" r="1.5" fill="var(--tv-sub-text)"/></>}
           </svg>
         </button>
         {showStyleDropdown && (
@@ -277,13 +277,13 @@ export function MultiSelectSubBar() {
             top: '100%',
             left: 0,
             marginTop: '4px',
-            backgroundColor: '#ffffff',
+            backgroundColor: 'var(--tv-sub-bg)',
             borderRadius: '6px',
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
             zIndex: 300,
             padding: '4px 0',
             minWidth: '130px',
-            border: '1px solid #e0e3eb',
+            border: '1px solid var(--tv-sub-border)',
           }}>
             {['Solid', 'Dashed', 'Dotted'].map(style => (
               <button
@@ -296,21 +296,21 @@ export function MultiSelectSubBar() {
                   width: '100%',
                   padding: '8px 16px',
                   border: 'none',
-                  background: currentStyle === style ? '#f0f3fa' : 'transparent',
+                  background: currentStyle === style ? 'var(--tv-sub-hover)' : 'transparent',
                   cursor: 'pointer',
                   fontSize: '13px',
-                  color: '#131722',
+                  color: 'var(--tv-sub-text)',
                   outline: 'none',
                   textAlign: 'left'
                 }}
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
                 onMouseLeave={e => currentStyle !== style && (e.currentTarget.style.backgroundColor = 'transparent')}
               >
                 <div style={{ width: '24px', display: 'flex', alignItems: 'center' }}>
-                  <svg width="24" height="12" viewBox="0 0 24 12" fill="none" stroke="#131722" strokeWidth="2">
+                  <svg width="24" height="12" viewBox="0 0 24 12" fill="none" stroke="var(--tv-sub-text)" strokeWidth="2">
                     {style === 'Solid' ? <line x1="0" y1="6" x2="24" y2="6"/> :
                      style === 'Dashed' ? <><line x1="0" y1="6" x2="8" y2="6"/><line x1="12" y1="6" x2="20" y2="6"/></> :
-                     <><circle cx="2" cy="6" r="1" fill="#131722"/><circle cx="8" cy="6" r="1" fill="#131722"/><circle cx="14" cy="6" r="1" fill="#131722"/><circle cx="20" cy="6" r="1" fill="#131722"/></>}
+                     <><circle cx="2" cy="6" r="1" fill="var(--tv-sub-text)"/><circle cx="8" cy="6" r="1" fill="var(--tv-sub-text)"/><circle cx="14" cy="6" r="1" fill="var(--tv-sub-text)"/><circle cx="20" cy="6" r="1" fill="var(--tv-sub-text)"/></>}
                   </svg>
                 </div>
                 {style === 'Solid' ? 'Line' : style === 'Dashed' ? 'Dashed line' : 'Dotted line'}
@@ -334,7 +334,7 @@ export function MultiSelectSubBar() {
             setShowTextColorPicker(false);
             setShowMoreDropdown(false);
           }}
-          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
           onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           title="Line Color"
         >
@@ -372,7 +372,7 @@ export function MultiSelectSubBar() {
             setShowTextColorPicker(false);
             setShowMoreDropdown(false);
           }}
-          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
           onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           title="Background Color"
         >
@@ -409,7 +409,7 @@ export function MultiSelectSubBar() {
             setShowFillColorPicker(false);
             setShowMoreDropdown(false);
           }}
-          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
           onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           title="Text Color"
         >
@@ -449,7 +449,7 @@ export function MultiSelectSubBar() {
             setShowTextColorPicker(false);
             setShowMoreDropdown(false);
           }}
-          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
           onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           title="Settings"
         >
@@ -464,7 +464,7 @@ export function MultiSelectSubBar() {
       <button
         style={btnStyle}
         onClick={handleLockToggle}
-        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+        onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
         onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
         title={allLocked ? 'Unlock all' : 'Lock all'}
       >
@@ -475,7 +475,7 @@ export function MultiSelectSubBar() {
       <button
         style={btnStyle}
         onClick={handleDelete}
-        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+        onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
         onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
         title="Delete"
       >
@@ -494,7 +494,7 @@ export function MultiSelectSubBar() {
             setShowFillColorPicker(false);
             setShowTextColorPicker(false);
           }}
-          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
           onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           title="More"
         >
@@ -503,38 +503,38 @@ export function MultiSelectSubBar() {
         {showMoreDropdown && (
           <div style={{
             position: 'absolute', top: '100%', right: 0, marginTop: '4px',
-            backgroundColor: '#ffffff', borderRadius: '6px',
+            backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 300,
-            padding: '4px 0', minWidth: '220px', border: '1px solid #e0e3eb',
-            fontSize: '14px', color: '#131722',
+            padding: '4px 0', minWidth: '220px', border: '1px solid var(--tv-sub-border)',
+            fontSize: '14px', color: 'var(--tv-sub-text)',
           }}>
-            <button style={{ width: '100%', padding: '8px 16px', display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', gap: '12px' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+            <button style={{ width: '100%', padding: '8px 16px', display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', gap: '12px' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
               <Layers size={18} strokeWidth={1.5} />
               <span style={{ flex: 1, textAlign: 'left' }}>Visual order</span>
               <ChevronRight size={16} strokeWidth={1.5} />
             </button>
-            <button style={{ width: '100%', padding: '8px 16px', display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', gap: '12px' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+            <button style={{ width: '100%', padding: '8px 16px', display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', gap: '12px' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
               <div style={{ width: '18px' }} /> {/* Spacer */}
               <span style={{ flex: 1, textAlign: 'left' }}>Visibility on intervals</span>
               <ChevronRight size={16} strokeWidth={1.5} />
             </button>
             
-            <div style={{ height: '1px', backgroundColor: '#e0e3eb', margin: '4px 0' }} />
+            <div style={{ height: '1px', backgroundColor: 'var(--tv-sub-border)', margin: '4px 0' }} />
             
-            <button onClick={() => { handleClone(); setShowMoreDropdown(false); }} style={{ width: '100%', padding: '8px 16px', display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', gap: '12px' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+            <button onClick={() => { handleClone(); setShowMoreDropdown(false); }} style={{ width: '100%', padding: '8px 16px', display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', gap: '12px' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
               <Copy size={18} strokeWidth={1.5} />
               <span style={{ flex: 1, textAlign: 'left' }}>Clone</span>
               <span style={{ color: '#787b86', fontSize: '12px' }}>Ctrl + Drag</span>
             </button>
-            <button style={{ width: '100%', padding: '8px 16px', display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', gap: '12px' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+            <button style={{ width: '100%', padding: '8px 16px', display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', gap: '12px' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
               <div style={{ width: '18px' }} /> {/* Spacer */}
               <span style={{ flex: 1, textAlign: 'left' }}>Copy</span>
               <span style={{ color: '#787b86', fontSize: '12px' }}>Ctrl + C</span>
             </button>
             
-            <div style={{ height: '1px', backgroundColor: '#e0e3eb', margin: '4px 0' }} />
+            <div style={{ height: '1px', backgroundColor: 'var(--tv-sub-border)', margin: '4px 0' }} />
             
-            <button onClick={() => { handleHide(); setShowMoreDropdown(false); }} style={{ width: '100%', padding: '8px 16px', display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', gap: '12px' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+            <button onClick={() => { handleHide(); setShowMoreDropdown(false); }} style={{ width: '100%', padding: '8px 16px', display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', gap: '12px' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
               <EyeOff size={18} strokeWidth={1.5} />
               <span style={{ flex: 1, textAlign: 'left' }}>Hide</span>
             </button>

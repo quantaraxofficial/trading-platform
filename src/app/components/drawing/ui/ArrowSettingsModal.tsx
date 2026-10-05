@@ -15,14 +15,14 @@ function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boole
       onClick={() => onChange(!checked)}
       style={{
         width: '18px', height: '18px', borderRadius: '3px',
-        border: checked ? 'none' : '1px solid #b2b5be',
-        backgroundColor: checked ? '#131722' : '#ffffff',
+        border: checked ? 'none' : '1px solid var(--tv-sub-muted)',
+        backgroundColor: checked ? 'var(--tv-sub-text)' : 'var(--tv-sub-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         cursor: 'pointer', flexShrink: 0,
       }}
     >
       {checked && (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-bg)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12" />
         </svg>
       )}
@@ -37,7 +37,7 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter') e.currentTarget.blur(); };
   return (
     <input type="text" value={localVal} onChange={(e) => setLocalVal(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown}
-      style={{ width: '60px', height: '32px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: '#131722', outline: 'none', ...style }}
+      style={{ width: '60px', height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', outline: 'none', ...style }}
     />
   );
 }
@@ -50,14 +50,14 @@ function Select({ options, value, onChange, style }: { options: string[]; value:
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          width: '100%', height: '34px', border: isOpen ? '2px solid #2962ff' : '1px solid #e0e3eb', 
-          borderRadius: '4px', background: '#fff', display: 'flex', alignItems: 'center', 
+          width: '100%', height: '34px', border: isOpen ? '2px solid #2962ff' : '1px solid var(--tv-sub-border)', 
+          borderRadius: '4px', background: 'var(--tv-sub-bg)', display: 'flex', alignItems: 'center', 
           justifyContent: 'space-between', padding: isOpen ? '0 9px' : '0 10px', 
-          fontSize: '13px', color: '#131722', cursor: 'pointer', outline: 'none', textAlign: 'left'
+          fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer', outline: 'none', textAlign: 'left'
         }}
       >
         {value}
-        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="#131722" strokeWidth="1.2" style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}>
+        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.2" style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}>
           <path d="M1 1L5 5L9 1"></path>
         </svg>
       </button>
@@ -67,7 +67,7 @@ function Select({ options, value, onChange, style }: { options: string[]; value:
           <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setIsOpen(false)} />
           <div style={{
             position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
-            backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '4px',
+            backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '4px',
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000, padding: '4px 0',
             overflow: 'hidden'
           }}>
@@ -77,10 +77,10 @@ function Select({ options, value, onChange, style }: { options: string[]; value:
                 style={{ 
                   padding: '8px 12px', fontSize: '13px', cursor: 'pointer',
                   backgroundColor: value === opt ? '#2962ff' : 'transparent',
-                  color: value === opt ? '#ffffff' : '#131722'
+                  color: value === opt ? '#ffffff' : 'var(--tv-sub-text)'
                 }}
                 onClick={() => { onChange && onChange(opt); setIsOpen(false); }}
-                onMouseEnter={e => { if (value !== opt) e.currentTarget.style.backgroundColor = '#f0f3fa'; }}
+                onMouseEnter={e => { if (value !== opt) e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'; }}
                 onMouseLeave={e => { if (value !== opt) e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 {opt}
@@ -118,14 +118,14 @@ function ExtendDropdown({
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          width: '100%', height: '34px', border: isOpen ? '2px solid #2962ff' : '1px solid #e0e3eb', 
-          borderRadius: '4px', background: '#fff', display: 'flex', alignItems: 'center', 
+          width: '100%', height: '34px', border: isOpen ? '2px solid #2962ff' : '1px solid var(--tv-sub-border)', 
+          borderRadius: '4px', background: 'var(--tv-sub-bg)', display: 'flex', alignItems: 'center', 
           justifyContent: 'space-between', padding: isOpen ? '0 9px' : '0 10px', 
-          fontSize: '13px', color: '#131722', cursor: 'pointer', outline: 'none'
+          fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer', outline: 'none'
         }}
       >
         {getLabel()}
-        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="#131722" strokeWidth="1.2" style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}>
+        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.2" style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}>
           <path d="M1 1L5 5L9 1"></path>
         </svg>
       </button>
@@ -135,26 +135,26 @@ function ExtendDropdown({
           <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setIsOpen(false)} />
           <div style={{
             position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
-            backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px',
+            backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px',
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000, padding: '4px 0'
           }}>
             <div 
               style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', cursor: 'pointer' }}
               onClick={(e) => { e.stopPropagation(); onChangeLeft(!extendLeft); }}
-              onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
               onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
             >
               <CheckBox checked={extendLeft} onChange={onChangeLeft} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '10px' }}>Extend left line</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '10px' }}>Extend left line</span>
             </div>
             <div 
               style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', cursor: 'pointer' }}
               onClick={(e) => { e.stopPropagation(); onChangeRight(!extendRight); }}
-              onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
               onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
             >
               <CheckBox checked={extendRight} onChange={onChangeRight} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '10px' }}>Extend right line</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '10px' }}>Extend right line</span>
             </div>
           </div>
         </>
@@ -194,14 +194,14 @@ function StatsDropdown({
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          width: '100%', height: '34px', border: isOpen ? '2px solid #2962ff' : '1px solid #e0e3eb', 
-          borderRadius: '4px', background: '#fff', display: 'flex', alignItems: 'center', 
+          width: '100%', height: '34px', border: isOpen ? '2px solid #2962ff' : '1px solid var(--tv-sub-border)', 
+          borderRadius: '4px', background: 'var(--tv-sub-bg)', display: 'flex', alignItems: 'center', 
           justifyContent: 'space-between', padding: isOpen ? '0 9px' : '0 10px', 
-          fontSize: '13px', color: '#131722', cursor: 'pointer', outline: 'none'
+          fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer', outline: 'none'
         }}
       >
         {getLabel()}
-        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="#131722" strokeWidth="1.2" style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}>
+        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.2" style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}>
           <path d="M1 1L5 5L9 1"></path>
         </svg>
       </button>
@@ -211,7 +211,7 @@ function StatsDropdown({
           <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setIsOpen(false)} />
           <div style={{
             position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
-            backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px',
+            backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px',
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000, padding: '4px 0'
           }}>
             {options.map(opt => (
@@ -219,11 +219,11 @@ function StatsDropdown({
                 key={opt.key}
                 style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', cursor: 'pointer' }}
                 onClick={(e) => { e.stopPropagation(); onChange(opt.key, !statsOptions?.[opt.key]); }}
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
                 onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
               >
                 <CheckBox checked={!!statsOptions?.[opt.key]} onChange={(v) => onChange(opt.key, v)} />
-                <span style={{ fontSize: '13px', color: '#131722', marginLeft: '10px' }}>{opt.label}</span>
+                <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '10px' }}>{opt.label}</span>
               </div>
             ))}
           </div>
@@ -306,7 +306,7 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
     <div
       style={{
         position: 'fixed', left: position.x, top: position.y, width: '370px',
-        backgroundColor: '#ffffff', borderRadius: '8px',
+        backgroundColor: 'var(--tv-sub-bg)', borderRadius: '8px',
         boxShadow: '0 4px 20px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.07)',
         zIndex: 2000, display: 'flex', flexDirection: 'column',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif',
@@ -320,14 +320,14 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', cursor: 'grab' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '18px', fontWeight: 600, color: '#131722' }}>Arrow</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <span style={{ fontSize: '18px', fontWeight: 600, color: 'var(--tv-sub-text)' }}>Arrow</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
           </svg>
         </div>
         <button onClick={cancelEdit}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#131722', padding: '4px', borderRadius: '4px' }}
-          onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f0f3fa')}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--tv-sub-text)', padding: '4px', borderRadius: '4px' }}
+          onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')}
           onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -337,12 +337,12 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #e0e3eb', padding: '0 20px' }}>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--tv-sub-border)', padding: '0 20px' }}>
         {tabs.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             style={{
               padding: '8px 0', marginRight: '20px', fontSize: '14px', fontWeight: 500,
-              color: activeTab === tab ? '#131722' : '#787b86',
+              color: activeTab === tab ? 'var(--tv-sub-text)' : '#787b86',
               background: 'transparent', border: 'none',
               borderBottom: activeTab === tab ? '2px solid #131722' : '2px solid transparent',
               cursor: 'pointer',
@@ -357,10 +357,10 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {/* Line Row */}
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={{ width: '80px', fontSize: '13px', color: '#131722' }}>Line</div>
+              <div style={{ width: '80px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Line</div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 {/* Color + Thickness */}
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', border: '1px solid #e0e3eb', borderRadius: '4px', height: '34px', padding: '0 8px', gap: '8px', cursor: 'pointer' }} onClick={() => setShowColorPicker(!showColorPicker)}>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', height: '34px', padding: '0 8px', gap: '8px', cursor: 'pointer' }} onClick={() => setShowColorPicker(!showColorPicker)}>
                   <div style={{ width: '18px', height: '18px', backgroundColor: selectedShape?.stroke || '#2962ff', borderRadius: '2px' }} />
                   <div style={{ width: '30px', height: '1px', backgroundColor: selectedShape?.stroke || '#2962ff' }} />
                   {showColorPicker && (
@@ -375,13 +375,13 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
 
                 {/* Line Style */}
                 <div style={{ position: 'relative' }}>
-                  <button onClick={() => setShowStyleDrop(!showStyleDrop)} style={{ width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                  <button onClick={() => setShowStyleDrop(!showStyleDrop)} style={{ width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: 'var(--tv-sub-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="12" x2="20" y2="12" strokeDasharray={selectedShape?.lineStyle === 'Dashed' ? '4,4' : selectedShape?.lineStyle === 'Dotted' ? '1,2' : 'none'} /></svg>
                   </button>
                   {showStyleDrop && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', background: '#fff', border: '1px solid #e0e3eb', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 100 }}>
+                    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', background: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 100 }}>
                       {LINE_STYLES.map(opt => (
-                        <div key={opt} onClick={() => { updateProp('lineStyle', opt); setShowStyleDrop(false); }} style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', background: selectedShape?.lineStyle === opt ? '#f0f3fa' : '#fff' }}>{opt}</div>
+                        <div key={opt} onClick={() => { updateProp('lineStyle', opt); setShowStyleDrop(false); }} style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', background: selectedShape?.lineStyle === opt ? 'var(--tv-sub-hover)' : 'var(--tv-sub-bg)' }}>{opt}</div>
                       ))}
                     </div>
                   )}
@@ -389,16 +389,16 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
 
                 {/* Start Cap */}
                 <div style={{ position: 'relative' }}>
-                  <button onClick={() => setShowStartCapDrop(!showStartCapDrop)} style={{ width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                  <button onClick={() => setShowStartCapDrop(!showStartCapDrop)} style={{ width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: 'var(--tv-sub-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <line x1="10" y1="12" x2="20" y2="12" />
                       {selectedShape?.startCap === 'Circle' ? <circle cx="6" cy="12" r="3" /> : selectedShape?.startCap === 'Arrow' ? <path d="M10 7l-5 5 5 5" /> : null}
                     </svg>
                   </button>
                   {showStartCapDrop && (
-                     <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', background: '#fff', border: '1px solid #e0e3eb', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 100 }}>
+                     <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', background: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 100 }}>
                        {['None', 'Arrow', 'Circle'].map(opt => (
-                         <div key={opt} onClick={() => { updateProp('startCap', opt); setShowStartCapDrop(false); }} style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', background: selectedShape?.startCap === opt ? '#f0f3fa' : '#fff' }}>{opt}</div>
+                         <div key={opt} onClick={() => { updateProp('startCap', opt); setShowStartCapDrop(false); }} style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', background: selectedShape?.startCap === opt ? 'var(--tv-sub-hover)' : 'var(--tv-sub-bg)' }}>{opt}</div>
                        ))}
                      </div>
                   )}
@@ -406,16 +406,16 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
 
                 {/* End Cap */}
                 <div style={{ position: 'relative' }}>
-                  <button onClick={() => setShowEndCapDrop(!showEndCapDrop)} style={{ width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                  <button onClick={() => setShowEndCapDrop(!showEndCapDrop)} style={{ width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: 'var(--tv-sub-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <line x1="4" y1="12" x2="14" y2="12" />
                       {selectedShape?.endCap === 'Circle' ? <circle cx="18" cy="12" r="3" /> : (selectedShape?.endCap !== 'None') ? <path d="M14 7l5 5-5 5" /> : null}
                     </svg>
                   </button>
                   {showEndCapDrop && (
-                     <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', background: '#fff', border: '1px solid #e0e3eb', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 100 }}>
+                     <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', background: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 100 }}>
                        {['None', 'Arrow', 'Circle'].map(opt => (
-                         <div key={opt} onClick={() => { updateProp('endCap', opt); setShowEndCapDrop(false); }} style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', background: selectedShape?.endCap === opt ? '#f0f3fa' : '#fff' }}>{opt}</div>
+                         <div key={opt} onClick={() => { updateProp('endCap', opt); setShowEndCapDrop(false); }} style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', background: selectedShape?.endCap === opt ? 'var(--tv-sub-hover)' : 'var(--tv-sub-bg)' }}>{opt}</div>
                        ))}
                      </div>
                   )}
@@ -425,7 +425,7 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
 
             {/* Extend Dropdown */}
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={{ width: '80px', fontSize: '13px', color: '#131722' }}>Extend</div>
+              <div style={{ width: '80px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Extend</div>
               <ExtendDropdown 
                 extendLeft={!!selectedShape?.extendLeft}
                 extendRight={!!selectedShape?.extendRight}
@@ -438,11 +438,11 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
               <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => updateProp('middlePoint', !selectedShape?.middlePoint)}>
                 <CheckBox checked={!!selectedShape?.middlePoint} onChange={v => updateProp('middlePoint', v)} />
-                <span style={{ fontSize: '13px', color: '#131722', marginLeft: '10px' }}>Middle point</span>
+                <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '10px' }}>Middle point</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => updateProp('priceLabels', !selectedShape?.priceLabels)}>
                 <CheckBox checked={!!selectedShape?.priceLabels} onChange={v => updateProp('priceLabels', v)} />
-                <span style={{ fontSize: '13px', color: '#131722', marginLeft: '10px' }}>Price labels</span>
+                <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '10px' }}>Price labels</span>
               </div>
             </div>
 
@@ -452,7 +452,7 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <div style={{ width: '80px', fontSize: '13px', color: '#131722' }}>Stats</div>
+                  <div style={{ width: '80px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Stats</div>
                   <StatsDropdown 
                     statsOptions={selectedShape?.statsOptions || {}}
                     onChange={(key, v) => {
@@ -462,12 +462,12 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
                   />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <div style={{ width: '80px', fontSize: '13px', color: '#131722' }}>Stats position</div>
+                  <div style={{ width: '80px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Stats position</div>
                   <Select options={['Right', 'Left', 'Top', 'Bottom']} value={selectedShape?.statsPosition || 'Right'} onChange={v => updateProp('statsPosition', v)} style={{ flex: 1 }} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginTop: '4px' }} onClick={() => updateProp('alwaysShowStats', !selectedShape?.alwaysShowStats)}>
                   <CheckBox checked={!!selectedShape?.alwaysShowStats} onChange={v => updateProp('alwaysShowStats', v)} />
-                  <span style={{ fontSize: '13px', color: '#131722', marginLeft: '10px' }}>Always show stats</span>
+                  <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '10px' }}>Always show stats</span>
                 </div>
               </div>
             </div>
@@ -481,7 +481,7 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
               <div style={{ position: 'relative' }}>
                 <div 
                   onClick={() => setShowTextColorPicker(!showTextColorPicker)}
-                  style={{ width: '34px', height: '34px', borderRadius: '4px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #e0e3eb', position: 'relative' }}
+                  style={{ width: '34px', height: '34px', borderRadius: '4px', overflow: 'hidden', cursor: 'pointer', border: '1px solid var(--tv-sub-border)', position: 'relative' }}
                 >
                   <div style={{ width: '100%', height: '100%', backgroundColor: selectedShape?.textColor || '#131722' }} />
                 </div>
@@ -498,16 +498,16 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
               <div style={{ position: 'relative' }}>
                 <button
                   onClick={() => setShowFontDrop(!showFontDrop)}
-                  style={{ height: '34px', minWidth: '72px', border: '1px solid #e0e3eb', borderRadius: '4px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 10px', gap: '6px', fontSize: '13px', color: '#131722', cursor: 'pointer' }}
+                  style={{ height: '34px', minWidth: '72px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: 'var(--tv-sub-bg)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 10px', gap: '6px', fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}
                 >
                   {selectedShape?.fontSize || '14'}
-                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="#131722" strokeWidth="1.2"><path d="M1 1L5 5L9 1"></path></svg>
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.2"><path d="M1 1L5 5L9 1"></path></svg>
                 </button>
                 {showFontDrop && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 200, padding: '4px 0', maxHeight: '200px', overflowY: 'auto' }}>
+                  <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 200, padding: '4px 0', maxHeight: '200px', overflowY: 'auto' }}>
                     {FONT_SIZES.map(s => (
                       <button key={s} onClick={() => { updateProp('fontSize', parseInt(s)); setShowFontDrop(false); }}
-                        style={{ width: '100%', padding: '6px 14px', textAlign: 'left', background: (selectedShape?.fontSize === parseInt(s)) ? '#f0f3fa' : 'transparent', border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer' }}
+                        style={{ width: '100%', padding: '6px 14px', textAlign: 'left', background: (selectedShape?.fontSize === parseInt(s)) ? 'var(--tv-sub-hover)' : 'transparent', border: 'none', fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}
                       >{s}</button>
                     ))}
                   </div>
@@ -515,11 +515,11 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
               </div>
 
               <button onClick={() => updateProp('bold', !selectedShape?.bold)}
-                style={{ width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', background: selectedShape?.bold ? '#f0f3fa' : '#ffffff', fontWeight: 700, fontSize: '14px', color: '#131722', cursor: 'pointer' }}
+                style={{ width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: selectedShape?.bold ? 'var(--tv-sub-hover)' : 'var(--tv-sub-bg)', fontWeight: 700, fontSize: '14px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}
               >B</button>
 
               <button onClick={() => updateProp('italic', !selectedShape?.italic)}
-                style={{ width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', background: selectedShape?.italic ? '#f0f3fa' : '#ffffff', fontStyle: 'italic', fontSize: '14px', color: '#131722', cursor: 'pointer' }}
+                style={{ width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: selectedShape?.italic ? 'var(--tv-sub-hover)' : 'var(--tv-sub-bg)', fontStyle: 'italic', fontSize: '14px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}
               >I</button>
             </div>
 
@@ -528,9 +528,9 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
               onChange={e => updateProp('text', e.target.value)}
               placeholder="Text"
               style={{
-                width: '100%', height: '80px', border: '1px solid #e0e3eb', borderRadius: '6px',
+                width: '100%', height: '80px', border: '1px solid var(--tv-sub-border)', borderRadius: '6px',
                 padding: '8px 12px', fontSize: '13px', fontFamily: 'inherit', resize: 'none',
-                outline: 'none', color: '#131722', boxSizing: 'border-box',
+                outline: 'none', color: 'var(--tv-sub-text)', boxSizing: 'border-box',
               }}
             />
           </div>
@@ -541,7 +541,7 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {selectedShape?.points?.map((p: any, idx: number) => (
               <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '110px', fontSize: '13px', color: '#131722' }}>
+                <div style={{ width: '110px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>
                   #{idx + 1} (price, bar)
                 </div>
                 <LocalNumberInput 
@@ -572,7 +572,7 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CheckBox checked={!!visibility.ticks?.enabled} onChange={(v) => updateVisibility('ticks', { enabled: v })} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Ticks</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Ticks</span>
             </div>
             
             {[
@@ -586,7 +586,7 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
               <div key={row.id} style={{ display: 'flex', alignItems: 'center', opacity: !!visibility[row.id]?.enabled ? 1 : 0.4, pointerEvents: !!visibility[row.id]?.enabled ? 'auto' : 'none' }}>
                 <div style={{ width: '100px', display: 'flex', alignItems: 'center' }}>
                   <CheckBox checked={!!visibility[row.id]?.enabled} onChange={(v) => updateVisibility(row.id, { enabled: v })} />
-                  <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>{row.label}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>{row.label}</span>
                 </div>
                 
                 <div style={{ display: 'flex', gap: '12px', flex: 1, alignItems: 'center' }}>
@@ -611,21 +611,21 @@ export function ArrowSettingsModal({ onClose }: ArrowSettingsModalProps) {
             
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CheckBox checked={!!visibility.ranges?.enabled} onChange={(v) => updateVisibility('ranges', { enabled: v })} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Ranges</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Ranges</span>
             </div>
           </div>
         )}
       </div>
 
       {/* Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid #e0e3eb' }}>
-        <div style={{ height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', display: 'flex', alignItems: 'center', padding: '0 12px', gap: '6px', fontSize: '13px', color: '#131722', cursor: 'pointer' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid var(--tv-sub-border)' }}>
+        <div style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', padding: '0 12px', gap: '6px', fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}>
           Template
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={cancelEdit} style={{ padding: '0 16px', height: '34px', background: '#fff', border: '1px solid #131722', borderRadius: '4px', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
-          <button onClick={onClose} style={{ padding: '0 24px', height: '34px', background: '#131722', border: 'none', borderRadius: '4px', color: '#fff', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Ok</button>
+          <button onClick={cancelEdit} style={{ padding: '0 16px', height: '34px', background: 'var(--tv-sub-bg)', border: '1px solid #131722', borderRadius: '4px', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '0 24px', height: '34px', background: 'var(--tv-sub-text)', border: 'none', borderRadius: '4px', color: 'var(--tv-sub-bg)', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Ok</button>
         </div>
       </div>
     </div>

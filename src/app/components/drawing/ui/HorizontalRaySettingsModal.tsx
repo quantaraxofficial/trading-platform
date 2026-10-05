@@ -16,14 +16,14 @@ function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boole
       onClick={() => onChange(!checked)}
       style={{
         width: '18px', height: '18px', borderRadius: '3px',
-        border: checked ? 'none' : '1px solid #b2b5be',
-        backgroundColor: checked ? '#131722' : '#ffffff',
+        border: checked ? 'none' : '1px solid var(--tv-sub-muted)',
+        backgroundColor: checked ? 'var(--tv-sub-text)' : 'var(--tv-sub-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         cursor: 'pointer', flexShrink: 0,
       }}
     >
       {checked && (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-bg)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12" />
         </svg>
       )}
@@ -38,7 +38,7 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') e.currentTarget.blur(); };
   return (
     <input type="text" value={localVal} onChange={(e) => setLocalVal(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown}
-      style={{ width: '60px', height: '32px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: '#131722', outline: 'none', ...style }}
+      style={{ width: '60px', height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', outline: 'none', ...style }}
     />
   );
 }
@@ -128,7 +128,7 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
   const tabs = ['Style', 'Text', 'Coordinates', 'Visibility'];
 
   const tabButtonStyle = (tab: string): React.CSSProperties => ({
-    padding: '8px 0', fontSize: '14px', fontWeight: activeTab === tab ? 600 : 400, color: '#131722',
+    padding: '8px 0', fontSize: '14px', fontWeight: activeTab === tab ? 600 : 400, color: 'var(--tv-sub-text)',
     background: 'transparent', border: 'none', borderBottom: activeTab === tab ? '2px solid #131722' : '2px solid transparent', cursor: 'pointer',
   });
 
@@ -136,7 +136,7 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
     <div
       style={{
         position: 'fixed', left: position.x, top: position.y, width: '380px',
-        backgroundColor: '#ffffff', borderRadius: '8px',
+        backgroundColor: 'var(--tv-sub-bg)', borderRadius: '8px',
         boxShadow: '0 4px 12px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05)',
         zIndex: 2000, display: 'flex', flexDirection: 'column',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif',
@@ -150,8 +150,8 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', cursor: 'grab' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '18px', fontWeight: 600, color: '#131722' }}>Horizontal ray</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <span style={{ fontSize: '18px', fontWeight: 600, color: 'var(--tv-sub-text)' }}>Horizontal ray</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
           </svg>
         </div>
@@ -161,7 +161,7 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', padding: '0 20px', borderBottom: '1px solid #e0e3eb', gap: '20px' }}>
+      <div style={{ display: 'flex', padding: '0 20px', borderBottom: '1px solid var(--tv-sub-border)', gap: '20px' }}>
         {tabs.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={tabButtonStyle(tab)}>{tab}</button>
         ))}
@@ -172,12 +172,12 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
         {activeTab === 'Style' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={{ width: '100px', fontSize: '14px', color: '#131722' }}>Line</div>
+              <div style={{ width: '100px', fontSize: '14px', color: 'var(--tv-sub-text)' }}>Line</div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <div ref={lineColorRef} style={{ position: 'relative' }}>
                   <div
                     onClick={() => setShowLineColorPicker(v => !v)}
-                    style={{ position: 'relative', width: '32px', height: '32px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '4px', cursor: 'pointer' }}
+                    style={{ position: 'relative', width: '32px', height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '4px', cursor: 'pointer' }}
                   >
                     <div style={{ width: '100%', height: '100%', backgroundColor: drawing.stroke || '#2962ff', borderRadius: '2px' }} />
                   </div>
@@ -190,10 +190,10 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
                     />
                   )}
                 </div>
-                <select value={drawing.strokeWidth || 2} onChange={e => updateProp('strokeWidth', parseInt(e.target.value))} style={{ height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
+                <select value={drawing.strokeWidth || 2} onChange={e => updateProp('strokeWidth', parseInt(e.target.value))} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
                   {[1, 2, 3, 4].map(w => <option key={w} value={w}>{w}px</option>)}
                 </select>
-                <select value={drawing.lineStyle || 'solid'} onChange={e => updateProp('lineStyle', e.target.value)} style={{ height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
+                <select value={drawing.lineStyle || 'solid'} onChange={e => updateProp('lineStyle', e.target.value)} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
                   <option value="solid">Line</option>
                   <option value="dashed">Dashed line</option>
                   <option value="dotted">Dotted line</option>
@@ -203,7 +203,7 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
 
             <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => updateProp('priceLabel', drawing.priceLabel === false)}>
               <CheckBox checked={drawing.priceLabel !== false} onChange={v => updateProp('priceLabel', v)} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Price label</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Price label</span>
             </div>
           </div>
         )}
@@ -214,7 +214,7 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
               <div ref={textColorRef} style={{ position: 'relative' }}>
                 <div
                   onClick={() => setShowTextColorPicker(v => !v)}
-                  style={{ position: 'relative', width: '32px', height: '32px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '4px', cursor: 'pointer' }}
+                  style={{ position: 'relative', width: '32px', height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '4px', cursor: 'pointer' }}
                 >
                   <div style={{ width: '100%', height: '100%', backgroundColor: drawing.textColor || drawing.stroke || '#2962ff', borderRadius: '2px' }} />
                 </div>
@@ -227,16 +227,16 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
                   />
                 )}
               </div>
-              <select value={drawing.fontSize || 14} onChange={e => updateProp('fontSize', parseInt(e.target.value))} style={{ height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
+              <select value={drawing.fontSize || 14} onChange={e => updateProp('fontSize', parseInt(e.target.value))} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
                 {[10, 12, 14, 16, 18, 20, 24, 28, 32].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
               <button
                 onClick={() => updateProp('bold', !drawing.bold)}
-                style={{ width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', background: drawing.bold ? '#131722' : '#fff', color: drawing.bold ? '#fff' : '#131722', fontWeight: 700, cursor: 'pointer' }}
+                style={{ width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: drawing.bold ? 'var(--tv-sub-text)' : 'var(--tv-sub-bg)', color: drawing.bold ? '#fff' : 'var(--tv-sub-text)', fontWeight: 700, cursor: 'pointer' }}
               >B</button>
               <button
                 onClick={() => updateProp('italic', !drawing.italic)}
-                style={{ width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', background: drawing.italic ? '#131722' : '#fff', color: drawing.italic ? '#fff' : '#131722', fontStyle: 'italic', cursor: 'pointer' }}
+                style={{ width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: drawing.italic ? 'var(--tv-sub-text)' : 'var(--tv-sub-bg)', color: drawing.italic ? '#fff' : 'var(--tv-sub-text)', fontStyle: 'italic', cursor: 'pointer' }}
               >I</button>
             </div>
 
@@ -244,17 +244,17 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
               value={drawing.text || ''}
               onChange={e => updateProp('text', e.target.value)}
               placeholder="Add text"
-              style={{ width: '100%', height: '80px', border: '1px solid #2962ff', borderRadius: '4px', padding: '10px 12px', fontSize: '14px', fontFamily: 'inherit', resize: 'none', outline: 'none', color: '#131722', boxSizing: 'border-box' }}
+              style={{ width: '100%', height: '80px', border: '1px solid #2962ff', borderRadius: '4px', padding: '10px 12px', fontSize: '14px', fontFamily: 'inherit', resize: 'none', outline: 'none', color: 'var(--tv-sub-text)', boxSizing: 'border-box' }}
             />
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '13px', color: '#131722' }}>Text alignment</span>
-              <select value={drawing.textVAlign || 'Bottom'} onChange={e => updateProp('textVAlign', e.target.value)} style={{ height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Text alignment</span>
+              <select value={drawing.textVAlign || 'Bottom'} onChange={e => updateProp('textVAlign', e.target.value)} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
                 <option value="Top">Top</option>
                 <option value="Middle">Middle</option>
                 <option value="Bottom">Bottom</option>
               </select>
-              <select value={drawing.textHAlign || 'Center'} onChange={e => updateProp('textHAlign', e.target.value)} style={{ height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
+              <select value={drawing.textHAlign || 'Center'} onChange={e => updateProp('textHAlign', e.target.value)} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
                 <option value="Left">Left</option>
                 <option value="Center">Center</option>
                 <option value="Right">Right</option>
@@ -291,7 +291,7 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CheckBox checked={!!visibility.ticks?.enabled} onChange={(v) => updateVisibility('ticks', { enabled: v })} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Ticks</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Ticks</span>
             </div>
 
             {[
@@ -305,7 +305,7 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
               <div key={row.id} style={{ display: 'flex', alignItems: 'center', opacity: !!visibility[row.id]?.enabled ? 1 : 0.4, pointerEvents: !!visibility[row.id]?.enabled ? 'auto' : 'none' }}>
                 <div style={{ width: '100px', display: 'flex', alignItems: 'center' }}>
                   <CheckBox checked={!!visibility[row.id]?.enabled} onChange={(v) => updateVisibility(row.id, { enabled: v })} />
-                  <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>{row.label}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>{row.label}</span>
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px', flex: 1, alignItems: 'center' }}>
@@ -330,20 +330,20 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
 
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CheckBox checked={!!visibility.ranges?.enabled} onChange={(v) => updateVisibility('ranges', { enabled: v })} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Ranges</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Ranges</span>
             </div>
           </div>
         )}
       </div>
 
       {/* Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid #e0e3eb' }}>
-        <div style={{ height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', display: 'flex', alignItems: 'center', padding: '0 12px', gap: '6px', fontSize: '13px', color: '#131722', cursor: 'pointer' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid var(--tv-sub-border)' }}>
+        <div style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', padding: '0 12px', gap: '6px', fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}>
           Template <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="6 9 12 15 18 9" /></svg>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={cancelEdit} style={{ padding: '0 16px', height: '34px', background: '#fff', border: '1px solid #131722', borderRadius: '4px', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
-          <button onClick={onClose} style={{ padding: '0 24px', height: '34px', background: '#131722', border: 'none', borderRadius: '4px', color: '#fff', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Ok</button>
+          <button onClick={cancelEdit} style={{ padding: '0 16px', height: '34px', background: 'var(--tv-sub-bg)', border: '1px solid #131722', borderRadius: '4px', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '0 24px', height: '34px', background: 'var(--tv-sub-text)', border: 'none', borderRadius: '4px', color: 'var(--tv-sub-bg)', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Ok</button>
         </div>
       </div>
     </div>

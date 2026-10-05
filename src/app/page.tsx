@@ -228,8 +228,15 @@ function AppLayout() {
     return () => window.removeEventListener("tv:set-symbol", onSet);
   }, []);
 
+  // The theme is remembered (the layout's inline script applies it before the first paint)
+  const themeLoaded = useRef(false);
+  useEffect(() => {
+    try { const t = localStorage.getItem("tv:theme"); if (t === "dark" || t === "light") setTheme(t); } catch { /* ignore */ }
+    themeLoaded.current = true;
+  }, []);
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
+    if (themeLoaded.current) { try { localStorage.setItem("tv:theme", theme); } catch { /* ignore */ } }
   }, [theme]);
 
   const toggleTheme = () => {

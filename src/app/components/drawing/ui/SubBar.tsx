@@ -30,6 +30,7 @@ import { PositionSettingsModal } from './PositionSettingsModal';
 import { ColorPickerPopup, parseColorInput } from './ColorPickerPopup';
 import { TvWidthMenu, TvLineStyleMenu } from './TvLineMenus';
 import { POSITION_TARGET_FILL, POSITION_STOP_FILL } from '../tools/PositionTool';
+import { PaletteInput } from "./PaletteInput";
 
 export function SubBar() {
   const { user } = useAuth();
@@ -66,11 +67,11 @@ export function SubBar() {
 
   const MoreMenu = () => (
     <div style={{ position: 'relative' }}>
-      <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+      <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
         <SubMoreIcon />
       </button>
       {showDropdown && (
-        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '180px' }}>
+        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '180px' }}>
           
           {/* Visual Order with Submenu */}
           <div 
@@ -78,36 +79,36 @@ export function SubBar() {
             onMouseEnter={() => setShowVisualOrder(true)}
             onMouseLeave={() => setShowVisualOrder(false)}
           >
-            <button style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#131722' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+            <button style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--tv-sub-text)' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
               Visual order
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
             </button>
             {showVisualOrder && (
-              <div style={{ position: 'absolute', top: '0', right: '100%', marginRight: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 101, padding: '4px 0', minWidth: '160px' }}>
-                <button onClick={() => handleVisualOrder('front')} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', color: '#131722' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>Bring to front</button>
-                <button onClick={() => handleVisualOrder('back')} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', color: '#131722' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>Send to back</button>
-                <button onClick={() => handleVisualOrder('forward')} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', color: '#131722' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>Bring forward</button>
-                <button onClick={() => handleVisualOrder('backward')} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', color: '#131722' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>Send backward</button>
+              <div style={{ position: 'absolute', top: '0', right: '100%', marginRight: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 101, padding: '4px 0', minWidth: '160px' }}>
+                <button onClick={() => handleVisualOrder('front')} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', color: 'var(--tv-sub-text)' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>Bring to front</button>
+                <button onClick={() => handleVisualOrder('back')} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', color: 'var(--tv-sub-text)' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>Send to back</button>
+                <button onClick={() => handleVisualOrder('forward')} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', color: 'var(--tv-sub-text)' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>Bring forward</button>
+                <button onClick={() => handleVisualOrder('backward')} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', color: 'var(--tv-sub-text)' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>Send backward</button>
               </div>
             )}
           </div>
 
-          <button onClick={() => { setIsSettingsOpen(true); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', color: '#131722' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>Visibility on intervals</button>
+          <button onClick={() => { setIsSettingsOpen(true); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', color: 'var(--tv-sub-text)' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>Visibility on intervals</button>
           
-          <div style={{ height: '1px', backgroundColor: '#f0f3fa', margin: '4px 0' }} />
+          <div style={{ height: '1px', backgroundColor: 'var(--tv-sub-hover)', margin: '4px 0' }} />
 
-          <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', color: '#131722' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', color: 'var(--tv-sub-text)' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
             Clone
-            <span style={{ color: '#b2b5be', fontSize: '11px' }}>Ctrl + Drag</span>
+            <span style={{ color: 'var(--tv-sub-muted)', fontSize: '11px' }}>Ctrl + Drag</span>
           </button>
-          <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', color: '#131722' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', color: 'var(--tv-sub-text)' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
             Copy
-            <span style={{ color: '#b2b5be', fontSize: '11px' }}>Ctrl + C</span>
+            <span style={{ color: 'var(--tv-sub-muted)', fontSize: '11px' }}>Ctrl + C</span>
           </button>
           
-          <div style={{ height: '1px', backgroundColor: '#f0f3fa', margin: '4px 0' }} />
+          <div style={{ height: '1px', backgroundColor: 'var(--tv-sub-hover)', margin: '4px 0' }} />
           
-          <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', color: '#131722' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+          <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer', color: 'var(--tv-sub-text)' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
         </div>
       )}
     </div>
@@ -263,7 +264,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         >
           <div 
             style={{ 
-              backgroundColor: '#ffffff', 
+              backgroundColor: 'var(--tv-sub-bg)', 
               borderRadius: '8px', 
               width: '440px', 
               boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
@@ -274,10 +275,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           >
             {/* Header */}
             <div style={{ padding: '20px 24px 0 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 600, color: '#131722', fontFamily: 'Inter, sans-serif' }}>Save drawing template</h3>
+              <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 600, color: 'var(--tv-sub-text)', fontFamily: 'Inter, sans-serif' }}>Save drawing template</h3>
               <button 
                 onClick={() => setShowSaveTemplateModal(false)}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#131722', padding: '4px' }}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--tv-sub-text)', padding: '4px' }}
               >
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
@@ -300,8 +301,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
                     borderRadius: '6px',
                     fontSize: '14px',
                     outline: 'none',
-                    color: '#131722',
-                    backgroundColor: '#ffffff'
+                    color: 'var(--tv-sub-text)',
+                    backgroundColor: 'var(--tv-sub-bg)'
                   }}
                 />
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#787b86' }}>
@@ -320,14 +321,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
                 style={{ 
                   padding: '10px 24px', 
                   borderRadius: '6px', 
-                  border: '1px solid #e0e3eb', 
+                  border: '1px solid var(--tv-sub-border)', 
                   background: 'transparent', 
-                  color: '#131722',
+                  color: 'var(--tv-sub-text)',
                   fontSize: '14px',
                   fontWeight: 600,
                   cursor: 'pointer' 
                 }}
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
                 onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
               >
                 Cancel
@@ -339,7 +340,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
                   padding: '10px 24px', 
                   borderRadius: '6px', 
                   border: 'none', 
-                  background: templateName ? '#2962ff' : '#f0f3fa', 
+                  background: templateName ? '#2962ff' : 'var(--tv-sub-hover)', 
                   color: templateName ? '#ffffff' : '#b2b5be',
                   fontSize: '14px',
                   fontWeight: 600,
@@ -618,8 +619,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
       <button 
         className="tv-icon-btn" 
         onClick={handleTemplateClick}
-        style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: showTemplateDropdown ? '#f0f3fa' : 'transparent' }} 
-        onMouseEnter={e => !showTemplateDropdown && (e.currentTarget.style.backgroundColor = '#f0f3fa')} 
+        style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: showTemplateDropdown ? 'var(--tv-sub-hover)' : 'transparent' }} 
+        onMouseEnter={e => !showTemplateDropdown && (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')} 
         onMouseLeave={e => !showTemplateDropdown && (e.currentTarget.style.backgroundColor = 'transparent')}
       >
         <SubTemplateIcon />
@@ -628,23 +629,23 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
       {showTemplateDropdown && (
         <div style={{ 
           position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-          backgroundColor: '#ffffff', borderRadius: '6px', 
+          backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px', 
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '220px',
-          border: '1px solid #e0e3eb'
+          border: '1px solid var(--tv-sub-border)'
         }}>
           <div style={{ padding: '8px 16px', fontSize: '12px', fontWeight: 600, color: '#787b86', borderBottom: '1px solid #f0f3fa' }}>Template</div>
           <button 
             onClick={() => { setShowSaveTemplateModal(true); setShowTemplateDropdown(false); }}
-            style={{ width: '100%', padding: '10px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '14px', color: '#131722', cursor: 'pointer' }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+            style={{ width: '100%', padding: '10px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '14px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             Save Drawing Template As...
           </button>
           <button 
             onClick={applyDefaultTemplate}
-            style={{ width: '100%', padding: '10px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '14px', color: '#131722', cursor: 'pointer' }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+            style={{ width: '100%', padding: '10px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '14px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             Apply Default Style
@@ -652,20 +653,20 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           
           {templates.length > 0 && (
             <>
-              <div style={{ height: '1px', backgroundColor: '#f0f3fa', margin: '4px 0' }} />
+              <div style={{ height: '1px', backgroundColor: 'var(--tv-sub-hover)', margin: '4px 0' }} />
               {templates.map(tmp => (
                 <div key={tmp.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '8px' }}>
                   <button 
                     onClick={() => applyTemplate(tmp)}
-                    style={{ flex: 1, padding: '10px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '14px', color: '#131722', cursor: 'pointer' }}
-                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+                    style={{ flex: 1, padding: '10px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '14px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
                     onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
                     {tmp.name}
                   </button>
                   <button 
                     onClick={() => deleteTemplate(tmp.id)}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#b2b5be', padding: '4px' }}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--tv-sub-muted)', padding: '4px' }}
                     title="Delete template"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -1003,10 +1004,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         data-subbar="true"
         style={{
           position: 'absolute', left: position.x, top: position.y,
-          backgroundColor: '#ffffff', borderRadius: '6px',
+          backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex', alignItems: 'center', padding: '2px 4px', gap: '4px',
-          zIndex: 50, pointerEvents: 'auto', userSelect: 'none',
+          zIndex: 80, pointerEvents: 'auto', userSelect: 'none',
         }}
         onClick={handleSubBarClick}
       >
@@ -1019,7 +1020,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Border Color (Pencil) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Border Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Border Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubPencilIcon />
           <SubColorBar color={currentColor || '#9b59b6'} />
         </button>
@@ -1035,7 +1036,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Background Color (Paint Bucket) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowFillColorPicker(v => !v)} className="tv-icon-btn" title="Background Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowFillColorPicker(v => !v)} className="tv-icon-btn" title="Background Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubBucketIcon />
           <SubColorBar color={currentFillColor || '#9b59b633'} />
         </button>
@@ -1051,7 +1052,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Text Color (T) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowTextColorPicker(v => !v)} className="tv-icon-btn" title="Text Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowTextColorPicker(v => !v)} className="tv-icon-btn" title="Text Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTextIcon />
           <SubColorBar color={textColor || '#9b59b6'} />
         </button>
@@ -1070,8 +1071,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowRectangleWidthDropdown(!showRectangleWidthDropdown)}
-            style={{ width: 'auto', padding: '0 6px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: 'auto', padding: '0 6px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubWidthLabel width={currentWidth} />
@@ -1084,8 +1085,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowRectangleStyleDropdown(!showRectangleStyleDropdown)}
-            style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubLineStyleIcon style={selectedShape?.lineStyle} />
@@ -1094,22 +1095,22 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings */}
-        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Alert (Alarm Clock) */}
-        <button className="tv-icon-btn" title="Add alert" onClick={handleCreateAlert} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Add alert" onClick={handleCreateAlert} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubAlertIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
         {/* More */}
@@ -1131,10 +1132,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         data-subbar="true"
         style={{
           position: 'absolute', left: position.x, top: position.y,
-          backgroundColor: '#ffffff', borderRadius: '6px',
+          backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex', alignItems: 'center', padding: '2px 4px', gap: '4px',
-          zIndex: 50, pointerEvents: 'auto', userSelect: 'none',
+          zIndex: 80, pointerEvents: 'auto', userSelect: 'none',
         }}
         onClick={handleSubBarClick}
       >
@@ -1147,7 +1148,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Line Color (Pencil) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Line Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Line Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubPencilIcon />
           <SubColorBar color={themeColor} />
         </button>
@@ -1166,7 +1167,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowPathWidthDropdown(!showPathWidthDropdown)}
-            style={{ width: '54px', height: '34px', color: themeColor, borderRadius: '4px', border: 'none', background: '#f0f3fa', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+            style={{ width: '54px', height: '34px', color: themeColor, borderRadius: '4px', border: 'none', background: 'var(--tv-sub-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
           >
             <div style={{ width: '12px', height: '1px', backgroundColor: themeColor }} />
             <SubWidthLabel width={currentWidth} />
@@ -1179,8 +1180,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowPathStyleDropdown(!showPathStyleDropdown)}
-            style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubLineStyleIcon style={selectedShape?.lineStyle} />
@@ -1189,17 +1190,17 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings */}
-        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
         {/* More */}
@@ -1220,10 +1221,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         data-subbar="true"
         style={{
           position: 'absolute', left: position.x, top: position.y,
-          backgroundColor: '#ffffff', borderRadius: '6px',
+          backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex', alignItems: 'center', padding: '2px 4px', gap: '4px',
-          zIndex: 50, pointerEvents: 'auto', userSelect: 'none',
+          zIndex: 80, pointerEvents: 'auto', userSelect: 'none',
         }}
         onClick={handleSubBarClick}
       >
@@ -1236,7 +1237,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Border Color (Pencil) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Border Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Border Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubPencilIcon />
           <SubColorBar color={themeColor} />
         </button>
@@ -1252,7 +1253,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Background Color (Paint Bucket) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowFillColorPicker(v => !v)} className="tv-icon-btn" title="Background Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowFillColorPicker(v => !v)} className="tv-icon-btn" title="Background Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubBucketIcon />
           <SubColorBar color={currentFillColor || themeColor + '33'} />
         </button>
@@ -1271,8 +1272,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowRotatedRectangleWidthDropdown(!showRotatedRectangleWidthDropdown)}
-            style={{ width: 'auto', padding: '0 6px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: 'auto', padding: '0 6px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubWidthLabel width={currentWidth} />
@@ -1281,17 +1282,17 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings */}
-        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
         {/* More */}
@@ -1311,10 +1312,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         data-subbar="true"
         style={{
           position: 'absolute', left: position.x, top: position.y,
-          backgroundColor: '#ffffff', borderRadius: '6px',
+          backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex', alignItems: 'center', padding: '2px 4px', gap: '4px',
-          zIndex: 50, pointerEvents: 'auto', userSelect: 'none',
+          zIndex: 80, pointerEvents: 'auto', userSelect: 'none',
         }}
         onClick={handleSubBarClick}
       >
@@ -1330,8 +1331,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowArrowColorPicker(!showArrowColorPicker)}
-            style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubPencilIcon />
@@ -1355,8 +1356,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowArrowWidthDropdown(!showArrowWidthDropdown)}
-            style={{ width: 'auto', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', padding: '0 8px', display: 'flex', alignItems: 'center', gap: '4px' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: 'auto', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', padding: '0 8px', display: 'flex', alignItems: 'center', gap: '4px' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubWidthLabel width={currentWidth} />
@@ -1369,8 +1370,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowArrowStyleDropdown(!showArrowStyleDropdown)}
-            style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubLineStyleIcon style={selectedShape?.lineStyle} />
@@ -1379,17 +1380,17 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings */}
-        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
         {/* More */}
@@ -1410,10 +1411,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         data-subbar="true"
         style={{
           position: 'absolute', left: position.x, top: position.y,
-          backgroundColor: '#ffffff', borderRadius: '6px',
+          backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex', alignItems: 'center', padding: '2px 4px', gap: '4px',
-          zIndex: 50, pointerEvents: 'auto', userSelect: 'none',
+          zIndex: 80, pointerEvents: 'auto', userSelect: 'none',
         }}
         onClick={handleSubBarClick}
       >
@@ -1429,8 +1430,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowArrowMarkerColorPicker(!showArrowMarkerColorPicker)}
-            style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubPencilIcon />
@@ -1454,8 +1455,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowArrowMarkerWidthDropdown(!showArrowMarkerWidthDropdown)}
-            style={{ width: 'auto', padding: '0 6px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: 'auto', padding: '0 6px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubWidthLabel width={currentWidth} />
@@ -1468,8 +1469,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowArrowMarkerTextColorPicker(!showArrowMarkerTextColorPicker)}
-            style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubTextIcon />
@@ -1489,17 +1490,17 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings */}
-        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
         {/* More */}
@@ -1522,10 +1523,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         data-subbar="true"
         style={{
           position: 'absolute', left: position.x, top: position.y,
-          backgroundColor: '#ffffff', borderRadius: '6px',
+          backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex', alignItems: 'center', padding: '2px 4px', gap: '4px',
-          zIndex: 50, pointerEvents: 'auto', userSelect: 'none',
+          zIndex: 80, pointerEvents: 'auto', userSelect: 'none',
         }}
         onClick={handleSubBarClick}
       >
@@ -1541,8 +1542,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowArrowMarkupColorPicker(!showArrowMarkupColorPicker)}
-            style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubPencilIcon />
@@ -1566,8 +1567,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowArrowMarkupTextColorPicker(!showArrowMarkupTextColorPicker)}
-            style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubTextIcon />
@@ -1587,17 +1588,17 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings */}
-        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
         {/* More */}
@@ -1620,14 +1621,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           position: 'absolute',
           left: position.x,
           top: position.y,
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--tv-sub-bg)',
           borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex',
           alignItems: 'center',
           padding: '2px 4px',
           gap: '4px',
-          zIndex: 50,
+          zIndex: 80,
           pointerEvents: 'auto',
           userSelect: 'none',
         }}
@@ -1645,8 +1646,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowHighlighterColorPicker(!showHighlighterColorPicker)}
-            style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} 
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} 
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubPencilIcon />
@@ -1676,12 +1677,12 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
               height: '34px', 
               padding: '0 8px', 
               gap: '6px', 
-              color: '#131722', 
+              color: 'var(--tv-sub-text)', 
               borderRadius: '4px', 
               border: 'none', 
-              background: showHighlighterWidthDropdown ? '#f0f3fa' : 'transparent' 
+              background: showHighlighterWidthDropdown ? 'var(--tv-sub-hover)' : 'transparent' 
             }} 
-            onMouseEnter={(e) => !showHighlighterWidthDropdown && (e.currentTarget.style.backgroundColor = '#f0f3fa')} 
+            onMouseEnter={(e) => !showHighlighterWidthDropdown && (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')} 
             onMouseLeave={(e) => !showHighlighterWidthDropdown && (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1697,8 +1698,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
               top: '100%', 
               left: '0', 
               marginTop: '4px', 
-              backgroundColor: '#ffffff', 
-              border: '1px solid #e0e3eb', 
+              backgroundColor: 'var(--tv-sub-bg)', 
+              border: '1px solid var(--tv-sub-border)', 
               borderRadius: '6px', 
               boxShadow: '0 4px 12px rgba(0,0,0,0.15)', 
               zIndex: 100, 
@@ -1718,13 +1719,13 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
                     padding: '8px 12px',
                     cursor: 'pointer',
                     borderRadius: '4px',
-                    backgroundColor: currentWidth === width ? '#131722' : 'transparent',
-                    color: currentWidth === width ? '#ffffff' : '#131722',
+                    backgroundColor: currentWidth === width ? 'var(--tv-sub-text)' : 'transparent',
+                    color: currentWidth === width ? 'var(--tv-sub-bg)' : 'var(--tv-sub-text)',
                     fontSize: '13px',
                     fontWeight: 500
                   }}
                   onMouseEnter={(e) => {
-                    if (currentWidth !== width) e.currentTarget.style.backgroundColor = '#f0f3fa';
+                    if (currentWidth !== width) e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)';
                   }}
                   onMouseLeave={(e) => {
                     if (currentWidth !== width) e.currentTarget.style.backgroundColor = 'transparent';
@@ -1738,17 +1739,17 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings */}
-        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
         {/* More */}
@@ -1771,14 +1772,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           position: 'absolute',
           left: position.x,
           top: position.y,
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--tv-sub-bg)',
           borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex',
           alignItems: 'center',
           padding: '2px 4px',
           gap: '4px',
-          zIndex: 50,
+          zIndex: 80,
           pointerEvents: 'auto',
           userSelect: 'none',
         }}
@@ -1793,7 +1794,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Border Color (Pencil) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Border Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Border Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubPencilIcon />
           <SubColorBar color={currentColor} />
         </button>
@@ -1809,7 +1810,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Background Color (Paint Bucket) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowFillColorPicker(v => !v)} className="tv-icon-btn" title="Background Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowFillColorPicker(v => !v)} className="tv-icon-btn" title="Background Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubBucketIcon />
           <SubColorBar color={currentFillColor === 'transparent' ? '#ccc' : currentFillColor} />
         </button>
@@ -1828,7 +1829,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowTriangleWidthDropdown(!showTriangleWidthDropdown)}
-            style={{ width: '54px', height: '34px', color: currentColor, borderRadius: '4px', border: 'none', background: '#f0f3fa', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+            style={{ width: '54px', height: '34px', color: currentColor, borderRadius: '4px', border: 'none', background: 'var(--tv-sub-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
           >
             <div style={{ width: '12px', height: '1px', backgroundColor: currentColor }} />
             <SubWidthLabel width={currentWidth} />
@@ -1837,30 +1838,30 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings Hexagon */}
-        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
 
         {/* More Options */}
         <div style={{ position: 'relative' }}>
-          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <SubMoreIcon />
           </button>
           {showDropdown && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
             </div>
           )}
         </div>
@@ -1882,14 +1883,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           position: 'absolute',
           left: position.x,
           top: position.y,
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--tv-sub-bg)',
           borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex',
           alignItems: 'center',
           padding: '2px 4px',
           gap: '4px',
-          zIndex: 50,
+          zIndex: 80,
           pointerEvents: 'auto',
           userSelect: 'none'
         }}
@@ -1907,7 +1908,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Line Color (Pencil) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Line Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Line Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubPencilIcon />
           {/* Dynamic underline */}
           <SubColorBar color={currentColor || '#2962ff'} />
@@ -1924,7 +1925,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Text Color (T) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowTextColorPicker(v => !v)} className="tv-icon-btn" title="Text Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowTextColorPicker(v => !v)} className="tv-icon-btn" title="Text Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTextIcon />
           {/* Dynamic underline */}
           <SubColorBar color={textColor || '#2962ff'} />
@@ -1951,12 +1952,12 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
               height: '34px', 
               padding: '0 8px', 
               gap: '6px', 
-              color: '#131722', 
+              color: 'var(--tv-sub-text)', 
               borderRadius: '4px', 
               border: 'none', 
-              background: showWidthDropdown ? '#f0f3fa' : 'transparent' 
+              background: showWidthDropdown ? 'var(--tv-sub-hover)' : 'transparent' 
             }} 
-            onMouseEnter={(e) => !showWidthDropdown && (e.currentTarget.style.backgroundColor = '#f0f3fa')} 
+            onMouseEnter={(e) => !showWidthDropdown && (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')} 
             onMouseLeave={(e) => !showWidthDropdown && (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             <SubWidthLabel width={currentWidth} />
@@ -1978,15 +1979,15 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             style={{ 
               width: '34px', 
               height: '34px', 
-              color: '#131722', 
+              color: 'var(--tv-sub-text)', 
               borderRadius: '4px', 
               border: 'none', 
-              background: showLineStyleDropdown ? '#f0f3fa' : 'transparent',
+              background: showLineStyleDropdown ? 'var(--tv-sub-hover)' : 'transparent',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }} 
-            onMouseEnter={(e) => !showLineStyleDropdown && (e.currentTarget.style.backgroundColor = '#f0f3fa')} 
+            onMouseEnter={(e) => !showLineStyleDropdown && (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')} 
             onMouseLeave={(e) => !showLineStyleDropdown && (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             {selectedShape?.lineStyle === 'dashed' ? (
@@ -2005,35 +2006,35 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings Hexagon */}
-        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Alert Clock Plus */}
-        <button className="tv-icon-btn" title="Add alert" onClick={handleCreateAlert} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Add alert" onClick={handleCreateAlert} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubAlertIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
 
         {/* More Options */}
         <div style={{ position: 'relative' }}>
-          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <SubMoreIcon />
           </button>
           {showDropdown && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
             </div>
           )}
         </div>
@@ -2057,14 +2058,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           position: 'absolute',
           left: position.x,
           top: position.y,
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--tv-sub-bg)',
           borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex',
           alignItems: 'center',
           padding: '2px 4px',
           gap: '4px',
-          zIndex: 50,
+          zIndex: 80,
           pointerEvents: 'auto',
           userSelect: 'none'
         }}
@@ -2085,8 +2086,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button
             className="tv-icon-btn" title="Line Color"
             onClick={() => setShowHRayColorPicker(!showHRayColorPicker)}
-            style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubPencilIcon />
             <SubColorBar color={currentColor || '#2962ff'} />
@@ -2106,8 +2107,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button
             className="tv-icon-btn" title="Text Color"
             onClick={() => setShowHRayTextColorPicker(!showHRayTextColorPicker)}
-            style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubTextIcon />
             <SubColorBar color={textColor || '#2962ff'} />
@@ -2134,12 +2135,12 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
               height: '34px',
               padding: '0 8px',
               gap: '6px',
-              color: '#131722',
+              color: 'var(--tv-sub-text)',
               borderRadius: '4px',
               border: 'none',
-              background: showWidthDropdown ? '#f0f3fa' : 'transparent'
+              background: showWidthDropdown ? 'var(--tv-sub-hover)' : 'transparent'
             }}
-            onMouseEnter={(e) => !showWidthDropdown && (e.currentTarget.style.backgroundColor = '#f0f3fa')}
+            onMouseEnter={(e) => !showWidthDropdown && (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')}
             onMouseLeave={(e) => !showWidthDropdown && (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             <SubWidthLabel width={currentWidth} />
@@ -2161,15 +2162,15 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             style={{
               width: '34px',
               height: '34px',
-              color: '#131722',
+              color: 'var(--tv-sub-text)',
               borderRadius: '4px',
               border: 'none',
-              background: showLineStyleDropdown ? '#f0f3fa' : 'transparent',
+              background: showLineStyleDropdown ? 'var(--tv-sub-hover)' : 'transparent',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}
-            onMouseEnter={(e) => !showLineStyleDropdown && (e.currentTarget.style.backgroundColor = '#f0f3fa')}
+            onMouseEnter={(e) => !showLineStyleDropdown && (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')}
             onMouseLeave={(e) => !showLineStyleDropdown && (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             {selectedShape?.lineStyle === 'dashed' ? (
@@ -2188,35 +2189,35 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings Hexagon */}
-        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Alert Clock Plus */}
-        <button className="tv-icon-btn" title="Add alert" onClick={handleCreateAlert} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Add alert" onClick={handleCreateAlert} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubAlertIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
 
         {/* More Options */}
         <div style={{ position: 'relative' }}>
-          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <SubMoreIcon />
           </button>
           {showDropdown && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
             </div>
           )}
         </div>
@@ -2275,8 +2276,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           {/* Boundary Color */}
           <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
             <Palette size={14} className="text-gray-400" />
-            <input
-              type="color"
+            <PaletteInput
               value={currentColor}
               onChange={(e) => {
                 e.stopPropagation();
@@ -2289,13 +2289,12 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           {/* Fill Color */}
           <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
             <Square size={14} className="text-gray-400" />
-            <input
-              type="color"
+            <PaletteInput
               value={parseColorInput(currentFillColor).hex}
               onChange={(e) => {
                 e.stopPropagation();
                 const { opacity } = parseColorInput(currentFillColor);
-                handleFillColorChange(opacity === 100 ? e.target.value : hexToRgba(e.target.value, opacity / 100));
+                handleFillColorChange(opacity === 100 || e.target.value.startsWith('rgb') ? e.target.value : hexToRgba(e.target.value, opacity / 100));
               }}
               className="w-5 h-5 rounded cursor-pointer"
             />
@@ -2304,8 +2303,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           {/* Text Color */}
           <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
             <span className="text-xs text-gray-400">T</span>
-            <input
-              type="color"
+            <PaletteInput
               value="#ffffff"
               onChange={(e) => {
                 e.stopPropagation();
@@ -2384,10 +2382,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         data-subbar="true"
         style={{
           position: 'absolute', left: position.x, top: position.y,
-          backgroundColor: '#ffffff', borderRadius: '6px',
+          backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex', alignItems: 'center', padding: '2px 4px', gap: '4px',
-          zIndex: 50, pointerEvents: 'auto', userSelect: 'none',
+          zIndex: 80, pointerEvents: 'auto', userSelect: 'none',
         }}
         onClick={handleSubBarClick}
       >
@@ -2400,7 +2398,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Border Color (Pencil) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Border Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Border Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubPencilIcon />
           <SubColorBar color={themeColor} />
         </button>
@@ -2416,7 +2414,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Background Color (Paint Bucket) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowFillColorPicker(v => !v)} className="tv-icon-btn" title="Background Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowFillColorPicker(v => !v)} className="tv-icon-btn" title="Background Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubBucketIcon />
           <SubColorBar color={currentFillColor === 'transparent' ? '#ccc' : currentFillColor} />
         </button>
@@ -2432,7 +2430,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Text Color (T) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowTextColorPicker(v => !v)} className="tv-icon-btn" title="Text Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowTextColorPicker(v => !v)} className="tv-icon-btn" title="Text Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTextIcon />
           <SubColorBar color={textColor || '#ffa000'} />
         </button>
@@ -2451,8 +2449,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowCircleWidthDropdown(!showCircleWidthDropdown)}
-            style={{ width: '56px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: '56px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubWidthLabel width={currentWidth} />
@@ -2461,22 +2459,22 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings */}
-        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Alert (Alarm Clock) */}
-        <button className="tv-icon-btn" title="Add alert" onClick={handleCreateAlert} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Add alert" onClick={handleCreateAlert} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubAlertIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
         {/* More */}
@@ -2498,10 +2496,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         data-subbar="true"
         style={{
           position: 'absolute', left: position.x, top: position.y,
-          backgroundColor: '#ffffff', borderRadius: '6px',
+          backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex', alignItems: 'center', padding: '2px 4px', gap: '4px',
-          zIndex: 50, pointerEvents: 'auto', userSelect: 'none',
+          zIndex: 80, pointerEvents: 'auto', userSelect: 'none',
         }}
         onClick={handleSubBarClick}
       >
@@ -2514,7 +2512,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Border Color (Pencil) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Border Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Border Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubPencilIcon />
           <SubColorBar color={themeColor} />
         </button>
@@ -2530,7 +2528,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Background Color (Paint Bucket) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowFillColorPicker(v => !v)} className="tv-icon-btn" title="Background Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowFillColorPicker(v => !v)} className="tv-icon-btn" title="Background Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubBucketIcon />
           <SubColorBar color={currentFillColor === 'transparent' ? '#ccc' : currentFillColor} />
         </button>
@@ -2546,7 +2544,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Text Color (T) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowTextColorPicker(v => !v)} className="tv-icon-btn" title="Text Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowTextColorPicker(v => !v)} className="tv-icon-btn" title="Text Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTextIcon />
           <SubColorBar color={textColor || '#f7525f'} />
         </button>
@@ -2565,8 +2563,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowEllipseWidthDropdown(!showEllipseWidthDropdown)}
-            style={{ width: '56px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: '56px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubWidthLabel width={currentWidth} />
@@ -2575,17 +2573,17 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings */}
-        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
         {/* More */}
@@ -2607,10 +2605,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         data-subbar="true"
         style={{
           position: 'absolute', left: position.x, top: position.y,
-          backgroundColor: '#ffffff', borderRadius: '6px',
+          backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex', alignItems: 'center', padding: '2px 4px', gap: '4px',
-          zIndex: 50, pointerEvents: 'auto', userSelect: 'none',
+          zIndex: 80, pointerEvents: 'auto', userSelect: 'none',
         }}
         onClick={handleSubBarClick}
       >
@@ -2623,7 +2621,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Border Color (Pencil) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Border Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Border Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubPencilIcon />
           <SubColorBar color={themeColor} />
         </button>
@@ -2639,7 +2637,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Background Color (Paint Bucket) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowFillColorPicker(v => !v)} className="tv-icon-btn" title="Background Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowFillColorPicker(v => !v)} className="tv-icon-btn" title="Background Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubBucketIcon />
           <SubColorBar color={currentFillColor === 'transparent' ? '#ccc' : currentFillColor} />
         </button>
@@ -2658,7 +2656,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowPolylineWidthDropdown(!showPolylineWidthDropdown)}
-            style={{ width: '54px', height: '34px', color: themeColor, borderRadius: '4px', border: 'none', background: '#f0f3fa', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+            style={{ width: '54px', height: '34px', color: themeColor, borderRadius: '4px', border: 'none', background: 'var(--tv-sub-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
           >
             <div style={{ width: '12px', height: '1px', backgroundColor: themeColor }} />
             <SubWidthLabel width={currentWidth} />
@@ -2671,8 +2669,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowPolylineStyleDropdown(!showPolylineStyleDropdown)}
-            style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubLineStyleIcon style={selectedShape?.lineStyle} />
@@ -2681,17 +2679,17 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings */}
-        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
         {/* More */}
@@ -2713,10 +2711,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         data-subbar="true"
         style={{
           position: 'absolute', left: position.x, top: position.y,
-          backgroundColor: '#ffffff', borderRadius: '6px',
+          backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex', alignItems: 'center', padding: '2px 4px', gap: '4px',
-          zIndex: 50, pointerEvents: 'auto', userSelect: 'none',
+          zIndex: 80, pointerEvents: 'auto', userSelect: 'none',
         }}
         onClick={handleSubBarClick}
       >
@@ -2729,7 +2727,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Line Color (Pencil) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Line Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Line Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubPencilIcon />
           <SubColorBar color={themeColor} />
         </button>
@@ -2749,7 +2747,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowCurveWidthDropdown(!showCurveWidthDropdown)}
-            style={{ width: '54px', height: '34px', color: themeColor, borderRadius: '4px', border: 'none', background: '#f0f3fa', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+            style={{ width: '54px', height: '34px', color: themeColor, borderRadius: '4px', border: 'none', background: 'var(--tv-sub-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
           >
             <div style={{ width: '12px', height: '1px', backgroundColor: themeColor }} />
             <SubWidthLabel width={currentWidth} />
@@ -2762,8 +2760,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowCurveStyleDropdown(!showCurveStyleDropdown)}
-            style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubLineStyleIcon style={selectedShape?.lineStyle} />
@@ -2772,17 +2770,17 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings */}
-        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
         {/* More */}
@@ -2804,10 +2802,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         data-subbar="true"
         style={{
           position: 'absolute', left: position.x, top: position.y,
-          backgroundColor: '#ffffff', borderRadius: '6px',
+          backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex', alignItems: 'center', padding: '2px 4px', gap: '4px',
-          zIndex: 50, pointerEvents: 'auto', userSelect: 'none',
+          zIndex: 80, pointerEvents: 'auto', userSelect: 'none',
         }}
         onClick={handleSubBarClick}
       >
@@ -2820,7 +2818,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Border Color (Pencil) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Border Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Border Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubPencilIcon />
           <SubColorBar color={themeColor} />
         </button>
@@ -2836,7 +2834,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Background Color (Paint Bucket) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowFillColorPicker(v => !v)} className="tv-icon-btn" title="Background Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowFillColorPicker(v => !v)} className="tv-icon-btn" title="Background Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubBucketIcon />
           <SubColorBar color={currentFillColor === 'transparent' ? '#ccc' : currentFillColor} />
         </button>
@@ -2856,7 +2854,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowArcWidthDropdown(!showArcWidthDropdown)}
-            style={{ width: '54px', height: '34px', color: themeColor, borderRadius: '4px', border: 'none', background: '#f0f3fa', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+            style={{ width: '54px', height: '34px', color: themeColor, borderRadius: '4px', border: 'none', background: 'var(--tv-sub-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
           >
             <div style={{ width: '12px', height: '1px', backgroundColor: themeColor }} />
             <SubWidthLabel width={currentWidth} />
@@ -2865,17 +2863,17 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings */}
-        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
         {/* More */}
@@ -2897,10 +2895,10 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         data-subbar="true"
         style={{
           position: 'absolute', left: position.x, top: position.y,
-          backgroundColor: '#ffffff', borderRadius: '6px',
+          backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex', alignItems: 'center', padding: '2px 4px', gap: '4px',
-          zIndex: 50, pointerEvents: 'auto', userSelect: 'none',
+          zIndex: 80, pointerEvents: 'auto', userSelect: 'none',
         }}
         onClick={handleSubBarClick}
       >
@@ -2913,7 +2911,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Line Color (Pencil) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Line Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Line Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubPencilIcon />
           <SubColorBar color={themeColor} />
         </button>
@@ -2933,7 +2931,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowDoubleCurveWidthDropdown(!showDoubleCurveWidthDropdown)}
-            style={{ width: '54px', height: '34px', color: themeColor, borderRadius: '4px', border: 'none', background: '#f0f3fa', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+            style={{ width: '54px', height: '34px', color: themeColor, borderRadius: '4px', border: 'none', background: 'var(--tv-sub-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
           >
             <div style={{ width: '12px', height: '1px', backgroundColor: themeColor }} />
             <SubWidthLabel width={currentWidth} />
@@ -2946,8 +2944,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => setShowDoubleCurveStyleDropdown(!showDoubleCurveStyleDropdown)}
-            style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} 
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubLineStyleIcon style={selectedShape?.lineStyle} />
@@ -2956,17 +2954,17 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings */}
-        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
         {/* More */}
@@ -2992,15 +2990,15 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         data-subbar="true"
         style={{
           position: 'absolute', left: position.x, top: position.y,
-          backgroundColor: '#ffffff', borderRadius: '6px',
+          backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex', alignItems: 'center', padding: '2px 4px', gap: '4px',
-          zIndex: 50, pointerEvents: 'auto', userSelect: 'none',
+          zIndex: 80, pointerEvents: 'auto', userSelect: 'none',
         }}
         onClick={handleSubBarClick}
       >
         {/* Grip */}
-        <div onMouseDown={handleGripMouseDown} style={{ cursor: 'grab', padding: '0 6px', display: 'flex', gap: '2px', alignItems: 'center', height: '34px', color: '#b2b5be' }}>
+        <div onMouseDown={handleGripMouseDown} style={{ cursor: 'grab', padding: '0 6px', display: 'flex', gap: '2px', alignItems: 'center', height: '34px', color: 'var(--tv-sub-muted)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
             {[1,2,3,4].map(i => <div key={i} style={{ width: '2px', height: '2px', backgroundColor: 'currentColor', borderRadius: '50%' }} />)}
           </div>
@@ -3010,13 +3008,13 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Template (Four squares with plus) */}
-        <button className="tv-icon-btn" title="Template" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Template" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTemplateIcon />
         </button>
 
         {/* Text Tool */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowTextColorPicker(v => !v)} className="tv-icon-btn" title="Text Tool" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowTextColorPicker(v => !v)} className="tv-icon-btn" title="Text Tool" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTextIcon />
           <SubColorBar color={textColor || '#e0e3eb'} />
         </button>
@@ -3032,7 +3030,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Target Color */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowTargetColorPicker(v => !v)} className="tv-icon-btn" title="Target Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowTargetColorPicker(v => !v)} className="tv-icon-btn" title="Target Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubBucketIcon />
           <SubColorBar color={targetColor} />
         </button>
@@ -3048,7 +3046,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Stop Color */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowStopColorPicker(v => !v)} className="tv-icon-btn" title="Stop Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowStopColorPicker(v => !v)} className="tv-icon-btn" title="Stop Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubBucketIcon />
           <SubColorBar color={stopColor} />
         </button>
@@ -3063,40 +3061,40 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Stats/Chart Icon */}
-        <button className="tv-icon-btn" title="Create order" onClick={handleCreateOrder} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Create order" onClick={handleCreateOrder} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubOrderIcon />
         </button>
 
         {/* Settings */}
-        <button className="tv-icon-btn" title="Settings" onClick={handleSettingsClick} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings" onClick={handleSettingsClick} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Alert */}
-        <button className="tv-icon-btn" title="Add alert" onClick={handleCreateAlert} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Add alert" onClick={handleCreateAlert} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubAlertIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
 
         {/* More Options */}
         <div style={{ position: 'relative' }}>
-          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <SubMoreIcon />
           </button>
           {showDropdown && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
             </div>
           )}
         </div>
@@ -3119,15 +3117,15 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         data-subbar="true"
         style={{
           position: 'absolute', left: position.x, top: position.y,
-          backgroundColor: '#ffffff', borderRadius: '6px',
+          backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           display: 'flex', alignItems: 'center', padding: '2px 4px', gap: '4px',
-          zIndex: 50, pointerEvents: 'auto', userSelect: 'none',
+          zIndex: 80, pointerEvents: 'auto', userSelect: 'none',
         }}
         onClick={handleSubBarClick}
       >
         {/* Grip */}
-        <div onMouseDown={handleGripMouseDown} style={{ cursor: 'grab', padding: '0 6px', display: 'flex', gap: '2px', alignItems: 'center', height: '34px', color: '#b2b5be' }}>
+        <div onMouseDown={handleGripMouseDown} style={{ cursor: 'grab', padding: '0 6px', display: 'flex', gap: '2px', alignItems: 'center', height: '34px', color: 'var(--tv-sub-muted)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
             {[1,2,3,4].map(i => <div key={i} style={{ width: '2px', height: '2px', backgroundColor: 'currentColor', borderRadius: '50%' }} />)}
           </div>
@@ -3137,13 +3135,13 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Template (Four squares with plus) */}
-        <button className="tv-icon-btn" title="Template" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Template" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTemplateIcon />
         </button>
 
         {/* Text Tool */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowTextColorPicker(v => !v)} className="tv-icon-btn" title="Text Tool" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowTextColorPicker(v => !v)} className="tv-icon-btn" title="Text Tool" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTextIcon />
           <SubColorBar color={textColor || '#e0e3eb'} />
         </button>
@@ -3159,7 +3157,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Target Color */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowTargetColorPicker(v => !v)} className="tv-icon-btn" title="Target Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowTargetColorPicker(v => !v)} className="tv-icon-btn" title="Target Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubBucketIcon />
           <SubColorBar color={targetColor} />
         </button>
@@ -3175,7 +3173,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Stop Color */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowStopColorPicker(v => !v)} className="tv-icon-btn" title="Stop Color" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowStopColorPicker(v => !v)} className="tv-icon-btn" title="Stop Color" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', position: 'relative' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubBucketIcon />
           <SubColorBar color={stopColor} />
         </button>
@@ -3190,40 +3188,40 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Stats/Chart Icon */}
-        <button className="tv-icon-btn" title="Create order" onClick={handleCreateOrder} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Create order" onClick={handleCreateOrder} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubOrderIcon />
         </button>
 
         {/* Settings */}
-        <button className="tv-icon-btn" title="Settings" onClick={handleSettingsClick} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings" onClick={handleSettingsClick} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Alert */}
-        <button className="tv-icon-btn" title="Add alert" onClick={handleCreateAlert} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Add alert" onClick={handleCreateAlert} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubAlertIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
 
         {/* More Options */}
         <div style={{ position: 'relative' }}>
-          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <SubMoreIcon />
           </button>
           {showDropdown && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
             </div>
           )}
         </div>
@@ -3245,14 +3243,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           left: position.x !== 0 ? position.x : '50%',
           top: position.y !== 0 ? position.y : '60px',
           transform: position.x === 0 ? 'translateX(-50%)' : 'none',
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--tv-sub-bg)',
           borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           padding: '2px 4px',
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
-          zIndex: 50,
+          zIndex: 80,
           pointerEvents: 'auto',
           userSelect: 'none'
         }}
@@ -3266,7 +3264,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             gap: '2px', 
             padding: '4px', 
             cursor: 'grab', 
-            color: '#b2b5be',
+            color: 'var(--tv-sub-muted)',
             marginRight: '2px'
           }}
         >
@@ -3285,48 +3283,48 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         <TemplateButton />
 
         {/* Boundary Color */}
-        <button className="tv-icon-btn" title="Boundary Color" style={{ position: 'relative', width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Boundary Color" style={{ position: 'relative', width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <div style={{ width: '18px', height: '18px', border: '2px solid currentColor', borderRadius: '2px' }}></div>
           <SubColorBar color={currentColor} />
         </button>
 
         {/* Fill Color */}
-        <button className="tv-icon-btn" title="Fill Color" style={{ position: 'relative', width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Fill Color" style={{ position: 'relative', width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <div style={{ width: '18px', height: '18px', backgroundColor: 'currentColor', borderRadius: '2px', opacity: 0.3 }}></div>
           <SubColorBar color={currentFillColor} />
         </button>
 
         {/* Line Width */}
-        <button className="tv-icon-btn" title="Line Width" style={{ width: '56px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Line Width" style={{ width: '56px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <div style={{ width: '18px', height: `${currentWidth}px`, backgroundColor: 'currentColor' }}></div>
           <span style={{ fontSize: '13px' }}>{currentWidth}px</span>
         </button>
 
         {/* Settings Hexagon */}
-        <button className="tv-icon-btn" title="Settings Hexagon" onClick={handleSettingsClick} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings Hexagon" onClick={handleSettingsClick} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
 
         {/* More Options */}
         <div style={{ position: 'relative' }}>
-          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <SubMoreIcon />
           </button>
           {showDropdown && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
             </div>
           )}
         </div>
@@ -3345,14 +3343,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           left: position.x !== 0 ? position.x : '50%',
           top: position.y !== 0 ? position.y : '60px',
           transform: position.x === 0 ? 'translateX(-50%)' : 'none',
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--tv-sub-bg)',
           borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           padding: '2px 4px',
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
-          zIndex: 50,
+          zIndex: 80,
           pointerEvents: 'auto',
           userSelect: 'none'
         }}
@@ -3366,7 +3364,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             gap: '2px', 
             padding: '4px', 
             cursor: 'grab', 
-            color: '#b2b5be',
+            color: 'var(--tv-sub-muted)',
             marginRight: '2px'
           }}
         >
@@ -3385,48 +3383,48 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         <TemplateButton />
 
         {/* Boundary Color */}
-        <button className="tv-icon-btn" title="Boundary Color" style={{ position: 'relative', width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Boundary Color" style={{ position: 'relative', width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <div style={{ width: '18px', height: '18px', border: '2px solid currentColor', borderRadius: '2px' }}></div>
           <SubColorBar color={currentColor} />
         </button>
 
         {/* Fill Color */}
-        <button className="tv-icon-btn" title="Fill Color" style={{ position: 'relative', width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Fill Color" style={{ position: 'relative', width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <div style={{ width: '18px', height: '18px', backgroundColor: 'currentColor', borderRadius: '2px', opacity: 0.3 }}></div>
           <SubColorBar color={currentFillColor} />
         </button>
 
         {/* Line Width */}
-        <button className="tv-icon-btn" title="Line Width" style={{ width: '56px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Line Width" style={{ width: '56px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <div style={{ width: '18px', height: `${currentWidth}px`, backgroundColor: 'currentColor' }}></div>
           <span style={{ fontSize: '13px' }}>{currentWidth}px</span>
         </button>
 
         {/* Settings Hexagon */}
-        <button className="tv-icon-btn" title="Settings Hexagon" onClick={handleSettingsClick} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings Hexagon" onClick={handleSettingsClick} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
 
         {/* More Options */}
         <div style={{ position: 'relative' }}>
-          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <SubMoreIcon />
           </button>
           {showDropdown && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
             </div>
           )}
         </div>
@@ -3444,14 +3442,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           left: position.x !== 0 ? position.x : '50%',
           top: position.y !== 0 ? position.y : '60px',
           transform: position.x === 0 ? 'translateX(-50%)' : 'none',
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--tv-sub-bg)',
           borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           padding: '2px 4px',
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
-          zIndex: 50,
+          zIndex: 80,
           pointerEvents: 'auto',
           userSelect: 'none'
         }}
@@ -3465,7 +3463,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             gap: '2px', 
             padding: '4px', 
             cursor: 'grab', 
-            color: '#b2b5be',
+            color: 'var(--tv-sub-muted)',
             marginRight: '2px'
           }}
         >
@@ -3484,48 +3482,48 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         <TemplateButton />
 
         {/* Boundary Color */}
-        <button className="tv-icon-btn" title="Boundary Color" style={{ position: 'relative', width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Boundary Color" style={{ position: 'relative', width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <div style={{ width: '18px', height: '18px', border: '2px solid currentColor', borderRadius: '2px' }}></div>
           <SubColorBar color={currentColor} />
         </button>
 
         {/* Fill Color */}
-        <button className="tv-icon-btn" title="Fill Color" style={{ position: 'relative', width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Fill Color" style={{ position: 'relative', width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <div style={{ width: '18px', height: '18px', backgroundColor: 'currentColor', borderRadius: '2px', opacity: 0.3 }}></div>
           <SubColorBar color={currentFillColor} />
         </button>
 
         {/* Line Width */}
-        <button className="tv-icon-btn" title="Line Width" style={{ width: '56px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Line Width" style={{ width: '56px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <div style={{ width: '18px', height: `${currentWidth}px`, backgroundColor: 'currentColor' }}></div>
           <span style={{ fontSize: '13px' }}>{currentWidth}px</span>
         </button>
 
         {/* Settings Hexagon */}
-        <button className="tv-icon-btn" title="Settings Hexagon" onClick={handleSettingsClick} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings Hexagon" onClick={handleSettingsClick} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
 
         {/* More Options */}
         <div style={{ position: 'relative' }}>
-          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <SubMoreIcon />
           </button>
           {showDropdown && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
             </div>
           )}
         </div>
@@ -3544,14 +3542,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           left: position.x !== 0 ? position.x : '50%',
           top: position.y !== 0 ? position.y : '60px',
           transform: position.x === 0 ? 'translateX(-50%)' : 'none',
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--tv-sub-bg)',
           borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           padding: '2px 4px',
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
-          zIndex: 50,
+          zIndex: 80,
           pointerEvents: 'auto',
           userSelect: 'none'
         }}
@@ -3565,7 +3563,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             gap: '2px', 
             padding: '4px', 
             cursor: 'grab', 
-            color: '#b2b5be',
+            color: 'var(--tv-sub-muted)',
             marginRight: '2px'
           }}
         >
@@ -3582,7 +3580,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Template (Four squares with plus) */}
-        <button className="tv-icon-btn" title="Template" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Template" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTemplateIcon />
         </button>
 
@@ -3595,38 +3593,38 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             const nextSize = sizes[(currentIndex + 1) % sizes.length];
             handleEmojiSizeChange(nextSize);
           }}
-          style={{ width: '56px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} 
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+          style={{ width: '56px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} 
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
           onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
         >
           <span style={{ fontSize: '13px', fontWeight: 500 }}>{currentEmojiSize}px</span>
         </button>
 
         {/* Settings Hexagon */}
-        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => { console.log("Emoji settings clicked"); setIsEmojiSettingsOpen(true); }} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => { console.log("Emoji settings clicked"); setIsEmojiSettingsOpen(true); }} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
 
         {/* More Options */}
         <div style={{ position: 'relative' }}>
-          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <SubMoreIcon />
           </button>
           {showDropdown && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
             </div>
           )}
         </div>
@@ -3648,14 +3646,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           left: position.x !== 0 ? position.x : '50%',
           top: position.y !== 0 ? position.y : '60px',
           transform: position.x === 0 ? 'translateX(-50%)' : 'none',
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--tv-sub-bg)',
           borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           padding: '2px 4px',
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
-          zIndex: 50,
+          zIndex: 80,
           pointerEvents: 'auto',
           userSelect: 'none'
         }}
@@ -3669,7 +3667,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             gap: '2px', 
             padding: '4px', 
             cursor: 'grab', 
-            color: '#b2b5be',
+            color: 'var(--tv-sub-muted)',
             marginRight: '2px'
           }}
         >
@@ -3692,8 +3690,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           <button 
             className="tv-icon-btn" 
             onClick={() => { setShowBrushColorPicker(!showBrushColorPicker); setShowBrushFillPicker(false); }}
-            style={{ position: 'relative', width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} 
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} 
+            style={{ position: 'relative', width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} 
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} 
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <SubPencilIcon />
@@ -3724,12 +3722,12 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
               height: '34px', 
               padding: '0 8px', 
               gap: '6px', 
-              color: '#131722', 
+              color: 'var(--tv-sub-text)', 
               borderRadius: '4px', 
               border: 'none', 
-              background: showWidthDropdown ? '#f0f3fa' : 'transparent' 
+              background: showWidthDropdown ? 'var(--tv-sub-hover)' : 'transparent' 
             }} 
-            onMouseEnter={(e) => !showWidthDropdown && (e.currentTarget.style.backgroundColor = '#f0f3fa')} 
+            onMouseEnter={(e) => !showWidthDropdown && (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')} 
             onMouseLeave={(e) => !showWidthDropdown && (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             <SubWidthLabel width={currentWidth} />
@@ -3743,30 +3741,30 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings Hexagon */}
-        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsBrushSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsBrushSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
 
         {/* More Options */}
         <div style={{ position: 'relative' }}>
-          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <SubMoreIcon />
           </button>
           {showDropdown && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
             </div>
           )}
         </div>
@@ -3791,14 +3789,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           left: position.x !== 0 ? position.x : '50%',
           top: position.y !== 0 ? position.y : '60px',
           transform: position.x === 0 ? 'translateX(-50%)' : 'none',
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--tv-sub-bg)',
           borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           padding: '2px 4px',
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
-          zIndex: 50,
+          zIndex: 80,
           pointerEvents: 'auto',
           userSelect: 'none'
         }}
@@ -3812,7 +3810,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             gap: '2px', 
             padding: '4px', 
             cursor: 'grab', 
-            color: '#b2b5be',
+            color: 'var(--tv-sub-muted)',
             marginRight: '2px'
           }}
         >
@@ -3831,42 +3829,42 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         <TemplateButton />
 
         {/* Target Color */}
-        <button className="tv-icon-btn" title="Target Color" style={{ position: 'relative', width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Target Color" style={{ position: 'relative', width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <div style={{ width: '18px', height: '18px', backgroundColor: '#089981', borderRadius: '2px', opacity: 0.3 }}></div>
           <SubColorBar color={'#089981'} />
         </button>
 
         {/* Stop Color */}
-        <button className="tv-icon-btn" title="Stop Color" style={{ position: 'relative', width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Stop Color" style={{ position: 'relative', width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <div style={{ width: '18px', height: '18px', backgroundColor: '#f23645', borderRadius: '2px', opacity: 0.3 }}></div>
           <SubColorBar color={'#f23645'} />
         </button>
 
         {/* Settings Hexagon */}
-        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
 
         {/* More Options */}
         <div style={{ position: 'relative' }}>
-          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <SubMoreIcon />
           </button>
           {showDropdown && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
             </div>
           )}
         </div>
@@ -3890,14 +3888,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           left: position.x !== 0 ? position.x : '50%',
           top: position.y !== 0 ? position.y : '60px',
           transform: position.x === 0 ? 'translateX(-50%)' : 'none',
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--tv-sub-bg)',
           borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           padding: '2px 4px',
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
-          zIndex: 50,
+          zIndex: 80,
           pointerEvents: 'auto',
           userSelect: 'none'
         }}
@@ -3911,7 +3909,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             gap: '2px', 
             padding: '4px', 
             cursor: 'grab', 
-            color: '#b2b5be',
+            color: 'var(--tv-sub-muted)',
             marginRight: '2px'
           }}
         >
@@ -3931,7 +3929,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Text Color (Underline) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowTextColorPicker(v => !v)} className="tv-icon-btn" title="Text Color" style={{ position: 'relative', width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowTextColorPicker(v => !v)} className="tv-icon-btn" title="Text Color" style={{ position: 'relative', width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <span style={{ fontFamily: 'serif', fontSize: '18px', display: 'block', marginBottom: '2px' }}>T</span>
           <SubColorBar color={textColor} />
         </button>
@@ -3957,14 +3955,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
               height: '34px', 
               padding: '0 8px', 
               gap: '4px', 
-              color: '#131722', 
+              color: 'var(--tv-sub-text)', 
               borderRadius: '4px', 
               border: 'none', 
-              background: showFontSizeDropdown ? '#f0f3fa' : 'transparent',
+              background: showFontSizeDropdown ? 'var(--tv-sub-hover)' : 'transparent',
               fontSize: '14px',
               fontWeight: 500
             }} 
-            onMouseEnter={(e) => !showFontSizeDropdown && (e.currentTarget.style.backgroundColor = '#f0f3fa')} 
+            onMouseEnter={(e) => !showFontSizeDropdown && (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')} 
             onMouseLeave={(e) => !showFontSizeDropdown && (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             {currentFontSize}
@@ -3977,8 +3975,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
               bottom: '100%', 
               left: '0', 
               marginBottom: '8px', 
-              backgroundColor: '#ffffff', 
-              border: '1px solid #e0e3eb', 
+              backgroundColor: 'var(--tv-sub-bg)', 
+              border: '1px solid var(--tv-sub-border)', 
               borderRadius: '6px', 
               boxShadow: '0 4px 12px rgba(0,0,0,0.15)', 
               zIndex: 100, 
@@ -4000,13 +3998,13 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
                     padding: '8px 12px',
                     cursor: 'pointer',
                     borderRadius: '4px',
-                    backgroundColor: currentFontSize === size ? '#131722' : 'transparent',
-                    color: currentFontSize === size ? '#ffffff' : '#131722',
+                    backgroundColor: currentFontSize === size ? 'var(--tv-sub-text)' : 'transparent',
+                    color: currentFontSize === size ? 'var(--tv-sub-bg)' : 'var(--tv-sub-text)',
                     fontSize: '13px',
                     fontWeight: 500
                   }}
                   onMouseEnter={(e) => {
-                    if (currentFontSize !== size) e.currentTarget.style.backgroundColor = '#f0f3fa';
+                    if (currentFontSize !== size) e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)';
                   }}
                   onMouseLeave={(e) => {
                     if (currentFontSize !== size) e.currentTarget.style.backgroundColor = 'transparent';
@@ -4020,17 +4018,17 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings Hexagon */}
-        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsTextSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsTextSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Anchor */}
-        <button className="tv-icon-btn" title="Anchor" style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Anchor" style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="5" r="3"></circle>
             <line x1="12" y1="22" x2="12" y2="8"></line>
@@ -4039,20 +4037,20 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
 
         {/* More Options */}
         <div style={{ position: 'relative' }}>
-          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <SubMoreIcon />
           </button>
           {showDropdown && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
             </div>
           )}
         </div>
@@ -4075,14 +4073,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           left: position.x !== 0 ? position.x : '50%',
           top: position.y !== 0 ? position.y : '60px',
           transform: position.x === 0 ? 'translateX(-50%)' : 'none',
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--tv-sub-bg)',
           borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           padding: '2px 4px',
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
-          zIndex: 50,
+          zIndex: 80,
           pointerEvents: 'auto',
           userSelect: 'none'
         }}
@@ -4096,7 +4094,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             gap: '2px', 
             padding: '4px', 
             cursor: 'grab', 
-            color: '#b2b5be',
+            color: 'var(--tv-sub-muted)',
             marginRight: '2px'
           }}
         >
@@ -4115,42 +4113,42 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         <TemplateButton />
 
         {/* Line Color */}
-        <button className="tv-icon-btn" title="Line Color" style={{ position: 'relative', width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Line Color" style={{ position: 'relative', width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubPencilIcon />
           <SubColorBar color={currentColor} />
         </button>
 
         {/* Line Width */}
-        <button className="tv-icon-btn" title="Line Width" style={{ width: '56px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Line Width" style={{ width: '56px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <div style={{ width: '18px', height: `${currentWidth}px`, backgroundColor: 'currentColor' }}></div>
           <span style={{ fontSize: '13px' }}>{currentWidth}px</span>
         </button>
 
         {/* Settings Hexagon */}
-        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsCurveSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsCurveSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
 
         {/* More Options */}
         <div style={{ position: 'relative' }}>
-          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <SubMoreIcon />
           </button>
           {showDropdown && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
             </div>
           )}
         </div>
@@ -4173,14 +4171,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           left: position.x !== 0 ? position.x : '50%',
           top: position.y !== 0 ? position.y : '60px',
           transform: position.x === 0 ? 'translateX(-50%)' : 'none',
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--tv-sub-bg)',
           borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           padding: '2px 4px',
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
-          zIndex: 50,
+          zIndex: 80,
           pointerEvents: 'auto',
           userSelect: 'none'
         }}
@@ -4194,7 +4192,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             gap: '2px', 
             padding: '4px', 
             cursor: 'grab', 
-            color: '#b2b5be',
+            color: 'var(--tv-sub-muted)',
             marginRight: '2px'
           }}
         >
@@ -4213,42 +4211,42 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         <TemplateButton />
 
         {/* Line Color */}
-        <button className="tv-icon-btn" title="Line Color" style={{ position: 'relative', width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Line Color" style={{ position: 'relative', width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubPencilIcon />
           <SubColorBar color={currentColor} />
         </button>
 
         {/* Line Width */}
-        <button className="tv-icon-btn" title="Line Width" style={{ width: '56px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Line Width" style={{ width: '56px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <div style={{ width: '18px', height: `${currentWidth}px`, backgroundColor: 'currentColor' }}></div>
           <span style={{ fontSize: '13px' }}>{currentWidth}px</span>
         </button>
 
         {/* Settings Hexagon */}
-        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsDoubleCurveSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsDoubleCurveSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
 
         {/* More Options */}
         <div style={{ position: 'relative' }}>
-          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <SubMoreIcon />
           </button>
           {showDropdown && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
             </div>
           )}
         </div>
@@ -4271,14 +4269,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           left: position.x !== 0 ? position.x : '50%',
           top: position.y !== 0 ? position.y : '60px',
           transform: position.x === 0 ? 'translateX(-50%)' : 'none',
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--tv-sub-bg)',
           borderRadius: '6px',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
           padding: '2px 4px',
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
-          zIndex: 50,
+          zIndex: 80,
           pointerEvents: 'auto',
           userSelect: 'none'
         }}
@@ -4292,7 +4290,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             gap: '2px', 
             padding: '4px', 
             cursor: 'grab', 
-            color: '#b2b5be',
+            color: 'var(--tv-sub-muted)',
             marginRight: '2px'
           }}
         >
@@ -4312,7 +4310,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
         {/* Line Color (Rainbow) */}
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Line Color" style={{ position: 'relative', width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button onClick={() => setShowBorderColorPicker(v => !v)} className="tv-icon-btn" title="Line Color" style={{ position: 'relative', width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubPencilIcon />
           {/* One colour for all levels shows that colour; otherwise the levels' rainbow */}
           <div style={{ position: 'absolute', bottom: '6px', left: '6px', right: '6px', height: '4px', borderRadius: '2px', background: (selectedShape as any)?.useOneColor ? ((selectedShape as any).oneColor || currentColor) : 'linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8b00ff)' }}></div>
@@ -4339,12 +4337,12 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
               height: '34px', 
               padding: '0 8px', 
               gap: '6px', 
-              color: '#131722', 
+              color: 'var(--tv-sub-text)', 
               borderRadius: '4px', 
               border: 'none', 
-              background: showWidthDropdown ? '#f0f3fa' : 'transparent' 
+              background: showWidthDropdown ? 'var(--tv-sub-hover)' : 'transparent' 
             }} 
-            onMouseEnter={(e) => !showWidthDropdown && (e.currentTarget.style.backgroundColor = '#f0f3fa')} 
+            onMouseEnter={(e) => !showWidthDropdown && (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')} 
             onMouseLeave={(e) => !showWidthDropdown && (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             <SubWidthLabel width={currentWidth} />
@@ -4359,30 +4357,30 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
 
         {/* Settings Hexagon */}
-        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsFibonacciSettingsOpen(true)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Settings Hexagon" onClick={() => setIsFibonacciSettingsOpen(true)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubSettingsIcon />
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
         {/* Trash */}
-        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubTrashIcon />
         </button>
 
         {/* More Options */}
         <div style={{ position: 'relative' }}>
-          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <SubMoreIcon />
           </button>
           {showDropdown && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+              <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+              <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+              <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
             </div>
           )}
         </div>
@@ -4404,14 +4402,14 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         left: position.x !== 0 ? position.x : '50%',
         top: position.y !== 0 ? position.y : '60px',
         transform: position.x === 0 ? 'translateX(-50%)' : 'none',
-        backgroundColor: '#ffffff',
+        backgroundColor: 'var(--tv-sub-bg)',
         borderRadius: '6px',
         boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)',
         padding: '2px 4px',
         display: 'flex',
         alignItems: 'center',
         gap: '4px',
-        zIndex: 50,
+        zIndex: 80,
         pointerEvents: 'auto',
         userSelect: 'none'
       }}
@@ -4425,7 +4423,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
           gap: '2px', 
           padding: '4px', 
           cursor: 'grab', 
-          color: '#b2b5be',
+          color: 'var(--tv-sub-muted)',
           marginRight: '2px'
         }}
       >
@@ -4444,42 +4442,42 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
       <TemplateButton />
 
       {/* Line Color */}
-      <button className="tv-icon-btn" title="Line Color" style={{ position: 'relative', width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+      <button className="tv-icon-btn" title="Line Color" style={{ position: 'relative', width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
         <div style={{ width: '18px', height: '2px', backgroundColor: 'currentColor', borderRadius: '1px' }}></div>
         <SubColorBar color={currentColor} />
       </button>
 
       {/* Line Width */}
-      <button className="tv-icon-btn" title="Line Width" style={{ width: '56px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+      <button className="tv-icon-btn" title="Line Width" style={{ width: '56px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
         <div style={{ width: '18px', height: `${currentWidth}px`, backgroundColor: 'currentColor' }}></div>
         <span style={{ fontSize: '13px' }}>{currentWidth}px</span>
       </button>
 
       {/* Settings Hexagon */}
-      <button className="tv-icon-btn" title="Settings Hexagon" onClick={handleSettingsClick} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+      <button className="tv-icon-btn" title="Settings Hexagon" onClick={handleSettingsClick} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
         <TVSettingsIcon size={20} />
       </button>
 
       {/* Lock */}
-      <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+      <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
         <SubLockIcon locked={isLocked} />
       </button>
 
       {/* Trash */}
-      <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+      <button className="tv-icon-btn" title="Trash" onClick={handleDelete} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
         <SubTrashIcon />
       </button>
 
       {/* More Options */}
       <div style={{ position: 'relative' }}>
-        <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: '#131722', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" onClick={() => setShowDropdown(!showDropdown)} style={{ width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubMoreIcon />
         </button>
         {showDropdown && (
-          <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
-            <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
-            <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
-            <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
+          <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 100, padding: '4px 0', minWidth: '120px' }}>
+            <button onClick={() => { handleClone(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Clone</button>
+            <button onClick={() => { handleCopy(); setShowDropdown(false); }} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Copy</button>
+            <button onClick={handleHide} style={{ width: '100%', padding: '8px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '13px', cursor: 'pointer' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>Hide</button>
           </div>
         )}
       </div>

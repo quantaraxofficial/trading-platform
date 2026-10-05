@@ -19,8 +19,8 @@ function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boole
         width: '18px',
         height: '18px',
         borderRadius: '3px',
-        border: checked ? 'none' : '1px solid #b2b5be',
-        backgroundColor: checked ? '#131722' : '#ffffff',
+        border: checked ? 'none' : '1px solid var(--tv-sub-muted)',
+        backgroundColor: checked ? 'var(--tv-sub-text)' : 'var(--tv-sub-bg)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -29,7 +29,7 @@ function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boole
       }}
     >
       {checked && (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-bg)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12"></polyline>
         </svg>
       )}
@@ -55,7 +55,7 @@ function VisibilityRow({ label, checked, minVal, maxVal, minLimit, maxLimit, onT
     <div style={{ display: 'flex', alignItems: 'center', height: '34px', marginBottom: '8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '120px' }}>
         <CheckBox checked={checked} onChange={onToggle} />
-        <span style={{ fontSize: '14px', color: '#131722' }}>{label}</span>
+        <span style={{ fontSize: '14px', color: 'var(--tv-sub-text)' }}>{label}</span>
       </div>
       
       {hasRange && (
@@ -152,7 +152,7 @@ export function EmojiSettingsModal({ onClose }: EmojiSettingsModalProps) {
         left: position.x,
         top: position.y,
         width: '400px',
-        backgroundColor: '#ffffff',
+        backgroundColor: 'var(--tv-sub-bg)',
         borderRadius: '12px',
         boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
         zIndex: 2500,
@@ -170,7 +170,7 @@ export function EmojiSettingsModal({ onClose }: EmojiSettingsModalProps) {
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', cursor: 'grab' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '18px', fontWeight: 600, color: '#131722' }}>Emoji</span>
+          <span style={{ fontSize: '18px', fontWeight: 600, color: 'var(--tv-sub-text)' }}>Emoji</span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#787b86', cursor: 'pointer' }}>
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
@@ -182,7 +182,7 @@ export function EmojiSettingsModal({ onClose }: EmojiSettingsModalProps) {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #e0e3eb', padding: '0 20px' }}>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--tv-sub-border)', padding: '0 20px' }}>
         {tabs.map(tab => (
           <button
             key={tab}
@@ -192,7 +192,7 @@ export function EmojiSettingsModal({ onClose }: EmojiSettingsModalProps) {
               marginRight: '24px',
               fontSize: '14px',
               fontWeight: 600,
-              color: activeTab === tab ? '#131722' : '#787b86',
+              color: activeTab === tab ? 'var(--tv-sub-text)' : '#787b86',
               background: 'transparent',
               border: 'none',
               borderBottom: activeTab === tab ? '2px solid #2962ff' : '2px solid transparent',
@@ -205,29 +205,29 @@ export function EmojiSettingsModal({ onClose }: EmojiSettingsModalProps) {
       </div>
 
       {/* Content */}
-      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', minHeight: '400px', backgroundColor: '#ffffff' }}>
+      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', minHeight: '400px', backgroundColor: 'var(--tv-sub-bg)' }}>
         {activeTab === 'Style' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: '14px', color: '#131722' }}>Size</div>
+              <div style={{ fontSize: '14px', color: 'var(--tv-sub-text)' }}>Size</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <input 
                   type="number" 
                   value={emojiSize} 
                   onChange={(e) => selectedShape && updateDrawing(selectedShape.id, { emojiSize: parseInt(e.target.value) || 40 })}
-                  style={{ width: '80px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '14px', outline: 'none' }}
+                  style={{ width: '80px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '14px', outline: 'none' }}
                 />
                 <span style={{ fontSize: '14px', color: '#787b86' }}>px</span>
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: '14px', color: '#131722' }}>Emoji</div>
+              <div style={{ fontSize: '14px', color: 'var(--tv-sub-text)' }}>Emoji</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <input 
                   type="text" 
                   value={selectedShape?.emojiChar || '😃'} 
                   onChange={(e) => selectedShape && updateDrawing(selectedShape.id, { emojiChar: e.target.value })}
-                  style={{ width: '80px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '18px', textAlign: 'center', outline: 'none' }}
+                  style={{ width: '80px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '18px', textAlign: 'center', outline: 'none' }}
                 />
               </div>
             </div>
@@ -269,7 +269,7 @@ export function EmojiSettingsModal({ onClose }: EmojiSettingsModalProps) {
             <div style={{ display: 'flex', alignItems: 'center', height: '34px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '120px' }}>
                 <CheckBox checked={!!visibility.ranges?.enabled} onChange={(v) => updateVisibility('ranges', { enabled: v })} />
-                <span style={{ fontSize: '14px', color: '#131722' }}>Ranges</span>
+                <span style={{ fontSize: '14px', color: 'var(--tv-sub-text)' }}>Ranges</span>
               </div>
             </div>
           </div>
@@ -277,7 +277,7 @@ export function EmojiSettingsModal({ onClose }: EmojiSettingsModalProps) {
       </div>
 
       {/* Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid #e0e3eb', backgroundColor: '#ffffff' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid var(--tv-sub-border)', backgroundColor: 'var(--tv-sub-bg)' }}>
         <div style={{ position: 'relative' }}>
           <button style={{ 
             display: 'flex', 
@@ -285,11 +285,11 @@ export function EmojiSettingsModal({ onClose }: EmojiSettingsModalProps) {
             gap: '8px', 
             padding: '0 12px', 
             height: '38px', 
-            backgroundColor: '#ffffff', 
-            border: '1px solid #e0e3eb', 
+            backgroundColor: 'var(--tv-sub-bg)', 
+            border: '1px solid var(--tv-sub-border)', 
             borderRadius: '6px',
             fontSize: '14px',
-            color: '#131722',
+            color: 'var(--tv-sub-text)',
             cursor: 'pointer'
           }}>
             Template
@@ -300,10 +300,10 @@ export function EmojiSettingsModal({ onClose }: EmojiSettingsModalProps) {
           <button onClick={cancelEdit} style={{ 
             padding: '0 20px', 
             height: '38px', 
-            backgroundColor: '#ffffff', 
-            border: '1px solid #e0e3eb', 
+            backgroundColor: 'var(--tv-sub-bg)', 
+            border: '1px solid var(--tv-sub-border)', 
             borderRadius: '6px', 
-            color: '#131722', 
+            color: 'var(--tv-sub-text)', 
             fontSize: '14px', 
             fontWeight: 500, 
             cursor: 'pointer' 

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useDrawing, useSettingsSession } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
+import { PaletteInput } from "./PaletteInput";
 
 interface TriangleSettingsModalProps {
   onClose: () => void;
@@ -14,14 +15,14 @@ function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boole
       onClick={() => onChange(!checked)}
       style={{
         width: '18px', height: '18px', borderRadius: '3px',
-        border: checked ? 'none' : '1px solid #b2b5be',
-        backgroundColor: checked ? '#131722' : '#ffffff',
+        border: checked ? 'none' : '1px solid var(--tv-sub-muted)',
+        backgroundColor: checked ? 'var(--tv-sub-text)' : 'var(--tv-sub-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         cursor: 'pointer', flexShrink: 0,
       }}
     >
       {checked && (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-bg)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12" />
         </svg>
       )}
@@ -36,7 +37,7 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter') e.currentTarget.blur(); };
   return (
     <input type="text" value={localVal} onChange={(e) => setLocalVal(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown}
-      style={{ width: '60px', height: '32px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: '#131722', outline: 'none', ...style }}
+      style={{ width: '60px', height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', outline: 'none', ...style }}
     />
   );
 }
@@ -100,7 +101,7 @@ export function TriangleSettingsModal({ onClose }: TriangleSettingsModalProps) {
     <div
       style={{
         position: 'fixed', left: position.x, top: position.y, width: '370px',
-        backgroundColor: '#ffffff', borderRadius: '8px',
+        backgroundColor: 'var(--tv-sub-bg)', borderRadius: '8px',
         boxShadow: '0 4px 20px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.07)',
         zIndex: 2000, display: 'flex', flexDirection: 'column',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif',
@@ -114,14 +115,14 @@ export function TriangleSettingsModal({ onClose }: TriangleSettingsModalProps) {
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', cursor: 'grab' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '18px', fontWeight: 600, color: '#131722' }}>Triangle</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <span style={{ fontSize: '18px', fontWeight: 600, color: 'var(--tv-sub-text)' }}>Triangle</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
           </svg>
         </div>
         <button onClick={cancelEdit}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#131722', padding: '4px', borderRadius: '4px' }}
-          onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f0f3fa')}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--tv-sub-text)', padding: '4px', borderRadius: '4px' }}
+          onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')}
           onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -131,12 +132,12 @@ export function TriangleSettingsModal({ onClose }: TriangleSettingsModalProps) {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #e0e3eb', padding: '0 20px' }}>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--tv-sub-border)', padding: '0 20px' }}>
         {tabs.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             style={{
               padding: '8px 0', marginRight: '20px', fontSize: '14px', fontWeight: 500,
-              color: activeTab === tab ? '#131722' : '#787b86',
+              color: activeTab === tab ? 'var(--tv-sub-text)' : '#787b86',
               background: 'transparent', border: 'none',
               borderBottom: activeTab === tab ? '2px solid #131722' : '2px solid transparent',
               cursor: 'pointer',
@@ -152,16 +153,16 @@ export function TriangleSettingsModal({ onClose }: TriangleSettingsModalProps) {
         {activeTab === 'Style' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={{ width: '100px', fontSize: '13px', color: '#131722' }}>Border</div>
+              <div style={{ width: '100px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Border</div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <div style={{ position: 'relative', width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', overflow: 'hidden', cursor: 'pointer' }}>
+                <div style={{ position: 'relative', width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', overflow: 'hidden', cursor: 'pointer' }}>
                   <div style={{ width: '100%', height: '100%', backgroundColor: selectedShape?.stroke || '#26a69a' }} />
-                  <input type="color" value={selectedShape?.stroke || '#26a69a'} onChange={e => updateProp('stroke', e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                  <PaletteInput value={selectedShape?.stroke || '#26a69a'} onChange={e => updateProp('stroke', e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
                 </div>
-                <div style={{ display: 'flex', border: '1px solid #e0e3eb', borderRadius: '4px', overflow: 'hidden', height: '34px' }}>
+                <div style={{ display: 'flex', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', overflow: 'hidden', height: '34px' }}>
                    {[1, 2, 3, 4].map(w => (
                      <button key={w} onClick={() => updateProp('strokeWidth', w)}
-                       style={{ width: '32px', height: '100%', background: (selectedShape?.strokeWidth || 2) === w ? '#f0f3fa' : '#ffffff', border: 'none', cursor: 'pointer', borderRight: w !== 4 ? '1px solid #e0e3eb' : 'none' }}>
+                       style={{ width: '32px', height: '100%', background: (selectedShape?.strokeWidth || 2) === w ? 'var(--tv-sub-hover)' : 'var(--tv-sub-bg)', border: 'none', cursor: 'pointer', borderRight: w !== 4 ? '1px solid var(--tv-sub-border)' : 'none' }}>
                        <div style={{ width: '16px', height: `${w}px`, backgroundColor: '#131722' }} />
                      </button>
                    ))}
@@ -172,11 +173,11 @@ export function TriangleSettingsModal({ onClose }: TriangleSettingsModalProps) {
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100px' }}>
                 <CheckBox checked={!!selectedShape?.fillEnabled} onChange={(v) => updateProp('fillEnabled', v)} />
-                <span style={{ fontSize: '13px', color: '#131722' }}>Background</span>
+                <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Background</span>
               </div>
-              <div style={{ position: 'relative', width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', overflow: 'hidden', opacity: selectedShape?.fillEnabled ? 1 : 0.4 }}>
+              <div style={{ position: 'relative', width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', overflow: 'hidden', opacity: selectedShape?.fillEnabled ? 1 : 0.4 }}>
                  <div style={{ width: '100%', height: '100%', backgroundColor: selectedShape?.fill || '#26a69a' }} />
-                 <input type="color" disabled={!selectedShape?.fillEnabled} value={selectedShape?.fill || '#26a69a'} onChange={e => updateProp('fill', e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: selectedShape?.fillEnabled ? 'pointer' : 'default' }} />
+                 <PaletteInput disabled={!selectedShape?.fillEnabled} value={selectedShape?.fill || '#26a69a'} onChange={e => updateProp('fill', e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: selectedShape?.fillEnabled ? 'pointer' : 'default' }} />
               </div>
             </div>
           </div>
@@ -187,7 +188,7 @@ export function TriangleSettingsModal({ onClose }: TriangleSettingsModalProps) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
             {selectedShape?.points.map((p: any, i: number) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '13px', color: '#131722', width: '110px' }}>#{i + 1} (price, bar)</span>
+                <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', width: '110px' }}>#{i + 1} (price, bar)</span>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <LocalNumberInput 
                     value={p.price.toString()} 
@@ -218,7 +219,7 @@ export function TriangleSettingsModal({ onClose }: TriangleSettingsModalProps) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CheckBox checked={!!visibility.ticks?.enabled} onChange={(v) => updateVisibility('ticks', { enabled: v })} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Ticks</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Ticks</span>
             </div>
             
             {[
@@ -232,7 +233,7 @@ export function TriangleSettingsModal({ onClose }: TriangleSettingsModalProps) {
               <div key={row.id} style={{ display: 'flex', alignItems: 'center', opacity: !!visibility[row.id]?.enabled ? 1 : 0.4, pointerEvents: !!visibility[row.id]?.enabled ? 'auto' : 'none' }}>
                 <div style={{ width: '100px', display: 'flex', alignItems: 'center' }}>
                   <CheckBox checked={!!visibility[row.id]?.enabled} onChange={(v) => updateVisibility(row.id, { enabled: v })} />
-                  <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>{row.label}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>{row.label}</span>
                 </div>
                 
                 <div style={{ display: 'flex', gap: '12px', flex: 1, alignItems: 'center' }}>
@@ -257,20 +258,20 @@ export function TriangleSettingsModal({ onClose }: TriangleSettingsModalProps) {
             
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CheckBox checked={!!visibility.ranges?.enabled} onChange={(v) => updateVisibility('ranges', { enabled: v })} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Ranges</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Ranges</span>
             </div>
           </div>
         )}
       </div>
 
       {/* Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid #e0e3eb' }}>
-        <div style={{ height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', display: 'flex', alignItems: 'center', padding: '0 12px', gap: '6px', fontSize: '13px', color: '#131722', cursor: 'pointer' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid var(--tv-sub-border)' }}>
+        <div style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', padding: '0 12px', gap: '6px', fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}>
           Template <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="6 9 12 15 18 9" /></svg>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={cancelEdit} style={{ padding: '0 16px', height: '34px', background: '#fff', border: '1px solid #131722', borderRadius: '4px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', color: '#131722' }}>Cancel</button>
-          <button onClick={onClose} style={{ padding: '0 24px', height: '34px', background: '#131722', border: 'none', borderRadius: '4px', color: '#fff', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Ok</button>
+          <button onClick={cancelEdit} style={{ padding: '0 16px', height: '34px', background: 'var(--tv-sub-bg)', border: '1px solid #131722', borderRadius: '4px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', color: 'var(--tv-sub-text)' }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '0 24px', height: '34px', background: 'var(--tv-sub-text)', border: 'none', borderRadius: '4px', color: 'var(--tv-sub-bg)', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Ok</button>
         </div>
       </div>
     </div>

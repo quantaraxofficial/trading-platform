@@ -61,6 +61,7 @@ export interface ChartSettings {
   sessionBreaks: boolean; sessionBreaksStyle: ColorLine;
   economicEvents: boolean; onlyFutureEvents: boolean; eventsBreaks: boolean; eventsBreaksStyle: ColorLine;
   latestNews: boolean; newsNotification: boolean;
+  colorsTheme: "light" | "dark";      // the theme the canvas colours were last set for
 }
 
 export const DATE_FORMATS = ["Mon Q3 '97", "Mon Q3 1997", "Mon 29 Sep '97", "Mon Sep '97", "Mon Sep 29, 1997", "Mon Sep 1997", "Mon Sep 29", "Mon 29 Sep",
@@ -105,6 +106,7 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   sessionBreaks: false, sessionBreaksStyle: { color: "#4985e7", width: 1, style: "Dashed" },
   economicEvents: true, onlyFutureEvents: true, eventsBreaks: false, eventsBreaksStyle: { color: "#555555", width: 1, style: "Dashed" },
   latestNews: true, newsNotification: false,
+  colorsTheme: "light",
 };
 
 export const chartSettings = makeStore<ChartSettings>("tv:chartSettings", DEFAULT_CHART_SETTINGS);
@@ -128,7 +130,7 @@ export function applySnapshot(s: Partial<ChartSettingsSnapshot>) {
 export function defaultSnapshot(dark: boolean): ChartSettingsSnapshot {
   const c = themeCanvas(dark);
   return {
-    chart: { ...DEFAULT_CHART_SETTINGS, background: c.background, background2: c.background2, gridVert: c.gridVert, gridHorz: c.gridHorz, crosshair: c.crosshair, text: c.text, lines: c.lines, watermarkColor: c.watermarkColor },
+    chart: { ...DEFAULT_CHART_SETTINGS, colorsTheme: dark ? "dark" : "light", background: c.background, background2: c.background2, gridVert: c.gridVert, gridHorz: c.gridHorz, crosshair: c.crosshair, text: c.text, lines: c.lines, watermarkColor: c.watermarkColor },
     status: { ...statusLine.get(), ...{ logo: true, title: true, marketStatus: true, chartValues: true, barChange: true, volume: false, lastDayChange: false, background: true, backgroundOpacity: 50, indTitles: true, indInputs: true, indValues: true, indBackground: true, indBackgroundOpacity: 50 } } as StatusLineSettings,
     trading: {},
   };

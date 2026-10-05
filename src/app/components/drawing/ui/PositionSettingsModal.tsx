@@ -4,6 +4,7 @@ import { useDrawing, useSettingsSession } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
 import { NumberInput as GlobalNumberInput } from './NumberInput';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
+import { PaletteInput } from "./PaletteInput";
 
 interface PositionSettingsModalProps {
   type: 'long' | 'short';
@@ -19,8 +20,8 @@ function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boole
         width: '18px',
         height: '18px',
         borderRadius: '3px',
-        border: checked ? 'none' : '1px solid #b2b5be',
-        backgroundColor: checked ? '#131722' : '#ffffff',
+        border: checked ? 'none' : '1px solid var(--tv-sub-muted)',
+        backgroundColor: checked ? 'var(--tv-sub-text)' : 'var(--tv-sub-bg)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -29,7 +30,7 @@ function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boole
       }}
     >
       {checked && (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-bg)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12"></polyline>
         </svg>
       )}
@@ -66,11 +67,11 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
       style={{
         width: '100px',
         height: '34px',
-        border: '1px solid #e0e3eb',
+        border: '1px solid var(--tv-sub-border)',
         borderRadius: '4px',
         padding: '0 8px',
         fontSize: '13px',
-        color: '#131722',
+        color: 'var(--tv-sub-text)',
         outline: 'none',
         ...style
       }}
@@ -87,12 +88,12 @@ function Select({ options, value, onChange, style }: { options: string[]; value:
         style={{
           width: '100%',
           height: '34px',
-          border: '1px solid #e0e3eb',
+          border: '1px solid var(--tv-sub-border)',
           borderRadius: '4px',
           padding: '0 30px 0 10px',
           fontSize: '13px',
-          color: '#131722',
-          backgroundColor: '#ffffff',
+          color: 'var(--tv-sub-text)',
+          backgroundColor: 'var(--tv-sub-bg)',
           appearance: 'none',
           outline: 'none',
           cursor: 'pointer'
@@ -101,7 +102,7 @@ function Select({ options, value, onChange, style }: { options: string[]; value:
         {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
       </select>
       <div style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="#131722" strokeWidth="1.2"><path d="M1 1L5 5L9 1"></path></svg>
+        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.2"><path d="M1 1L5 5L9 1"></path></svg>
       </div>
     </div>
   );
@@ -272,7 +273,7 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
         left: position.x,
         top: position.y,
         width: '370px',
-        backgroundColor: '#ffffff',
+        backgroundColor: 'var(--tv-sub-bg)',
         borderRadius: '8px',
         boxShadow: '0 4px 20px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.07)',
         zIndex: 2500,
@@ -289,15 +290,15 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', cursor: 'grab' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '18px', fontWeight: 600, color: '#131722' }}>{type === 'long' ? 'Long position' : 'Short position'}</span>
+          <span style={{ fontSize: '18px', fontWeight: 600, color: 'var(--tv-sub-text)' }}>{type === 'long' ? 'Long position' : 'Short position'}</span>
         </div>
-        <button onClick={cancelEdit} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#131722' }}>
+        <button onClick={cancelEdit} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--tv-sub-text)' }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #e0e3eb', padding: '0 20px' }}>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--tv-sub-border)', padding: '0 20px' }}>
         {tabs.map(tab => (
           <button
             key={tab}
@@ -307,7 +308,7 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
               marginRight: '20px',
               fontSize: '14px',
               fontWeight: 500,
-              color: activeTab === tab ? '#131722' : '#787b86',
+              color: activeTab === tab ? 'var(--tv-sub-text)' : '#787b86',
               background: 'transparent',
               border: 'none',
               borderBottom: activeTab === tab ? '2px solid #131722' : '2px solid transparent',
@@ -326,58 +327,58 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
         {activeTab === 'Inputs' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-              <div style={{ width: '120px', fontSize: '13px', color: '#131722' }}>Account size</div>
+              <div style={{ width: '120px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Account size</div>
               <LocalNumberInput value={accountSize.toString()} onChange={(v) => updateProp('accountSize', parseFloat(v))} style={{ flex: 1, minWidth: '0' }} />
               <Select options={['Default', 'USD']} value={accountCurrency} onChange={(v) => updateProp('accountSizeCurrency', v)} style={{ width: '100px' }} />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-              <div style={{ width: '120px', fontSize: '13px', color: '#131722' }}>Lot size</div>
+              <div style={{ width: '120px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Lot size</div>
               <LocalNumberInput value={lotSize.toString()} onChange={(v) => updateProp('lotSize', parseFloat(v))} style={{ flex: 1, minWidth: '0' }} />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-              <div style={{ width: '120px', fontSize: '13px', color: '#131722' }}>Risk</div>
+              <div style={{ width: '120px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Risk</div>
               <LocalNumberInput value={risk.toString()} onChange={(v) => updateProp('risk', parseFloat(v))} style={{ flex: 1, minWidth: '0' }} />
               <Select options={['%', 'USD']} value={riskType} onChange={(v) => updateProp('riskType', v)} style={{ width: '100px' }} />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-              <div style={{ width: '120px', fontSize: '13px', color: '#131722' }}>Entry price</div>
+              <div style={{ width: '120px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Entry price</div>
               <LocalNumberInput value={entryPrice.toFixed(3)} onChange={handleEntryChange} style={{ flex: 1, minWidth: '0' }} />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-              <div style={{ width: '120px', fontSize: '13px', color: '#131722' }}>Leverage</div>
+              <div style={{ width: '120px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Leverage</div>
               <LocalNumberInput value={leverage.toString()} onChange={(v) => updateProp('leverage', parseFloat(v))} style={{ flex: 1, minWidth: '0' }} />
             </div>
 
             <div style={{ fontSize: '11px', color: '#787b86', textTransform: 'uppercase', marginTop: '10px' }}>PROFIT LEVEL</div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-              <div style={{ width: '120px', fontSize: '13px', color: '#131722' }}>Ticks</div>
+              <div style={{ width: '120px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Ticks</div>
               <LocalNumberInput value={targetTicks.toString()} onChange={handleTargetTicksChange} style={{ flex: 1, minWidth: '0' }} />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-              <div style={{ width: '120px', fontSize: '13px', color: '#131722' }}>Price</div>
+              <div style={{ width: '120px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Price</div>
               <LocalNumberInput value={targetPrice.toFixed(3)} onChange={handleTargetPriceChange} style={{ flex: 1, minWidth: '0' }} />
             </div>
 
             <div style={{ fontSize: '11px', color: '#787b86', textTransform: 'uppercase', marginTop: '10px' }}>STOP LEVEL</div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-              <div style={{ width: '120px', fontSize: '13px', color: '#131722' }}>Ticks</div>
+              <div style={{ width: '120px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Ticks</div>
               <LocalNumberInput value={stopTicks.toString()} onChange={handleStopTicksChange} style={{ flex: 1, minWidth: '0' }} />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-              <div style={{ width: '120px', fontSize: '13px', color: '#131722' }}>Price</div>
+              <div style={{ width: '120px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Price</div>
               <LocalNumberInput value={stopPrice.toFixed(3)} onChange={handleStopPriceChange} style={{ flex: 1, minWidth: '0' }} />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
-              <div style={{ width: '120px', fontSize: '13px', color: '#131722' }}>QTY precision</div>
+              <div style={{ width: '120px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>QTY precision</div>
               <Select options={['Default', '0', '1', '2', '3', '4', '5', '6', '7', '8']} value={qtyPrecision} onChange={(v) => updateProp('qtyPrecision', v)} style={{ width: '120px' }} />
             </div>
           </div>
@@ -387,36 +388,36 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
         {activeTab === 'Style' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '100px', fontSize: '13px', color: '#131722' }}>Lines</div>
-              <div style={{ display: 'flex', gap: '8px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '3px 8px', alignItems: 'center' }}>
+              <div style={{ width: '100px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Lines</div>
+              <div style={{ display: 'flex', gap: '8px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '3px 8px', alignItems: 'center' }}>
                 <div style={{ position: 'relative', width: '22px', height: '22px', backgroundColor: selectedShape?.stroke || '#787b86', borderRadius: '2px' }}>
-                  <input type="color" value={rgbaToHex(selectedShape?.stroke || '#787b86')} onChange={(e) => updateProp('stroke', e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                  <PaletteInput value={rgbaToHex(selectedShape?.stroke || '#787b86')} onChange={(e) => updateProp('stroke', e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
                 </div>
                 <div style={{ width: '24px', height: '1px', backgroundColor: selectedShape?.stroke || '#787b86' }}></div>
               </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '100px', fontSize: '13px', color: '#131722' }}>Stop color</div>
-              <div style={{ position: 'relative', width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', backgroundColor: stopColor, cursor: 'pointer', backgroundImage: 'linear-gradient(45deg, #e0e3eb 25%, transparent 25%, transparent 75%, #e0e3eb 75%, #e0e3eb), linear-gradient(45deg, #e0e3eb 25%, transparent 25%, transparent 75%, #e0e3eb 75%, #e0e3eb)', backgroundSize: '8px 8px', backgroundPosition: '0 0, 4px 4px' }}>
+              <div style={{ width: '100px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Stop color</div>
+              <div style={{ position: 'relative', width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', backgroundColor: stopColor, cursor: 'pointer', backgroundImage: 'linear-gradient(45deg, #e0e3eb 25%, transparent 25%, transparent 75%, #e0e3eb 75%, #e0e3eb), linear-gradient(45deg, #e0e3eb 25%, transparent 25%, transparent 75%, #e0e3eb 75%, #e0e3eb)', backgroundSize: '8px 8px', backgroundPosition: '0 0, 4px 4px' }}>
                 <div style={{ position: 'absolute', inset: 0, backgroundColor: stopColor }} />
-                <input type="color" value={stopHex} onChange={(e) => updateProp('stopFillColor', hexToRgba(e.target.value, 0.2))} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                <PaletteInput value={stopHex} onChange={(e) => updateProp('stopFillColor', e.target.value.startsWith('rgb') ? e.target.value : hexToRgba(e.target.value, 0.2))} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
               </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '100px', fontSize: '13px', color: '#131722' }}>Target color</div>
-              <div style={{ position: 'relative', width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', backgroundColor: targetColor, cursor: 'pointer', backgroundImage: 'linear-gradient(45deg, #e0e3eb 25%, transparent 25%, transparent 75%, #e0e3eb 75%, #e0e3eb), linear-gradient(45deg, #e0e3eb 25%, transparent 25%, transparent 75%, #e0e3eb 75%, #e0e3eb)', backgroundSize: '8px 8px', backgroundPosition: '0 0, 4px 4px' }}>
+              <div style={{ width: '100px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Target color</div>
+              <div style={{ position: 'relative', width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', backgroundColor: targetColor, cursor: 'pointer', backgroundImage: 'linear-gradient(45deg, #e0e3eb 25%, transparent 25%, transparent 75%, #e0e3eb 75%, #e0e3eb), linear-gradient(45deg, #e0e3eb 25%, transparent 25%, transparent 75%, #e0e3eb 75%, #e0e3eb)', backgroundSize: '8px 8px', backgroundPosition: '0 0, 4px 4px' }}>
                 <div style={{ position: 'absolute', inset: 0, backgroundColor: targetColor }} />
-                <input type="color" value={targetHex} onChange={(e) => updateProp('targetFillColor', hexToRgba(e.target.value, 0.2))} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                <PaletteInput value={targetHex} onChange={(e) => updateProp('targetFillColor', e.target.value.startsWith('rgb') ? e.target.value : hexToRgba(e.target.value, 0.2))} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
               </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '100px', fontSize: '13px', color: '#131722' }}>Text</div>
+              <div style={{ width: '100px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Text</div>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <div style={{ position: 'relative', width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', backgroundColor: textColor, cursor: 'pointer' }}>
-                  <input type="color" value={textHex} onChange={(e) => updateProp('textColor', e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                <div style={{ position: 'relative', width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', backgroundColor: textColor, cursor: 'pointer' }}>
+                  <PaletteInput value={textHex} onChange={(e) => updateProp('textColor', e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
                 </div>
                 <Select options={['10', '12', '14', '16']} value={(selectedShape?.fontSize || 12).toString()} onChange={(v) => updateProp('fontSize', parseInt(v))} style={{ width: '100px' }} />
               </div>
@@ -424,24 +425,24 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
               <CheckBox checked={!!selectedShape?.showPriceLabels} onChange={(v) => updateProp('showPriceLabels', v)} />
-              <div style={{ fontSize: '13px', color: '#131722' }}>Price labels</div>
+              <div style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Price labels</div>
             </div>
 
             <div style={{ fontSize: '11px', color: '#787b86', textTransform: 'uppercase', marginTop: '10px' }}>INFO</div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-              <div style={{ width: '100px', fontSize: '13px', color: '#131722' }}>Stats</div>
+              <div style={{ width: '100px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Stats</div>
               <Select options={['TP price offset, ...']} value={selectedShape?.statsMode || 'TP price offset, ...'} onChange={(v) => updateProp('statsMode', v)} style={{ flex: 1 }} />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
               <CheckBox checked={!!selectedShape?.compactStatsMode} onChange={(v) => updateProp('compactStatsMode', v)} />
-              <div style={{ fontSize: '13px', color: '#131722' }}>Compact stats mode</div>
+              <div style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Compact stats mode</div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <CheckBox checked={!!selectedShape?.alwaysShowStats} onChange={(v) => updateProp('alwaysShowStats', v)} />
-              <div style={{ fontSize: '13px', color: '#131722' }}>Always show stats</div>
+              <div style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Always show stats</div>
             </div>
           </div>
         )}
@@ -451,7 +452,7 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
               <CheckBox checked={!!visibility.ticks?.enabled} onChange={(v) => updateVisibility('ticks', { enabled: v })} />
-              <div style={{ fontSize: '13px', color: '#131722' }}>Ticks</div>
+              <div style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Ticks</div>
             </div>
 
             {[
@@ -464,7 +465,7 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
             ].map(row => (
               <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', opacity: !!visibility[row.id]?.enabled ? 1 : 0.4, pointerEvents: !!visibility[row.id]?.enabled ? 'auto' : 'none' }}>
                 <CheckBox checked={!!visibility[row.id]?.enabled} onChange={(v) => updateVisibility(row.id, { enabled: v })} />
-                <div style={{ fontSize: '13px', color: '#131722', width: '60px' }}>{row.label}</div>
+                <div style={{ fontSize: '13px', color: 'var(--tv-sub-text)', width: '60px' }}>{row.label}</div>
                 <LocalNumberInput 
                   value={(visibility[row.id]?.from || row.minLimit).toString()} 
                   onChange={(v) => updateVisibility(row.id, { from: parseInt(v) || row.minLimit })}
@@ -487,18 +488,18 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
               <CheckBox checked={!!visibility.ranges?.enabled} onChange={(v) => updateVisibility('ranges', { enabled: v })} />
-              <div style={{ fontSize: '13px', color: '#131722' }}>Ranges</div>
+              <div style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Ranges</div>
             </div>
           </div>
         )}
       </div>
 
       {/* Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid #e0e3eb' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid var(--tv-sub-border)' }}>
         <Select options={['Template']} defaultValue="Template" style={{ width: '110px' }} />
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={cancelEdit} style={{ padding: '0 16px', height: '34px', backgroundColor: '#ffffff', border: '1px solid #131722', borderRadius: '4px', color: '#131722', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
-          <button onClick={onClose} style={{ padding: '0 24px', height: '34px', backgroundColor: '#131722', border: 'none', borderRadius: '4px', color: '#ffffff', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Ok</button>
+          <button onClick={cancelEdit} style={{ padding: '0 16px', height: '34px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid #131722', borderRadius: '4px', color: 'var(--tv-sub-text)', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '0 24px', height: '34px', backgroundColor: 'var(--tv-sub-text)', border: 'none', borderRadius: '4px', color: 'var(--tv-sub-bg)', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Ok</button>
         </div>
       </div>
     </div>
