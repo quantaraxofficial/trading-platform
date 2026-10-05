@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Line, Circle, Group, Text } from 'react-konva';
+import { Line, Circle, Group, Text, Rect, Shape } from 'react-konva';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../../core/coordinates';
 import { useChartTick } from '../../core/useChartTick';
 import { useSnap, useSnappedDrag } from '../../core/snap';
 import { HandleCircle } from '../../core/Handles';
+import { lineStats, textWidth, isDarkChart, SHAPE_FONT } from '../../core/lineStats';
 
 interface TrendLineProps {
   id: string;
@@ -27,6 +28,12 @@ interface TrendLineProps {
   text?: string;
   onTextEdit?: () => void;
   isEditingText?: boolean;
+  // Info line: TradingView's always-on stats box (price change, bars/time/distance, angle)
+  infoStats?: boolean;
+  // Trend angle: the dotted horizontal and arc at the first point, with the angle in degrees
+  angleMark?: boolean;
+  // Whether the line takes a text label ("+ Add text"); Trend angle has none
+  allowText?: boolean;
 }
 
 export function TrendLine({
@@ -34,7 +41,8 @@ export function TrendLine({
   extendLeft = false, extendRight = false, showMiddlePoint = false,
   showPriceLabels = false, showStats = false, statsPosition = 'Right',
   isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints, isLocked = false,
-  text, onTextEdit, isEditingText = false
+  text, onTextEdit, isEditingText = false,
+  infoStats = false, angleMark = false, allowText = true,
 }: TrendLineProps) {
   const snap = useSnap(chart, series);
   const move = useSnappedDrag(chart, series, points, onUpdatePoints);
@@ -243,9 +251,12 @@ export function TrendLine({
         />
       )}
 
+      {infoStats && <InfoBox p1={p1} p2={p2} x1={x1} y1={y1} x2={x2} y2={y2} />}
+      {angleMark && <AngleMark p1={p1} p2={p2} x1={x1} y1={y1} x2={x2} y2={y2} color={stroke} />}
+
       {/* Text rendering — suppressed while the HTML overlay is actively editing this
           shape's text, so its own blinking cursor isn't doubled up with this label */}
-      {!isEditingText && (() => {
+      {allowText && !isEditingText && (() => {
         const mx = (x1 + x2) / 2;
         const my = (y1 + y2) / 2;
         const angle = Math.atan2(y2 - y1, x2 - x1) * (180 / Math.PI);
@@ -333,6 +344,79 @@ export function TrendLine({
           />
         </>
       )}
+    </Group>
+  );
+}
+
+type P = { logical: number; price: number; time?: number };
+
+// TradingView's Info line box: just right of and below the line's middle, translucent, with a
+// row each for the price change, the bars / time / distance, and the angle
+function InfoBox({ p1, p2, x1, y1, x2, y2 }: { p1: P; p2: P; x1: number; y1: number; x2: number; y2: number }) {
+  const st = lineStats(p1, p2, x1, y1, x2, y2);
+  const dark = isDarkChart();
+  const ink = dark ? '#d1d4dc' : '#131722';
+  const rows = [st.priceLine, st.barsLine, st.angleLine];
+  const width = 42 + Math.max(...rows.map(r => textWidth(r, 12))) + 14;
+  const height = 93;
+  const left = (x1 + x2) / 2 + 13;
+  const top = (y1 + y2) / 2 + 12;
+  const rowY = [19, 46, 72];
+  return (
+    <Group x={left} y={top} listening={false}>
+      <Rect width={width} height={height} cornerRadius={4} fill={dark ? 'rgba(42, 46, 57, 0.9)' : 'rgba(240, 243, 250, 0.9)'} />
+      {/* price range: a double arrow between two bars */}
+      <Line points={[16, rowY[0] - 6, 26, rowY[0] - 6]} stroke={ink} strokeWidth={1} />
+      <Line points={[16, rowY[0] + 6, 26, rowY[0] + 6]} stroke={ink} strokeWidth={1} />
+      <Line points={[21, rowY[0] - 4, 21, rowY[0] + 4]} stroke={ink} strokeWidth={1} />
+      <Line points={[19, rowY[0] - 2, 21, rowY[0] - 4, 23, rowY[0] - 2]} stroke={ink} strokeWidth={1} />
+      <Line points={[19, rowY[0] + 2, 21, rowY[0] + 4, 23, rowY[0] + 2]} stroke={ink} strokeWidth={1} />
+      {/* bars: two candles with a double arrow between */}
+      <Rect x={13.5} y={rowY[1] - 4.5} width={2} height={9} stroke={ink} strokeWidth={1} />
+      <Rect x={26.5} y={rowY[1] - 4.5} width={2} height={9} stroke={ink} strokeWidth={1} />
+      <Line points={[17.5, rowY[1], 24.5, rowY[1]]} stroke={ink} strokeWidth={1} />
+      <Line points={[19.5, rowY[1] - 2, 17.5, rowY[1], 19.5, rowY[1] + 2]} stroke={ink} strokeWidth={1} />
+      <Line points={[22.5, rowY[1] - 2, 24.5, rowY[1], 22.5, rowY[1] + 2]} stroke={ink} strokeWidth={1} />
+      {/* angle */}
+      <Line points={[25, rowY[2] - 6, 15, rowY[2] + 6, 27, rowY[2] + 6]} stroke={ink} strokeWidth={1} />
+      <Shape stroke={ink} strokeWidth={1} sceneFunc={(ctx, shape) => { ctx.beginPath(); ctx.arc(15, rowY[2] + 6, 6, -0.88, 0); ctx.strokeShape(shape); }} />
+      {rows.map((r, i) => (
+        <Text key={i} x={42} y={rowY[i] - 7} text={r} fontSize={12} fontFamily={SHAPE_FONT} fill={ink} />
+      ))}
+    </Group>
+  );
+}
+
+// TradingView's Trend angle: a dotted horizontal from the first point and a dotted arc up (or
+// down) to the line, with the angle written just past the arc
+function AngleMark({ p1, p2, x1, y1, x2, y2, color }: { p1: P; p2: P; x1: number; y1: number; x2: number; y2: number; color: string }) {
+  const R = 50;
+  const dir = x2 >= x1 ? 1 : -1;
+  const lineAngle = Math.atan2(y2 - y1, x2 - x1); // canvas angle of the line
+  const base = dir > 0 ? 0 : Math.PI;
+  const label = `${lineStats(p1, p2, x1, y1, x2, y2).angle.toFixed(2)}°`;
+  const labelW = textWidth(label, 12);
+  return (
+    <Group listening={false}>
+      <Line points={[x1, y1, x1 + dir * R, y1]} stroke={color} strokeWidth={1} dash={[2, 3]} />
+      <Shape
+        stroke={color} strokeWidth={1} dash={[2, 3]}
+        sceneFunc={(ctx, shape) => {
+          let a0 = base, a1 = lineAngle;
+          // the short way round from the horizontal to the line
+          let delta = a1 - a0;
+          while (delta > Math.PI) delta -= 2 * Math.PI;
+          while (delta < -Math.PI) delta += 2 * Math.PI;
+          a1 = a0 + delta;
+          ctx.beginPath();
+          ctx.arc(x1, y1, R, Math.min(a0, a1), Math.max(a0, a1));
+          ctx.strokeShape(shape);
+        }}
+      />
+      <Text
+        x={dir > 0 ? x1 + R + 9 : x1 - R - 9 - labelW} y={y1 - 7}
+        text={label} fontSize={12} fontFamily={SHAPE_FONT} fill={color}
+      />
     </Group>
   );
 }

@@ -470,7 +470,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
   useEffect(() => {
     setCurrentWidth(selectedShape?.strokeWidth || 2);
     // Set blue as default color for trendlines, otherwise use shape color or default purple
-    if (selectedShapeType === 'trendline') {
+    if (['trendline', 'ray', 'info_line', 'extended_line', 'trend_angle', 'horizontal_line', 'vertical_line', 'cross_line'].includes(selectedShapeType as string)) {
       setCurrentColor(selectedShape?.stroke || '#2962ff');
     } else {
       setCurrentColor(selectedShape?.stroke || '#9b59b6');
@@ -1873,7 +1873,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
   }
 
   // Trendline SubBar
-  if (['trendline'].includes(selectedShapeType)) {
+  if (['trendline', 'ray', 'info_line', 'extended_line', 'trend_angle'].includes(selectedShapeType)) {
     return (
       <>
       <div 
@@ -2048,7 +2048,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
   // Horizontal Ray SubBar — same layout as the trend line's, minus Extend Left/Right
   // (a ray has no left side and always extends right by definition, so that option
   // wouldn't mean anything here).
-  if (selectedShapeType === 'horizontal_ray') {
+  if (selectedShapeType === 'horizontal_ray' || selectedShapeType === 'horizontal_line' || selectedShapeType === 'vertical_line' || selectedShapeType === 'cross_line') {
     return (
       <>
       <div

@@ -4,6 +4,7 @@
 // for the active tool, a flyout arrow that appears on hover, and separators between the tool
 // groups, the zoom tools, the drawing modes and Remove objects.
 
+import { TvToolIcon } from "./icons/tvToolIcons";
 import React, { useState, useRef, useEffect } from "react";
 import { Circle, MousePointer2, PlayCircle, Wand2, Eraser, Star } from "lucide-react";
 import { useDrawing, DrawingType } from "./drawing/core/DrawingContext";
@@ -15,8 +16,6 @@ import { Tip, TipKey } from "../trading/ui";
 import {
   TVCrosshairIcon,
   TVMeasureIcon,
-  TVTrendlineIcon,
-  TVHorizontalRayIcon,
   TVFibonacciIcon,
   TVRectangleIcon,
   TVTriangleIcon,
@@ -182,15 +181,22 @@ export default function LeftToolbar({ indicatorCount = 0, onRemoveIndicators }: 
     },
     {
       id: 'trendlines',
-      defaultIcon: <TVTrendlineIcon size={icon} />,
+      defaultIcon: <TvToolIcon id="LineToolTrendLine" size={icon} />,
       tooltip: "Trendline",
       items: [
         { isHeader: true, label: "LINES" },
         {
-          type: "trendline" as DrawingType, label: "Trend line", icon: <TVTrendlineIcon size={menuIcon} />, keys: ["Alt", "T"],
+          type: "trendline" as DrawingType, label: "Trend line", icon: <TvToolIcon id="LineToolTrendLine" size={menuIcon} />, keys: ["Alt", "T"],
           hint: <><TipKey>Shift</TipKey> — drawing a straight line at angles of 45°</>,
         },
-        { type: "horizontal_ray" as DrawingType, label: "Horizontal ray", icon: <TVHorizontalRayIcon size={menuIcon} />, keys: ["Alt", "J"] },
+        { type: "ray" as DrawingType, label: "Ray", icon: <TvToolIcon id="LineToolRay" size={menuIcon} /> },
+        { type: "info_line" as DrawingType, label: "Info line", icon: <TvToolIcon id="LineToolInfoLine" size={menuIcon} /> },
+        { type: "extended_line" as DrawingType, label: "Extended line", icon: <TvToolIcon id="LineToolExtended" size={menuIcon} /> },
+        { type: "trend_angle" as DrawingType, label: "Trend angle", icon: <TvToolIcon id="LineToolTrendAngle" size={menuIcon} /> },
+        { type: "horizontal_line" as DrawingType, label: "Horizontal line", icon: <TvToolIcon id="LineToolHorzLine" size={menuIcon} />, keys: ["Alt", "H"] },
+        { type: "horizontal_ray" as DrawingType, label: "Horizontal ray", icon: <TvToolIcon id="LineToolHorzRay" size={menuIcon} />, keys: ["Alt", "J"] },
+        { type: "vertical_line" as DrawingType, label: "Vertical line", icon: <TvToolIcon id="LineToolVertLine" size={menuIcon} />, keys: ["Alt", "V"] },
+        { type: "cross_line" as DrawingType, label: "Cross line", icon: <TvToolIcon id="LineToolCrossLine" size={menuIcon} />, keys: ["Alt", "C"] },
       ]
     },
     {

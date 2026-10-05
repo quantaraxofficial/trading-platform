@@ -4,7 +4,9 @@
 //  • the selected drawing: a label at each of its points on the price axis and the time axis, in
 //    blue, with a light blue band spanning its range on each axis;
 //  • Long / Short positions: their target, entry and stop prices always labelled on the price
-//    axis (green, grey, red); selected, they get the bands and the start/end time labels too.
+//    axis (green, grey, red); selected, they get the bands and the start/end time labels too;
+//  • Horizontal / Vertical / Cross lines: their price and/or time always labelled, in the
+//    line's colour (TradingView's "Show price" / "Show time", on by default).
 
 import React, { useEffect, useState } from "react";
 import { useChartTick } from "./core/useChartTick";
@@ -44,12 +46,23 @@ function formatAxisTime(t: number): string {
   return daily ? base : `${base}  ${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
 }
 
-type Drawing = { id: string; type: string; points: { logical: number; price: number }[] };
+type Drawing = { id: string; type: string; points: { logical: number; price: number }[]; stroke?: string; showPrice?: boolean; showTime?: boolean };
+const INFINITE_LINES = ["horizontal_line", "vertical_line", "cross_line"];
 type PriceLabel = { price: number; color: string };
+type TimeLabel = { logical: number; color: string };
 
 // The price and time labels a drawing puts on the axes
-function axisPoints(d: Drawing): { prices: PriceLabel[]; times: number[] } {
+function axisPoints(d: Drawing): { prices: PriceLabel[]; times: number[]; timeColor?: string } {
   const pts = d.points || [];
+  if (INFINITE_LINES.includes(d.type)) {
+    if (!pts.length) return { prices: [], times: [] };
+    const color = d.stroke || BLUE;
+    return {
+      prices: d.type !== "vertical_line" && d.showPrice !== false ? [{ price: pts[0].price, color }] : [],
+      times: d.type !== "horizontal_line" && d.showTime !== false ? [pts[0].logical] : [],
+      timeColor: color,
+    };
+  }
   if (d.type === "long_position" || d.type === "short_position") {
     if (pts.length < 4) return { prices: [], times: [] };
     return {
@@ -94,20 +107,30 @@ export default function AxisHighlights({ chart, series, drawings, selectedIds, w
   const xOf = (l: number): number | null => { const x = chart.timeScale().logicalToCoordinate(l); return x === null ? null : x; };
 
   const priceLabels: { y: number; text: string; color: string; key: string }[] = [];
-  const timeLabels: { x: number; text: string; key: string }[] = [];
+  const timeLabels: { x: number; text: string; key: string; color: string }[] = [];
   const priceBands: { top: number; bottom: number; key: string }[] = [];
   const timeBands: { left: number; right: number; key: string }[] = [];
 
   for (const d of drawings) {
     const selected = selectedIds.includes(d.id);
     const isPosition = d.type === "long_position" || d.type === "short_position";
-    if (!selected && !isPosition) continue;
-    const { prices, times } = axisPoints(d);
+    const isInfinite = INFINITE_LINES.includes(d.type);
+    if (!selected && !isPosition && !isInfinite) continue;
+    const { prices, times, timeColor } = axisPoints(d);
     const ys = prices.map(p => yOf(p.price)).filter((y): y is number => y !== null);
     prices.forEach((p, i) => {
       const y = yOf(p.price);
       if (y !== null) priceLabels.push({ y, text: fmtPrice(p.price), color: p.color, key: `${d.id}-p${i}` });
     });
+    if (isInfinite) {
+      // always-on time label, no bands
+      times.forEach((l, i) => {
+        const x = xOf(l);
+        const t = timeAtLogical(l);
+        if (x !== null && t !== null) timeLabels.push({ x, text: formatAxisTime(t), key: `${d.id}-t${i}`, color: timeColor || BLUE });
+      });
+      continue;
+    }
     if (!selected) continue;
     if (ys.length >= 2) priceBands.push({ top: Math.min(...ys), bottom: Math.max(...ys), key: `${d.id}-pb` });
     const xs: number[] = [];
@@ -116,7 +139,7 @@ export default function AxisHighlights({ chart, series, drawings, selectedIds, w
       const t = timeAtLogical(l);
       if (x === null || t === null) return;
       xs.push(x);
-      timeLabels.push({ x, text: formatAxisTime(t), key: `${d.id}-t${i}` });
+      timeLabels.push({ x, text: formatAxisTime(t), key: `${d.id}-t${i}`, color: BLUE });
     });
     if (xs.length >= 2) timeBands.push({ left: Math.min(...xs), right: Math.max(...xs), key: `${d.id}-tb` });
   }
@@ -137,7 +160,7 @@ export default function AxisHighlights({ chart, series, drawings, selectedIds, w
         <div aria-hidden style={{ position: "absolute", left: 0, top: paneH, width: paneW, height: tsH, pointerEvents: "none", overflow: "hidden", zIndex: 11 }}>
           {timeBands.map(b => <div key={b.key} style={{ position: "absolute", top: 0, bottom: 0, left: b.left, width: b.right - b.left, background: BAND }} />)}
           {timeLabels.map(l => (
-            <div key={l.key} data-axis-label="time" style={{ ...labelFont, position: "absolute", top: Math.max(0, Math.round((tsH - 22) / 2)), left: l.x, transform: "translateX(-50%)", height: 22, lineHeight: "22px", padding: "0 8px", background: BLUE, borderRadius: 3 }}>
+            <div key={l.key} data-axis-label="time" style={{ ...labelFont, position: "absolute", top: Math.max(0, Math.round((tsH - 22) / 2)), left: l.x, transform: "translateX(-50%)", height: 22, lineHeight: "22px", padding: "0 8px", background: l.color, borderRadius: 3 }}>
               {l.text}
             </div>
           ))}

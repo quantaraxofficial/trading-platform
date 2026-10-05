@@ -11,6 +11,7 @@ import { chartModeCursor } from '../chartCursor';
 import { isIconId } from '../ui/emojiArt';
 import { TrendLine } from './tools/TrendLine';
 import { RectangleTool } from './tools/Rectangle';
+import { InfiniteLineTool } from './tools/InfiniteLineTool';
 import { TextTool } from './tools/Text';
 import { FibonacciTool } from './tools/Fibonacci';
 import { DEFAULT_FIB_LEVELS } from './ui/FibonacciSettingsModal';
@@ -46,7 +47,11 @@ interface DrawingLayerProps {
 }
 
 // Shapes whose selected label spot takes typing (an I-beam there on TradingView)
-const TEXT_SPOT_TYPES = ['trendline', 'rectangle', 'circle', 'ellipse'];
+// Two-point lines drawn by the TrendLine component (TradingView's Lines group)
+const TREND_LINE_TYPES = ['trendline', 'ray', 'info_line', 'extended_line', 'trend_angle'];
+// Those that take a text label along the line (Trend angle has none)
+const TEXT_LINE_TYPES = ['trendline', 'ray', 'info_line', 'extended_line'];
+const TEXT_SPOT_TYPES = [...TEXT_LINE_TYPES, 'rectangle', 'circle', 'ellipse'];
 
 // TradingView's cursor over a part of a drawing: a handle shows its own resize arrows if it
 // has them (`cursor` attr) or else the plain arrow; the label spot of a selected shape the
@@ -405,7 +410,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
             // silently do nothing on the very first click. Since this manual hit-test
             // already found the exact Konva node, open the text editor directly for it
             // when that node is specifically a Text label on a type that supports one.
-            const textEditableTypes = ['trendline', 'rectangle', 'circle', 'ellipse', 'text'];
+            const textEditableTypes = [...TEXT_LINE_TYPES, 'rectangle', 'circle', 'ellipse', 'text'];
             const clickedDrawing = drawingsRef.current.find(d => d.id === foundId);
             if (shape.className === 'Text' && clickedDrawing && textEditableTypes.includes(clickedDrawing.type)) {
               setEditingTextId(foundId);
@@ -593,7 +598,13 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     arrow_mark_down: { type: 'click-point', maxPoints: 1 },
     
     trendline: { type: 'click-point', maxPoints: 2 },
-    horizontal_line: { type: 'click-point', maxPoints: 2 },
+    ray: { type: 'click-point', maxPoints: 2 },
+    info_line: { type: 'click-point', maxPoints: 2 },
+    extended_line: { type: 'click-point', maxPoints: 2 },
+    trend_angle: { type: 'click-point', maxPoints: 2 },
+    horizontal_line: { type: 'click-point', maxPoints: 1 },
+    vertical_line: { type: 'click-point', maxPoints: 1 },
+    cross_line: { type: 'click-point', maxPoints: 1 },
     horizontal_ray: { type: 'click-point', maxPoints: 1 },
     rectangle: { type: 'click-point', maxPoints: 2 },
     zoom_in: { type: 'click-point', maxPoints: 2 },
@@ -724,7 +735,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   // that followed without first nudging the mouse would place the point using whichever
   // state (locked or free) happened to be left over instead of the current one.
   const syncTrendlineShiftPreview = (shiftHeld: boolean) => {
-    if (activeTool !== 'trendline' || pendingPointsRef.current.length !== 1) return;
+    if (!activeTool || !TREND_LINE_TYPES.includes(activeTool) || pendingPointsRef.current.length !== 1) return;
     const pos = lastPointerPosRef.current;
     if (!pos || !chart || !series) return;
 
@@ -860,7 +871,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
 
     // Trend line: holding Shift while placing the second point locks the line's angle
     // to the nearest multiple of 45°.
-    if (activeTool === 'trendline' && pendingPoints.length === 1 && e.evt?.shiftKey) {
+    if (activeTool && TREND_LINE_TYPES.includes(activeTool) && pendingPoints.length === 1 && e.evt?.shiftKey) {
       const locked = computeAngleLockedPoint(pendingPoints[0], pointerPos);
       if (locked) {
         logical = locked.logical;
@@ -1050,7 +1061,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
 
     // Trend line: holding Shift while placing the second point locks the live preview's
     // angle to the nearest multiple of 45°.
-    if (activeTool === 'trendline' && pendingPoints.length === 1 && e.evt?.shiftKey) {
+    if (activeTool && TREND_LINE_TYPES.includes(activeTool) && pendingPoints.length === 1 && e.evt?.shiftKey) {
       const locked = computeAngleLockedPoint(pendingPoints[0], pointerPos);
       if (locked) {
         logical = locked.logical;
@@ -1334,11 +1345,11 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     if (!editingTextId || !chart || !series) return null;
     const d = drawingsRef.current.find(x => x.id === editingTextId);
     if (!d || d.points.length === 0) return null;
-    if (d.type !== 'text' && d.type !== 'trendline' && d.type !== 'rectangle' && d.type !== 'circle' && d.type !== 'ellipse') return null;
+    if (d.type !== 'text' && !TEXT_LINE_TYPES.includes(d.type) && d.type !== 'rectangle' && d.type !== 'circle' && d.type !== 'ellipse') return null;
 
     let px = 0, py = 0, rot = 0;
 
-    if (d.type === 'trendline' && d.points.length === 2) {
+    if (TEXT_LINE_TYPES.includes(d.type) && d.points.length === 2) {
       const x1 = logicalToPixel(chart, d.points[0].logical) || 0;
       const y1 = priceToPixel(series, d.points[0].price) || 0;
       const x2 = logicalToPixel(chart, d.points[1].logical) || 0;
@@ -1384,6 +1395,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     const style: Record<string, any> = { stroke: '#e91e63', strokeWidth: 2 };
     if (tool === 'arrow_mark_up' || tool === 'arrow_mark_down') style.stroke = '#009688';
     if (tool === 'horizontal_ray' || TOOL_CONFIG[tool]?.type === 'N-point') style.stroke = '#2962ff';
+    if (['ray', 'info_line', 'extended_line', 'trend_angle', 'horizontal_line', 'vertical_line', 'cross_line'].includes(tool)) style.stroke = '#2962ff';
     if (tool === 'fibonacci') style.fibLevels = DEFAULT_FIB_LEVELS;
     if (tool === 'arc') style.fill = 'rgba(233, 30, 99, 0.2)';
     if (tool === 'path') style.lineEndStyle = 'Arrow';
@@ -1445,7 +1457,9 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   const renderDrawing = (committed: any, asSelected = false) => {
             const drawing = liveEdit && liveEdit.id === committed.id ? { ...committed, ...liveEdit.updates } : committed;
             const isSel = asSelected || selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id);
-            if (drawing.type === 'trendline') {
+            if (TREND_LINE_TYPES.includes(drawing.type)) {
+              // Ray runs off to the right, Extended line both ways (each can be changed in settings)
+              const t = drawing.type;
               return (
                 <TrendLine 
                   key={drawing.id}
@@ -1454,8 +1468,11 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   stroke={drawing.stroke}
                   strokeWidth={drawing.strokeWidth}
                   lineStyle={drawing.lineStyle}
-                  extendLeft={drawing.extendLeft}
-                  extendRight={drawing.extendRight}
+                  extendLeft={drawing.extendLeft ?? t === 'extended_line'}
+                  extendRight={drawing.extendRight ?? (t === 'ray' || t === 'extended_line')}
+                  infoStats={t === 'info_line'}
+                  angleMark={t === 'trend_angle'}
+                  allowText={t !== 'trend_angle'}
                   showMiddlePoint={drawing.showMiddlePoint}
                   showPriceLabels={drawing.showPriceLabels}
                   showStats={drawing.showStats}
@@ -1847,6 +1864,24 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isLocked={drawing.locked} 
                 />
               );
+            } else if (drawing.type === 'horizontal_line' || drawing.type === 'vertical_line' || drawing.type === 'cross_line') {
+              return (
+                <InfiniteLineTool
+                  key={drawing.id}
+                  id={drawing.id}
+                  kind={drawing.type}
+                  points={drawing.points}
+                  stroke={drawing.stroke}
+                  strokeWidth={drawing.strokeWidth}
+                  lineStyle={(drawing as any).lineStyle}
+                  isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
+                  chart={chart}
+                  series={series}
+                  onSelect={() => selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  isLocked={drawing.locked}
+                />
+              );
             } else if (drawing.type === 'horizontal_ray') {
               return (
                 <HorizontalRayTool
@@ -2020,7 +2055,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
             initialText={(d as any).text || ''}
             x={px}
             y={py}
-            rotation={d.type === 'trendline' ? rot : (d.type === 'rectangle' || d.type === 'circle' || d.type === 'ellipse') ? 0 : undefined}
+            rotation={TEXT_LINE_TYPES.includes(d.type) ? rot : (d.type === 'rectangle' || d.type === 'circle' || d.type === 'ellipse') ? 0 : undefined}
             color={(d as any).textColor || d.stroke}
             fontSize={(d as any).fontSize || 14}
             onCommit={(newText) => {

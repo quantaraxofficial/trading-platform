@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 
 export type DrawingType =
   | 'trendline' | 'horizontal_line' | 'horizontal_ray' | 'text' | 'rectangle' | 'fibonacci'
+  | 'ray' | 'info_line' | 'extended_line' | 'trend_angle' | 'vertical_line' | 'cross_line'
   | 'brush' | 'highlighter' | 'arrow_marker' | 'arrow' | 'arrow_mark_up' | 'arrow_mark_down'
   | 'rotated_rectangle' | 'path' | 'circle' | 'ellipse' | 'polyline' | 'triangle' 
   | 'arc' | 'curve' | 'double_curve' | 'measure' | 'long_position' | 'short_position' | 'emoji'
@@ -543,10 +544,10 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
         if (key === 'h' && !e.shiftKey) { e.preventDefault(); setActiveTool('horizontal_line'); return; }
         // Alt+J = Horizontal Ray
         if (key === 'j' && !e.shiftKey) { e.preventDefault(); setActiveTool('horizontal_ray'); return; }
-        // Alt+V = Vertical Line (we don't have vertical_line yet, use crossline)
-        if (key === 'v' && !e.shiftKey) { e.preventDefault(); setActiveTool('cross'); return; }
+        // Alt+V = Vertical Line
+        if (key === 'v' && !e.shiftKey) { e.preventDefault(); setActiveTool('vertical_line'); return; }
         // Alt+C = Crossline
-        if (key === 'c' && !e.shiftKey) { e.preventDefault(); setActiveTool('cross'); return; }
+        if (key === 'c' && !e.shiftKey) { e.preventDefault(); setActiveTool('cross_line'); return; }
         // Alt+F = Fibonacci Retracement
         if (key === 'f' && !e.shiftKey) { e.preventDefault(); setActiveTool('fibonacci'); return; }
         // Alt+E = Eraser

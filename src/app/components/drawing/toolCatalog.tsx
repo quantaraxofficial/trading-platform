@@ -1,6 +1,7 @@
 import React from "react";
 import { Circle, Type, MousePointer2, PlayCircle, Wand2, Eraser } from "lucide-react";
 import type { DrawingType } from "./core/DrawingContext";
+import { TvToolIcon } from "../icons/tvToolIcons";
 import {
   TVCrosshairIcon,
   TVMeasureIcon,
@@ -50,7 +51,14 @@ export const DRAWING_TOOLS: DrawingToolInfo[] = [
   { type: "magic", label: "Magic", keywords: ["cursor"], icon: lucide(<Wand2 size={18} />) },
   { type: "eraser", label: "Eraser", keywords: ["delete", "remove"], icon: lucide(<Eraser size={18} />) },
   { type: "trendline", label: "Trend Line", keywords: ["line"], icon: tv(TVTrendlineIcon) },
+  { type: "ray", label: "Ray", keywords: ["line"], icon: () => <TvToolIcon id="LineToolRay" size={28} /> },
+  { type: "info_line", label: "Info line", keywords: ["line", "stats", "measure"], icon: () => <TvToolIcon id="LineToolInfoLine" size={28} /> },
+  { type: "extended_line", label: "Extended line", keywords: ["line"], icon: () => <TvToolIcon id="LineToolExtended" size={28} /> },
+  { type: "trend_angle", label: "Trend angle", keywords: ["line", "angle"], icon: () => <TvToolIcon id="LineToolTrendAngle" size={28} /> },
+  { type: "horizontal_line", label: "Horizontal line", keywords: ["line"], shortcut: "Alt+H", icon: () => <TvToolIcon id="LineToolHorzLine" size={28} /> },
   { type: "horizontal_ray", label: "Horizontal ray", keywords: ["line"], shortcut: "Alt+J", icon: tv(TVHorizontalRayIcon) },
+  { type: "vertical_line", label: "Vertical line", keywords: ["line"], shortcut: "Alt+V", icon: () => <TvToolIcon id="LineToolVertLine" size={28} /> },
+  { type: "cross_line", label: "Cross line", keywords: ["line", "crosshair"], shortcut: "Alt+C", icon: () => <TvToolIcon id="LineToolCrossLine" size={28} /> },
   { type: "fibonacci", label: "Fibonacci Retracement", keywords: ["fib"], icon: tv(TVFibonacciIcon) },
   { type: "long_position", label: "Long Position", keywords: ["risk", "reward", "trade"], icon: tv(TVLongPositionIcon) },
   { type: "short_position", label: "Short Position", keywords: ["risk", "reward", "trade"], icon: tv(TVShortPositionIcon) },
