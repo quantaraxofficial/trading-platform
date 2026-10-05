@@ -6,6 +6,7 @@ import { createChart, ColorType, ISeriesApi, IChartApi, CandlestickSeries, Histo
 import { CandleBodyAwareLine, candlestickBodyWidthCss } from "./chartPrimitives/CandleBodyAwareLine";
 import { SeriesSelection } from "./chartPrimitives/SeriesSelection";
 import ChartNavButtons from "./ChartNavButtons";
+import SymbolInfoDialog from "./SymbolInfoDialog";
 import { watchlists as wlStore, wl as wlActions } from "./watchlist/store";
 import { ReplayWatermark } from "./chartPrimitives/ReplayWatermark";
 import { chartModeCursor } from "./chartCursor";
@@ -568,6 +569,7 @@ export default function ChartContainer({
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, clientX: number, clientY: number, price: number | null, time: number | null, visible: boolean, onCandle?: boolean } | null>(null);
   // The price series selected by clicking a candle (TradingView's dots along it)
   const [seriesSelected, setSeriesSelected] = useState(false);
+  const [showSymbolInfo, setShowSymbolInfo] = useState(false);
   const seriesSelectionRef = useRef<SeriesSelection | null>(null);
   useEffect(() => { seriesSelectionRef.current?.setSelected(seriesSelected); }, [seriesSelected]);
   // selecting a drawing, or Esc, clears it
@@ -3579,7 +3581,7 @@ export default function ChartContainer({
             onAddAlert={() => { setShowAlertModal(true); setContextMenu(null); }}
             onAddOrder={() => { if (contextMenu.price !== null) addOrderAt(contextMenu.price); setContextMenu(null); }}
             onAddIndicator={() => { window.dispatchEvent(new CustomEvent('tv:open-indicators')); setContextMenu(null); }}
-            onSymbolInfo={() => { window.dispatchEvent(new CustomEvent('tv:open-sidebar-panel', { detail: 'watchlist' })); setContextMenu(null); }}
+            onSymbolInfo={() => { setShowSymbolInfo(true); setContextMenu(null); }}
             onCopyPrice={(text: string) => { navigator.clipboard?.writeText(text).catch(() => {}); setContextMenu(null); }}
             canPaste={!!(window as any).__copiedDrawings?.length}
             onPaste={() => { window.dispatchEvent(new CustomEvent('tv:paste-drawings')); setContextMenu(null); }}
@@ -3631,6 +3633,7 @@ export default function ChartContainer({
         )
       )}
       <ChartNavButtons chart={chart} container={chartContainerRef.current} onReset={() => resetChartViewRef.current()} />
+      {showSymbolInfo && <SymbolInfoDialog symbol={symbol} precision={pricePrecision} onClose={() => setShowSymbolInfo(false)} />}
       {lockedCursorTime !== null && chartRef.current && (
         <LockedCursorLine chart={chartRef.current} time={lockedCursorTime} theme={theme} tz={chartTimezone} />
       )}
