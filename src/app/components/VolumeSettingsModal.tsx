@@ -80,7 +80,10 @@ interface VolumeSettingsModalProps {
 }
 
 export default function VolumeSettingsModal({ onClose, theme, config, onChangeConfig }: VolumeSettingsModalProps) {
-  useEscapeClose(onClose);
+  // Changes show live; Cancel / Escape / ✕ / a click outside put the original colours back
+  const initialRef = React.useRef(config);
+  const cancel = () => { onChangeConfig(initialRef.current); onClose(); };
+  useEscapeClose(cancel);
   const [activeTab, setActiveTab] = useState<"Inputs" | "Style" | "Visibility">("Inputs");
   const [visibility, setVisibility] = useState({
     ticks: { enabled: true, from: 1, to: 1000 },
@@ -123,7 +126,7 @@ export default function VolumeSettingsModal({ onClose, theme, config, onChangeCo
       backgroundColor: "rgba(0,0,0,0.5)",
       display: "flex", alignItems: "center", justifyContent: "center",
       zIndex: 10000,
-    }} onClick={onClose}>
+    }} onClick={cancel}>
       <div 
         style={{
           width: "360px",
@@ -139,7 +142,7 @@ export default function VolumeSettingsModal({ onClose, theme, config, onChangeCo
         {/* Header */}
         <div style={{ padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>Vol</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: textColor, padding: 0 }}>
+          <button onClick={cancel} style={{ background: "none", border: "none", cursor: "pointer", color: textColor, padding: 0 }}>
             <X size={20} strokeWidth={1.5} />
           </button>
         </div>
@@ -293,7 +296,7 @@ export default function VolumeSettingsModal({ onClose, theme, config, onChangeCo
             Defaults <ChevronDown size={14} />
           </div>
           <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={onClose} style={{ padding: "8px 16px", borderRadius: "4px", border: `1px solid ${borderColor}`, backgroundColor: "transparent", color: textColor, cursor: "pointer", fontWeight: 600 }}>Cancel</button>
+            <button onClick={cancel} style={{ padding: "8px 16px", borderRadius: "4px", border: `1px solid ${borderColor}`, backgroundColor: "transparent", color: textColor, cursor: "pointer", fontWeight: 600 }}>Cancel</button>
             <button onClick={onClose} style={{ padding: "8px 16px", borderRadius: "4px", border: "none", backgroundColor: "#2962ff", color: "white", cursor: "pointer", fontWeight: 600 }}>Ok</button>
           </div>
         </div>

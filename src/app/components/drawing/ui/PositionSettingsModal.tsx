@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { useDrawing } from '../core/DrawingContext';
+import { useDrawing, useSettingsSession } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
 import { NumberInput as GlobalNumberInput } from './NumberInput';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
@@ -127,7 +127,8 @@ const hexToRgba = (hex: string, alpha: number) => {
 };
 
 export function PositionSettingsModal({ type, onClose }: PositionSettingsModalProps) {
-  useEscapeClose(onClose);
+  const cancelEdit = useSettingsSession(onClose);
+  useEscapeClose(cancelEdit);
   const { selectedShapeId, drawings, updateDrawing } = useDrawing();
   const selectedShape = drawings.find((d: any) => d.id === selectedShapeId);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -290,7 +291,7 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '18px', fontWeight: 600, color: '#131722' }}>{type === 'long' ? 'Long position' : 'Short position'}</span>
         </div>
-        <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#131722' }}>
+        <button onClick={cancelEdit} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#131722' }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
@@ -496,7 +497,7 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid #e0e3eb' }}>
         <Select options={['Template']} defaultValue="Template" style={{ width: '110px' }} />
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={onClose} style={{ padding: '0 16px', height: '34px', backgroundColor: '#ffffff', border: '1px solid #131722', borderRadius: '4px', color: '#131722', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={cancelEdit} style={{ padding: '0 16px', height: '34px', backgroundColor: '#ffffff', border: '1px solid #131722', borderRadius: '4px', color: '#131722', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
           <button onClick={onClose} style={{ padding: '0 24px', height: '34px', backgroundColor: '#131722', border: 'none', borderRadius: '4px', color: '#ffffff', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Ok</button>
         </div>
       </div>

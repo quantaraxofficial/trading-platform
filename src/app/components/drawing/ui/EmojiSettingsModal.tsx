@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { useDrawing } from '../core/DrawingContext';
+import { useDrawing, useSettingsSession } from '../core/DrawingContext';
 
 interface EmojiSettingsModalProps {
   onClose: () => void;
@@ -86,7 +86,8 @@ function VisibilityRow({ label, checked, minVal, maxVal, minLimit, maxLimit, onT
 }
 
 export function EmojiSettingsModal({ onClose }: EmojiSettingsModalProps) {
-  useEscapeClose(onClose);
+  const cancelEdit = useSettingsSession(onClose);
+  useEscapeClose(cancelEdit);
   const { selectedShape, updateDrawing } = useDrawing();
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -175,7 +176,7 @@ export function EmojiSettingsModal({ onClose }: EmojiSettingsModalProps) {
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
           </svg>
         </div>
-        <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#787b86' }}>
+        <button onClick={cancelEdit} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#787b86' }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
@@ -296,7 +297,7 @@ export function EmojiSettingsModal({ onClose }: EmojiSettingsModalProps) {
           </button>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={onClose} style={{ 
+          <button onClick={cancelEdit} style={{ 
             padding: '0 20px', 
             height: '38px', 
             backgroundColor: '#ffffff', 

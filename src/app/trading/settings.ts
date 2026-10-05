@@ -25,7 +25,7 @@ export interface TradingSettings {
   executionMarks: boolean;
   executionLabels: boolean;
   extendedPriceLines: boolean;
-  alignment: "Left" | "Right";
+  alignment: "Left" | "Center" | "Right";
   tradesInSnapshots: boolean;
 }
 

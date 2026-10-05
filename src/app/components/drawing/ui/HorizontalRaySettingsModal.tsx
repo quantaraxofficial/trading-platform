@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
-import { useDrawing } from '../core/DrawingContext';
+import { useDrawing, useSettingsSession } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
 import { ColorPickerPopup } from './ColorPickerPopup';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
@@ -44,7 +44,8 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
 }
 
 export function HorizontalRaySettingsModal({ onClose, initialPosition }: HorizontalRaySettingsModalProps) {
-  useEscapeClose(onClose);
+  const cancelEdit = useSettingsSession(onClose);
+  useEscapeClose(cancelEdit);
   const { drawings, updateDrawing, selectedShapeId } = useDrawing();
   const drawing = drawings.find((d: any) => d.id === selectedShapeId);
 
@@ -154,7 +155,7 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
             <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
           </svg>
         </div>
-        <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px' }}>
+        <button onClick={cancelEdit} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px' }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
         </button>
       </div>
@@ -341,7 +342,7 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
           Template <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="6 9 12 15 18 9" /></svg>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={onClose} style={{ padding: '0 16px', height: '34px', background: '#fff', border: '1px solid #131722', borderRadius: '4px', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={cancelEdit} style={{ padding: '0 16px', height: '34px', background: '#fff', border: '1px solid #131722', borderRadius: '4px', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
           <button onClick={onClose} style={{ padding: '0 24px', height: '34px', background: '#131722', border: 'none', borderRadius: '4px', color: '#fff', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Ok</button>
         </div>
       </div>

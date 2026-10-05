@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { useDrawing } from '../core/DrawingContext';
+import { useDrawing, useSettingsSession } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
 import { ColorPickerPopup } from './ColorPickerPopup';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
@@ -68,7 +68,8 @@ const FONT_SIZES = ['8','9','10','11','12','14','16','18','20','24','28','32','3
 const THICKNESS_OPTIONS = ['1px', '2px', '3px', '4px'];
 
 export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalProps) {
-  useEscapeClose(onClose);
+  const cancelEdit = useSettingsSession(onClose);
+  useEscapeClose(cancelEdit);
   const { selectedShapeId, drawings, updateDrawing } = useDrawing();
   const selectedShape = drawings.find((d: any) => d.id === selectedShapeId);
 
@@ -158,7 +159,7 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
             <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
           </svg>
         </div>
-        <button onClick={onClose}
+        <button onClick={cancelEdit}
           style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px', color: '#131722' }}
           onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f0f3fa')}
           onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
@@ -384,7 +385,7 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="6 9 12 15 18 9" /></svg>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={onClose}
+          <button onClick={cancelEdit}
             style={{ padding: '0 16px', height: '34px', backgroundColor: '#ffffff', border: '1px solid #131722', borderRadius: '4px', color: '#131722', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}
           >Cancel</button>
           <button onClick={onClose}
