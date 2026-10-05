@@ -14,6 +14,14 @@ import {
   renderPriceRange, renderDateRange, renderDateAndPriceRange,
 } from './forecast';
 import { renderAnchoredVWAP, anchorOnVWAP, renderFixedRangeVP, renderAnchoredVP } from './volume';
+import {
+  renderParallelChannel, renderRegressionTrend, renderFlatBottom, renderDisjointChannel,
+  renderPitchfork, renderSchiffPitchfork, renderModifiedSchiffPitchfork, renderInsidePitchfork,
+} from './channels';
+import {
+  renderTextNote, textNoteAt, renderPriceNote, renderPin, pinAt, renderTable, tableAt, renderCallout, calloutAt,
+  renderComment, commentAt, renderPriceLabel, renderSignpost, signpostAt, renderFlag, renderImage, renderPost, renderIdea,
+} from './annotations';
 
 // TradingView's left-toolbar tools drawn by MultiPointTool: how many points each takes (as
 // placing them in TradingView does), its default colour, how it's drawn, its TradingView icon,
@@ -27,9 +35,38 @@ export interface AdvancedTool {
   onCreate?: (points: Pt[]) => Record<string, any>;
   constrain?: (points: Pt[], moved: number, ctx: RenderCtx) => Pt[];
   extra?: Record<string, any>;  // other default style
+  // Text tools: where the editor opens on its text (key: a table cell 'r,c'), and whether typing
+  // starts as soon as it's placed (as TradingView's notes do)
+  text?: { at: (g: { p: { x: number; y: number }[]; d: any; key?: string }) => { x: number; y: number; color: string; fontSize: number }; editOnCreate?: boolean };
+  // Content tools ask for their content once placed: a picture, or a link
+  content?: 'image' | 'post' | 'idea';
 }
 
 export const ADVANCED_TOOLS: Record<string, AdvancedTool> = {
+  // Channels
+  parallel_channel: { label: 'Parallel channel', tvIcon: 'LineToolParallelChannel', points: 3, stroke: '#2962FF', render: renderParallelChannel },
+  regression_trend: { label: 'Regression trend', tvIcon: 'LineToolRegressionTrend', points: 2, stroke: '#2962FF', render: renderRegressionTrend },
+  flat_bottom: { label: 'Flat top/bottom', tvIcon: 'LineToolFlatBottom', points: 3, stroke: '#FF9800', render: renderFlatBottom },
+  disjoint_angle: { label: 'Disjoint channel', tvIcon: 'LineToolDisjointAngle', points: 3, stroke: '#089981', render: renderDisjointChannel },
+  // Pitchforks
+  pitchfork: { label: 'Pitchfork', tvIcon: 'LineToolPitchfork', points: 3, stroke: '#F23645', render: renderPitchfork },
+  schiff_pitchfork: { label: 'Schiff pitchfork', tvIcon: 'LineToolSchiffPitchfork2', points: 3, stroke: '#F23645', render: renderSchiffPitchfork },
+  schiff_pitchfork_modified: { label: 'Modified Schiff pitchfork', tvIcon: 'LineToolSchiffPitchfork', points: 3, stroke: '#F23645', render: renderModifiedSchiffPitchfork },
+  inside_pitchfork: { label: 'Inside pitchfork', tvIcon: 'LineToolInsidePitchfork', points: 3, stroke: '#F23645', render: renderInsidePitchfork },
+  // Text & notes
+  text_note: { label: 'Note', tvIcon: 'LineToolTextNote', points: 2, stroke: '#0F0F0F', render: renderTextNote, text: { at: textNoteAt, editOnCreate: true } },
+  price_note: { label: 'Price note', tvIcon: 'LineToolPriceNote', points: 2, stroke: '#2962FF', render: renderPriceNote },
+  note: { label: 'Pin', tvIcon: 'LineToolNote', points: 1, stroke: '#2962FF', render: renderPin, text: { at: pinAt, editOnCreate: true } },
+  table: { label: 'Table', tvIcon: 'LineToolTable', points: 1, stroke: '#DBDBDB', render: renderTable, text: { at: tableAt } },
+  callout: { label: 'Callout', tvIcon: 'LineToolCallout', points: 2, stroke: '#0097A7', render: renderCallout, text: { at: calloutAt, editOnCreate: true } },
+  comment: { label: 'Comment', tvIcon: 'LineToolComment', points: 1, stroke: '#2962FF', render: renderComment, text: { at: commentAt, editOnCreate: true } },
+  price_label: { label: 'Price label', tvIcon: 'LineToolPriceLabel', points: 1, stroke: '#2962FF', render: renderPriceLabel },
+  signpost: { label: 'Signpost', tvIcon: 'LineToolSignpost', points: 1, stroke: '#2962FF', render: renderSignpost, text: { at: signpostAt, editOnCreate: true } },
+  flag: { label: 'Flag mark', tvIcon: 'LineToolFlagMark', points: 1, stroke: '#2962FF', render: renderFlag },
+  // Content
+  image: { label: 'Image', tvIcon: 'LineToolImage', points: 1, stroke: '#2962FF', render: renderImage, content: 'image' },
+  tweet: { label: 'Post', tvIcon: 'LineToolTweet', points: 1, stroke: '#2962FF', render: renderPost, content: 'post' },
+  idea: { label: 'Idea', tvIcon: 'LineToolIdea', points: 1, stroke: '#2962FF', render: renderIdea, content: 'idea' },
   // Fibonacci
   fib_trend_ext: { label: 'Trend-based fib extension', tvIcon: 'LineToolTrendBasedFibExtension', points: 3, stroke: '#808080', render: renderFibTrendExt },
   fib_channel: { label: 'Fib channel', tvIcon: 'LineToolFibChannel', points: 3, stroke: '#808080', render: renderFibChannel },
@@ -87,7 +124,16 @@ export type AdvancedToolType = keyof typeof ADVANCED_TOOLS;
 
 // The left-toolbar flyout sections these tools appear in, in TradingView's order
 // (null entries are tools that already exist elsewhere, listed by their own type)
-export const TOOLBAR_SECTIONS: Record<'fibonacci' | 'patterns' | 'prediction', { title: string; types: string[] }[]> = {
+export const TOOLBAR_SECTIONS: Record<'trendlines' | 'fibonacci' | 'patterns' | 'prediction' | 'text', { title: string; types: string[] }[]> = {
+  // after the Lines section (listed in the toolbar itself)
+  trendlines: [
+    { title: 'CHANNELS', types: ['parallel_channel', 'regression_trend', 'flat_bottom', 'disjoint_angle'] },
+    { title: 'PITCHFORKS', types: ['pitchfork', 'schiff_pitchfork', 'schiff_pitchfork_modified', 'inside_pitchfork'] },
+  ],
+  text: [
+    { title: 'TEXT AND NOTES', types: ['text', 'text_note', 'price_note', 'note', 'table', 'callout', 'comment', 'price_label', 'signpost', 'flag'] },
+    { title: 'CONTENT', types: ['image', 'tweet', 'idea'] },
+  ],
   fibonacci: [
     { title: 'FIBONACCI', types: ['fibonacci', 'fib_trend_ext', 'fib_channel', 'fib_timezone', 'fib_speed_resist_fan', 'fib_trend_time', 'fib_circles', 'fib_spiral', 'fib_speed_resist_arcs', 'fib_wedge', 'pitchfan'] },
     { title: 'GANN', types: ['gannbox', 'gannbox_fixed', 'gannbox_square', 'gannbox_fan'] },

@@ -38,6 +38,7 @@ import AxisHighlights from './AxisHighlights';
 import { POSITION_TARGET_FILL, POSITION_STOP_FILL } from './tools/PositionTool';
 import { EmojiTool } from './tools/EmojiTool';
 import { TextEditorOverlay } from './ui/TextEditorOverlay';
+import { LinkPromptDialog } from './ui/LinkPromptDialog';
 import { isTypingTarget } from '../../lib/isTypingTarget';
 
 interface DrawingLayerProps {
@@ -229,6 +230,10 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   const pendingPointsRef = useRef<{ logical: number; price: number }[]>([]);
   const lastPointerPosRef = useRef<{ x: number; y: number } | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  // Which of the edited drawing's texts is open: null its text, 'r,c' a table cell
+  const [editingTextKey, setEditingTextKey] = useState<string | null>(null);
+  // Post / Idea waiting for their link
+  const [linkPrompt, setLinkPrompt] = useState<{ id: string; kind: 'post' | 'idea' } | null>(null);
   // Which drawing (if any) the pointer is currently over. Driven from the
   // chart's own crosshair-move stream (not Konva's native mouseenter/leave)
   // because the Konva stage's wrapper div is deliberately pointer-events:none
@@ -1050,6 +1055,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
             ...additionalProps
           });
           setSelectedShapeId(newId);
+          afterCreate(activeTool, newId, finalPoints);
         }
         setPendingPoints([]);
         setPreviewPoint(null);
@@ -1358,6 +1364,13 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     if (!editingTextId || !chart || !series) return null;
     const d = drawingsRef.current.find(x => x.id === editingTextId);
     if (!d || d.points.length === 0) return null;
+    // Text & notes tools say where their own text sits
+    const advText = ADVANCED_TOOLS[d.type]?.text;
+    if (advText) {
+      const p = d.points.map((q: any) => ({ x: logicalToPixel(chart, q.logical) || 0, y: priceToPixel(series, q.price) || 0 }));
+      const g = advText.at({ p, d, key: editingTextKey ?? undefined });
+      return { d, px: g.x, py: g.y, rot: 0, color: g.color, fontSize: g.fontSize };
+    }
     if (d.type !== 'text' && !TEXT_LINE_TYPES.includes(d.type) && d.type !== 'rectangle' && d.type !== 'circle' && d.type !== 'ellipse') return null;
 
     let px = 0, py = 0, rot = 0;
@@ -1399,9 +1412,48 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
       py = priceToPixel(series, p.price) || 0;
     }
 
-    return { d, px, py, rot };
-  }, [editingTextId]);
+    return { d, px, py, rot, color: undefined as string | undefined, fontSize: undefined as number | undefined };
+  }, [editingTextId, editingTextKey]);
 
+  // Right after a registry tool is placed: notes start typing (as TradingView's do), Image asks
+  // for a picture and Post / Idea for their link — dropping the drawing if that's cancelled
+  const afterCreate = (tool: string, id: string, points: any[]) => {
+    const adv = ADVANCED_TOOLS[tool];
+    if (!adv) return;
+    if (adv.text?.editOnCreate) { setEditingTextKey(null); setEditingTextId(id); }
+    if (adv.content === 'post' || adv.content === 'idea') setLinkPrompt({ id, kind: adv.content });
+    if (adv.content === 'image') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.addEventListener('cancel', () => deleteDrawing(id));
+      input.onchange = () => {
+        const file = input.files?.[0];
+        if (!file) { deleteDrawing(id); return; }
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new window.Image();
+          img.onload = () => {
+            // stored scaled down (it travels with the layout), placed up to 300px across
+            const scale = Math.min(1, 800 / Math.max(img.width, img.height));
+            const cv = document.createElement('canvas');
+            cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
+            cv.getContext('2d')?.drawImage(img, 0, 0, cv.width, cv.height);
+            const data = cv.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.9);
+            const shown = Math.min(1, 300 / Math.max(img.width, img.height));
+            const x0 = logicalToPixel(chart, points[0].logical), y0 = priceToPixel(series, points[0].price);
+            if (x0 === null || y0 === null) return;
+            const l1 = pixelToLogical(chart, x0 + img.width * shown), p1 = pixelToPrice(series, y0 + img.height * shown);
+            if (l1 === null || p1 === null) return;
+            updateDrawing(id, { imageData: data, points: [points[0], { logical: l1, price: p1 }] } as any);
+          };
+          img.src = String(reader.result);
+        };
+        reader.readAsDataURL(file);
+      };
+      input.click();
+    }
+  };
   // The style a tool's drawing is created with; addDrawing layers the user's last-used
   // style for that tool on top. The live preview is built the same way.
   const toolBaseStyle = (tool: string): Record<string, any> => {
@@ -1482,6 +1534,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   required={adv.points}
                   render={adv.render}
                   constrain={adv.constrain}
+                  editingKey={editingTextId === drawing.id ? (editingTextKey ?? '') : null}
+                  onEditText={adv.text ? (key) => { setSelectedShapeId(drawing.id); setEditingTextKey(key ?? null); setEditingTextId(drawing.id); } : undefined}
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
@@ -2084,32 +2138,50 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
 
       {editingTextId && editingOverlayGeometry && (() => {
         const { d, px, py, rot } = editingOverlayGeometry;
+        const cell = editingTextKey ? editingTextKey.split(',').map(Number) : null;
+        const cells: string[][] | null = cell ? ((d as any).cells || [['', '', ''], ['', '', ''], ['', '', '']]) : null;
         return (
           <TextEditorOverlay
-            initialText={(d as any).text || ''}
+            key={`${editingTextId}-${editingTextKey ?? ''}`}
+            initialText={cells && cell ? cells[cell[0]][cell[1]] : (d as any).text || ''}
             x={px}
             y={py}
             rotation={TEXT_LINE_TYPES.includes(d.type) ? rot : (d.type === 'rectangle' || d.type === 'circle' || d.type === 'ellipse') ? 0 : undefined}
-            color={(d as any).textColor || d.stroke}
-            fontSize={(d as any).fontSize || 14}
+            color={editingOverlayGeometry.color || (d as any).textColor || d.stroke}
+            fontSize={editingOverlayGeometry.fontSize || (d as any).fontSize || 14}
             onCommit={(newText) => {
-              if (newText.trim() === '' && d.type === 'text') {
+              if (cells && cell) {
+                // a table cell
+                const next = cells.map(r => [...r]);
+                next[cell[0]][cell[1]] = newText;
+                updateDrawing(editingTextId, { cells: next } as any);
+                setSelectedShapeId(editingTextId);
+              } else if (newText.trim() === '' && d.type === 'text') {
                 deleteDrawing(editingTextId);
               } else {
                 updateDrawing(editingTextId, { text: newText } as any);
                 setSelectedShapeId(editingTextId);
               }
               setEditingTextId(null);
+              setEditingTextKey(null);
             }}
             onCancel={() => {
               if (((d as any).text || '').trim() === '' && d.type === 'text') {
                 deleteDrawing(editingTextId);
               }
               setEditingTextId(null);
+              setEditingTextKey(null);
             }}
           />
         );
       })()}
+      {linkPrompt && (
+        <LinkPromptDialog
+          kind={linkPrompt.kind}
+          onSubmit={(url) => { updateDrawing(linkPrompt.id, { url } as any); setLinkPrompt(null); }}
+          onCancel={() => { deleteDrawing(linkPrompt.id); setLinkPrompt(null); }}
+        />
+      )}
     </div>
     {/* Price / time axis labels and bands for the selected drawing (and positions' levels) */}
     {!allDrawingsHidden && (

@@ -218,6 +218,7 @@ export default function LeftToolbar({ indicatorCount = 0, onRemoveIndicators }: 
         { type: "horizontal_ray" as DrawingType, label: "Horizontal ray", icon: <TvToolIcon id="LineToolHorzRay" size={menuIcon} />, keys: ["Alt", "J"] },
         { type: "vertical_line" as DrawingType, label: "Vertical line", icon: <TvToolIcon id="LineToolVertLine" size={menuIcon} />, keys: ["Alt", "V"] },
         { type: "cross_line" as DrawingType, label: "Cross line", icon: <TvToolIcon id="LineToolCrossLine" size={menuIcon} />, keys: ["Alt", "C"] },
+        ...sectionItems(TOOLBAR_SECTIONS.trendlines, {}),
       ]
     },
     {
@@ -273,10 +274,9 @@ export default function LeftToolbar({ indicatorCount = 0, onRemoveIndicators }: 
       id: 'text',
       defaultIcon: <TVTextToolIcon size={icon} />,
       tooltip: "Text",
-      items: [
-        { isHeader: true, label: "TEXT & NOTES" },
-        { type: "text" as DrawingType, label: "Text", icon: <TVTextToolIcon size={menuIcon} /> },
-      ]
+      items: sectionItems(TOOLBAR_SECTIONS.text, {
+        text: { label: "Text", icon: <TVTextToolIcon size={menuIcon} /> },
+      }),
     },
     { id: 'icons', defaultIcon: <TVEmojiToolIcon size={icon} />, tooltip: "Icon", defaultType: 'emoji' as DrawingType },
   ];
@@ -389,7 +389,7 @@ export default function LeftToolbar({ indicatorCount = 0, onRemoveIndicators }: 
             }}
           />
         ) : group.items ? (
-          <div role="menu" ref={el => placeBeside(el, buttonElsRef.current[group.id], 2, toolbarTop())} style={{ ...menuStyle, width: group.id === 'patterns' || group.id === 'prediction' ? '320px' : group.id === 'shapes' ? '270px' : '250px' }}>
+          <div role="menu" ref={el => placeBeside(el, buttonElsRef.current[group.id], 2, toolbarTop())} style={{ ...menuStyle, width: group.id === 'patterns' || group.id === 'prediction' || group.id === 'trendlines' ? '320px' : group.id === 'shapes' ? '270px' : '250px' }}>
             {group.items.map((item, idx) => item.isHeader ? (
               item.label
                 ? <div key={idx} style={{ padding: '8px 14px 4px', fontSize: '11px', fontWeight: 600, color: 'var(--tv-color-text-muted)', letterSpacing: '0.4px' }}>{item.label}</div>

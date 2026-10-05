@@ -30,6 +30,10 @@ export interface RenderCtx {
   selected: boolean;
   dark: boolean;
   complete: boolean;       // false while it's still being placed
+  // Text tools: which of its texts the HTML editor is open on ('' = its text, 'r,c' = a table
+  // cell; null = none), so it isn't drawn twice; and how to open the editor on one
+  editingKey: string | null;
+  editText: (key?: string) => void;
 }
 
 export interface MultiPointToolProps {
@@ -49,11 +53,14 @@ export interface MultiPointToolProps {
   hideHandles?: boolean;
   // Lets a tool adjust the points when one handle moves (e.g. Sector keeps its radius)
   constrain?: (points: Pt[], movedIndex: number, ctx: RenderCtx) => Pt[];
+  editingKey?: string | null;
+  onEditText?: (key?: string) => void;
 }
 
 export function MultiPointTool({
   id, drawing, points, required, render, isSelected, isHovering = false, chart, series,
   onSelect, onUpdatePoints, isLocked = false, hideHandles = false, constrain,
+  editingKey = null, onEditText,
 }: MultiPointToolProps) {
   const snap = useSnap(chart, series);
   const move = useSnappedDrag(chart, series, points, onUpdatePoints);
@@ -79,6 +86,7 @@ export function MultiPointTool({
     selected: isSelected, dark: isDarkChart(),
     // an open-ended tool (Ghost feed) draws itself from its second point on
     complete: Number.isFinite(required) ? points.length >= required : points.length >= 2,
+    editingKey, editText: (key) => onEditText?.(key),
   };
 
   const onHandleMove = (i: number) => (e: any) => {
