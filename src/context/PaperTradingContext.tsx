@@ -40,24 +40,28 @@ export const PaperTradingProvider = ({ children }: { children: ReactNode }) => {
       if (uid) setDoc(doc(db, 'userPaperTrading', uid), { engine: state }, { merge: true }).catch(err => console.warn('[PaperTrading] save failed', err));
     };
 
+    // This browser's copy at once; the account's copy (which can take seconds, or fail when
+    // offline) replaces it only if nothing was traded meanwhile — otherwise a late load wiped
+    // out orders placed (or a broker connected) right after the page opened
+    const name = user?.displayName || user?.email?.split('@')[0] || 'Paper Trading';
+    let localRaw: any = null;
+    try { localRaw = JSON.parse(localStorage.getItem(localKeyFor(uid)) || 'null'); } catch { localRaw = null; }
+    engine.replaceState(localRaw ? normalizeState(localRaw) : createInitialState(name));
+    const loadedRevision = engine.getRevision();
+    lastSaved = loadedRevision;
+    ready = true;
     (async () => {
+      if (!uid) return;
       let raw: any = null;
-      if (uid) {
-        try {
-          const snap = await getDoc(doc(db, 'userPaperTrading', uid));
-          raw = snap.exists() ? snap.data()?.engine ?? null : null;
-        } catch (err) {
-          console.warn('[PaperTrading] load failed, using this browser\'s copy', err);
-        }
+      try {
+        const snap = await getDoc(doc(db, 'userPaperTrading', uid));
+        raw = snap.exists() ? snap.data()?.engine ?? null : null;
+      } catch (err) {
+        console.warn('[PaperTrading] load failed, using this browser\'s copy', err);
       }
-      if (!raw) {
-        try { raw = JSON.parse(localStorage.getItem(localKeyFor(uid)) || 'null'); } catch { raw = null; }
-      }
-      if (cancelled) return;
-      const name = user?.displayName || user?.email?.split('@')[0] || 'Paper Trading';
-      engine.replaceState(raw ? normalizeState(raw) : createInitialState(name));
+      if (cancelled || !raw || engine.getRevision() !== loadedRevision) return;
+      engine.replaceState(normalizeState(raw));
       lastSaved = engine.getRevision();
-      ready = true;
     })();
 
     const unsubscribe = engine.subscribe(() => {

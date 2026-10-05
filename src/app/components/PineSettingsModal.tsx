@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X, Info } from "lucide-react";
 import type { PineInputMeta } from "../lib/pineScriptEngine";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import { PaletteInput } from "./drawing/ui/PaletteInput";
 
 interface PineSettingsModalProps {
   theme?: string;
@@ -103,8 +104,7 @@ export default function PineSettingsModal({
         return <input type="text" value={v ?? ""} onChange={(e) => set(m.varName, e.target.value)} style={inputStyle} />;
       case "color":
         return (
-          <input
-            type="color"
+          <PaletteInput
             value={typeof v === "string" && /^#/.test(v) ? v : "#2962ff"}
             onChange={(e) => set(m.varName, e.target.value)}
             style={{ width: "36px", height: "26px", padding: 0, border: `1px solid ${border}`, borderRadius: "4px", background: "none", cursor: "pointer" }}
@@ -241,8 +241,7 @@ export default function PineSettingsModal({
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                   {plots.map((p) => (
                     <div key={p.title} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <input
-                        type="color"
+                      <PaletteInput
                         value={plotColors[p.title] || p.color}
                         onChange={(e) => setPlotColors((c) => ({ ...c, [p.title]: e.target.value }))}
                         style={{ width: "30px", height: "24px", padding: 0, border: `1px solid ${border}`, borderRadius: "4px", background: "none", cursor: "pointer" }}

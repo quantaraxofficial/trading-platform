@@ -4,6 +4,7 @@ import { useDrawing, useSettingsSession } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
 import { ColorPickerPopup } from './ColorPickerPopup';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
+import { PaletteInput } from "./PaletteInput";
 
 interface RectangleSettingsModalProps {
   onClose: () => void;
@@ -15,14 +16,14 @@ function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boole
       onClick={() => onChange(!checked)}
       style={{
         width: '18px', height: '18px', borderRadius: '3px',
-        border: checked ? 'none' : '1px solid #b2b5be',
-        backgroundColor: checked ? '#131722' : '#ffffff',
+        border: checked ? 'none' : '1px solid var(--tv-sub-muted)',
+        backgroundColor: checked ? 'var(--tv-sub-text)' : 'var(--tv-sub-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         cursor: 'pointer', flexShrink: 0,
       }}
     >
       {checked && (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-bg)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12" />
         </svg>
       )}
@@ -48,10 +49,10 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
         onKeyDown={handleKeyDown}
         style={{ 
           width: '60px', height: '34px', 
-          border: isFocused ? '2px solid #2962ff' : '1px solid #e0e3eb', 
+          border: isFocused ? '2px solid #2962ff' : '1px solid var(--tv-sub-border)', 
           borderRadius: '4px', padding: isFocused ? '0 7px' : '0 8px', 
-          fontSize: '13px', color: '#131722', outline: 'none', 
-          backgroundColor: '#ffffff',
+          fontSize: '13px', color: 'var(--tv-sub-text)', outline: 'none', 
+          backgroundColor: 'var(--tv-sub-bg)',
           ...style 
         }}
       />
@@ -140,7 +141,7 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
     <div
       style={{
         position: 'fixed', left: position.x, top: position.y, width: '380px',
-        backgroundColor: '#ffffff', borderRadius: '8px',
+        backgroundColor: 'var(--tv-sub-bg)', borderRadius: '8px',
         boxShadow: '0 4px 20px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.07)',
         zIndex: 2000, display: 'flex', flexDirection: 'column',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif',
@@ -154,14 +155,14 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', cursor: 'grab' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '18px', fontWeight: 600, color: '#131722' }}>Rectangle</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <span style={{ fontSize: '18px', fontWeight: 600, color: 'var(--tv-sub-text)' }}>Rectangle</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
           </svg>
         </div>
         <button onClick={cancelEdit}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#131722', padding: '4px', borderRadius: '4px' }}
-          onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f0f3fa')}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--tv-sub-text)', padding: '4px', borderRadius: '4px' }}
+          onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')}
           onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -171,12 +172,12 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #e0e3eb', padding: '0 20px' }}>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--tv-sub-border)', padding: '0 20px' }}>
         {tabs.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             style={{
               padding: '8px 0', marginRight: '20px', fontSize: '14px', fontWeight: 500,
-              color: activeTab === tab ? '#131722' : '#787b86',
+              color: activeTab === tab ? 'var(--tv-sub-text)' : '#787b86',
               background: 'transparent', border: 'none',
               borderBottom: activeTab === tab ? '2px solid #131722' : '2px solid transparent',
               cursor: 'pointer',
@@ -193,7 +194,7 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {/* Extend */}
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={{ width: '100px', fontSize: '13px', color: '#131722' }}>Extend</div>
+              <div style={{ width: '100px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Extend</div>
               <select 
                 value={selectedShape?.extendLeft && selectedShape?.extendRight ? 'Both' : selectedShape?.extendRight ? 'Right' : selectedShape?.extendLeft ? 'Left' : 'None'}
                 onChange={(e) => {
@@ -203,7 +204,7 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
                     extendRight: val === 'Right' || val === 'Both' 
                   });
                 }}
-                style={{ height: '34px', flex: 1, border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 10px', fontSize: '13px', color: '#131722', outline: 'none', appearance: 'none', background: '#fff url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23787b86%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 10px center' }}
+                style={{ height: '34px', flex: 1, border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 10px', fontSize: '13px', color: 'var(--tv-sub-text)', outline: 'none', appearance: 'none', background: 'var(--tv-sub-bg) url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23787b86%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 10px center' }}
               >
                 <option value="None">Don't extend</option>
                 <option value="Right">Extend Right</option>
@@ -214,12 +215,12 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
 
             {/* Border */}
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={{ width: '100px', fontSize: '13px', color: '#131722' }}>Border</div>
+              <div style={{ width: '100px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Border</div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <div style={{ position: 'relative' }}>
                   <div 
                     onClick={() => setShowBorderPicker(!showBorderPicker)}
-                    style={{ position: 'relative', width: '64px', height: '34px', borderRadius: '4px', border: '1px solid #e0e3eb', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }}
+                    style={{ position: 'relative', width: '64px', height: '34px', borderRadius: '4px', border: '1px solid var(--tv-sub-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }}
                   >
                     <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc), linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc)', backgroundSize: '8px 8px', backgroundPosition: '0 0, 4px 4px', opacity: 0.2 }} />
                     <div style={{ width: '24px', height: '24px', backgroundColor: selectedShape?.stroke || '#9b59b6', borderRadius: '2px', position: 'relative', zIndex: 1 }} />
@@ -237,7 +238,7 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
                     />
                   )}
                 </div>
-                <div style={{ width: '64px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: '64px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <svg width="24" height="2" viewBox="0 0 24 2" fill="none" stroke={selectedShape?.stroke || '#9b59b6'} strokeWidth="2">
                     <line x1="0" y1="1" x2="24" y2="1" strokeDasharray={selectedShape?.lineStyle === 'Dashed' ? '4,4' : selectedShape?.lineStyle === 'Dotted' ? '1,3' : ''} />
                   </svg>
@@ -249,13 +250,13 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100px' }}>
                 <CheckBox checked={!!selectedShape?.middleLineVisible} onChange={(v) => updateProp('middleLineVisible', v)} />
-                <span style={{ fontSize: '13px', color: '#131722' }}>Middle line</span>
+                <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Middle line</span>
               </div>
               <div style={{ display: 'flex', gap: '8px', opacity: selectedShape?.middleLineVisible ? 1 : 0.5, pointerEvents: selectedShape?.middleLineVisible ? 'auto' : 'none' }}>
                 <div style={{ position: 'relative' }}>
                   <div 
                     onClick={() => setShowMiddleLinePicker(!showMiddleLinePicker)}
-                    style={{ position: 'relative', width: '64px', height: '34px', borderRadius: '4px', border: '1px solid #e0e3eb', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }}
+                    style={{ position: 'relative', width: '64px', height: '34px', borderRadius: '4px', border: '1px solid var(--tv-sub-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }}
                   >
                     <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc), linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc)', backgroundSize: '8px 8px', backgroundPosition: '0 0, 4px 4px', opacity: 0.2 }} />
                     <div style={{ width: '24px', height: '24px', backgroundColor: selectedShape?.middleLineColor || '#9b59b6', borderRadius: '2px', position: 'relative', zIndex: 1 }} />
@@ -269,7 +270,7 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
                     />
                   )}
                 </div>
-                <div style={{ width: '64px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: '64px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <svg width="24" height="2" viewBox="0 0 24 2" fill="none" stroke={selectedShape?.middleLineColor || '#9b59b6'} strokeWidth="1">
                     <line x1="0" y1="1" x2="24" y2="1" strokeDasharray="4,4" />
                   </svg>
@@ -281,12 +282,12 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100px' }}>
                 <CheckBox checked={selectedShape?.backgroundVisible !== false} onChange={(v) => updateProp('backgroundVisible', v)} />
-                <span style={{ fontSize: '13px', color: '#131722' }}>Background</span>
+                <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Background</span>
               </div>
               <div style={{ position: 'relative' }}>
                 <div 
                   onClick={() => setShowBackgroundPicker(!showBackgroundPicker)}
-                  style={{ position: 'relative', width: '64px', height: '34px', borderRadius: '4px', border: '1px solid #e0e3eb', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', opacity: selectedShape?.backgroundVisible !== false ? 1 : 0.5, pointerEvents: selectedShape?.backgroundVisible !== false ? 'auto' : 'none' }}
+                  style={{ position: 'relative', width: '64px', height: '34px', borderRadius: '4px', border: '1px solid var(--tv-sub-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer', opacity: selectedShape?.backgroundVisible !== false ? 1 : 0.5, pointerEvents: selectedShape?.backgroundVisible !== false ? 'auto' : 'none' }}
                 >
                   <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc), linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc)', backgroundSize: '8px 8px', backgroundPosition: '0 0, 4px 4px', opacity: 0.2 }} />
                   <div style={{ width: '24px', height: '24px', backgroundColor: selectedShape?.fill || '#9b59b633', borderRadius: '2px', position: 'relative', zIndex: 1 }} />
@@ -308,31 +309,31 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
         {activeTab === 'Text' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <div style={{ position: 'relative', width: '34px', height: '34px', borderRadius: '4px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #e0e3eb' }}>
+              <div style={{ position: 'relative', width: '34px', height: '34px', borderRadius: '4px', overflow: 'hidden', cursor: 'pointer', border: '1px solid var(--tv-sub-border)' }}>
                 <div style={{ width: '100%', height: '100%', backgroundColor: selectedShape?.textColor || '#9b59b6' }} />
-                <input type="color" value={selectedShape?.textColor || '#9b59b6'} onChange={e => updateProp('textColor', e.target.value)}
+                <PaletteInput value={selectedShape?.textColor || '#9b59b6'} onChange={e => updateProp('textColor', e.target.value)}
                   style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
               </div>
 
               <div style={{ position: 'relative' }}>
-                <button onClick={() => setShowFontDrop(!showFontDrop)} style={{ height: '34px', minWidth: '72px', border: '1px solid #e0e3eb', borderRadius: '4px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 10px', fontSize: '13px', color: '#131722', cursor: 'pointer' }}>
+                <button onClick={() => setShowFontDrop(!showFontDrop)} style={{ height: '34px', minWidth: '72px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: 'var(--tv-sub-bg)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 10px', fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}>
                   {selectedShape?.fontSize || '14'}
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="6 9 12 15 18 9" /></svg>
                 </button>
                 {showFontDrop && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 200, padding: '4px 0', maxHeight: '160px', overflowY: 'auto' }}>
+                  <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 200, padding: '4px 0', maxHeight: '160px', overflowY: 'auto' }}>
                     {FONT_SIZES.map(s => (
-                      <button key={s} onClick={() => { updateProp('fontSize', parseInt(s)); setShowFontDrop(false); }} style={{ width: '100%', padding: '6px 14px', textAlign: 'left', background: (selectedShape?.fontSize === parseInt(s)) ? '#f0f3fa' : 'transparent', border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer' }}>{s}</button>
+                      <button key={s} onClick={() => { updateProp('fontSize', parseInt(s)); setShowFontDrop(false); }} style={{ width: '100%', padding: '6px 14px', textAlign: 'left', background: (selectedShape?.fontSize === parseInt(s)) ? 'var(--tv-sub-hover)' : 'transparent', border: 'none', fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}>{s}</button>
                     ))}
                   </div>
                 )}
               </div>
 
-              <button onClick={() => updateProp('bold', !selectedShape?.bold)} style={{ width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', background: selectedShape?.bold ? '#e0e3eb' : '#ffffff', fontWeight: 700, fontSize: '15px', color: '#131722', cursor: 'pointer' }}>B</button>
-              <button onClick={() => updateProp('italic', !selectedShape?.italic)} style={{ width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', background: selectedShape?.italic ? '#e0e3eb' : '#ffffff', fontStyle: 'italic', fontFamily: 'serif', fontSize: '15px', color: '#131722', cursor: 'pointer' }}>I</button>
+              <button onClick={() => updateProp('bold', !selectedShape?.bold)} style={{ width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: selectedShape?.bold ? '#e0e3eb' : 'var(--tv-sub-bg)', fontWeight: 700, fontSize: '15px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}>B</button>
+              <button onClick={() => updateProp('italic', !selectedShape?.italic)} style={{ width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: selectedShape?.italic ? '#e0e3eb' : 'var(--tv-sub-bg)', fontStyle: 'italic', fontFamily: 'serif', fontSize: '15px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}>I</button>
             </div>
 
-            <textarea value={selectedShape?.text || ''} onChange={e => updateProp('text', e.target.value)} placeholder="Add text" style={{ width: '100%', height: '80px', border: '1px solid #2962ff', borderRadius: '6px', padding: '8px 12px', fontSize: '13px', fontFamily: 'inherit', resize: 'none', outline: 'none', color: '#131722', boxSizing: 'border-box' }} />
+            <textarea value={selectedShape?.text || ''} onChange={e => updateProp('text', e.target.value)} placeholder="Add text" style={{ width: '100%', height: '80px', border: '1px solid #2962ff', borderRadius: '6px', padding: '8px 12px', fontSize: '13px', fontFamily: 'inherit', resize: 'none', outline: 'none', color: 'var(--tv-sub-text)', boxSizing: 'border-box' }} />
           </div>
         )}
 
@@ -341,7 +342,7 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {selectedShape?.points?.map((p: any, idx: number) => (
               <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '110px', fontSize: '13px', color: '#131722' }}>
+                <div style={{ width: '110px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>
                   #{idx + 1} (price, bar)
                 </div>
                 <LocalNumberInput 
@@ -364,7 +365,7 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CheckBox checked={!!visibility.ticks?.enabled} onChange={(v) => updateVisibility('ticks', { enabled: v })} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Ticks</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Ticks</span>
             </div>
             
             {[
@@ -378,7 +379,7 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
               <div key={row.id} style={{ display: 'flex', alignItems: 'center', opacity: !!visibility[row.id]?.enabled ? 1 : 0.4, pointerEvents: !!visibility[row.id]?.enabled ? 'auto' : 'none' }}>
                 <div style={{ width: '100px', display: 'flex', alignItems: 'center' }}>
                   <CheckBox checked={!!visibility[row.id]?.enabled} onChange={(v) => updateVisibility(row.id, { enabled: v })} />
-                  <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>{row.label}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>{row.label}</span>
                 </div>
                 
                 <div style={{ display: 'flex', gap: '12px', flex: 1, alignItems: 'center' }}>
@@ -403,20 +404,20 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
             
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CheckBox checked={!!visibility.ranges?.enabled} onChange={(v) => updateVisibility('ranges', { enabled: v })} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Ranges</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Ranges</span>
             </div>
           </div>
         )}
       </div>
 
       {/* Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid #e0e3eb' }}>
-        <div style={{ height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', display: 'flex', alignItems: 'center', padding: '0 12px', gap: '6px', fontSize: '13px', color: '#131722', cursor: 'pointer' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid var(--tv-sub-border)' }}>
+        <div style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', padding: '0 12px', gap: '6px', fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}>
           Template <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="6 9 12 15 18 9" /></svg>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={cancelEdit} style={{ padding: '0 16px', height: '34px', background: '#fff', border: '1px solid #131722', borderRadius: '4px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', color: '#131722' }}>Cancel</button>
-          <button onClick={onClose} style={{ padding: '0 24px', height: '34px', background: '#131722', border: 'none', borderRadius: '4px', color: '#fff', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Ok</button>
+          <button onClick={cancelEdit} style={{ padding: '0 16px', height: '34px', background: 'var(--tv-sub-bg)', border: '1px solid #131722', borderRadius: '4px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', color: 'var(--tv-sub-text)' }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '0 24px', height: '34px', background: 'var(--tv-sub-text)', border: 'none', borderRadius: '4px', color: 'var(--tv-sub-bg)', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Ok</button>
         </div>
       </div>
     </div>

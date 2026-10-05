@@ -108,18 +108,18 @@ export function ColorPickerPopup({ colorStr, onChange, onClose, thickness, onThi
       />
     );
   };
-  const label = (t: string) => <div style={{ margin: '14px 0 8px', fontSize: 14, color: '#6a6d78' }}>{t}</div>;
+  const label = (t: string) => <div style={{ margin: '14px 0 8px', fontSize: 14, color: 'var(--tv-color-text-muted)' }}>{t}</div>;
   const segments = (count: number, isOn: (i: number) => boolean, pick: (i: number) => void, draw: (i: number, color: string) => React.ReactNode) => (
-    <div style={{ display: 'flex', border: '1px solid #dbdbdb', borderRadius: 6, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', border: '1px solid var(--tv-sub-border)', borderRadius: 6, overflow: 'hidden' }}>
       {Array.from({ length: count }, (_, i) => {
         const on = isOn(i);
         return (
           <button key={i} type="button" onClick={() => pick(i)}
             style={{
-              flex: 1, height: 32, background: on ? '#2e2e2e' : 'transparent', border: 'none', borderLeft: i > 0 ? '1px solid #dbdbdb' : 'none',
+              flex: 1, height: 32, background: on ? 'var(--tv-sub-text)' : 'transparent', border: 'none', borderLeft: i > 0 ? '1px solid var(--tv-sub-border)' : 'none',
               cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
             }}>
-            {draw(i, on ? '#ffffff' : '#2e2e2e')}
+            {draw(i, on ? 'var(--tv-sub-bg)' : 'var(--tv-sub-text)')}
           </button>
         );
       })}
@@ -129,7 +129,7 @@ export function ColorPickerPopup({ colorStr, onChange, onClose, thickness, onThi
   return (
     <div
       style={{
-        position: 'absolute', backgroundColor: '#ffffff', borderRadius: 6, boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)', zIndex: 100000,
+        position: 'absolute', backgroundColor: 'var(--tv-sub-bg)', borderRadius: 6, boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)', zIndex: 100000,
         padding: '12px 13px', width: showCustomPicker ? 236 : GRID_W, boxSizing: 'content-box', overflow: 'hidden', ...style,
       }}
       onClick={stopAll}
@@ -137,6 +137,7 @@ export function ColorPickerPopup({ colorStr, onChange, onClose, thickness, onThi
       {showCustomPicker ? (
         <HSVColorPickerPopup
           hex={hex}
+          isDark={typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark'}
           onApply={(newHex) => { addCustomColor(newHex); applyColor(newHex, opacity); setShowCustomPicker(false); }}
         />
       ) : (
@@ -152,7 +153,7 @@ export function ColorPickerPopup({ colorStr, onChange, onClose, thickness, onThi
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(10, ${SW}px)`, gap: GAP, alignItems: 'center' }}>
             {customColors.map((c, i) => swatch(c, `c${i}`))}
             <div onClick={() => setShowCustomPicker(true)} title="Add custom color"
-              style={{ width: SW, height: SW, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0f0f0f' }}>
+              style={{ width: SW, height: SW, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--tv-sub-text)' }}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M7 0v14M0 7h14" /></svg>
             </div>
           </div>
@@ -167,9 +168,9 @@ export function ColorPickerPopup({ colorStr, onChange, onClose, thickness, onThi
               }} />
               <input type="range" min="0" max="100" value={opacity} onChange={e => applyColor(hex, parseInt(e.target.value))} aria-label="Opacity"
                 style={{ position: 'absolute', inset: 0, width: '100%', cursor: 'pointer', opacity: 0, zIndex: 2, margin: 0 }} />
-              <div style={{ position: 'absolute', left: `calc(${opacity}% - ${opacity * 0.14}px)`, width: 14, height: 14, backgroundColor: '#fff', border: '2px solid #0f0f0f', borderRadius: '50%', boxSizing: 'border-box', pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', left: `calc(${opacity}% - ${opacity * 0.14}px)`, width: 14, height: 14, backgroundColor: 'var(--tv-sub-bg)', border: '2px solid var(--tv-sub-text)', borderRadius: '50%', boxSizing: 'border-box', pointerEvents: 'none' }} />
             </div>
-            <div style={{ width: 48, height: 32, border: '1px solid #dbdbdb', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 8, boxSizing: 'border-box', fontSize: 14, color: '#0f0f0f' }}>
+            <div style={{ width: 48, height: 32, border: '1px solid var(--tv-sub-border)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 8, boxSizing: 'border-box', fontSize: 14, color: 'var(--tv-sub-text)' }}>
               {opacity}%
             </div>
           </div>

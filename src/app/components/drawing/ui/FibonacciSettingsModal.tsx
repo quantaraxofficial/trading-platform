@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import SaveTemplateModal from '../../SaveTemplateModal';
 import { ColorPickerPopup, stopAll } from './ColorPickerPopup';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
+import { PaletteInput } from "./PaletteInput";
 
 interface FibonacciSettingsModalProps {
   onClose: () => void;
@@ -18,14 +19,14 @@ function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boole
       onClick={() => onChange(!checked)}
       style={{
         width: '18px', height: '18px', borderRadius: '3px',
-        border: checked ? 'none' : '1px solid #b2b5be',
-        backgroundColor: checked ? '#131722' : '#ffffff',
+        border: checked ? 'none' : '1px solid var(--tv-sub-muted)',
+        backgroundColor: checked ? 'var(--tv-sub-text)' : 'var(--tv-sub-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         cursor: 'pointer', flexShrink: 0,
       }}
     >
       {checked && (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-bg)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12" />
         </svg>
       )}
@@ -44,16 +45,16 @@ function LineThicknessDropdown({ value, onChange, isOpen, onToggle }: { value: n
   return (
     <div style={{ position: 'relative' }}>
       <div onClick={e => { stopAll(e); onToggle(); }}
-        style={{ width: '48px', height: '32px', border: isOpen ? '1px solid #2962ff' : '1px solid #e0e3eb', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        style={{ width: '48px', height: '32px', border: isOpen ? '1px solid #2962ff' : '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
         <div style={{ width: '24px', height: `${value}px`, backgroundColor: '#131722' }} />
       </div>
       {isOpen && (
         <div onClick={stopAll}
-          style={{ position: 'absolute', top: '36px', left: 0, backgroundColor: '#fff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 100000, padding: '4px', width: '56px' }}>
+          style={{ position: 'absolute', top: '36px', left: 0, backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 100000, padding: '4px', width: '56px' }}>
           {[1, 2, 3, 4].map(w => (
             <div key={w} onClick={() => onChange(w)}
-              style={{ height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px', cursor: 'pointer', backgroundColor: value === w ? '#131722' : 'transparent' }}>
-              <div style={{ width: '24px', height: `${w}px`, backgroundColor: value === w ? '#ffffff' : '#131722' }} />
+              style={{ height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px', cursor: 'pointer', backgroundColor: value === w ? 'var(--tv-sub-text)' : 'transparent' }}>
+              <div style={{ width: '24px', height: `${w}px`, backgroundColor: value === w ? '#ffffff' : 'var(--tv-sub-text)' }} />
             </div>
           ))}
         </div>
@@ -72,21 +73,21 @@ function LineStyleMiniDropdown({ value, onChange, isOpen, onToggle }: { value: s
   return (
     <div style={{ position: 'relative' }}>
       <div onClick={e => { stopAll(e); onToggle(); }}
-        style={{ width: '48px', height: '32px', border: isOpen ? '1px solid #2962ff' : '1px solid #e0e3eb', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-        <svg width="24" height="2" viewBox="0 0 24 2"><line x1="0" y1="1" x2="24" y2="1" stroke="#131722" strokeWidth="2" strokeDasharray={lineDash(value)} /></svg>
+        style={{ width: '48px', height: '32px', border: isOpen ? '1px solid #2962ff' : '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        <svg width="24" height="2" viewBox="0 0 24 2"><line x1="0" y1="1" x2="24" y2="1" stroke="var(--tv-sub-text)" strokeWidth="2" strokeDasharray={lineDash(value)} /></svg>
       </div>
       {isOpen && (
         <div onClick={stopAll}
-          style={{ position: 'absolute', top: '36px', left: 0, backgroundColor: '#fff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 100000, padding: '4px', width: '140px' }}>
+          style={{ position: 'absolute', top: '36px', left: 0, backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 100000, padding: '4px', width: '140px' }}>
           {options.map(opt => (
             <div key={opt.key} onClick={() => onChange(opt.key)}
               style={{
                 height: '32px', display: 'flex', alignItems: 'center', gap: '10px', padding: '0 10px',
                 borderRadius: '4px', cursor: 'pointer', fontSize: '13px',
-                backgroundColor: value === opt.key ? '#131722' : 'transparent', color: value === opt.key ? '#ffffff' : '#131722',
+                backgroundColor: value === opt.key ? 'var(--tv-sub-text)' : 'transparent', color: value === opt.key ? '#ffffff' : 'var(--tv-sub-text)',
               }}>
               <svg width="20" height="2" viewBox="0 0 20 2" style={{ flexShrink: 0 }}>
-                <line x1="0" y1="1" x2="20" y2="1" stroke={value === opt.key ? '#ffffff' : '#131722'} strokeWidth="2" strokeDasharray={lineDash(opt.key)} />
+                <line x1="0" y1="1" x2="20" y2="1" stroke={value === opt.key ? '#ffffff' : 'var(--tv-sub-text)'} strokeWidth="2" strokeDasharray={lineDash(opt.key)} />
               </svg>
               {opt.label}
             </div>
@@ -104,28 +105,28 @@ function ExtendDropdown({ left, right, onChange, isOpen, onToggle }: { left: boo
     <div style={{ position: 'relative', flex: 1 }}>
       <div onClick={e => { stopAll(e); onToggle(); }}
         style={{
-          height: '32px', border: isOpen ? '1px solid #2962ff' : '1px solid #e0e3eb', borderRadius: '4px',
+          height: '32px', border: isOpen ? '1px solid #2962ff' : '1px solid var(--tv-sub-border)', borderRadius: '4px',
           padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', cursor: 'pointer',
         }}>
-        <span style={{ fontSize: '13px', color: '#131722', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#787b86" strokeWidth="2" style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : undefined }}>
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </div>
       {isOpen && (
         <div onClick={stopAll}
-          style={{ position: 'absolute', top: '36px', left: 0, right: 0, backgroundColor: '#fff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 100000, padding: '6px' }}>
+          style={{ position: 'absolute', top: '36px', left: 0, right: 0, backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 100000, padding: '6px' }}>
           <div onClick={() => onChange({ extendLeft: !left })}
             style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', borderRadius: '4px', cursor: 'pointer' }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
             <CheckBox checked={left} onChange={() => onChange({ extendLeft: !left })} />
-            <span style={{ fontSize: '13px', color: '#131722' }}>Extend lines left</span>
+            <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Extend lines left</span>
           </div>
           <div onClick={() => onChange({ extendRight: !right })}
             style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', borderRadius: '4px', cursor: 'pointer' }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f3fa'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
             <CheckBox checked={right} onChange={() => onChange({ extendRight: !right })} />
-            <span style={{ fontSize: '13px', color: '#131722' }}>Extend lines right</span>
+            <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Extend lines right</span>
           </div>
         </div>
       )}
@@ -135,7 +136,7 @@ function ExtendDropdown({ left, right, onChange, isOpen, onToggle }: { left: boo
 
 function ColorSwatchButton({ color, size = 28, onClick }: { color: string; size?: number; onClick: () => void }) {
   return (
-    <div onClick={e => { stopAll(e); onClick(); }} style={{ position: 'relative', width: `${size}px`, height: `${size}px`, border: '1px solid #e0e3eb', borderRadius: '4px', padding: '3px', cursor: 'pointer' }}>
+    <div onClick={e => { stopAll(e); onClick(); }} style={{ position: 'relative', width: `${size}px`, height: `${size}px`, border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '3px', cursor: 'pointer' }}>
       <div style={{ width: '100%', height: '100%', backgroundColor: color, borderRadius: '2px' }} />
     </div>
   );
@@ -148,7 +149,7 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter') e.currentTarget.blur(); };
   return (
     <input type="text" value={localVal} onChange={(e) => setLocalVal(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown}
-      style={{ width: '60px', height: '32px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: '#131722', outline: 'none', ...style }}
+      style={{ width: '60px', height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', outline: 'none', ...style }}
     />
   );
 }
@@ -198,7 +199,7 @@ function CoordInput({ value, onCommit, autoFocus, ariaLabel }: { value: string; 
       onChange={e => setText(e.target.value)}
       onBlur={() => { setFocused(false); if (text !== value) onCommit(text); }}
       onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-      style={{ width: 100, height: 34, boxSizing: 'border-box', border: `1px solid ${focused ? '#2962ff' : '#dbdbdb'}`, borderRadius: 6, padding: '0 12px', fontSize: 14, color: '#0f0f0f', outline: 'none', background: '#ffffff' }}
+      style={{ width: 100, height: 34, boxSizing: 'border-box', border: `1px solid ${focused ? '#2962ff' : 'var(--tv-sub-border)'}`, borderRadius: 6, padding: '0 12px', fontSize: 14, color: '#0f0f0f', outline: 'none', background: 'var(--tv-sub-bg)' }}
     />
   );
 }
@@ -331,7 +332,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
     <div 
       style={{
         position: 'fixed', left: position.x, top: position.y, width: '400px',
-        backgroundColor: '#ffffff', borderRadius: '8px',
+        backgroundColor: 'var(--tv-sub-bg)', borderRadius: '8px',
         boxShadow: '0 4px 12px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05)',
         zIndex: 2000, display: 'flex', flexDirection: 'column',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif',
@@ -356,8 +357,8 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', cursor: 'grab' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '18px', fontWeight: 600, color: '#131722' }}>Fib retracement</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <span style={{ fontSize: '18px', fontWeight: 600, color: 'var(--tv-sub-text)' }}>Fib retracement</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
           </svg>
         </div>
@@ -367,10 +368,10 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', padding: '0 20px', borderBottom: '1px solid #e0e3eb', gap: '20px' }}>
+      <div style={{ display: 'flex', padding: '0 20px', borderBottom: '1px solid var(--tv-sub-border)', gap: '20px' }}>
         {tabs.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            style={{ padding: '8px 0', fontSize: '14px', fontWeight: activeTab === tab ? 600 : 400, color: '#131722', background: 'transparent', border: 'none', borderBottom: activeTab === tab ? '2px solid #131722' : '2px solid transparent', cursor: 'pointer' }}
+            style={{ padding: '8px 0', fontSize: '14px', fontWeight: activeTab === tab ? 600 : 400, color: 'var(--tv-sub-text)', background: 'transparent', border: 'none', borderBottom: activeTab === tab ? '2px solid #131722' : '2px solid transparent', cursor: 'pointer' }}
           >{tab}</button>
         ))}
       </div>
@@ -382,12 +383,12 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <div style={{ width: '120px', display: 'flex', alignItems: 'center' }}>
                 <CheckBox checked={!!drawing.showTrendLine} onChange={v => updateProp('showTrendLine', v)} />
-                <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Trend line</span>
+                <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Trend line</span>
               </div>
               <div style={{ position: 'relative' }}>
                 <div
                   onClick={e => { stopAll(e); setColorPickerOpen(colorPickerOpen === 'trend' ? '' : 'trend'); }}
-                  style={{ width: '48px', height: '32px', border: '1px solid #e0e3eb', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backgroundColor: '#f8f9fd' }}
+                  style={{ width: '48px', height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backgroundColor: '#f8f9fd' }}
                 >
                   <svg width="28" height="2" viewBox="0 0 28 2">
                     <line x1="0" y1="1" x2="28" y2="1" stroke={drawing.trendLineColor || '#787b86'} strokeWidth="2"
@@ -412,7 +413,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
             {/* Levels line */}
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <div style={{ width: '120px' }}>
-                <span style={{ fontSize: '13px', color: '#131722' }}>Levels line</span>
+                <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Levels line</span>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <LineStyleMiniDropdown
@@ -433,7 +434,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
             {/* Extend */}
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <div style={{ width: '120px' }}>
-                <span style={{ fontSize: '13px', color: '#131722' }}>Extend</span>
+                <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Extend</span>
               </div>
               <ExtendDropdown
                 left={!!drawing.extendLeft}
@@ -468,21 +469,21 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
             </div>
 
             {/* Separator */}
-            <div style={{ height: '1px', backgroundColor: '#e0e3eb', margin: '8px 0' }} />
+            <div style={{ height: '1px', backgroundColor: 'var(--tv-sub-border)', margin: '8px 0' }} />
 
             {/* Use one color */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '13px', color: '#131722' }}>Use one color</span>
-              <div style={{ position: 'relative', width: '32px', height: '32px', border: '1px solid #e0e3eb', borderRadius: '4px', overflow: 'hidden' }}>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Use one color</span>
+              <div style={{ position: 'relative', width: '32px', height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', overflow: 'hidden' }}>
                 <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, ${drawing.fibOneColor || '#ef5350'} 50%, ${drawing.fibOneColorAlt || '#26a69a'} 50%)` }} />
-                <input type="color" value={drawing.fibOneColor || '#ef5350'} onChange={e => updateProp('fibOneColor', e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                <PaletteInput value={drawing.fibOneColor || '#ef5350'} onChange={e => updateProp('fibOneColor', e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
               </div>
             </div>
 
             {/* Background */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CheckBox checked={drawing.showBackground !== false} onChange={v => updateProp('showBackground', v)} />
-              <span style={{ fontSize: '13px', color: '#131722', width: '80px' }}>Background</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', width: '80px' }}>Background</span>
               <div style={{ flex: 1, position: 'relative', height: '8px', borderRadius: '4px', background: 'linear-gradient(to right, transparent, #5b9cf6)', cursor: 'pointer' }}>
                 <input type="range" min="0" max="100" value={Math.round((drawing.backgroundOpacity ?? 0.2) * 100)}
                   onChange={e => updateProp('backgroundOpacity', parseInt(e.target.value) / 100)}
@@ -491,7 +492,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
                 <div style={{
                   position: 'absolute', top: '50%', transform: 'translateY(-50%)',
                   left: `${Math.round((drawing.backgroundOpacity ?? 0.2) * 100)}%`, width: '14px', height: '14px',
-                  borderRadius: '50%', backgroundColor: '#fff', border: '2px solid #5b9cf6',
+                  borderRadius: '50%', backgroundColor: 'var(--tv-sub-bg)', border: '2px solid #5b9cf6',
                   pointerEvents: 'none', marginLeft: '-7px'
                 }} />
               </div>
@@ -500,21 +501,21 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
             {/* Reverse */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CheckBox checked={!!drawing.fibReverse} onChange={v => updateProp('fibReverse', v)} />
-              <span style={{ fontSize: '13px', color: '#131722' }}>Reverse</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Reverse</span>
             </div>
 
             {/* Prices */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CheckBox checked={drawing.fibPrices !== false} onChange={v => updateProp('fibPrices', v)} />
-              <span style={{ fontSize: '13px', color: '#131722' }}>Prices</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Prices</span>
             </div>
 
             {/* Levels */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CheckBox checked={drawing.fibShowLevels !== false} onChange={v => updateProp('fibShowLevels', v)} />
-              <span style={{ fontSize: '13px', color: '#131722', width: '80px' }}>Levels</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', width: '80px' }}>Levels</span>
               <select value={drawing.fibLevelFormat || 'Values'} onChange={e => updateProp('fibLevelFormat', e.target.value)}
-                style={{ height: '32px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: '#131722', background: '#fff', cursor: 'pointer', minWidth: '100px' }}>
+                style={{ height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', background: 'var(--tv-sub-bg)', cursor: 'pointer', minWidth: '100px' }}>
                 <option value="Values">Values</option>
                 <option value="Percent">Percent</option>
                 <option value="Values & Percent">Values & Percent</option>
@@ -523,15 +524,15 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
 
             {/* Labels */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '13px', color: '#131722', width: '96px' }}>Labels</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', width: '96px' }}>Labels</span>
               <select value={drawing.fibLabelHAlign || 'Left'} onChange={e => updateProp('fibLabelHAlign', e.target.value)}
-                style={{ height: '32px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: '#131722', background: '#fff', cursor: 'pointer', flex: 1 }}>
+                style={{ height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', background: 'var(--tv-sub-bg)', cursor: 'pointer', flex: 1 }}>
                 <option value="Left">Left</option>
                 <option value="Center">Center</option>
                 <option value="Right">Right</option>
               </select>
               <select value={drawing.fibLabelVAlign || 'Middle'} onChange={e => updateProp('fibLabelVAlign', e.target.value)}
-                style={{ height: '32px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: '#131722', background: '#fff', cursor: 'pointer', flex: 1 }}>
+                style={{ height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', background: 'var(--tv-sub-bg)', cursor: 'pointer', flex: 1 }}>
                 <option value="Top">Top</option>
                 <option value="Middle">Middle</option>
                 <option value="Bottom">Bottom</option>
@@ -541,15 +542,15 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
             {/* Text */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CheckBox checked={drawing.fibShowText !== false} onChange={v => updateProp('fibShowText', v)} />
-              <span style={{ fontSize: '13px', color: '#131722', width: '80px' }}>Text</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', width: '80px' }}>Text</span>
               <select value={drawing.fibTextHAlign || 'Center'} onChange={e => updateProp('fibTextHAlign', e.target.value)}
-                style={{ height: '32px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: '#131722', background: '#fff', cursor: 'pointer', flex: 1 }}>
+                style={{ height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', background: 'var(--tv-sub-bg)', cursor: 'pointer', flex: 1 }}>
                 <option value="Left">Left</option>
                 <option value="Center">Center</option>
                 <option value="Right">Right</option>
               </select>
               <select value={drawing.fibTextVAlign || 'Middle'} onChange={e => updateProp('fibTextVAlign', e.target.value)}
-                style={{ height: '32px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: '#131722', background: '#fff', cursor: 'pointer', flex: 1 }}>
+                style={{ height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', background: 'var(--tv-sub-bg)', cursor: 'pointer', flex: 1 }}>
                 <option value="Top">Top</option>
                 <option value="Middle">Middle</option>
                 <option value="Bottom">Bottom</option>
@@ -558,9 +559,9 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
 
             {/* Font size */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '13px', color: '#131722', width: '96px' }}>Font size</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', width: '96px' }}>Font size</span>
               <select value={drawing.fibFontSize || 11} onChange={e => updateProp('fibFontSize', parseInt(e.target.value))}
-                style={{ height: '32px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: '#131722', background: '#fff', cursor: 'pointer', minWidth: '80px' }}>
+                style={{ height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', background: 'var(--tv-sub-bg)', cursor: 'pointer', minWidth: '80px' }}>
                 {[8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32].map(s => (
                   <option key={s} value={s}>{s}</option>
                 ))}
@@ -570,7 +571,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
             {/* Fib levels based on log scale */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CheckBox checked={!!drawing.fibLogScale} onChange={v => updateProp('fibLogScale', v)} />
-              <span style={{ fontSize: '13px', color: '#131722' }}>Fib levels based on log scale</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Fib levels based on log scale</span>
             </div>
           </>
         )}
@@ -579,7 +580,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '4px 0' }}>
             {drawing.points.map((p: any, idx: number) => (
               <div key={idx} style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ width: 110, fontSize: 14, color: '#0f0f0f' }}>#{idx + 1} (price, bar)</span>
+                <span style={{ width: 110, fontSize: 14, color: 'var(--tv-sub-text)' }}>#{idx + 1} (price, bar)</span>
                 <CoordInput ariaLabel={`Point ${idx + 1} price`} autoFocus={idx === 0}
                   value={p.price.toFixed((window as any).__pricePrecision ?? 2)}
                   onCommit={t => setPoint(idx, 'price', t)} />
@@ -594,7 +595,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CheckBox checked={!!visibility.ticks?.enabled} onChange={(v) => updateVisibility('ticks', { enabled: v })} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Ticks</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Ticks</span>
             </div>
             
             {[
@@ -608,7 +609,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
               <div key={row.id} style={{ display: 'flex', alignItems: 'center', opacity: !!visibility[row.id]?.enabled ? 1 : 0.4, pointerEvents: !!visibility[row.id]?.enabled ? 'auto' : 'none' }}>
                 <div style={{ width: '100px', display: 'flex', alignItems: 'center' }}>
                   <CheckBox checked={!!visibility[row.id]?.enabled} onChange={(v) => updateVisibility(row.id, { enabled: v })} />
-                  <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>{row.label}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>{row.label}</span>
                 </div>
                 
                 <div style={{ display: 'flex', gap: '12px', flex: 1, alignItems: 'center' }}>
@@ -633,33 +634,33 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
             
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CheckBox checked={!!visibility.ranges?.enabled} onChange={(v) => updateVisibility('ranges', { enabled: v })} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Ranges</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Ranges</span>
             </div>
           </div>
         )}
       </div>
 
       {/* Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid #e0e3eb' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid var(--tv-sub-border)' }}>
         <div style={{ position: 'relative' }}>
           <div 
             onClick={() => setShowTemplateDropdown(!showTemplateDropdown)}
-            style={{ height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', display: 'flex', alignItems: 'center', padding: '0 12px', gap: '6px', fontSize: '13px', color: '#131722', cursor: 'pointer' }}>
+            style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', padding: '0 12px', gap: '6px', fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}>
             Template <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="6 9 12 15 18 9"/></svg>
           </div>
           {showTemplateDropdown && (
             <div style={{
               position: 'absolute', bottom: '100%', left: 0, marginBottom: '4px',
-              backgroundColor: '#fff', border: `1px solid #e0e3eb`, borderRadius: '6px',
+              backgroundColor: 'var(--tv-sub-bg)', border: `1px solid var(--tv-sub-border)`, borderRadius: '6px',
               boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: '180px', overflow: 'hidden',
               display: 'flex', flexDirection: 'column', zIndex: 100001
             }}>
-              <button onClick={() => { setShowTemplateDropdown(false); setShowSaveModal(true); }} style={{ padding: '10px 16px', background: 'transparent', border: 'none', color: '#131722', cursor: 'pointer', textAlign: 'left', fontSize: '14px' }} onMouseEnter={(e) => e.currentTarget.style.background = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+              <button onClick={() => { setShowTemplateDropdown(false); setShowSaveModal(true); }} style={{ padding: '10px 16px', background: 'transparent', border: 'none', color: 'var(--tv-sub-text)', cursor: 'pointer', textAlign: 'left', fontSize: '14px' }} onMouseEnter={(e) => e.currentTarget.style.background = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
                 Save As...
               </button>
-              {templates.length > 0 && <div style={{ height: '1px', backgroundColor: '#e0e3eb', margin: '4px 0' }} />}
+              {templates.length > 0 && <div style={{ height: '1px', backgroundColor: 'var(--tv-sub-border)', margin: '4px 0' }} />}
               {templates.map(t => (
-                <button key={t.id} onClick={() => applyTemplate(t)} style={{ padding: '10px 16px', background: 'transparent', border: 'none', color: '#131722', cursor: 'pointer', textAlign: 'left', fontSize: '14px' }} onMouseEnter={(e) => e.currentTarget.style.background = '#f0f3fa'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                <button key={t.id} onClick={() => applyTemplate(t)} style={{ padding: '10px 16px', background: 'transparent', border: 'none', color: 'var(--tv-sub-text)', cursor: 'pointer', textAlign: 'left', fontSize: '14px' }} onMouseEnter={(e) => e.currentTarget.style.background = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
                   {t.name}
                 </button>
               ))}
@@ -667,8 +668,8 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
           )}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={cancelEdit} style={{ padding: '0 16px', height: '34px', background: '#fff', border: '1px solid #131722', borderRadius: '4px', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
-          <button onClick={onClose} style={{ padding: '0 24px', height: '34px', background: '#131722', border: 'none', borderRadius: '4px', color: '#fff', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Ok</button>
+          <button onClick={cancelEdit} style={{ padding: '0 16px', height: '34px', background: 'var(--tv-sub-bg)', border: '1px solid #131722', borderRadius: '4px', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '0 24px', height: '34px', background: 'var(--tv-sub-text)', border: 'none', borderRadius: '4px', color: 'var(--tv-sub-bg)', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Ok</button>
         </div>
       </div>
       

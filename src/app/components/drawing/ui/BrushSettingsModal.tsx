@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useDrawing, useSettingsSession } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
+import { PaletteInput } from "./PaletteInput";
 
 interface BrushSettingsModalProps {
   onClose: () => void;
@@ -17,8 +18,8 @@ function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boole
         width: '18px',
         height: '18px',
         borderRadius: '3px',
-        border: checked ? 'none' : '1px solid #b2b5be',
-        backgroundColor: checked ? '#131722' : '#ffffff',
+        border: checked ? 'none' : '1px solid var(--tv-sub-muted)',
+        backgroundColor: checked ? 'var(--tv-sub-text)' : 'var(--tv-sub-bg)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -27,7 +28,7 @@ function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boole
       }}
     >
       {checked && (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-bg)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12"></polyline>
         </svg>
       )}
@@ -64,11 +65,11 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
       style={{
         width: '60px',
         height: '32px',
-        border: '1px solid #e0e3eb',
+        border: '1px solid var(--tv-sub-border)',
         borderRadius: '4px',
         padding: '0 8px',
         fontSize: '13px',
-        color: '#131722',
+        color: 'var(--tv-sub-text)',
         outline: 'none',
         ...style
       }}
@@ -174,7 +175,7 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
         left: position.x,
         top: position.y,
         width: '360px',
-        backgroundColor: '#ffffff',
+        backgroundColor: 'var(--tv-sub-bg)',
         borderRadius: '8px',
         boxShadow: '0 4px 12px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05)',
         zIndex: 1000,
@@ -197,8 +198,8 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '18px', fontWeight: 600, color: '#131722' }}>Brush</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <span style={{ fontSize: '18px', fontWeight: 600, color: 'var(--tv-sub-text)' }}>Brush</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
           </svg>
         </div>
@@ -208,14 +209,14 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
             background: 'transparent',
             border: 'none',
             cursor: 'pointer',
-            color: '#131722',
+            color: 'var(--tv-sub-text)',
             padding: '4px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: '4px'
           }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f3fa'}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
           onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -226,7 +227,7 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', padding: '0 20px', borderBottom: '1px solid #e0e3eb', gap: '20px' }}>
+      <div style={{ display: 'flex', padding: '0 20px', borderBottom: '1px solid var(--tv-sub-border)', gap: '20px' }}>
         {tabs.map(tab => (
           <div 
             key={tab}
@@ -235,7 +236,7 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
               padding: '8px 0',
               fontSize: '14px',
               fontWeight: activeTab === tab ? 600 : 400,
-              color: '#131722',
+              color: 'var(--tv-sub-text)',
               cursor: 'pointer',
               borderBottom: activeTab === tab ? '2px solid #131722' : '2px solid transparent',
               marginBottom: '-1px'
@@ -252,15 +253,15 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
           <>
             {/* Line Controls */}
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={{ width: '80px', fontSize: '13px', color: '#131722' }}>Line</div>
+              <div style={{ width: '80px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Line</div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 {/* Color and Width combo box */}
-                <div style={{ display: 'flex', border: '1px solid #e0e3eb', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', overflow: 'hidden' }}>
                   <div style={{ width: '32px', height: '32px', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                     <div style={{ width: '100%', height: '100%', backgroundColor: selectedShape?.stroke || '#00bcd4', borderRadius: '2px' }}></div>
-                    <input type="color" value={selectedShape?.stroke || '#00bcd4'} onChange={e => updateProp('stroke', e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                    <PaletteInput value={selectedShape?.stroke || '#00bcd4'} onChange={e => updateProp('stroke', e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
                   </div>
-                  <div style={{ width: '1px', backgroundColor: '#e0e3eb' }}></div>
+                  <div style={{ width: '1px', backgroundColor: 'var(--tv-sub-border)' }}></div>
                   <div style={{ width: '40px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div style={{ width: '20px', height: `${selectedShape?.strokeWidth || 2}px`, backgroundColor: selectedShape?.stroke || '#00bcd4' }}></div>
                   </div>
@@ -270,36 +271,36 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
                   <div 
                     onClick={() => { setShowStartArrowDropdown(!showStartArrowDropdown); setShowEndArrowDropdown(false); }}
                     style={{ 
-                      width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', 
+                      width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', 
                       display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                       borderColor: showStartArrowDropdown ? '#2962ff' : '#e0e3eb'
                     }}
                   >
                     {selectedShape?.lineStart === 'arrow' ? (
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="1.5">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.5">
                         <path d="M7 12h11M7 12l4-4M7 12l4 4"></path>
                       </svg>
                     ) : (
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="1">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1">
                         <circle cx="6" cy="12" r="2" fill="transparent"></circle>
                         <line x1="8" y1="12" x2="18" y2="12"></line>
                       </svg>
                     )}
                   </div>
                   {showStartArrowDropdown && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '4px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 10, width: '120px' }}>
+                    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 10, width: '120px' }}>
                       <div 
                         onClick={() => { updateProp('lineStart', 'normal'); setShowStartArrowDropdown(false); }}
-                        style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', backgroundColor: selectedShape?.lineStart !== 'arrow' ? '#f0f3fa' : 'transparent' }}
+                        style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', backgroundColor: selectedShape?.lineStart !== 'arrow' ? 'var(--tv-sub-hover)' : 'transparent' }}
                       >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="1"><circle cx="6" cy="12" r="2"></circle><line x1="8" y1="12" x2="18" y2="12"></line></svg>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1"><circle cx="6" cy="12" r="2"></circle><line x1="8" y1="12" x2="18" y2="12"></line></svg>
                         <span style={{ fontSize: '13px' }}>Normal</span>
                       </div>
                       <div 
                         onClick={() => { updateProp('lineStart', 'arrow'); setShowStartArrowDropdown(false); }}
-                        style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', backgroundColor: selectedShape?.lineStart === 'arrow' ? '#f0f3fa' : 'transparent' }}
+                        style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', backgroundColor: selectedShape?.lineStart === 'arrow' ? 'var(--tv-sub-hover)' : 'transparent' }}
                       >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="1.5"><path d="M7 12h11M7 12l4-4M7 12l4 4"></path></svg>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.5"><path d="M7 12h11M7 12l4-4M7 12l4 4"></path></svg>
                         <span style={{ fontSize: '13px' }}>Arrow</span>
                       </div>
                     </div>
@@ -311,36 +312,36 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
                   <div 
                     onClick={() => { setShowEndArrowDropdown(!showEndArrowDropdown); setShowStartArrowDropdown(false); }}
                     style={{ 
-                      width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', 
+                      width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', 
                       display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                       borderColor: showEndArrowDropdown ? '#2962ff' : '#e0e3eb'
                     }}
                   >
                     {selectedShape?.lineEnd === 'arrow' ? (
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="1.5">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.5">
                         <path d="M6 12h11M17 12l-4-4M17 12l-4 4"></path>
                       </svg>
                     ) : (
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="1">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1">
                         <line x1="6" y1="12" x2="16" y2="12"></line>
                         <circle cx="18" cy="12" r="2" fill="transparent"></circle>
                       </svg>
                     )}
                   </div>
                   {showEndArrowDropdown && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '4px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 10, width: '120px' }}>
+                    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', zIndex: 10, width: '120px' }}>
                       <div 
                         onClick={() => { updateProp('lineEnd', 'normal'); setShowEndArrowDropdown(false); }}
-                        style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', backgroundColor: selectedShape?.lineEnd !== 'arrow' ? '#f0f3fa' : 'transparent' }}
+                        style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', backgroundColor: selectedShape?.lineEnd !== 'arrow' ? 'var(--tv-sub-hover)' : 'transparent' }}
                       >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="1"><line x1="6" y1="12" x2="16" y2="12"></line><circle cx="18" cy="12" r="2"></circle></svg>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1"><line x1="6" y1="12" x2="16" y2="12"></line><circle cx="18" cy="12" r="2"></circle></svg>
                         <span style={{ fontSize: '13px' }}>Normal</span>
                       </div>
                       <div 
                         onClick={() => { updateProp('lineEnd', 'arrow'); setShowEndArrowDropdown(false); }}
-                        style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', backgroundColor: selectedShape?.lineEnd === 'arrow' ? '#f0f3fa' : 'transparent' }}
+                        style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', backgroundColor: selectedShape?.lineEnd === 'arrow' ? 'var(--tv-sub-hover)' : 'transparent' }}
                       >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="1.5"><path d="M6 12h11M17 12l-4-4M17 12l-4 4"></path></svg>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.5"><path d="M6 12h11M17 12l-4-4M17 12l-4 4"></path></svg>
                         <span style={{ fontSize: '13px' }}>Arrow</span>
                       </div>
                     </div>
@@ -353,15 +354,15 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <div style={{ width: '120px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <CheckBox checked={!!selectedShape?.fillEnabled} onChange={(v) => updateProp('fillEnabled', v)} />
-                <span style={{ fontSize: '13px', color: '#131722' }}>Background</span>
+                <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Background</span>
               </div>
               <div style={{ display: 'flex', marginLeft: '12px' }}>
                 {/* Checkered Color Box */}
-                <div style={{ width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', padding: '4px', position: 'relative', opacity: selectedShape?.fillEnabled ? 1 : 0.5 }}>
+                <div style={{ width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '4px', position: 'relative', opacity: selectedShape?.fillEnabled ? 1 : 0.5 }}>
                   <div style={{ width: '100%', height: '100%', borderRadius: '2px', backgroundImage: checkeredBg, position: 'relative' }}>
                     <div style={{ position: 'absolute', inset: 0, backgroundColor: selectedShape?.fill || '#00bcd4' }}></div>
                   </div>
-                  <input type="color" value={selectedShape?.fill || '#00bcd4'} onChange={e => updateProp('fill', e.target.value)} disabled={!selectedShape?.fillEnabled} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: selectedShape?.fillEnabled ? 'pointer' : 'default' }} />
+                  <PaletteInput value={selectedShape?.fill || '#00bcd4'} onChange={e => updateProp('fill', e.target.value)} disabled={!selectedShape?.fillEnabled} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: selectedShape?.fillEnabled ? 'pointer' : 'default' }} />
                 </div>
               </div>
             </div>
@@ -372,7 +373,7 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CheckBox checked={!!visibility.ticks?.enabled} onChange={(v) => updateVisibility('ticks', { enabled: v })} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Ticks</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Ticks</span>
             </div>
             
             {[
@@ -386,7 +387,7 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
               <div key={row.id} style={{ display: 'flex', alignItems: 'center', opacity: !!visibility[row.id]?.enabled ? 1 : 0.4, pointerEvents: !!visibility[row.id]?.enabled ? 'auto' : 'none' }}>
                 <div style={{ width: '100px', display: 'flex', alignItems: 'center' }}>
                   <CheckBox checked={!!visibility[row.id]?.enabled} onChange={(v) => updateVisibility(row.id, { enabled: v })} />
-                  <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>{row.label}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>{row.label}</span>
                 </div>
                 
                 <div style={{ display: 'flex', gap: '12px', flex: 1, alignItems: 'center' }}>
@@ -415,16 +416,16 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
             
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CheckBox checked={!!visibility.ranges?.enabled} onChange={(v) => updateVisibility('ranges', { enabled: v })} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Ranges</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Ranges</span>
             </div>
           </div>
         )}
       </div>
 
       {/* Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid #e0e3eb' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid var(--tv-sub-border)' }}>
         {/* Template */}
-        <div style={{ width: '110px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', fontSize: '13px', color: '#131722', cursor: 'pointer' }}>
+        <div style={{ width: '110px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}>
           Template
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <polyline points="6 9 12 15 18 9"></polyline>
@@ -438,10 +439,10 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
             style={{
               padding: '0 16px',
               height: '34px',
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--tv-sub-bg)',
               border: '1px solid #131722',
               borderRadius: '4px',
-              color: '#131722',
+              color: 'var(--tv-sub-text)',
               fontSize: '14px',
               fontWeight: 500,
               cursor: 'pointer'

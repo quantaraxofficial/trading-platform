@@ -30,7 +30,7 @@ function MenuPanel({ onClose, children }: { onClose?: () => void; children: Reac
       style={{
         position: 'absolute', left: 0, ...(above ? { bottom: 'calc(100% + 3px)' } : { top: 'calc(100% + 3px)' }),
         background: '#ffffff', borderRadius: 6, boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)', padding: '6px 0',
-        zIndex: 100, color: '#0f0f0f',
+        zIndex: 100, color: 'var(--tv-sub-text)',
       }}
     >
       {children}

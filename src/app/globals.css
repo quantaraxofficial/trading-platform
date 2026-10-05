@@ -3,6 +3,12 @@
 @tailwind utilities;
 
 :root {
+  /* floating drawing toolbars (sub-bars) and drawing settings dialogs */
+  --tv-sub-bg: #ffffff;
+  --tv-sub-text: #131722;
+  --tv-sub-hover: #f0f3fa;
+  --tv-sub-muted: #b2b5be;
+  --tv-sub-border: #e0e3eb;
   --tv-color-bg: #ffffff;
   --tv-color-pane-bg: #ffffff;
   --tv-color-border: #e0e3eb;
@@ -63,6 +69,11 @@
 }
 
 [data-theme="dark"] {
+  --tv-sub-bg: #1e222d;
+  --tv-sub-text: #d1d4dc;
+  --tv-sub-hover: #2a2e39;
+  --tv-sub-muted: #5d606b;
+  --tv-sub-border: #434651;
   --tv-color-bg: #131722;
   --tv-color-pane-bg: #131722;
   --tv-color-border: #2a2e39;
@@ -614,3 +625,12 @@ ul {
 .st-target { opacity: 0; }
 .st-iconbtn { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--st-text-secondary); padding: 0; cursor: default; }
 .st-iconbtn:hover { background: var(--st-fill-strong); color: var(--st-text); }
+
+/* Dark theme: form fields that don't set their own colours (inline styles still win) */
+[data-theme="dark"] select,
+[data-theme="dark"] textarea,
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]) {
+  background-color: var(--tv-sub-bg);
+  color: var(--tv-sub-text);
+  border-color: var(--tv-sub-border);
+}

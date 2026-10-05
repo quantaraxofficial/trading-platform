@@ -37,6 +37,9 @@ interface ReplayContextType {
   setSpeed: (speed: number) => void;
   updateReplayData: (newData: CandleData[]) => void;
   reSelectBar: () => void;
+  // Right-click while picking a bar: picking again during a replay goes back to that replay;
+  // picking the first start point closes replay
+  cancelSelect: () => void;
   startMode: ReplayStartMode;
   setStartMode: (m: ReplayStartMode) => void;
   // True once a replay has been started (until it's exited): Play and the other controls work
@@ -139,6 +142,8 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     setMode('selecting');
   }, []);
 
+  const cancelSelectRef = useRef<() => void>(() => {});
+
   const startReplayAt = useCallback((index: number, data: CandleData[], series: any, chart: any) => {
     stopInterval();
     seriesRef.current = series;
@@ -184,6 +189,12 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
 
   // The Replay button toggles: a second press leaves replay exactly like "Exit Replay",
   // keeping the chart where it is (fitting all content made it jump)
+  cancelSelectRef.current = () => {
+    if (hasStarted) { setHoverX(null); setMode('active'); }
+    else stopReplay();
+  };
+  const cancelSelect = useCallback(() => cancelSelectRef.current(), []);
+
   const enterSelectMode = useCallback(() => {
     if (mode !== 'idle') { stopReplay(); return; }
     setMode('selecting');
@@ -271,7 +282,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     <ReplayContext.Provider value={{
       mode, isPlaying, replayIndex, replaySpeed, fullData, hoverX, setHoverX,
       enterSelectMode, startReplayAt, getReplayTime, stopReplay, togglePlay,
-      stepBack, stepForward, skipToEnd, setSpeed, updateReplayData, reSelectBar,
+      stepBack, stepForward, skipToEnd, setSpeed, updateReplayData, reSelectBar, cancelSelect,
       startMode, setStartMode, hasStarted,
     }}>
       {children}

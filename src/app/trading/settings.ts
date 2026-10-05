@@ -71,7 +71,7 @@ export const DEFAULT_SETTINGS: TradingSettings = {
   onlyRejectionNotifications: false,
   positionsAndOrders: true,
   reversePositionButton: true,
-  projectOrderForMarket: false,
+  projectOrderForMarket: true,
   pnlValue: true,
   pnlPositions: true,
   pnlPositionsMode: "Money",
@@ -145,7 +145,19 @@ export function makeStore<T extends object>(key: string, defaults: T, migrate?: 
   return { get, set, subscribe, useValue };
 }
 
-export const tradingSettings = makeStore<TradingSettings>("tv:tradingSettings", DEFAULT_SETTINGS);
+export const tradingSettings = makeStore<TradingSettings>("tv:tradingSettings", DEFAULT_SETTINGS, apply => {
+  // "Project order for market orders" is on by default (as in TradingView): Buy / Sell then show
+  // the order on the chart with draggable TP / SL. Settings saved under the old default (off)
+  // get it turned on once.
+  try {
+    if (localStorage.getItem("tv:projectOrderDefaultOn") !== "1") {
+      apply({ projectOrderForMarket: true });
+      const raw = localStorage.getItem("tv:tradingSettings");
+      if (raw) localStorage.setItem("tv:tradingSettings", JSON.stringify({ ...JSON.parse(raw), projectOrderForMarket: true }));
+      localStorage.setItem("tv:projectOrderDefaultOn", "1");
+    }
+  } catch { /* ignore */ }
+});
 export const ticketPrefs = makeStore<TicketPrefs>("tv:orderTicket", DEFAULT_TICKET, apply => {
   // The earlier order panel kept its default risk % under its own key
   const legacy = localStorage.getItem("tv_default_risk_percent");

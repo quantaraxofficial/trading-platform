@@ -147,6 +147,8 @@ export const TIMEZONES: { label: string; tz: string }[] = [
   { label: '(UTC+13) Tokelau', tz: 'Pacific/Fakaofo' },
 ];
 
+// TradingView's default bar spacing (what Reset chart view returns to)
+const DEFAULT_BAR_SPACING = 6;
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // The price scale (mode/invert/autoscale/manual zoom) has no subscribe-to-change API like
@@ -524,7 +526,7 @@ export default function ChartContainer({
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const { activeTool, shiftDrawings, setSymbol: setDrawingSymbol, setDrawings } = useDrawing();
-  const { mode, replayIndex, startReplayAt, getReplayTime, stopReplay, togglePlay, stepBack, stepForward, setHoverX, hoverX, updateReplayData } = useReplay();
+  const { mode, replayIndex, startReplayAt, getReplayTime, stopReplay, togglePlay, stepBack, stepForward, setHoverX, hoverX, updateReplayData, cancelSelect } = useReplay();
   const { checkAlerts, alerts } = useAlerts();
   const tradingState = useEngineState();
   const tradingSettings = useTradingSettings();
@@ -788,16 +790,13 @@ export default function ChartContainer({
   // afterwards would leave the chart pane on the old background. Re-seed the
   // theme-dependent colors when the theme actually changes (skipping first mount so
   // colors loaded from saved settings aren't overwritten).
-  const prevThemeRef = useRef(theme);
+  // Switching the theme puts the chart's canvas colours to that theme's (as TradingView does);
+  // reloading in the same theme keeps any custom colours
   useEffect(() => {
-    // First visit: the chart colours follow the theme
-    try { if (!localStorage.getItem('tv:chartSettings')) { const t = themeCanvas(theme === 'dark'); chartSettings.set({ background: t.background, background2: t.background2, gridVert: t.gridVert, gridHorz: t.gridHorz, crosshair: t.crosshair, text: t.text, lines: t.lines, watermarkColor: t.watermarkColor }); } } catch { /* ignore */ }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (prevThemeRef.current === theme) return;
-    prevThemeRef.current = theme;
-    const t = themeCanvas(theme === "dark");
-    chartSettings.set({ background: t.background, background2: t.background2, gridVert: t.gridVert, gridHorz: t.gridHorz, crosshair: { ...csRef.current.crosshair, color: t.crosshair.color }, text: t.text, lines: t.lines, watermarkColor: t.watermarkColor });
+    const want = theme === "dark" ? "dark" : "light";
+    if (csRef.current.colorsTheme === want) return;
+    const t = themeCanvas(want === "dark");
+    chartSettings.set({ colorsTheme: want, background: t.background, background2: t.background2, gridVert: t.gridVert, gridHorz: t.gridHorz, crosshair: { ...csRef.current.crosshair, color: t.crosshair.color }, text: t.text, lines: t.lines, watermarkColor: t.watermarkColor });
   }, [theme]);
 
   const { user } = useAuth();
@@ -1136,7 +1135,9 @@ export default function ChartContainer({
     if (!series) return;
     const bars = fullDataRef.current;
     const marks: any[] = [];
-    if (tradingSettings.executionMarks && tradingState.connected && bars.length) {
+    // none while a replay bar is being picked (the scissors cursor): those would be the real
+    // account's fills, piled on the latest candle
+    if (tradingSettings.executionMarks && tradingState.connected && bars.length && mode !== 'selecting') {
       const firstTime = bars[0].time as number;
       for (const ex of executions) {
         if (ex.symbol !== symbol) continue;
@@ -1156,9 +1157,10 @@ export default function ChartContainer({
       }
     }
     tradeMarkersRef.current = marks;
+    (window as any).__tradeMarkerCount = marks.length;   // read-only, for checks
     applyAllMarkers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [series, symbol, executions, tradingSettings.executionMarks, tradingSettings.executionLabels, tradingState.connected, lastPriceData, interval]);
+  }, [series, symbol, executions, tradingSettings.executionMarks, tradingSettings.executionLabels, tradingState.connected, lastPriceData, interval, mode]);
 
   // Chart snapshots (Settings → Trading → "Orders, executions, and positions in chart
   // snapshots"): lets the snapshot hide execution marks, or draw the position/order lines,
@@ -1240,14 +1242,18 @@ export default function ChartContainer({
     const ts = ch.timeScale();
     const o: any = ts.options();
     const spacing = Math.abs((ts.logicalToCoordinate(1 as any) ?? 0) - (ts.logicalToCoordinate(0 as any) ?? 0));
-    const scrolled = Math.abs(ts.scrollPosition() - (o.rightOffset ?? 0)) > 0.5;
-    const zoomed = Math.abs(spacing - (o.barSpacing ?? 6)) > 0.01;
+    const scrolled = Math.abs(ts.scrollPosition() - csRef.current.marginRight) > 0.5;
+    const zoomed = Math.abs(spacing - DEFAULT_BAR_SPACING) > 0.01;
     const auto = se ? se.priceScale().options().autoScale : true;
     return scrolled || zoomed || !auto;
   }
+  // As measured on TradingView: bar spacing 6 and the Right margin's bars (10) after the last
+  // bar — in replay, after the replay's current bar — price autoscale back on; log / inverted
+  // scale stay as they are
   function resetChartView() {
     const ch = chartRef.current;
     if (!ch) return;
+    ch.timeScale().applyOptions({ barSpacing: DEFAULT_BAR_SPACING, rightOffset: csRef.current.marginRight });
     ch.timeScale().resetTimeScale();
     candleSeriesRef.current?.priceScale().applyOptions({ autoScale: true });
     setPsAutoScale(true);
@@ -3207,6 +3213,29 @@ export default function ChartContainer({
   }, [mode]);
 
   // ── Mouse handlers for the select-mode overlay ──────────────────────────────
+  // The select-mode overlay sits above the chart (for the scissors line), so the mouse wheel
+  // never reached it: hand each wheel event to the chart (zoom / pan, or the price axis's
+  // zoom over the scale), then move the split line to the bar now under the cursor
+  useEffect(() => {
+    const el = overlayRef.current;
+    if (mode !== 'selecting' || !el) return;
+    const onWheel = (e: WheelEvent) => {
+      const target = chartContainerRef.current;
+      if (!target) return;
+      e.preventDefault();
+      target.dispatchEvent(new WheelEvent('wheel', {
+        bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY, screenX: e.screenX, screenY: e.screenY,
+        deltaX: e.deltaX, deltaY: e.deltaY, deltaZ: e.deltaZ, deltaMode: e.deltaMode,
+        ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey, metaKey: e.metaKey,
+      }));
+      const { clientX, clientY } = e;
+      requestAnimationFrame(() => handleOverlayMouseMoveRef.current?.({ clientX, clientY, currentTarget: el } as any));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [mode]);
+  const handleOverlayMouseMoveRef = useRef<((e: any) => void) | null>(null);
+
   const handleOverlayMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (modeRef.current !== 'selecting') return;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -3219,6 +3248,8 @@ export default function ChartContainer({
       const logical = chartRef.current.timeScale().coordinateToLogical(x);
       if (logical !== null) {
         const idx = Math.max(0, Math.min(fullDataRef.current.length - 1, Math.round(logical)));
+        // Snaps to the middle of the bar under the cursor (its wick), as on TradingView; a click
+        // cuts that bar and everything after it
         const snappedX = chartRef.current.timeScale().logicalToCoordinate(idx as any);
         setVLineX(snappedX !== null ? snappedX : x);
         setVLineTime(fullDataRef.current[idx].time);
@@ -3227,6 +3258,7 @@ export default function ChartContainer({
     }
     setVLineX(x);
   }, []);
+  handleOverlayMouseMoveRef.current = handleOverlayMouseMove;
 
   const handleOverlayMouseLeave = useCallback(() => {
     setVLineX(null);
@@ -3244,7 +3276,8 @@ export default function ChartContainer({
     if (logical === null) return;
     // Find closest data index
     const idx = Math.max(0, Math.min(fullDataRef.current.length - 1, Math.round(logical)));
-    startReplayAt(idx, fullDataRef.current, candleSeriesRef.current, chartRef.current);
+    // The clicked bar is cut too: the replay shows the bars before it and plays it next
+    startReplayAt(Math.max(0, idx - 1), fullDataRef.current, candleSeriesRef.current, chartRef.current);
     setVLineX(null);
   }, [startReplayAt]);
 
@@ -3414,7 +3447,7 @@ export default function ChartContainer({
         });
 
         return (
-          <div style={{ position: "absolute", top: "6px", left: "9px", maxWidth: "calc(100% - 90px)", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "flex-start", pointerEvents: "none", color: "var(--tv-hdr-text)" }}>
+          <div style={{ position: "absolute", top: "6px", left: "9px", maxWidth: "calc(100% - 90px)", zIndex: 11, display: "flex", flexDirection: "column", alignItems: "flex-start", pointerEvents: "none", color: "var(--tv-hdr-text)" }}>
             {/* Title line */}
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0 8px", minHeight: "22px" }}>
               {(sl.logo || sl.title) && (
@@ -3527,15 +3560,6 @@ export default function ChartContainer({
         />
       )}
 
-      {/* Replay active top stripe */}
-      {(isSelectMode || isActive) && (
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0,
-          height: '3px',
-          background: 'linear-gradient(90deg, #2962ff, #1c7ed6)',
-          zIndex: 15, pointerEvents: 'none',
-        }} />
-      )}
 
       {/* Chart canvas */}
       <div 
@@ -3804,7 +3828,7 @@ export default function ChartContainer({
             e.stopPropagation();
             setVLineX(null);
             setVLineTime(null);
-            stopReplay();
+            cancelSelect();
           }}
           style={{
             position: "absolute",
@@ -3876,7 +3900,9 @@ export default function ChartContainer({
       {chart && series && dimensions.width > 0 && (
         <>
           <DrawingLayer chart={chart} series={series} width={dimensions.width} height={dimensions.height} theme={theme} />
-          {mode === 'idle' && (
+          {/* positions, orders and the projected order with TP / SL — in replay too (it trades
+              in its own Replay Trading account), except while a replay bar is being picked */}
+          {mode !== 'selecting' && (
             <TradingOverlay chart={chart} series={series} symbol={symbol} width={dimensions.width} height={dimensions.height} plusButton={psPlusButton} />
           )}
           <SubBar />

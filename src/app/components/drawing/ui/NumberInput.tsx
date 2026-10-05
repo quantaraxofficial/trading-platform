@@ -15,7 +15,7 @@ export function NumberInput({ value, onChange, width = '100%', style }: NumberIn
     ? '1px solid #2962ff' 
     : isHovered 
       ? '1px solid #b2b5be' 
-      : '1px solid #e0e3eb';
+      : '1px solid var(--tv-sub-border)';
 
   return (
     <input
@@ -34,7 +34,7 @@ export function NumberInput({ value, onChange, width = '100%', style }: NumberIn
         borderRadius: '4px',
         padding: '0 12px',
         fontSize: '13px',
-        color: '#131722',
+        color: 'var(--tv-sub-text)',
         outline: 'none',
         transition: 'border-color 0.2s',
         ...style

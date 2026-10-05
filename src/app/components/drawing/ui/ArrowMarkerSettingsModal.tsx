@@ -15,14 +15,14 @@ function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boole
       onClick={() => onChange(!checked)}
       style={{
         width: '18px', height: '18px', borderRadius: '3px',
-        border: checked ? 'none' : '1px solid #b2b5be',
-        backgroundColor: checked ? '#131722' : '#ffffff',
+        border: checked ? 'none' : '1px solid var(--tv-sub-muted)',
+        backgroundColor: checked ? 'var(--tv-sub-text)' : 'var(--tv-sub-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         cursor: 'pointer', flexShrink: 0,
       }}
     >
       {checked && (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-bg)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12" />
         </svg>
       )}
@@ -47,10 +47,10 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
         onKeyDown={handleKeyDown}
         style={{ 
           width: '60px', height: '34px', 
-          border: isFocused ? '2px solid #2962ff' : '1px solid #e0e3eb', 
+          border: isFocused ? '2px solid #2962ff' : '1px solid var(--tv-sub-border)', 
           borderRadius: '4px', padding: isFocused ? '0 7px' : '0 8px', 
-          fontSize: '13px', color: '#131722', outline: 'none', 
-          backgroundColor: '#ffffff',
+          fontSize: '13px', color: 'var(--tv-sub-text)', outline: 'none', 
+          backgroundColor: 'var(--tv-sub-bg)',
           ...style 
         }}
       />
@@ -140,7 +140,7 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
     <div
       style={{
         position: 'fixed', left: position.x, top: position.y, width: '370px',
-        backgroundColor: '#ffffff', borderRadius: '8px',
+        backgroundColor: 'var(--tv-sub-bg)', borderRadius: '8px',
         boxShadow: '0 4px 20px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.07)',
         zIndex: 2000, display: 'flex', flexDirection: 'column',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif',
@@ -154,14 +154,14 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', cursor: 'grab' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '18px', fontWeight: 600, color: '#131722' }}>Arrow marker</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#131722" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <span style={{ fontSize: '18px', fontWeight: 600, color: 'var(--tv-sub-text)' }}>Arrow marker</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
           </svg>
         </div>
         <button onClick={cancelEdit}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px', color: '#131722' }}
-          onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f0f3fa')}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px', color: 'var(--tv-sub-text)' }}
+          onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')}
           onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -171,12 +171,12 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #e0e3eb', padding: '0 20px' }}>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--tv-sub-border)', padding: '0 20px' }}>
         {tabs.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             style={{
               padding: '8px 0', marginRight: '20px', fontSize: '14px', fontWeight: 500,
-              color: activeTab === tab ? '#131722' : '#787b86',
+              color: activeTab === tab ? 'var(--tv-sub-text)' : '#787b86',
               background: 'transparent', border: 'none',
               borderBottom: activeTab === tab ? '2px solid #131722' : '2px solid transparent',
               cursor: 'pointer',
@@ -192,11 +192,11 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
         {activeTab === 'Style' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={{ width: '80px', fontSize: '13px', color: '#131722' }}>Color</div>
+              <div style={{ width: '80px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Color</div>
               <div style={{ position: 'relative' }}>
                 <div 
                   onClick={() => setShowColorPicker(!showColorPicker)}
-                  style={{ width: '34px', height: '34px', borderRadius: '4px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #e0e3eb', position: 'relative' }}
+                  style={{ width: '34px', height: '34px', borderRadius: '4px', overflow: 'hidden', cursor: 'pointer', border: '1px solid var(--tv-sub-border)', position: 'relative' }}
                 >
                   <div style={{ width: '100%', height: '100%', backgroundColor: selectedShape?.stroke || '#2962ff' }} />
                 </div>
@@ -212,24 +212,24 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={{ width: '80px', fontSize: '13px', color: '#131722' }}>Thickness</div>
+              <div style={{ width: '80px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Thickness</div>
               <div style={{ position: 'relative' }}>
                 <button
                   onClick={() => setShowThicknessDrop(!showThicknessDrop)}
-                  style={{ height: '34px', minWidth: '72px', border: '1px solid #e0e3eb', borderRadius: '4px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 10px', gap: '6px', fontSize: '13px', color: '#131722', cursor: 'pointer' }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f0f3fa')}
+                  style={{ height: '34px', minWidth: '72px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: 'var(--tv-sub-bg)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 10px', gap: '6px', fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')}
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#ffffff')}
                 >
                   {selectedShape?.strokeWidth ? `${selectedShape.strokeWidth}px` : '2px'}
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="6 9 12 15 18 9" /></svg>
                 </button>
                 {showThicknessDrop && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 200, padding: '4px 0' }}>
+                  <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 200, padding: '4px 0' }}>
                     {THICKNESS_OPTIONS.map(s => (
                       <button key={s} onClick={() => { updateProp('strokeWidth', parseInt(s)); setShowThicknessDrop(false); }}
-                        style={{ width: '100%', padding: '6px 14px', textAlign: 'left', background: (selectedShape?.strokeWidth === parseInt(s)) ? '#f0f3fa' : 'transparent', border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer' }}
-                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f0f3fa')}
-                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = (selectedShape?.strokeWidth === parseInt(s)) ? '#f0f3fa' : 'transparent')}
+                        style={{ width: '100%', padding: '6px 14px', textAlign: 'left', background: (selectedShape?.strokeWidth === parseInt(s)) ? 'var(--tv-sub-hover)' : 'transparent', border: 'none', fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}
+                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')}
+                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = (selectedShape?.strokeWidth === parseInt(s)) ? 'var(--tv-sub-hover)' : 'transparent')}
                       >{s}</button>
                     ))}
                   </div>
@@ -246,7 +246,7 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
               <div style={{ position: 'relative' }}>
                 <div 
                   onClick={() => setShowTextColorPicker(!showTextColorPicker)}
-                  style={{ width: '34px', height: '34px', borderRadius: '4px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #e0e3eb', position: 'relative' }}
+                  style={{ width: '34px', height: '34px', borderRadius: '4px', overflow: 'hidden', cursor: 'pointer', border: '1px solid var(--tv-sub-border)', position: 'relative' }}
                 >
                   <div style={{ width: '100%', height: '100%', backgroundColor: selectedShape?.textColor || '#2962ff' }} />
                 </div>
@@ -263,20 +263,20 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
               <div style={{ position: 'relative' }}>
                 <button
                   onClick={() => setShowFontDrop(!showFontDrop)}
-                  style={{ height: '34px', minWidth: '72px', border: '1px solid #e0e3eb', borderRadius: '4px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 10px', gap: '6px', fontSize: '13px', color: '#131722', cursor: 'pointer' }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f0f3fa')}
+                  style={{ height: '34px', minWidth: '72px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: 'var(--tv-sub-bg)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 10px', gap: '6px', fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')}
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#ffffff')}
                 >
                   {selectedShape?.fontSize || '16'}
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="6 9 12 15 18 9" /></svg>
                 </button>
                 {showFontDrop && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: '#ffffff', border: '1px solid #e0e3eb', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 200, padding: '4px 0', maxHeight: '200px', overflowY: 'auto' }}>
+                  <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid var(--tv-sub-border)', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', zIndex: 200, padding: '4px 0', maxHeight: '200px', overflowY: 'auto' }}>
                     {FONT_SIZES.map(s => (
                       <button key={s} onClick={() => { updateProp('fontSize', parseInt(s)); setShowFontDrop(false); }}
-                        style={{ width: '100%', padding: '6px 14px', textAlign: 'left', background: (selectedShape?.fontSize === parseInt(s)) ? '#f0f3fa' : 'transparent', border: 'none', fontSize: '13px', color: '#131722', cursor: 'pointer' }}
-                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f0f3fa')}
-                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = (selectedShape?.fontSize === parseInt(s)) ? '#f0f3fa' : 'transparent')}
+                        style={{ width: '100%', padding: '6px 14px', textAlign: 'left', background: (selectedShape?.fontSize === parseInt(s)) ? 'var(--tv-sub-hover)' : 'transparent', border: 'none', fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}
+                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)')}
+                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = (selectedShape?.fontSize === parseInt(s)) ? 'var(--tv-sub-hover)' : 'transparent')}
                       >{s}</button>
                     ))}
                   </div>
@@ -284,11 +284,11 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
               </div>
 
               <button onClick={() => updateProp('bold', !selectedShape?.bold)}
-                style={{ width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', background: selectedShape?.bold ? '#e0e3eb' : '#ffffff', fontWeight: 700, fontSize: '15px', color: '#131722', cursor: 'pointer' }}
+                style={{ width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: selectedShape?.bold ? '#e0e3eb' : 'var(--tv-sub-bg)', fontWeight: 700, fontSize: '15px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}
               >B</button>
 
               <button onClick={() => updateProp('italic', !selectedShape?.italic)}
-                style={{ width: '34px', height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', background: selectedShape?.italic ? '#e0e3eb' : '#ffffff', fontStyle: 'italic', fontFamily: 'serif', fontSize: '15px', color: '#131722', cursor: 'pointer' }}
+                style={{ width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: selectedShape?.italic ? '#e0e3eb' : 'var(--tv-sub-bg)', fontStyle: 'italic', fontFamily: 'serif', fontSize: '15px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}
               >I</button>
             </div>
 
@@ -299,7 +299,7 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
               style={{
                 width: '100%', height: '90px', border: '1px solid #2962ff', borderRadius: '6px',
                 padding: '8px 12px', fontSize: '13px', fontFamily: 'inherit', resize: 'none',
-                outline: 'none', color: '#131722', boxSizing: 'border-box',
+                outline: 'none', color: 'var(--tv-sub-text)', boxSizing: 'border-box',
               }}
             />
           </>
@@ -310,7 +310,7 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {selectedShape?.points?.map((p: any, idx: number) => (
               <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '110px', fontSize: '13px', color: '#131722' }}>
+                <div style={{ width: '110px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>
                   #{idx + 1} (price, bar)
                 </div>
                 <LocalNumberInput 
@@ -333,7 +333,7 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CheckBox checked={!!visibility.ticks?.enabled} onChange={(v) => updateVisibility('ticks', { enabled: v })} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Ticks</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Ticks</span>
             </div>
             
             {[
@@ -347,7 +347,7 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
               <div key={row.id} style={{ display: 'flex', alignItems: 'center', opacity: !!visibility[row.id]?.enabled ? 1 : 0.4, pointerEvents: !!visibility[row.id]?.enabled ? 'auto' : 'none' }}>
                 <div style={{ width: '100px', display: 'flex', alignItems: 'center' }}>
                   <CheckBox checked={!!visibility[row.id]?.enabled} onChange={(v) => updateVisibility(row.id, { enabled: v })} />
-                  <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>{row.label}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>{row.label}</span>
                 </div>
                 
                 <div style={{ display: 'flex', gap: '12px', flex: 1, alignItems: 'center' }}>
@@ -372,21 +372,21 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
             
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <CheckBox checked={!!visibility.ranges?.enabled} onChange={(v) => updateVisibility('ranges', { enabled: v })} />
-              <span style={{ fontSize: '13px', color: '#131722', marginLeft: '8px' }}>Ranges</span>
+              <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', marginLeft: '8px' }}>Ranges</span>
             </div>
           </div>
         )}
       </div>
 
       {/* Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid #e0e3eb' }}>
-        <div style={{ height: '34px', border: '1px solid #e0e3eb', borderRadius: '4px', display: 'flex', alignItems: 'center', padding: '0 12px', gap: '6px', fontSize: '13px', color: '#131722', cursor: 'pointer' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid var(--tv-sub-border)' }}>
+        <div style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', padding: '0 12px', gap: '6px', fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}>
           Template
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="6 9 12 15 18 9" /></svg>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={cancelEdit}
-            style={{ padding: '0 16px', height: '34px', backgroundColor: '#ffffff', border: '1px solid #131722', borderRadius: '4px', color: '#131722', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}
+            style={{ padding: '0 16px', height: '34px', backgroundColor: 'var(--tv-sub-bg)', border: '1px solid #131722', borderRadius: '4px', color: 'var(--tv-sub-text)', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}
           >Cancel</button>
           <button onClick={onClose}
             style={{ padding: '0 24px', height: '34px', backgroundColor: '#131722', border: 'none', borderRadius: '4px', color: '#ffffff', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}
