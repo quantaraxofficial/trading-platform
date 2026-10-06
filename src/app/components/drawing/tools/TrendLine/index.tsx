@@ -63,6 +63,37 @@ export function TrendLine({
   // and move that exact node from outside Konva's own dragmove callback.
   const draggingIndexRef = useRef<number | null>(null);
   const handleRefs = useRef<[any, any]>([null, null]);
+  // (applyHandleMove is defined below, after the early returns; the effect reaches it through
+  // this ref so every render calls the same hooks in the same order)
+  const applyHandleMoveRef = useRef<((...a: any[]) => void) | null>(null);
+  // Without this, toggling Shift while the mouse sits still mid-resize does nothing
+  // visible until the next actual pointer move — since the whole snap/un-snap only ever
+  // ran inside the dragmove callback above. A quick tap of Shift (press then release
+  // between two mouse movements) could then land entirely between pointer-move events
+  // and never get applied at all, which is what made a "tap" look like it didn't work
+  // while holding Shift down through further movement did. Mirrors the same fix already
+  // used for the live preview while first drawing a trend line.
+  useEffect(() => {
+    if (!isDraggingHandle || draggingIndexRef.current === null) return;
+    const index = draggingIndexRef.current;
+    const node = handleRefs.current[index];
+    const stage = node?.getStage?.();
+
+    const resync = (shiftHeld: boolean, evt: KeyboardEvent) => {
+      const pos = stage?.getPointerPosition?.();
+      if (!pos) return;
+      applyHandleMoveRef.current?.(index, node, pos.x, pos.y, shiftHeld, evt);
+    };
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Shift') resync(true, e); };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Shift') resync(false, e); };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDraggingHandle]);
   if (points.length !== 2) return null;
 
   const [p1, p2] = points;
@@ -187,34 +218,8 @@ export function TrendLine({
     applyHandleMove(index, e.target, e.target.x(), e.target.y(), !!e.evt?.shiftKey, e.evt);
   };
 
-  // Without this, toggling Shift while the mouse sits still mid-resize does nothing
-  // visible until the next actual pointer move — since the whole snap/un-snap only ever
-  // ran inside the dragmove callback above. A quick tap of Shift (press then release
-  // between two mouse movements) could then land entirely between pointer-move events
-  // and never get applied at all, which is what made a "tap" look like it didn't work
-  // while holding Shift down through further movement did. Mirrors the same fix already
-  // used for the live preview while first drawing a trend line.
-  useEffect(() => {
-    if (!isDraggingHandle || draggingIndexRef.current === null) return;
-    const index = draggingIndexRef.current;
-    const node = handleRefs.current[index];
-    const stage = node?.getStage?.();
 
-    const resync = (shiftHeld: boolean, evt: KeyboardEvent) => {
-      const pos = stage?.getPointerPosition?.();
-      if (!pos) return;
-      applyHandleMove(index, node, pos.x, pos.y, shiftHeld, evt);
-    };
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Shift') resync(true, e); };
-    const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Shift') resync(false, e); };
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDraggingHandle]);
+  applyHandleMoveRef.current = applyHandleMove;
 
   return (
     <Group 
