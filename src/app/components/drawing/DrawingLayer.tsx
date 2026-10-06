@@ -1291,7 +1291,9 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     }
   };
 
-  if (!width || !height) return null;
+  // (no size yet: nothing to draw — returned at the end, after every hook, so each render calls
+  // the same hooks in the same order)
+  const hasSize = !!width && !!height;
 
   const isCursorTool = activeTool && ['cross', 'dot', 'arrow_cursor', 'eraser', 'magic', 'demonstration'].includes(activeTool);
   // As on TradingView: any drawing tool shows the crosshair (over drawings too, which don't
@@ -1325,7 +1327,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [chart]);
+  }, [chart, hasSize]);
 
   // Anchor position/rotation for the text-edit overlay, frozen for the whole editing
   // session instead of recomputed on every DrawingLayer re-render. Depending only on
@@ -1996,6 +1998,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
             return null;
   };
 
+  if (!hasSize) return null;
   // The stage covers the pane: the chart minus its price scale (on either side) and time axis
   const { scaleW: geoScaleW, paneLeft } = paneGeometry(chart);
   const scaleW = geoScaleW || 60;

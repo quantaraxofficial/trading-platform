@@ -16,6 +16,14 @@ export function MeasureTool({ id, points, chart, series }: MeasureToolProps) {
   useChartTick(chart, series);
   const textRef = useRef<any>(null);
   const [textDim, setTextDim] = useState({ width: 120, height: 50 });
+  // The text's size, measured after each render (before the early return below, so every render
+  // calls the same hooks); only a real change sets it
+  useEffect(() => {
+    const t = textRef.current;
+    if (!t) return;
+    const w = t.width(), h = t.height();
+    if (w !== textDim.width || h !== textDim.height) setTextDim({ width: w, height: h });
+  });
 
   if (!chart || !series || points.length < 2) return null;
 
@@ -91,15 +99,6 @@ export function MeasureTool({ id, points, chart, series }: MeasureToolProps) {
 
   const textContent = `${line1}\n${line2}\n${line3}`;
 
-  // Use an effect to measure text size
-  useEffect(() => {
-    if (textRef.current) {
-      setTextDim({
-        width: textRef.current.width(),
-        height: textRef.current.height()
-      });
-    }
-  }, [textContent]);
 
   const padding = 8;
   const boxWidth = textDim.width + padding * 2;
