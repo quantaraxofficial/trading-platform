@@ -3256,7 +3256,27 @@ export default function ChartContainer({
           if (cancelled) return;
 
           if (stockData.length === 0) return; // Don't clear chart if fetch failed silently
-          
+
+          // A replay's date must be in the new timeframe's bars (with some before it), or the
+          // replay would start from whichever bar the batch happens to begin with. When the batch
+          // (fewer bars than asked for) doesn't reach back to it, fetch one window placed so the
+          // date sits ~300 bars from its start.
+          if (savedReplayTime && modeRef.current !== 'idle' && stockData.length) {
+            stockData.sort((a: any, b: any) => a.time - b.time);
+            if (stockData[0].time > savedReplayTime) {
+              const barSec = getIntervalMs(interval) / 1000;
+              const endT = Math.min(savedReplayTime + Math.max(50, stockData.length - 300) * barSec, Math.floor(Date.now() / 1000));
+              const d = new Date(endT * 1000);
+              const pad = (n: number) => n.toString().padStart(2, '0');
+              try {
+                const around = await fetchStockData(symbol, interval, `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00`);
+                if (cancelled) return;
+                const sorted = [...around].sort((a: any, b: any) => a.time - b.time);
+                if (sorted.length && sorted[0].time <= savedReplayTime) stockData = sorted;
+              } catch { /* keep the batch we have */ }
+            }
+          }
+
           // Filter out weekends
           stockData = stockData.filter((d: any) => {
             const day = new Date(d.time * 1000).getUTCDay();
