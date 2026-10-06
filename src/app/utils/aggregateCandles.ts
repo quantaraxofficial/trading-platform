@@ -64,7 +64,7 @@ export function aggregateFromMinuteData(
 }
 
 // LocalStorage helpers for aggregated cache
-const AGG_CACHE_PREFIX = 'tv_agg_';
+const AGG_CACHE_PREFIX = 'tv_agg2_';   // (2: bar times are real UTC now)
 
 export function getAggCacheKey(symbol: string, interval: string): string {
   return `${AGG_CACHE_PREFIX}${symbol}|${interval}`;

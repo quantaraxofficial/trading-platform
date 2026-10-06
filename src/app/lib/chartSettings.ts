@@ -7,6 +7,7 @@
 
 import { makeStore, tradingSettings, type TradingSettings } from "../trading/settings";
 import { statusLine, type StatusLineSettings } from "./statusLine";
+import type { SeriesStyles } from "./seriesStyles";
 
 export type Visibility3 = "Visible on mouse over" | "Always visible" | "Always invisible";
 export const VISIBILITY3: Visibility3[] = ["Visible on mouse over", "Always visible", "Always invisible"];
@@ -21,6 +22,8 @@ export interface ChartSettings {
     borderVisible: boolean; wickVisible: boolean; bodyVisible: boolean;
   };
   precision: string;            // "Default" | "Integer" | "N decimals" | "1/2" …
+  // Every other chart type's style (lib/seriesStyles), only what's been changed from the defaults
+  series: Partial<SeriesStyles>;
   // Scales and lines
   currencyUnit: Visibility3;
   scaleModes: Visibility3;
@@ -83,6 +86,7 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   colorBarsOnPrevClose: false,
   candle: { upColor: "#089981", downColor: "#f23645", borderUpColor: "#089981", borderDownColor: "#f23645", wickUpColor: "#089981", wickDownColor: "#f23645", borderVisible: true, wickVisible: true, bodyVisible: true },
   precision: "Default",
+  series: {},
   currencyUnit: "Visible on mouse over", scaleModes: "Visible on mouse over",
   lockPriceToBarRatio: false, priceToBarRatio: 1,
   scalesPlacement: "Auto",

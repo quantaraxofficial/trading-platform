@@ -10,6 +10,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useChartTick } from "./core/useChartTick";
+import { paneGeometry } from "../../lib/priceScaleSide";
 
 const BLUE = "#2962ff";
 const BAND = "rgba(41, 98, 255, 0.25)";
@@ -39,9 +40,16 @@ function timeAtLogical(logical: number): number | null {
 function formatAxisTime(t: number): string {
   const daily = /day|week|month/.test((window as any).__chartInterval || "1day");
   const d = new Date(t * 1000);
+  // intraday times in the chart's timezone (bars are real UTC timestamps)
+  const zoned = (() => {
+    try {
+      const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: (window as any).__chartTimezone || undefined, hourCycle: 'h23', weekday: 'short', year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).formatToParts(d).map(x => [x.type, x.value]));
+      return [WEEKDAYS.indexOf(p.weekday), +p.day, +p.month - 1, +p.year, +p.hour % 24, +p.minute];
+    } catch { return [d.getDay(), d.getDate(), d.getMonth(), d.getFullYear(), d.getHours(), d.getMinutes()]; }
+  })();
   const [wd, day, mon, yr, h, mi] = daily
     ? [d.getUTCDay(), d.getUTCDate(), d.getUTCMonth(), d.getUTCFullYear(), d.getUTCHours(), d.getUTCMinutes()]
-    : [d.getDay(), d.getDate(), d.getMonth(), d.getFullYear(), d.getHours(), d.getMinutes()];
+    : zoned;
   const base = `${WEEKDAYS[wd]} ${String(day).padStart(2, "0")} ${MONTHS[mon]} '${String(yr).slice(-2)}`;
   return daily ? base : `${base}  ${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
 }
@@ -96,8 +104,8 @@ export default function AxisHighlights({ chart, series, drawings, selectedIds, w
   }, []);
   if (!chart || !series) return null;
 
-  let psW = 0, tsH = 0;
-  try { psW = chart.priceScale("right").width(); tsH = chart.timeScale().height(); } catch { return null; }
+  let psW = 0, tsH = 0, side = "right", paneLeft = 0;
+  try { ({ scaleW: psW, side, paneLeft } = paneGeometry(chart)); tsH = chart.timeScale().height(); } catch { return null; }
   if (!psW || !tsH) return null;
   const paneW = width - psW;
   const paneH = height - tsH;
@@ -148,7 +156,7 @@ export default function AxisHighlights({ chart, series, drawings, selectedIds, w
   const labelFont: React.CSSProperties = { fontSize: 12, lineHeight: "20px", color: "#ffffff", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
   return (
     <>
-      <div aria-hidden style={{ position: "absolute", left: paneW, top: 0, width: psW, height: paneH, pointerEvents: "none", overflow: "hidden", zIndex: 11 }}>
+      <div aria-hidden style={{ position: "absolute", left: side === "left" ? 0 : paneW, top: 0, width: psW, height: paneH, pointerEvents: "none", overflow: "hidden", zIndex: 11 }}>
         {priceBands.map(b => <div key={b.key} style={{ position: "absolute", left: 0, right: 0, top: b.top, height: b.bottom - b.top, background: BAND }} />)}
         {priceLabels.map(l => (
           <div key={l.key} data-axis-label="price" style={{ ...labelFont, position: "absolute", left: 0, width: psW, top: Math.round(l.y - 10), height: 20, padding: "0 6px", boxSizing: "border-box", background: l.color, borderRadius: 2 }}>
@@ -157,7 +165,7 @@ export default function AxisHighlights({ chart, series, drawings, selectedIds, w
         ))}
       </div>
       {(timeBands.length > 0 || timeLabels.length > 0) && (
-        <div aria-hidden style={{ position: "absolute", left: 0, top: paneH, width: paneW, height: tsH, pointerEvents: "none", overflow: "hidden", zIndex: 11 }}>
+        <div aria-hidden style={{ position: "absolute", left: paneLeft, top: paneH, width: paneW, height: tsH, pointerEvents: "none", overflow: "hidden", zIndex: 11 }}>
           {timeBands.map(b => <div key={b.key} style={{ position: "absolute", top: 0, bottom: 0, left: b.left, width: b.right - b.left, background: BAND }} />)}
           {timeLabels.map(l => (
             <div key={l.key} data-axis-label="time" style={{ ...labelFont, position: "absolute", top: Math.max(0, Math.round((tsH - 22) / 2)), left: l.x, transform: "translateX(-50%)", height: 22, lineHeight: "22px", padding: "0 8px", background: l.color, borderRadius: 3 }}>

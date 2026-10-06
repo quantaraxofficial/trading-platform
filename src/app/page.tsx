@@ -18,7 +18,7 @@ import BottomPanel from "./components/BottomPanel";
 import AlertsSidebar from "./components/AlertsSidebar";
 import CreateAlertModal from "./components/CreateAlertModal";
 import ChangeIntervalModal from "./components/ChangeIntervalModal";
-import ObjectTreeSidebar from "./components/ObjectTreeSidebar";
+import ObjectTreePanel from "./components/objectTree/ObjectTreePanel";
 import FavoritesToolbar from "./components/FavoritesToolbar";
 import PineEditorPanel from "./components/PineEditorPanel";
 import { pineDock, openPine, defaultPineWidth } from "./components/pine/pineStore";
@@ -39,6 +39,11 @@ import MobileMenuDrawer, { MobilePanel, MobilePanelSheet } from "./components/Mo
 import KeyboardShortcutsDialog from "./components/KeyboardShortcutsDialog";
 import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
 import { saveReplay } from "./lib/savedReplay";
+import { layoutStore, layouts, ensureLayout, readSharedLayout, newLayout } from "./lib/layoutStore";
+import { LAYOUTS } from "./lib/chartLayouts";
+import { setLayoutSync } from "./lib/layoutSync";
+import SecondaryChart from "./components/SecondaryChart";
+import { watchlists, listSymbols, sameSymbol } from "./components/watchlist/store";
 
 const DRAWINGS_PANEL_KEY = "tv:drawingsPanelVisible";
 const RIGHT_PANEL_KEY = "tv:rightPanelOpen";
@@ -195,6 +200,72 @@ function AppLayout() {
   useEffect(() => { symbolRef.current = symbol; }, [symbol]);
   const intervalRef = useRef(selectedInterval);
   useEffect(() => { intervalRef.current = selectedInterval; }, [selectedInterval]);
+
+  // ── Chart layouts (Layout setup / Manage layouts): the grid of charts, which one is active,
+  // and "Sync in layout". The page's symbol / interval are the active chart's.
+  const layoutState = layoutStore.useValue();
+  const workingLayout = layoutState.working;
+  // The layout once the page's chart state is known (and a shared layout link opens as a copy)
+  const layoutReady = useRef(false);
+  useEffect(() => {
+    if (!isStateLoaded || layoutReady.current) return;
+    layoutReady.current = true;
+    let legacy: string | undefined;
+    try { legacy = localStorage.getItem("tv:layoutName") || undefined; } catch { /* ignore */ }
+    ensureLayout({ symbol, interval: selectedInterval, intervalLabel }, legacy);
+    const shared = readSharedLayout(searchParams.get("layout"));
+    if (shared) {
+      const l = { ...newLayout(`${shared.name || "Unnamed"} (shared)`, shared.cells[0]), ...shared, name: `${shared.name || "Unnamed"} (shared)` };
+      const s0 = layoutStore.get();
+      const copy = { ...l, id: Math.random().toString(36).slice(2, 10), savedAt: Date.now(), shared: false };
+      layoutStore.set({ layouts: [...s0.layouts, copy], working: copy, currentId: copy.id, recent: [copy.id, ...s0.recent] });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStateLoaded]);
+  // The page follows the active chart when the layout or the active chart changes
+  const followedKey = useRef("");
+  useEffect(() => {
+    if (!workingLayout) return;
+    const key = `${workingLayout.id}:${workingLayout.active}`;
+    if (followedKey.current === key) return;
+    followedKey.current = key;
+    const cell = workingLayout.cells[workingLayout.active] || workingLayout.cells[0];
+    if (!cell) return;
+    if (cell.symbol !== symbolRef.current) setSymbol(cell.symbol);
+    if (cell.interval !== intervalRef.current) { setSelectedInterval(cell.interval); setIntervalLabel(cell.intervalLabel); }
+  }, [workingLayout]);
+  // …and the active chart follows the page (symbol search, interval menu, …), with Sync in layout
+  useEffect(() => {
+    const w = layoutStore.get().working;
+    if (!w || followedKey.current !== `${w.id}:${w.active}`) return;
+    const cur = w.cells[w.active];
+    if (cur && cur.symbol === symbol && cur.interval === selectedInterval && cur.intervalLabel === intervalLabel) return;
+    layouts.update(l => ({
+      cells: l.cells.map((c, i) => {
+        if (i === l.active) return { symbol, interval: selectedInterval, intervalLabel };
+        return {
+          ...c,
+          ...(l.sync.symbol ? { symbol } : {}),
+          ...(l.sync.interval ? { interval: selectedInterval, intervalLabel } : {}),
+        };
+      }),
+    }));
+  }, [symbol, selectedInterval, intervalLabel]);
+  // Crosshair / time / date range sync (the charts read these while they draw)
+  useEffect(() => {
+    const w = workingLayout;
+    setLayoutSync({ multi: !!w && w.cells.length > 1, crosshair: !!w?.sync.crosshair, time: !!w?.sync.time, dateRange: !!w?.sync.dateRange });
+  }, [workingLayout]);
+  // Manage layouts → Open layout… / a recent one, Create new layout…
+  useEffect(() => {
+    const onOpen = (e: Event) => { const id = (e as CustomEvent).detail; if (typeof id === "string") layouts.open(id); };
+    const onCreate = () => layouts.create({ symbol: symbolRef.current, interval: intervalRef.current, intervalLabel: intervalLabelRef.current });
+    window.addEventListener("tv:layout-open", onOpen);
+    window.addEventListener("tv:layout-create", onCreate);
+    return () => { window.removeEventListener("tv:layout-open", onOpen); window.removeEventListener("tv:layout-create", onCreate); };
+  }, []);
+  const intervalLabelRef = useRef(intervalLabel);
+  intervalLabelRef.current = intervalLabel;
   const hasLoadedOnce = useRef(false);
 
   // The URL mirrors the symbol. It's written synchronously: an async router round-trip could
@@ -382,6 +453,20 @@ function AppLayout() {
         }
       }
 
+      // Space / Shift+Space = the watchlist's next / previous symbol (round the end of the list), as
+      // on TradingView. In replay Space plays / pauses instead (the replay's own shortcut).
+      if (e.code === 'Space' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (mode !== 'idle') return;
+        const wl = watchlists.get();
+        const list = wl.lists.find(l => l.id === wl.activeId) || wl.lists[0];
+        const syms = list ? listSymbols(list) : [];
+        if (!syms.length) return;
+        e.preventDefault();
+        const i = syms.findIndex(x => sameSymbol(x, symbol));
+        setSymbol(i < 0 ? syms[0] : syms[(i + (e.shiftKey ? -1 : 1) + syms.length) % syms.length]);
+        return;
+      }
+
       // Typing a letter (with or without Shift) while nothing is focused and no
       // dialog is open = open symbol search, pre-filled with what was just typed
       if (/^[a-zA-Z]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -393,7 +478,7 @@ function AppLayout() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showAlertModal, showIntervalModal, showSymbolSearch, showQuickSearch, showMobileMenu, showShortcuts, symbol]);
+  }, [showAlertModal, showIntervalModal, showSymbolSearch, showQuickSearch, showMobileMenu, showShortcuts, symbol, mode]);
 
   const handleIntervalChange = (interval: string, label?: string) => {
     setSelectedInterval(interval);
@@ -530,7 +615,9 @@ function AppLayout() {
   userRef.current = user;
   const saveLayoutRef = useRef<() => void>(() => {});
   saveLayoutRef.current = () => {
-    if (!user) { router.push("/login"); return; }
+    layouts.save();
+    // Signed out, the layout is still kept on this device: stay on the chart
+    if (!user) { setHeaderToast("Chart layout saved"); return; }
     clearTimeout((window as any).__saveChartStateTimer);
     fetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
       method: 'POST',
@@ -705,6 +792,32 @@ function AppLayout() {
       )}
 
       <main className={styles.mainChart}>
+        {(() => {
+          // Layout setup: each chart's cell; the full chart sits in the active one (moved, not
+          // remounted, when another chart is clicked), the others are SecondaryCharts
+          const grid = workingLayout ? (LAYOUTS[workingLayout.grid] || LAYOUTS["1a"]) : LAYOUTS["1a"];
+          const cells = workingLayout ? workingLayout.cells.slice(0, grid.charts) : [];
+          const multi = grid.charts > 1 && cells.length === grid.charts;
+          const active = multi ? Math.min(workingLayout!.active, grid.charts - 1) : 0;
+          const rect = (i: number): React.CSSProperties => {
+            const [x, y, w, h] = grid.cells[i];
+            const g = (from: number, to: number) => (from > 0 ? 1 : 0) + (to < 0.999 ? 1 : 0);
+            return {
+              position: "absolute",
+              left: `calc(${x * 100}% + ${x > 0 ? 1 : 0}px)`, top: `calc(${y * 100}% + ${y > 0 ? 1 : 0}px)`,
+              width: `calc(${w * 100}% - ${g(x, x + w)}px)`, height: `calc(${h * 100}% - ${g(y, y + h)}px)`,
+            };
+          };
+          return (
+            <div data-chart-grid={grid.id} style={{ position: "absolute", inset: 0, background: multi ? "var(--tv-color-border)" : undefined }}>
+              {multi && cells.map((c, i) => i === active ? null : (
+                <div key={`cell-${i}`} style={{ ...rect(i), background: "var(--tv-color-pane-bg)", overflow: "hidden" }}>
+                  <SecondaryChart index={i} symbol={c.symbol} interval={c.interval} intervalLabel={c.intervalLabel} theme={theme} chartType={c.chartType}
+                    showVolume={activeIndicators.some(ind => ind.name === "Volume" && (ind as any).visible !== false)}
+                    onActivate={(idx) => layouts.update({ active: idx })} />
+                </div>
+              ))}
+              <div data-active-chart style={{ ...(multi ? rect(active) : { position: "absolute", inset: 0 }), overflow: "hidden" }}>
         {isStateLoaded ? (
           <ChartContainer 
             theme={theme} 
@@ -747,6 +860,11 @@ function AppLayout() {
             Loading chart...
           </div>
         )}
+              </div>
+              {multi && <div aria-hidden style={{ ...rect(active), boxShadow: "inset 0 0 0 1px #2962ff", pointerEvents: "none", zIndex: 60 }} />}
+            </div>
+          );
+        })()}
         <FavoritesToolbar />
       </main>
 
@@ -757,13 +875,7 @@ function AppLayout() {
           ) : activeSidebarPanel === "alerts" ? (
             <AlertsSidebar />
           ) : activeSidebarPanel === "object_tree" ? (
-            <ObjectTreeSidebar
-              indicators={activeIndicators}
-              onUpdateIndicator={(id, updates) => {
-                setActiveIndicators(prev => prev.map(ind => ind.id === id ? { ...ind, ...updates } : ind));
-              }}
-              onDeleteIndicator={handleRemoveIndicator}
-            />
+            <ObjectTreePanel />
           ) : (
             <RightToolbar symbol={symbol} onSymbolChange={setSymbol} />
           )}
@@ -874,13 +986,7 @@ function AppLayout() {
           {mobilePanel === "alerts" ? (
             <AlertsSidebar />
           ) : mobilePanel === "object_tree" ? (
-            <ObjectTreeSidebar
-              indicators={activeIndicators}
-              onUpdateIndicator={(id, updates) => {
-                setActiveIndicators(prev => prev.map(ind => ind.id === id ? { ...ind, ...updates } : ind));
-              }}
-              onDeleteIndicator={handleRemoveIndicator}
-            />
+            <ObjectTreePanel />
           ) : (
             <RightToolbar symbol={symbol} onSymbolChange={(s) => { setSymbol(s); setMobilePanel(null); }} />
           )}

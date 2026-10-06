@@ -7,6 +7,11 @@ const NATIVE_INTERVALS = new Set([
 ]);
 
 // Aggregate 1min candles into N-minute candles
+// TwelveData's times are requested in UTC (timezone=UTC): read them as UTC, whatever the server's own zone
+function utcMs(datetime: string): number {
+  return /^\d{4}-\d{2}-\d{2}$/.test(datetime) ? Date.parse(`${datetime}T00:00:00Z`) : Date.parse(`${datetime.replace(' ', 'T')}Z`);
+}
+
 function aggregateCandles(values: any[], minutes: number): any[] {
   if (!values || values.length === 0) return [];
 
@@ -18,7 +23,7 @@ function aggregateCandles(values: any[], minutes: number): any[] {
   let i = 0;
 
   while (i < ascending.length) {
-    const bucketStart = new Date(ascending[i].datetime).getTime();
+    const bucketStart = utcMs(ascending[i].datetime);
     // Align to N-minute boundary
     const alignedStart = Math.floor(bucketStart / (minutes * 60 * 1000)) * (minutes * 60 * 1000);
     const bucketEnd = alignedStart + minutes * 60 * 1000;
@@ -35,7 +40,7 @@ function aggregateCandles(values: any[], minutes: number): any[] {
     i++;
 
     while (i < ascending.length) {
-      const t = new Date(ascending[i].datetime).getTime();
+      const t = utcMs(ascending[i].datetime);
       if (t >= bucketEnd) break;
 
       const h = parseFloat(ascending[i].high);
@@ -76,7 +81,7 @@ function aggregateCandlesByMonths(values: any[], monthsPerBucket: number): any[]
   const bucketKey = (d: Date) => Math.floor((d.getUTCFullYear() * 12 + d.getUTCMonth()) / monthsPerBucket);
 
   while (i < ascending.length) {
-    const startKey = bucketKey(new Date(ascending[i].datetime));
+    const startKey = bucketKey(new Date(utcMs(ascending[i].datetime)));
 
     let open = parseFloat(ascending[i].open);
     let high = parseFloat(ascending[i].high);
@@ -89,7 +94,7 @@ function aggregateCandlesByMonths(values: any[], monthsPerBucket: number): any[]
 
     i++;
 
-    while (i < ascending.length && bucketKey(new Date(ascending[i].datetime)) === startKey) {
+    while (i < ascending.length && bucketKey(new Date(utcMs(ascending[i].datetime))) === startKey) {
       const h = parseFloat(ascending[i].high);
       const l = parseFloat(ascending[i].low);
       const c = parseFloat(ascending[i].close);
@@ -134,7 +139,7 @@ export async function GET(request: Request) {
   if (searchParams.get('earliest')) {
     const base = NATIVE_INTERVALS.has(interval) ? interval : /month/.test(interval) ? '1day' : '1min';
     try {
-      const response = await fetch(`https://api.twelvedata.com/earliest_timestamp?symbol=${encodeURIComponent(symbol)}&interval=${base}&apikey=${apikey}`);
+      const response = await fetch(`https://api.twelvedata.com/earliest_timestamp?symbol=${encodeURIComponent(symbol)}&interval=${base}&timezone=UTC&apikey=${apikey}`);
       const data = await response.json();
       if (data.status === 'error' || !data.datetime) {
         return NextResponse.json({ error: data.message || 'Earliest date unavailable' }, { status: 400 });
@@ -158,7 +163,7 @@ export async function GET(request: Request) {
     // We need roughly outputsize * customMinutes raw candles
     const rawSize = Math.min(parseInt(outputsize) * customMinutes, 5000);
 
-    let url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=1min&apikey=${apikey}&outputsize=${rawSize}`;
+    let url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=1min&timezone=UTC&apikey=${apikey}&outputsize=${rawSize}`;
     if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
     if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
 
@@ -193,7 +198,7 @@ export async function GET(request: Request) {
   if (isCustomMonth) {
     const monthsPerBucket = parseInt(customMonthMatch![1], 10);
 
-    let url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=1day&apikey=${apikey}&outputsize=5000`;
+    let url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=1day&timezone=UTC&apikey=${apikey}&outputsize=5000`;
     if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
     if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
 
@@ -222,7 +227,7 @@ export async function GET(request: Request) {
   }
 
   // Native interval — pass through directly
-  let url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=${interval}&apikey=${apikey}&outputsize=${outputsize}`;
+  let url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=${interval}&timezone=UTC&apikey=${apikey}&outputsize=${outputsize}`;
   if (endDate) {
     url += `&end_date=${encodeURIComponent(endDate)}`;
   }

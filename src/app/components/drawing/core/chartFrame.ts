@@ -11,6 +11,12 @@ import { flushSync } from 'react-dom';
 // painting, or hit-testing from a mouse event.)
 
 type Fn = () => void;
+
+// Chart updates made from inside React effects (series options, data for a chart type…) can make
+// lightweight-charts ask for pane views straight away, where flushSync isn't allowed: those are
+// skipped here, and the next real paint does the pass.
+let quiet = 0;
+export function quietChartUpdates<T>(fn: () => T): T { quiet++; try { return fn(); } finally { quiet--; } }
 interface Hub { tick: Set<Fn>; after: Set<Fn>; detach: Fn; sig: string }
 const hubs = new WeakMap<object, Hub>();
 
@@ -28,6 +34,7 @@ function hubFor(chart: any, series: any): Hub {
   const h: Hub = { tick: new Set(), after: new Set(), detach: () => {}, sig: '' };
   const primitive = {
     paneViews() {
+      if (quiet) return [];
       let sig: string;
       try { sig = mappingSignature(chart, series); } catch { return []; }
       if (sig === h.sig) return [];

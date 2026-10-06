@@ -18,6 +18,9 @@
   --tv-color-accent-hover: #1e53e5;
   --tv-color-item-hover: #f0f3fa;
   --tv-color-item-active: #e3ebf6;
+  /* Object tree: a selected row, and the drawings of a selected group */
+  --tv-ot-selected: #bbd9fb;
+  --tv-ot-selected-child: #e3effd;
   --tv-color-bg-hover: #f0f3fa;
   --tv-color-bull: #089981;
   --tv-color-bear: #f23645;
@@ -83,6 +86,8 @@
   --tv-color-accent-hover: #1e53e5;
   --tv-color-item-hover: #2a2e39;
   --tv-color-item-active: #2a2e39;
+  --tv-ot-selected: #142e61;
+  --tv-ot-selected-child: #132042;
   --tv-color-bg-hover: #1e222d;
   --tv-color-bull: #089981;
   --tv-color-bear: #f23645;

@@ -14,6 +14,9 @@ import { tradingSettings, type TradingSettings, type PnlMode } from '@/app/tradi
 import { EXECUTION_SOUNDS, playExecutionSound } from '@/app/trading/sounds';
 import { ColorPickerPopup } from './drawing/ui/ColorPickerPopup';
 import { Tip } from '../trading/ui';
+import { useChartType, chartTypeInfo, DRAWN_TYPES } from '../lib/chartType';
+import { PRICE_SOURCES, BOX_METHODS } from '../lib/seriesStyles';
+import { styleOf } from './chartPrimitives/ChartStyles';
 import {
   chartSettings, takeSnapshot, applySnapshot, defaultSnapshot, chartTemplates, saveTemplate, removeTemplate, syncTemplatesFromAccount, applyTemplate,
   VISIBILITY3, DATE_FORMATS, PRECISIONS, FONT_SIZES, type ChartSettings, type ColorLine, type ChartSettingsSnapshot,
@@ -258,12 +261,120 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
   const titleModes: { value: LegendTitleMode; label: string }[] = [{ value: 'Description', label: 'Name' }, { value: 'Ticker', label: 'Symbol' }, { value: 'Ticker and description', label: 'Symbol and name' }];
   const pnlModes: { value: PnlMode; label: string }[] = [{ value: 'Money', label: 'Money' }, { value: 'Ticks', label: 'Ticks' }, { value: 'Percentage', label: '%' }];
 
+  // ── Symbol: the current chart type's own section (TradingView shows only that one) ──
+  const chartType = useChartType();
+  const st: any = styleOf(s.series, chartType);
+  const setSt = (patch: any) => set({ series: { ...s.series, [chartType]: { ...st, ...patch } } });
+  const LW = 200;   // the label column, as TradingView's
+  const sw = (label: string, color: string, onChange: (v: string) => void) => <Swatch key={label} c={c} label={label} color={color} onChange={onChange} />;
+  const swLine = (label: string, v: { color: string; width: number; style: string }, onChange: (v: any) => void) =>
+    <Swatch key={label} c={c} label={label} color={v.color} onChange={col => onChange({ ...v, color: col })} line={{ width: v.width, style: v.style }} onLine={l => onChange({ ...v, ...l })} />;
+  const check = (label: string, on: boolean, onChange: (v: boolean) => void) => <Check c={c} label={label} checked={on} onChange={onChange} />;
+  const checkRow = (label: string, on: boolean, onChange: (v: boolean) => void, ...controls: React.ReactNode[]) =>
+    line(<><div style={{ width: LW - 8 }}>{check(label, on, onChange)}</div>{controls}</>);
+  const upDownRow = (label: string, key: 'body' | 'border' | 'wick') =>
+    checkRow(label, st[key].on, v => setSt({ [key]: { ...st[key], on: v } }), sw(`${label} up color`, st[key].up, col => setSt({ [key]: { ...st[key], up: col } })), sw(`${label} down color`, st[key].down, col => setSt({ [key]: { ...st[key], down: col } })));
+  const bodyBorder = (label: string, key: string) => row(LW, label, sw(`${label} body`, st[key].body, col => setSt({ [key]: { ...st[key], body: col } })), sw(`${label} border`, st[key].border, col => setSt({ [key]: { ...st[key], border: col } })));
+  const single = (label: string, key: string) => row(LW, label, sw(label, st[key], col => setSt({ [key]: col })));
+  const source = () => row(LW, 'Price source', <Dropdown key="src" c={c} label="Price source" value={st.source} options={PRICE_SOURCES} onChange={v => setSt({ source: v })} />);
+  const num = (label: string, key: string, unit?: string, min = 0) => row(LW, label, <NumberInput key={key} c={c} label={label} value={st[key]} min={min} onChange={v => setSt({ [key]: v })} />, unit ? <span key="u" style={{ fontSize: 14 }}>{unit}</span> : null);
+  const method = (fixedLabel: string, fixedKey: string) => <>
+    {row(LW, 'Box size assignment method', <Dropdown key="m" c={c} label="Box size assignment method" value={st.method} options={BOX_METHODS} onChange={v => setSt({ method: v })} />)}
+    {st.method === 'ATR' ? num('ATR length', 'atrLength', undefined, 1) : st.method === 'Traditional' ? num(fixedLabel, fixedKey) : num('Percentage', 'percentage', '%')}
+  </>;
+  const lineSection = () => <>
+    {source()}
+    {row(LW, 'Line', <Dropdown key="ct" c={c} label="Line color type" value={st.colorType} options={['Solid', 'Gradient']} width={110} onChange={v => setSt({ colorType: v })} />,
+      ...(st.colorType === 'Gradient'
+        ? [sw('Gradient start color', st.gradStart, col => setSt({ gradStart: col })), <Swatch key="ge" c={c} label="Gradient end color" color={st.gradEnd} onChange={col => setSt({ gradEnd: col })} line={{ width: st.width, style: st.style }} onLine={l => setSt(l)} />]
+        : [<Swatch key="lc" c={c} label="Line color" color={st.color} onChange={col => setSt({ color: col })} line={{ width: st.width, style: st.style }} onLine={l => setSt(l)} />]))}
+  </>;
+  const typeSection = (() => {
+    switch (chartType) {
+      case 'bar': return <>
+        {line(check('Color bars based on previous close', st.prevClose, v => setSt({ prevClose: v })))}
+        {line(check('HLC bars', st.hlc, v => setSt({ hlc: v })))}
+        {single('Up color', 'up')}{single('Down color', 'down')}
+        {line(check('Thin bars', st.thin, v => setSt({ thin: v })))}
+      </>;
+      case 'hollowCandle': return <>{upDownRow('Body', 'body')}{upDownRow('Borders', 'border')}{upDownRow('Wick', 'wick')}</>;
+      case 'volCandles': return <>
+        {line(check('Color bars based on previous close', st.prevClose, v => setSt({ prevClose: v })))}
+        {upDownRow('Body', 'body')}{upDownRow('Borders', 'border')}{upDownRow('Wick', 'wick')}
+      </>;
+      case 'line': case 'lineWithMarkers': case 'stepline': return lineSection();
+      case 'area': return <>
+        {source()}
+        {row(LW, 'Line', swLine('Line color', st.line, v => setSt({ line: v })))}
+        {row(LW, 'Fill', sw('Fill top color', st.fillTop, col => setSt({ fillTop: col })), sw('Fill bottom color', st.fillBottom, col => setSt({ fillBottom: col })))}
+      </>;
+      case 'hlcArea': return <>
+        {checkRow('High line', st.high.on, v => setSt({ high: { ...st.high, on: v } }), swLine('High line color', st.high, v => setSt({ high: v })))}
+        {checkRow('Low line', st.low.on, v => setSt({ low: { ...st.low, on: v } }), swLine('Low line color', st.low, v => setSt({ low: v })))}
+        {row(LW, 'Close line', swLine('Close line color', st.close, v => setSt({ close: v })))}
+        {row(LW, 'Fill', sw('High fill color', st.fillHigh, col => setSt({ fillHigh: col })), sw('Low fill color', st.fillLow, col => setSt({ fillLow: col })))}
+      </>;
+      case 'baseline': return <>
+        {source()}
+        {row(LW, 'Top line', swLine('Top line color', st.top, v => setSt({ top: v })))}
+        {row(LW, 'Bottom line', swLine('Bottom line color', st.bottom, v => setSt({ bottom: v })))}
+        {row(LW, 'Fill top area', sw('Fill top area color 1', st.fillTop1, col => setSt({ fillTop1: col })), sw('Fill top area color 2', st.fillTop2, col => setSt({ fillTop2: col })))}
+        {row(LW, 'Fill bottom area', sw('Fill bottom area color 1', st.fillBottom1, col => setSt({ fillBottom1: col })), sw('Fill bottom area color 2', st.fillBottom2, col => setSt({ fillBottom2: col })))}
+        {num('Base level', 'level', '%')}
+      </>;
+      case 'column': return <>
+        {source()}
+        {line(check('Color bars based on previous close', st.prevClose, v => setSt({ prevClose: v })))}
+        {single('Up color', 'up')}{single('Down color', 'down')}
+      </>;
+      case 'hilo': return <>
+        {checkRow('Body', st.body.on, v => setSt({ body: { ...st.body, on: v } }), sw('Body color', st.body.color, col => setSt({ body: { ...st.body, color: col } })))}
+        {checkRow('Borders', st.border.on, v => setSt({ border: { ...st.border, on: v } }), sw('Borders color', st.border.color, col => setSt({ border: { ...st.border, color: col } })))}
+        {checkRow('Labels', st.labels.on, v => setSt({ labels: { ...st.labels, on: v } }), sw('Labels color', st.labels.color, col => setSt({ labels: { ...st.labels, color: col } })))}
+      </>;
+      case 'ha': return <>
+        {line(check('Real prices on price scale (instead of Heikin-Ashi price)', st.realPrices, v => setSt({ realPrices: v })))}
+        {line(check('Color bars based on previous close', st.prevClose, v => setSt({ prevClose: v })))}
+        {upDownRow('Body', 'body')}{upDownRow('Borders', 'border')}{upDownRow('Wick', 'wick')}
+      </>;
+      case 'renko': return <>
+        {bodyBorder('Up bars', 'up')}{bodyBorder('Down bars', 'down')}{bodyBorder('Projection up bars', 'projUp')}{bodyBorder('Projection down bars', 'projDown')}
+        {upDownRow('Wick', 'wick')}
+        {row(LW, 'Source', <Dropdown key="rs" c={c} label="Source" value={st.source} options={['Close', 'OHLC']} width={100} onChange={v => setSt({ source: v })} />)}
+        {method('Box size', 'boxSize')}
+      </>;
+      case 'pb': return <>
+        {bodyBorder('Up bars', 'up')}{bodyBorder('Down bars', 'down')}{bodyBorder('Projection up bars', 'projUp')}{bodyBorder('Projection down bars', 'projDown')}
+        {num('Number of line', 'lines', undefined, 1)}
+      </>;
+      case 'kagi': return <>
+        {single('Up bars', 'up')}{single('Down bars', 'down')}{single('Projection up bars', 'projUp')}{single('Projection down bars', 'projDown')}
+        {method('Reversal amount', 'reversal')}
+      </>;
+      case 'pnf': return <>
+        {single('Up bars', 'up')}{single('Down bars', 'down')}{single('Projection up bars', 'projUp')}{single('Projection down bars', 'projDown')}
+        {row(LW, 'Source', <Dropdown key="ps" c={c} label="Source" value={st.source} options={['HL', 'Close']} width={100} onChange={v => setSt({ source: v })} />)}
+        {method('Box size', 'boxSize')}
+        {num('Reversal amount', 'reversal', undefined, 1)}
+        {line(check('One step back building', st.oneStepBack, v => setSt({ oneStepBack: v })))}
+      </>;
+      case 'range': return <>
+        {row(LW, 'Style', <Dropdown key="rst" c={c} label="Style" value={st.style} options={['Bars', 'Candles']} width={110} onChange={v => setSt({ style: v })} />)}
+        {single('Up bars', 'up')}{single('Down bars', 'down')}{single('Projection up bars', 'projUp')}{single('Projection down bars', 'projDown')}
+        {line(check('Thin bars', st.thin, v => setSt({ thin: v })))}
+        {line(check('Phantom bars', st.phantom, v => setSt({ phantom: v })))}
+      </>;
+      default: return <>
+        {line(<Check c={c} label="Color bars based on previous close" checked={s.colorBarsOnPrevClose} onChange={v => set({ colorBarsOnPrevClose: v })} />)}
+        {candleRow('Body', 'bodyVisible', 'upColor', 'downColor')}
+        {candleRow('Borders', 'borderVisible', 'borderUpColor', 'borderDownColor')}
+        {candleRow('Wick', 'wickVisible', 'wickUpColor', 'wickDownColor')}
+      </>;
+    }
+  })();
   const symbolTab = (<>
-    {section('Candles', true)}
-    {line(<Check c={c} label="Color bars based on previous close" checked={s.colorBarsOnPrevClose} onChange={v => set({ colorBarsOnPrevClose: v })} />)}
-    {candleRow('Body', 'bodyVisible', 'upColor', 'downColor')}
-    {candleRow('Borders', 'borderVisible', 'borderUpColor', 'borderDownColor')}
-    {candleRow('Wick', 'wickVisible', 'wickUpColor', 'wickDownColor')}
+    {section(DRAWN_TYPES.has(chartType) ? chartTypeInfo(chartType).name : 'Candles', true)}
+    {typeSection}
     {section('Data modification')}
     {row(93, 'Precision', <Dropdown key="p" c={c} label="Precision" value={s.precision} options={PRECISIONS} onChange={v => set({ precision: v })} />)}
     {row(93, 'Timezone', <Dropdown key="tz" c={c} label="Timezone" value={timezone} options={timezones.map(t => ({ value: t.tz, label: t.label }))} onChange={onTimezone} />)}

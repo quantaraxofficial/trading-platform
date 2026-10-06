@@ -1,16 +1,17 @@
 "use client";
 
+import { feedTimeToUnix } from "./feedTime";
+
 // The first bar the data provider has for a symbol/interval — what replay's "First available
 // date" jumps to, the bottom of "Random bar"'s range and the first enabled day in the replay
 // date dialog. It never changes, so it's cached (one request per symbol and interval).
 
-const KEY = "tv:earliestBar:";
+const KEY = "tv:earliestBar2:";   // (2: bar times are real UTC now)
 const inflight = new Map<string, Promise<number | null>>();
 
-// Bar times are chart times: daily and longer bars sit at UTC midnight of their date, intraday
-// bars at their exchange-local wall time read as local (see fetchStockData)
+// Bar times are real UTC timestamps (daily and longer bars at UTC midnight of their date)
 function toChartSeconds(datetime: string): number {
-  return Math.floor(new Date(datetime).getTime() / 1000);
+  return feedTimeToUnix(datetime);
 }
 
 export function getEarliestBarTime(symbol: string, interval: string): Promise<number | null> {

@@ -30,6 +30,10 @@ export interface BaseDrawing {
   type: DrawingType;
   visible: boolean;
   locked: boolean;
+  // The Object tree's group this drawing is in (members share the id and name), and when it
+  // was last changed (the tree's "Modified: …" tooltip)
+  group?: { id: string; name: string };
+  modifiedAt?: number;
   stroke: string;
   strokeWidth: number;
   points: any[];
@@ -109,6 +113,8 @@ interface DrawingContextType {
   setActiveEmoji: (emoji: string | null) => void;
   drawings: BaseDrawing[];
   setDrawings: React.Dispatch<React.SetStateAction<BaseDrawing[]>>;
+  // Replaces the drawings as one undoable step (reordering, grouping… from the Object tree)
+  applyDrawings: (next: BaseDrawing[]) => void;
   addDrawing: (drawing: BaseDrawing) => void;
   updateDrawing: (id: string, updates: Partial<BaseDrawing>) => void;
   updateMultipleDrawings: (ids: string[], updates: Partial<BaseDrawing>) => void;
@@ -155,6 +161,7 @@ interface DrawingContextType {
 import { useAuth } from '@/context/AuthContext';
 import { useTelemetry } from '@/context/TelemetryContext';
 import { isTypingTarget } from '../../../lib/isTypingTarget';
+import { writeDrawingIndex } from '../../../lib/drawingIndex';
 
 const DrawingContext = createContext<DrawingContextType | undefined>(undefined);
 
@@ -323,6 +330,13 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, symbol]);
 
+  // The local per-symbol index of drawings (Manage layout drawings), once this symbol's are loaded
+  useEffect(() => {
+    if (!symbol || (user && isInitialLoad)) return;
+    const t = setTimeout(() => writeDrawingIndex(symbol, drawings), 300);
+    return () => clearTimeout(t);
+  }, [drawings, symbol, user, isInitialLoad]);
+
   // Save drawings when they change (debounced or after each action)
   useEffect(() => {
     if (user && symbol && !isInitialLoad) {
@@ -414,7 +428,9 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
       type: drawing.type, 
       points: drawing.points,
       visible: drawing.visible,
-      locked: drawing.locked
+      locked: drawing.locked,
+      group: drawing.group,
+      modifiedAt: Date.now(),
     };
     const newDrawings = [...drawingsRef.current, newDrawing];
     commitDrawings(newDrawings);
@@ -426,9 +442,9 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     markEdited();
     setDrawings(prev => prev.map(d => {
       if (d.id === id) {
-        const newDrawing = { ...d, ...updates };
+        const newDrawing = { ...d, ...updates, modifiedAt: Date.now() };
         // Intercept style updates to save as new default
-        const nonStyleKeys = ['id', 'type', 'points', 'visible', 'locked', 'scaleX', 'scaleY', 'rotation', 'text'];
+        const nonStyleKeys = ['id', 'type', 'points', 'visible', 'locked', 'scaleX', 'scaleY', 'rotation', 'text', 'group', 'modifiedAt'];
         const styleKeysChanged = Object.keys(updates).filter(k => !nonStyleKeys.includes(k));
         
         if (styleKeysChanged.length > 0) {
@@ -446,8 +462,13 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
 
   const updateMultipleDrawings = (ids: string[], updates: Partial<BaseDrawing>) => {
     markEdited();
-    setDrawings(prev => prev.map(d => ids.includes(d.id) ? { ...d, ...updates } : d));
+    setDrawings(prev => prev.map(d => ids.includes(d.id) ? { ...d, ...updates, modifiedAt: Date.now() } : d));
     logAction('DRAWINGS_BATCH_MODIFIED', { ids, updates });
+  };
+
+  const applyDrawings = (next: BaseDrawing[]) => {
+    commitDrawings(next);
+    pushToHistory(next);
   };
 
   const deleteDrawing = (id: string) => {
@@ -562,6 +583,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
       const newDrawings = copied.map((d: any) => ({
         ...d,
         id: Math.random().toString(36).substring(2, 9),
+        group: undefined, modifiedAt: Date.now(),
         points: d.points.map((p: any) => ({ ...p, logical: p.logical + 5, price: p.price }))
       }));
       const next = [...drawingsRef.current, ...newDrawings];
@@ -672,7 +694,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
   const contextValue = React.useMemo(() => ({
     activeTool, setActiveTool,
     activeEmoji, setActiveEmoji,
-    drawings, setDrawings, addDrawing, updateDrawing, updateMultipleDrawings, deleteDrawing, deleteMultipleDrawings, clearDrawings,
+    drawings, setDrawings, applyDrawings, addDrawing, updateDrawing, updateMultipleDrawings, deleteDrawing, deleteMultipleDrawings, clearDrawings,
     selectedShapeId, setSelectedShapeId,
     selectedShapeIds, setSelectedShapeIds, addToSelection, removeFromSelection, clearSelection,
     beginEditSession, cancelEditSession,

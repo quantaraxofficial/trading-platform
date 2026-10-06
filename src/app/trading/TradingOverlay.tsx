@@ -16,6 +16,7 @@ import { activeBook, orderPrice, precisionOf, quoteOf, positionViews, Order, Pos
 import { useTradingSettings, TradingSettings, PnlMode } from "./settings";
 import { formatPrice, formatQty, formatSignedMoney, roundToTick } from "./instruments";
 import { C, Tip, Popover, MenuItem, MenuDivider } from "./ui";
+import { paneGeometry } from "../lib/priceScaleSide";
 
 const BUY = "#2962ff";
 const SELL = "#f23645";
@@ -71,8 +72,8 @@ export default function TradingOverlay({ chart, series, symbol, width, height, p
   // Esc discards a pending chart edit
   useEscapeClose(() => tradingUi.set({ pending: null }), !!ui.pending);
 
-  let scaleWidth = 0, timeHeight = 0;
-  try { scaleWidth = chart.priceScale("right").width(); timeHeight = chart.timeScale().height(); } catch { /* chart disposed */ }
+  let scaleWidth = 0, timeHeight = 0, scaleLeft = false, paneLeft = 0;
+  try { const g = paneGeometry(chart); scaleWidth = g.scaleW; scaleLeft = g.side === "left"; paneLeft = g.paneLeft; timeHeight = chart.timeScale().height(); } catch { /* chart disposed */ }
   const paneW = Math.max(0, width - scaleWidth);
   const paneH = Math.max(0, height - timeHeight);
   const prec = precisionOf(state, symbol);
@@ -148,7 +149,7 @@ export default function TradingOverlay({ chart, series, symbol, width, height, p
   );
   const axisTag = (key: string, y: number, price: number, color: string, filled: boolean, dashed = false, faded = false) => (
     <div key={`tag-${key}`} style={{
-      position: "absolute", left: paneW, top: Math.round(y) - BOX_H / 2 + 1, width: scaleWidth, height: BOX_H - 2, boxSizing: "border-box",
+      position: "absolute", left: scaleLeft ? 0 : paneW, top: Math.round(y) - BOX_H / 2 + 1, width: scaleWidth, height: BOX_H - 2, boxSizing: "border-box",
       display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, borderRadius: 2,
       background: filled ? color : "var(--tv-trade-line-box-bg)", color: filled ? "#fff" : color,
       border: `1px ${dashed ? "dashed" : "solid"} ${color}`, opacity: faded ? 0.6 : 1, pointerEvents: "none", zIndex: 2,
@@ -429,13 +430,13 @@ export default function TradingOverlay({ chart, series, symbol, width, height, p
 
   return (
     <div style={{ position: "absolute", left: 0, top: 0, width, height, pointerEvents: "none", zIndex: 70, overflow: "hidden", fontFamily: "inherit" }}>
-      <div style={{ position: "absolute", left: 0, top: 0, width: paneW, height: paneH, overflow: "hidden" }}>
+      <div style={{ position: "absolute", left: paneLeft, top: 0, width: paneW, height: paneH, overflow: "hidden" }}>
         {fills}
         {items}
         {handles}
       </div>
       <div style={{ position: "absolute", left: 0, top: 0, width, height: paneH, overflow: "hidden" }}>{axisTags}</div>
-      {plusButton && <PlusButton chart={chart} series={series} symbol={symbol} paneW={paneW} paneH={paneH} prec={prec} connected={state.connected} />}
+      {plusButton && <PlusButton chart={chart} series={series} symbol={symbol} paneW={paneW} paneH={paneH} prec={prec} connected={state.connected} left={scaleLeft ? paneLeft + 2 : paneW - 22} />}
     </div>
   );
 }
@@ -531,7 +532,8 @@ function PlainBtn({ children, onClick, primary, color }: { children: React.React
 
 // ---------- "+" on the price axis ----------
 
-function PlusButton({ chart, series, symbol, paneW, paneH, prec, connected }: { chart: IChartApi; series: any; symbol: string; paneW: number; paneH: number; prec: number; connected: boolean }) {
+// (`left`: just inside the pane, next to the price scale — on its right or left side)
+function PlusButton({ chart, series, symbol, paneW, paneH, prec, connected, left }: { chart: IChartApi; series: any; symbol: string; paneW: number; paneH: number; prec: number; connected: boolean; left: number }) {
   const [y, setY] = useState<number | null>(null);
   const [menuPrice, setMenuPrice] = useState<number | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -565,7 +567,7 @@ function PlusButton({ chart, series, symbol, paneW, paneH, prec, connected }: { 
           onMouseLeave={() => { if (menuPrice === null) hoverRef.current = false; }}
           onClick={() => { if (price !== null) setMenuPrice(price); }}
           style={{
-            position: "absolute", left: paneW - 22, top: (y ?? 0) - 10, width: 20, height: 20, borderRadius: 4, padding: 0,
+            position: "absolute", left, top: (y ?? 0) - 10, width: 20, height: 20, borderRadius: 4, padding: 0,
             border: "none", background: "#131722", color: "#fff", cursor: "pointer", pointerEvents: "auto",
             display: "flex", alignItems: "center", justifyContent: "center", zIndex: 3,
           }}

@@ -183,6 +183,10 @@ def manage_drawings(request, uid):
             return Response({"error": "Session expired or logged out from another device"}, status=status.HTTP_401_UNAUTHORIZED)
 
     symbol = request.query_params.get('symbol') or request.data.get('symbol')
+    # Without a symbol, a GET lists every symbol's drawings (the Object tree's "Manage layout
+    # drawings": a count per symbol and what they are)
+    if not symbol and request.method == 'GET':
+        return Response([{"symbol": d.symbol, "drawings": d.data or []} for d in UserDrawing.objects.filter(owner=profile)])
     if not symbol:
         return Response({"error": "Symbol is required"}, status=status.HTTP_400_BAD_REQUEST)
 

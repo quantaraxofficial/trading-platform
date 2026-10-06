@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import SymbolSearch from "./SymbolSearch";
+import ChartTypeMenu from "./ChartTypeMenu";
 import IndicatorsModal from "./IndicatorsModal";
 import { useDrawing } from "./drawing/core/DrawingContext";
 import { useAuth } from "@/context/AuthContext";
@@ -23,6 +24,7 @@ import { useEscapeClose } from "../lib/useEscapeClose";
 import { TVAlertIcon, TVReplayIcon, TVQuickSearchIcon, TVIndicatorsIcon, TVCompareIcon, TVCandlesIcon, TVSettingsHexIcon, TVFullscreenIcon, TVCameraIcon, TVUndoIcon, TVRedoIcon } from "./icons/TVIcons";
 import { Tip, TipKey } from "../trading/ui";
 import LayoutMenu from "./LayoutMenu";
+import LayoutSetupMenu from "./LayoutSetupMenu";
 import IndicatorTemplatesMenu from "./IndicatorTemplatesMenu";
 import type { IndicatorTemplate } from "@/app/utils/indicatorTemplates";
 import AccountMenu from "./AccountMenu";
@@ -346,9 +348,7 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
         <div className="tv-hdr-sep" />
 
         {/* Chart type */}
-        <Tip text="Candles" placement="bottom">
-          <button className="tv-hdr-btn" aria-label="Chart type"><TVCandlesIcon size={28} /></button>
-        </Tip>
+        <ChartTypeMenu />
 
         <div className="tv-hdr-sep" />
 
@@ -458,8 +458,9 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-        {/* Layout name + Manage layouts */}
+        {/* Layout setup (the chart grid), then the layout name + Manage layouts */}
         <span className="tv-wide-only" style={{ display: "contents" }}>
+          <LayoutSetupMenu />
           <LayoutMenu />
         </span>
 

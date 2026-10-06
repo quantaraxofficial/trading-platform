@@ -1,6 +1,7 @@
 import { barVolume } from "../utils/volume";
 import { pineTfToAppInterval, type Bar as PineBar } from "./pineScriptEngine";
 import { getCacheKey, getCachedData, setCachedData } from "./stockDataCache";
+import { feedTimeToUnix } from "../utils/feedTime";
 
 // Fetches real historical OHLC data for a timeframe OTHER than the one
 // currently loaded on the chart, via the same /api/stock-data proxy
@@ -26,7 +27,7 @@ export async function fetchPineTimeframeData(pineTf: string, symbol: string): Pr
     if (data.error || !data.values || !Array.isArray(data.values)) return [];
     const bars: PineBar[] = data.values
       .map((item: any) => ({
-        time: new Date(item.datetime).getTime() / 1000,
+        time: feedTimeToUnix(item.datetime),
         open: parseFloat(item.open),
         high: parseFloat(item.high),
         low: parseFloat(item.low),

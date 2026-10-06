@@ -41,6 +41,7 @@ import { EmojiTool } from './tools/EmojiTool';
 import { TextEditorOverlay } from './ui/TextEditorOverlay';
 import { LinkPromptDialog } from './ui/LinkPromptDialog';
 import { isTypingTarget } from '../../lib/isTypingTarget';
+import { paneGeometry } from '../../lib/priceScaleSide';
 
 interface DrawingLayerProps {
   chart: any;
@@ -48,7 +49,14 @@ interface DrawingLayerProps {
   width: number;
   height: number;
   theme?: string;
+  // A read-only copy on another chart of the layout (drawings are synced to the charts showing
+  // the same symbol): these drawings — already mapped to that chart's bars — and its bars; it
+  // never takes the mouse or keys, and nothing on it is selected or being drawn
+  readOnly?: boolean;
+  drawingsOverride?: any[];
+  barsOf?: () => any[];
 }
+const NO_SELECTION = new Set<string>();
 
 // Shapes whose selected label spot takes typing (an I-beam there on TradingView)
 // Two-point lines drawn by the TrendLine component (TradingView's Lines group)
@@ -80,8 +88,13 @@ function optimalCandlestickWidth(barSpacing: number, pixelRatio: number): number
   return Math.max(Math.floor(pixelRatio), Math.min(res, scaled));
 }
 
-export default function DrawingLayer({ chart, series, width, height, theme = 'light' }: DrawingLayerProps) {
-  const { activeTool, setActiveTool, drawings, setDrawings, addDrawing, selectedShapeId, setSelectedShapeId, updateDrawing, deleteDrawing, activeEmoji, selectedShapeIds, setSelectedShapeIds, clearSelection, magnetMode, defaultSettings, keepDrawing, allDrawingsHidden } = useDrawing();
+export default function DrawingLayer({ chart, series, width, height, theme = 'light', readOnly = false, drawingsOverride, barsOf }: DrawingLayerProps) {
+  const ctx = useDrawing();
+  const { setActiveTool, setDrawings, addDrawing, setSelectedShapeId, updateDrawing, deleteDrawing, activeEmoji, setSelectedShapeIds, clearSelection, magnetMode, defaultSettings, keepDrawing, allDrawingsHidden } = ctx;
+  const activeTool = readOnly ? null : ctx.activeTool;
+  const drawings: typeof ctx.drawings = drawingsOverride ?? ctx.drawings;
+  const selectedShapeId = readOnly ? null : ctx.selectedShapeId;
+  const selectedShapeIds = readOnly ? NO_SELECTION : ctx.selectedShapeIds;
   // Once a drawing is finished the tool goes back to the cursor, unless "Keep drawing" is on
   const finishActiveTool = () => { if (!keepDrawing) setActiveTool(null); };
   // Clicking a drawing selects it — or, with the Eraser active, removes it. (The chart-level
@@ -113,13 +126,13 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     };
 
     const cutCandleBodies = () => {
-      const fullData: any[] = (window as any).__chartFullData || [];
+      const fullData: any[] = barsOf ? barsOf() : (window as any).__chartFullData || [];
       if (fullData.length === 0) return;
       const ts = chart.timeScale();
       const range = ts.getVisibleLogicalRange();
       if (!range) return;
       const opts: any = series.options();
-      const cutoff = (window as any).__replayVisibleCutoff;
+      const cutoff = readOnly ? null : (window as any).__replayVisibleCutoff;
 
       const barSpacing = Math.abs((ts.logicalToCoordinate(1) ?? 0) - (ts.logicalToCoordinate(0) ?? 0)) || 6;
       const start = Math.max(0, Math.floor(range.from) - 1);
@@ -335,6 +348,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   // Konva registers its own window mouseup listeners (which fire dragend) at module load,
   // so this bubble-phase listener always runs after a tool's final drag-end update.
   useEffect(() => {
+    if (readOnly) return;
     const onDown = () => { pointerHeldRef.current = true; };
     const onUp = () => { pointerHeldRef.current = false; commitLiveEdit(); };
     window.addEventListener('mousedown', onDown, true);
@@ -355,6 +369,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
 
   // Clear cloned tracking when a new drag starts
   useEffect(() => {
+    if (readOnly) return;
     const handleMouseDown = () => { clonedDrawingIds.current.clear(); };
     window.addEventListener('mousedown', handleMouseDown);
     return () => window.removeEventListener('mousedown', handleMouseDown);
@@ -365,7 +380,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   // Re-rendering the whole layer per frame also re-rendered the Konva stage's context bridge
   // and every drawing a second time, which made pan, zoom and drags stutter.
   useEffect(() => {
-    if (!chart) return;
+    if (!chart || readOnly) return;
 
     // Listen for clicks on the chart to select or erase shapes when not in drawing mode
     const handleChartClick = (param: any) => {
@@ -1157,6 +1172,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   // Esc on a path that already has two points keeps it, unselected (with one point it's
   // dropped by the global Esc). Capture phase, so it runs before that Esc clears the tool.
   useEffect(() => {
+    if (readOnly) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || activeTool !== 'path' || isTypingTarget(e.target)) return;
       if (pendingPoints.length >= 2) finishNPoint(false);
@@ -1166,6 +1182,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   });
 
   useEffect(() => {
+    if (readOnly) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
       if (e.key === 'Enter') {
@@ -1302,7 +1319,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   // A native non-passive listener — React's onWheel is passive and can't stop the page scroll.
   useEffect(() => {
     const el = wrapperRef.current;
-    if (!el || !chart) return;
+    if (!el || !chart || readOnly) return;
     const onWheel = (e: WheelEvent) => {
       if (applyChartWheel(chart, e, e.clientX - el.getBoundingClientRect().left)) e.preventDefault();
     };
@@ -1979,6 +1996,9 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
             return null;
   };
 
+  // The stage covers the pane: the chart minus its price scale (on either side) and time axis
+  const { scaleW: geoScaleW, paneLeft } = paneGeometry(chart);
+  const scaleW = geoScaleW || 60;
   return (
     <>
     <div 
@@ -1986,17 +2006,16 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
       style={{ 
         position: 'absolute', 
         top: 0, 
-        left: 0, 
-        // LWC time scale is ~26px high, right price scale is ~60px wide
-        width: 'calc(100% - 60px)', 
+        left: paneLeft, 
+        width: `calc(100% - ${scaleW}px)`, 
         height: 'calc(100% - 26px)', 
         zIndex: 10, 
-        pointerEvents: shouldCaptureEvents ? 'auto' : 'none', 
+        pointerEvents: shouldCaptureEvents && !readOnly ? 'auto' : 'none', 
         cursor: cursorStyle 
       }}
     >
       <Stage
-        width={width - 60}
+        width={width - scaleW}
         height={height - 26}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}

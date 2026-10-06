@@ -33,6 +33,7 @@ function isVisibleCanvas(c: HTMLCanvasElement): boolean {
 }
 
 import { tradingSettings } from '@/app/trading/settings';
+import { paneGeometry } from './priceScaleSide';
 
 export async function captureChartSnapshot(meta: SnapshotMeta): Promise<Blob> {
   const root = findChartRoot();
@@ -71,8 +72,8 @@ export async function captureChartSnapshot(meta: SnapshotMeta): Promise<Blob> {
   }
   if (trading && withTrades) {
     const chart = (window as any).__chartInstance;
-    let paneW = rect.width;
-    try { paneW = rect.width - chart.priceScale('right').width(); } catch { /* keep full width */ }
+    let paneW = rect.width, pl = 0;
+    try { const g = paneGeometry(chart); paneW = rect.width - g.scaleW; pl = g.paneLeft; } catch { /* keep full width */ }
     ctx.save();
     ctx.scale(dpr, dpr);
     ctx.font = '12px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
@@ -81,10 +82,10 @@ export async function captureChartSnapshot(meta: SnapshotMeta): Promise<Blob> {
       ctx.strokeStyle = l.color;
       ctx.lineWidth = 1;
       ctx.setLineDash(l.dashed ? [4, 3] : []);
-      ctx.beginPath(); ctx.moveTo(0, Math.round(l.y) + 0.5); ctx.lineTo(paneW, Math.round(l.y) + 0.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pl, Math.round(l.y) + 0.5); ctx.lineTo(pl + paneW, Math.round(l.y) + 0.5); ctx.stroke();
       ctx.setLineDash([]);
       const w = ctx.measureText(l.text).width + 14;
-      const x = paneW - 64 - w;
+      const x = pl + paneW - 64 - w;
       ctx.fillStyle = dark ? '#1e222d' : '#ffffff';
       ctx.fillRect(x, l.y - 10, w, 20);
       ctx.strokeRect(x + 0.5, l.y - 9.5, w - 1, 19);

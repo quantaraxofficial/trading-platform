@@ -2,11 +2,17 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo, forwardRef, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { createChart, ColorType, ISeriesApi, IChartApi, CandlestickSeries, HistogramSeries, LineSeries, PriceScaleMode, TickMarkType, LineStyle, createTextWatermark } from "lightweight-charts";
+import { createChart, ColorType, ISeriesApi, IChartApi, CandlestickSeries, HistogramSeries, LineSeries, BarSeries, AreaSeries, BaselineSeries, LineType, PriceScaleMode, TickMarkType, LineStyle, createTextWatermark } from "lightweight-charts";
 import { CandleBodyAwareLine, candlestickBodyWidthCss } from "./chartPrimitives/CandleBodyAwareLine";
+import { quietChartUpdates } from "./drawing/core/chartFrame";
+import { buildBricks, isBrick } from "../lib/bricks";
+import { StyleLayer, styleBars, styleBar, overlayPoint, overlayKind, overlayOptions, labelColor, styleOf } from "./chartPrimitives/ChartStyles";
+import { useChartType, DRAWN_TYPES, BRICK_TYPES, type ChartType } from "../lib/chartType";
+import { ExecutionMarks, type ExecMark } from "./chartPrimitives/ExecutionMarks";
 import { SeriesSelection } from "./chartPrimitives/SeriesSelection";
 import ChartNavButtons from "./ChartNavButtons";
 import SymbolInfoDialog from "./SymbolInfoDialog";
+import { attachLayoutSync } from "../lib/layoutSync";
 import { watchlists as wlStore, wl as wlActions } from "./watchlist/store";
 import { ReplayWatermark } from "./chartPrimitives/ReplayWatermark";
 import { chartModeCursor } from "./chartCursor";
@@ -44,7 +50,7 @@ import TradingOverlay from "@/app/trading/TradingOverlay";
 import { Tip, TipKey as Kbd, SymbolAvatar, Popover, MenuItem, MenuDivider } from "@/app/trading/ui";
 import { statusLine, type StatusLineSettings } from "../lib/statusLine";
 import { loadFavoriteIndicators, saveFavoriteIndicators } from "@/app/utils/favoriteIndicators";
-import { rememberExchangeTimezone, toChartTime } from "@/app/utils/exchangeTime";
+import { rememberExchangeTimezone, toChartTime, exchangeTimezoneOf } from "@/app/utils/exchangeTime";
 import { createSeriesMarkers } from "lightweight-charts";
 import { precomputeAllTimeframes, getAggCachedData, setAggCachedData, AGGREGATABLE_INTERVALS } from "@/app/utils/aggregateCandles";
 
@@ -163,11 +169,14 @@ function notifyPriceScaleChanged() {
   window.dispatchEvent(new CustomEvent('tv-price-scale-changed'));
 }
 
-// Reads a unix timestamp's wall-clock components in a given IANA timezone (or the
-// "exchange" sentinel, which — absent real per-symbol exchange metadata — is treated as UTC).
+// The "Exchange" timezone option: the chart symbol's exchange time zone (set by the chart)
+let currentExchangeTz = 'UTC';
+
+// Reads a unix timestamp's wall-clock components in a given IANA timezone (or the "exchange"
+// sentinel: the chart symbol's exchange time zone).
 function getZonedDateParts(unixSeconds: number, tz: string) {
   const d = new Date(unixSeconds * 1000);
-  const zone = tz === 'exchange' ? 'UTC' : tz;
+  const zone = tz === 'exchange' ? currentExchangeTz : tz;
   try {
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: zone, hour12: false,
@@ -290,13 +299,15 @@ interface ChartContainerProps {
 // from "./ChartContainer".
 import { getCacheKey, getCachedData, setCachedData } from "../lib/stockDataCache";
 import { barVolume, volumeHistogram, formatVolume } from "../utils/volume";
-import { rememberFromSeriesMeta, useSymbolInfo, marketOpenNow } from "../utils/symbolInfo";
+import { rememberFromSeriesMeta, useSymbolInfo, marketOpenNow, getSymbolInfo } from "../utils/symbolInfo";
 import { getEarliestBarTime } from "../utils/earliestBar";
 import { useEscapeClose } from "../lib/useEscapeClose";
 import TvMenu, { type TvMenuItem } from "./ui/TvMenu";
 import { MenuAlertIcon, MenuBuyIcon, MenuSellIcon, MenuAddOrderIcon, MenuSettingsIcon, MenuResetIcon } from "./ui/tvMenuIcons";
 import ChartTableView from "./ChartTableView";
 import { useChartTick } from "./drawing/core/useChartTick";
+import { chartObjects, sameObjects, type ChartObject, type DataWindowData, type DataWindowSection, type DataWindowRow } from "../lib/chartObjects";
+import { sideOfPlacement, applyScaleSide, mainPriceScale, paneGeometry, onPriceAxis, mainScaleSide } from "../lib/priceScaleSide";
 import { applyChartWheel } from "../lib/chartWheel";
 import { computeEma, normalizeEma, savedEmaDefaults, emaVisibleOnInterval, emaInputsText, type EmaConfig } from "../lib/emaCalc";
 import { BandFill } from "./chartPrimitives/BandFill";
@@ -304,6 +315,7 @@ import { SessionBreaks } from "./chartPrimitives/SessionBreaks";
 import { chartSettings, themeCanvas, precisionFormat, type ChartSettings } from "../lib/chartSettings";
 import type { DateRangeSpan } from "./BottomPanel";
 import { detectPrecision, simulatedQuote } from "@/app/utils/pricePrecision";
+import { feedTimeToUnix } from "../utils/feedTime";
 export { getCacheKey, getCachedData, setCachedData } from "../lib/stockDataCache";
 
 // Requests currently on the wire, keyed like the localStorage cache. The cache only
@@ -313,7 +325,7 @@ export { getCacheKey, getCachedData, setCachedData } from "../lib/stockDataCache
 // paid API. Sharing the pending promise makes them all wait on a single request.
 const inflightStockFetches = new Map<string, Promise<any[]>>();
 
-function fetchStockData(symbol: string = 'AAPL', interval: string = '1min', endDate?: string, lastPrice?: number, startDate?: string): Promise<any[]> {
+export function fetchStockData(symbol: string = 'AAPL', interval: string = '1min', endDate?: string, lastPrice?: number, startDate?: string): Promise<any[]> {
   const key = getCacheKey(symbol, interval, endDate, startDate);
   let pending = inflightStockFetches.get(key);
   if (!pending) {
@@ -354,7 +366,7 @@ async function fetchStockDataUncached(symbol: string = 'AAPL', interval: string 
     if (data.error) return [];
     if (!data.values || !Array.isArray(data.values)) return [];
     const result = data.values.map((item: any) => ({
-      time: new Date(item.datetime).getTime() / 1000,
+      time: feedTimeToUnix(item.datetime),
       open: parseFloat(item.open),
       high: parseFloat(item.high),
       low: parseFloat(item.low),
@@ -379,7 +391,7 @@ async function fetchStockDataUncached(symbol: string = 'AAPL', interval: string 
 const emaLineStyle = (s?: string) => (s === 'Dotted' ? 1 : s === 'Dashed' ? 2 : 0);
 
 // Helper: remap drawing points from one dataset to another, extrapolating for out-of-range times
-function remapDrawingPoints(drawings: any[], stockData: any[], label: string, oldStockData?: any[]) {
+export function remapDrawingPoints(drawings: any[], stockData: any[], label: string, oldStockData?: any[]) {
   if (!drawings || drawings.length === 0 || stockData.length === 0) return drawings;
   
   // Calculate average bar spacing in seconds for extrapolation
@@ -558,6 +570,39 @@ export default function ChartContainer({
   const [chart, setChart] = useState<IChartApi | null>(null);
   const [series, setSeries] = useState<any>(null);
   const tradeMarkersRef = useRef<any[]>([]);
+  // The chart type: what the main series' bars are drawn as (see the setData wrapper)
+  const chartTypeState = useChartType();
+  const effectiveType: ChartType = DRAWN_TYPES.has(chartTypeState) ? chartTypeState : 'candle';
+  const brickType: ChartType | null = BRICK_TYPES.has(effectiveType) ? effectiveType : null;
+  const brickTypeRef = useRef<ChartType | null>(brickType);
+  brickTypeRef.current = brickType;
+  const brickParams = brickType ? (({ method, atrLength, boxSize, percentage, reversal, lines, source, oneStepBack }: any) => ({ method, atrLength, boxSize, percentage, reversal, lines, source, oneStepBack }))(styleOf(chartSettings.get().series, brickType)) : null;
+  const effectiveTypeRef = useRef<ChartType>(effectiveType);
+  effectiveTypeRef.current = effectiveType;
+  const styleRawRef = useRef<any[]>([]);
+  const styleStyledRef = useRef<any[]>([]);
+  const styleLayerRef = useRef<StyleLayer | null>(null);
+  const styleOverlayRef = useRef<{ type: ChartType; kind: string; api: any; baseLine?: any } | null>(null);
+  const typeStyleRef = useRef<any>({});
+  // the built type and its inputs (the shown bars are rebuilt when they change)
+  const brickKeyRef = useRef<string | null>(null);
+  const styleOverlaySyncRef = useRef<() => void>(() => {});
+  const styleOverlayUpdateRef = useRef<(bar: any) => void>(() => {});
+  // Execution marks (the ExecutionMarks primitive) and the fills card of the one clicked
+  const execMarksRef = useRef<ExecutionMarks | null>(null);
+  const [execCard, setExecCard] = useState<string | null>(null);
+  const execCardRef = useRef(execCard);
+  execCardRef.current = execCard;
+  useEffect(() => { execMarksRef.current?.setActive(execCard); }, [execCard]);
+  useEscapeClose(() => setExecCard(null), !!execCard);
+  // the card goes when the chart scrolls or zooms under it
+  useEffect(() => {
+    if (!execCard || !chart) return;
+    const close = () => setExecCard(null);
+    const ts = chart.timeScale();
+    const t = setTimeout(() => ts.subscribeVisibleLogicalRangeChange(close), 0);
+    return () => { clearTimeout(t); ts.unsubscribeVisibleLogicalRangeChange(close); };
+  }, [execCard, chart]);
   const seriesMarkersRef = useRef<{ series: any; api: any } | null>(null);
   const snapshotHideTradesRef = useRef(false);
   const pineMarkersRef = useRef<any[]>([]);
@@ -607,7 +652,7 @@ export default function ChartContainer({
   // "Lock vertical cursor line by time": the bar time the vertical line stays on
   const [lockedCursorTime, setLockedCursorTime] = useState<number | null>(null);
   const [showTableView, setShowTableView] = useState(false);
-  const [psAnchor, setPsAnchor] = useState<{ right: number; top: number } | null>(null);
+  const [psAnchor, setPsAnchor] = useState<{ right: number; top: number } | { left: number; top: number } | null>(null);
   const [showChartSettings, setShowChartSettings] = useState(false);
   const [chartSettingsTab, setChartSettingsTab] = useState<string | undefined>(undefined);
   const crosshairPriceRef = useRef<number | null>(null);
@@ -630,6 +675,9 @@ export default function ChartContainer({
     try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
   });
   const chartTimezoneRef = useRef(chartTimezone);
+  // read-only for components that label times (axis highlights), like window.__chartInterval
+  useEffect(() => { (window as any).__chartTimezone = chartTimezone === 'exchange' ? exchangeTimezoneOf(symbol) : chartTimezone; }, [chartTimezone, symbol]);
+  useEffect(() => { currentExchangeTz = exchangeTimezoneOf(symbol); }, [symbol]);
   const [showTimezoneMenu, setShowTimezoneMenu] = useState(false);
   useEffect(() => {
     chartTimezoneRef.current = chartTimezone;
@@ -686,18 +734,30 @@ export default function ChartContainer({
   const countdownRef = useRef(countdown);
   countdownRef.current = countdown;
 
+  // Scales placement / "Move scale to left": the main price scale's side (lib/priceScaleSide)
+  const scaleSide = sideOfPlacement(cs.scalesPlacement);
+  const [, setScaleLaidOut] = useState(0);
   useEffect(() => {
-    try { chartRef.current?.priceScale('right').applyOptions({ autoScale: psAutoScale }); } catch { /* ignore */ }
-    notifyPriceScaleChanged();
-  }, [psAutoScale]);
+    if (!chart) return;
+    if (applyScaleSide(chart, scaleSide)) notifyPriceScaleChanged();
+    // the overlays need the scale's width, known once the chart has laid it out
+    const raf = requestAnimationFrame(() => setScaleLaidOut(n => n + 1));
+    return () => cancelAnimationFrame(raf);
+  }, [chart, scaleSide]);
+  // The legend, logo… start after a scale on the left
+  const leftScaleW = scaleSide === 'left' ? paneGeometry(chart).scaleW : 0;
   useEffect(() => {
-    try { chartRef.current?.priceScale('right').applyOptions({ invertScale: psInvert }); } catch { /* ignore */ }
+    try { if (chartRef.current) mainPriceScale(chartRef.current).applyOptions({ autoScale: psAutoScale }); } catch { /* ignore */ }
     notifyPriceScaleChanged();
-  }, [psInvert]);
+  }, [psAutoScale, chart, scaleSide]);
   useEffect(() => {
-    try { chartRef.current?.priceScale('right').applyOptions({ mode: psMode }); } catch { /* ignore */ }
+    try { if (chartRef.current) mainPriceScale(chartRef.current).applyOptions({ invertScale: psInvert }); } catch { /* ignore */ }
     notifyPriceScaleChanged();
-  }, [psMode]);
+  }, [psInvert, chart, scaleSide]);
+  useEffect(() => {
+    try { if (chartRef.current) mainPriceScale(chartRef.current).applyOptions({ mode: psMode }); } catch { /* ignore */ }
+    notifyPriceScaleChanged();
+  }, [psMode, chart, scaleSide]);
   useEffect(() => {
     const series = candleSeriesRef.current;
     if (!series) return;
@@ -741,7 +801,7 @@ export default function ChartContainer({
       const barEnd = last.time + Math.floor(getIntervalMs(intervalRef.current) / 1000);
       const remain = barEnd - toChartTime(symbolRef.current, Date.now());
       const y = series.priceToCoordinate(last.close);
-      const width = chart.priceScale('right').width();
+      const width = mainPriceScale(chart).width();
       // Nothing to count down once the bar has closed (e.g. the market is shut)
       if (remain <= 0 || y == null || !width) { if (countdownRef.current) setCountdown(null); return; }
       const d = Math.floor(remain / 86400), h = Math.floor((remain % 86400) / 3600);
@@ -784,6 +844,7 @@ export default function ChartContainer({
 
   // Indicator states
   const [volumeVisible, setVolumeVisible] = useState(true);
+  const [mainVisible, setMainVisible] = useState(true);
   const [showVolumeSettings, setShowVolumeSettings] = useState(false);
   const [showEmaSettingsFor, setShowEmaSettingsFor] = useState<string | null>(null);
   
@@ -1005,14 +1066,14 @@ export default function ChartContainer({
       try {
         const r = ch.timeScale().getVisibleLogicalRange();
         const h = ch.panes()[0]?.getHeight?.() ?? 0;
-        const vr = ch.priceScale('right').getVisibleRange();
+        const vr = mainPriceScale(ch).getVisibleRange();
         if (!r || !h || !vr) return;
         const barSpacing = ch.timeScale().width() / (r.to - r.from);
         const span = (csRef.current.priceToBarRatio * h) / barSpacing;
         const mid = (vr.from + vr.to) / 2;
         if (Math.abs((vr.to - vr.from) - span) < span * 1e-6) return;
-        ch.priceScale('right').setAutoScale(false);
-        ch.priceScale('right').setVisibleRange({ from: mid - span / 2, to: mid + span / 2 });
+        mainPriceScale(ch).setAutoScale(false);
+        mainPriceScale(ch).setVisibleRange({ from: mid - span / 2, to: mid + span / 2 });
         notifyPriceScaleChanged();
       } catch { /* chart gone */ }
     };
@@ -1090,8 +1151,7 @@ export default function ChartContainer({
   recolorCandlesRef.current = () => {
     const sr = candleSeriesRef.current as any;
     if (!sr) return;
-    const plain = (sr.data() as any[]).map(({ color, borderColor, wickColor, ...b }: any) => b);
-    sr.setData(plain);
+    sr.setData(styleRawRef.current);
   };
   const prevCloseColorSeen = useRef(cs.colorBarsOnPrevClose);
   useEffect(() => {
@@ -1134,9 +1194,12 @@ export default function ChartContainer({
       const target = e.target as HTMLElement;
       const cell = target.closest?.('.tv-lightweight-charts table tr td') as HTMLElement | null;
       if (hoverCell && hoverCell !== cell) { hoverCell.style.cursor = cursorStyle; hoverCell = null; }
-      if (!cell || getComputedStyle(target).cursor.includes('resize')) return;
+      if (!cell || getComputedStyle(target).cursor.includes('resize')) { execMarksRef.current?.setHover(null); return; }
       const r = container.getBoundingClientRect();
-      const over = candleAtRef.current(e.clientX - r.left, e.clientY - r.top) >= 0;
+      const px = e.clientX - r.left - paneGeometry(chartRef.current).paneLeft, py = e.clientY - r.top;
+      const mark = execMarksRef.current?.hitTest(px, py) ?? null;
+      execMarksRef.current?.setHover(mark);
+      const over = !!mark || candleAtRef.current(px, py) >= 0;
       cell.style.cursor = over ? 'pointer' : cursorStyle;
       hoverCell = over ? cell : null;
     };
@@ -1147,11 +1210,20 @@ export default function ChartContainer({
       grabbed.style.cursor = 'grabbing';
     };
     const onUp = () => { if (grabbed) grabbed.style.cursor = cursorStyle; grabbed = null; };
+    // Clicking an execution arrow opens its fills card; clicking anywhere else closes it
+    const onClick = (e: MouseEvent) => {
+      if (Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) > 3) return;   // a drag
+      const r = container.getBoundingClientRect();
+      const mark = execMarksRef.current?.hitTest(e.clientX - r.left - paneGeometry(chartRef.current).paneLeft, e.clientY - r.top) ?? null;
+      setExecCard(mark);
+    };
+    container.addEventListener('click', onClick);
     container.addEventListener('mousedown', onDown);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     return () => {
       container.removeEventListener('mousedown', onDown);
+      container.removeEventListener('click', onClick);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
@@ -1164,7 +1236,9 @@ export default function ChartContainer({
   useEffect(() => {
     if (!series) return;
     const bars = fullDataRef.current;
-    const marks: any[] = [];
+    // one arrow per bar and side, carrying that bar's fills (drawn by the ExecutionMarks primitive)
+    const byKey = new Map<string, ExecMark>();
+    let fills = 0;
     // none while a replay bar is being picked (the scissors cursor): those would be the real
     // account's fills, piled on the latest candle
     if (tradingSettings.executionMarks && tradingState.connected && bars.length && mode !== 'selecting') {
@@ -1175,19 +1249,20 @@ export default function ChartContainer({
         if (t < firstTime) continue;
         let lo = 0, hi = bars.length - 1;
         while (lo < hi) { const mid = (lo + hi + 1) >> 1; if ((bars[mid].time as number) <= t) lo = mid; else hi = mid - 1; }
-        const isBuy = ex.side === 'buy';
-        marks.push({
-          time: bars[lo].time,
-          position: isBuy ? 'belowBar' : 'aboveBar',
-          color: isBuy ? '#2962ff' : '#f23645',
-          shape: isBuy ? 'arrowUp' : 'arrowDown',
-          text: tradingSettings.executionLabels ? `${isBuy ? 'Buy' : 'Sell'} ${formatQty(ex.qty)}` : '',
-          size: 1,
-        });
+        const time = bars[lo].time as number;
+        const key = `${time}:${ex.side}`;
+        let m = byKey.get(key);
+        if (!m) byKey.set(key, m = { key, time, side: ex.side as 'buy' | 'sell', fills: [] });
+        m.fills.push({ qty: ex.qty, price: ex.price, time: ex.time });
+        fills++;
       }
     }
-    tradeMarkersRef.current = marks;
-    (window as any).__tradeMarkerCount = marks.length;   // read-only, for checks
+    const marks = Array.from(byKey.values());
+    if (tradingSettings.executionLabels) for (const m of marks) m.label = `${m.side === 'buy' ? 'Buy' : 'Sell'} ${formatQty(m.fills.reduce((a, f) => a + f.qty, 0))}`;
+    execMarksRef.current?.setMarks(marks);
+    if (execCardRef.current && !byKey.has(execCardRef.current)) setExecCard(null);
+    tradeMarkersRef.current = [];
+    (window as any).__tradeMarkerCount = fills;   // read-only, for checks
     applyAllMarkers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series, symbol, executions, tradingSettings.executionMarks, tradingSettings.executionLabels, tradingState.connected, lastPriceData, interval, mode]);
@@ -1198,7 +1273,7 @@ export default function ChartContainer({
   useEffect(() => {
     if (!series) return;
     (window as any).__tradingSnapshot = {
-      setMarksHidden: (hidden: boolean) => { snapshotHideTradesRef.current = hidden; applyAllMarkers(); },
+      setMarksHidden: (hidden: boolean) => { snapshotHideTradesRef.current = hidden; applyAllMarkers(); execMarksRef.current?.setHover(null); execMarksRef.current?.setMarks(execMarksRef.current ? (execMarksRef.current as any)._marks : []); },
       lines: () => {
         const st = engine.getState();
         if (!st.connected) return [];
@@ -1442,7 +1517,7 @@ export default function ChartContainer({
       if (unique.length <= all.length || unique[0].time >= oldestBar.time) break; // no real progress
       all = unique;
       fullDataRef.current = unique;
-      (window as any).__chartFullData = unique;
+      (window as any).__chartFullData = fullDataRef.current;
     }
     return all;
   }
@@ -1692,7 +1767,30 @@ export default function ChartContainer({
     }
   }, [volumeConfig]);
 
-  const fullDataRef = useRef<any[]>([]);
+  // The chart's bars. For Renko, Line break, Kagi, Point & figure and Range (lib/bricks) the shown
+  // bars are built from the time bars: setting `fullDataRef.current` to time bars keeps them
+  // (rawBars()) and builds what's shown; reading it gives what's shown. The data feed, live ticks
+  // and history loading work on rawBars().
+  const barsRef = useRef<{ raw: any[]; shown: any[]; builtWith: string | null }>({ raw: [], shown: [], builtWith: null });
+  const brickCacheRef = useRef<{ key: string; src: any[] | null; out: any[] }>({ key: '', src: null, out: [] });
+  const shownOf = (raw: any[]): any[] => {
+    const type = brickTypeRef.current;
+    if (!type || !raw.length || raw.every(isBrick)) return raw;
+    const last = raw[raw.length - 1];
+    const lastOpen = Date.now() / 1000 < last.time + getIntervalMs(intervalRef.current) / 1000;
+    const key = `${brickKeyRef.current}|${raw.length}|${last.time}|${last.close}|${last.high}|${last.low}|${pricePrecisionRef.current}|${lastOpen}`;
+    const c = brickCacheRef.current;
+    if (c.src === raw && c.key === key) return c.out;
+    const out = buildBricks(type, raw, Math.pow(10, -pricePrecisionRef.current), styleOf(csRef.current.series, type), lastOpen);
+    brickCacheRef.current = { key, src: raw, out };
+    return out;
+  };
+  const rawBars = () => barsRef.current.raw;
+  const fullDataRef = useMemo(() => ({
+    get current() { return barsRef.current.shown; },
+    set current(v: any[]) { const raw = v.length && v.every(isBrick) ? barsRef.current.raw : v; barsRef.current = { raw, shown: shownOf(raw), builtWith: brickKeyRef.current }; },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), []) as React.MutableRefObject<any[]>;
   const isNavigatingRef = useRef(false); // Guard to prevent infinite scroll during GoToDate
   const isSwitchingIntervalRef = useRef(false); // Guard to prevent infinite scroll while an interval switch is (re)cropping replay data
   const refreshRunIdRef = useRef(0); // Lets a stale refresh's trailing guard-clear no-op if a newer switch has since started
@@ -1722,6 +1820,53 @@ export default function ChartContainer({
   activeToolRef.current = activeTool;
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const emasRef = useRef<Record<string, ISeriesApi<"Line">>>({});
+
+  // The other charts of a multi-chart layout follow this one (and it follows them)
+  useEffect(() => {
+    if (!chart || !series) return;
+    return attachLayoutSync(chart, series, () => fullDataRef.current, 'active');
+  }, [chart, series]);
+  // and draw in the same colours
+  useEffect(() => { (window as any).__chartColors = { canvas: canvasColors, candle: candleColors }; }, [canvasColors, candleColors]);
+
+  // Manage layouts → Download chart data: the chart's bars and indicator values as a CSV
+  useEffect(() => {
+    const onDownload = (e: Event) => {
+      const format: 'iso' | 'unix' = (e as CustomEvent).detail?.format === 'unix' ? 'unix' : 'iso';
+      const bars = fullDataRef.current;
+      if (!bars.length) return;
+      const tz = chartTimezoneRef.current === 'exchange' ? 'UTC' : chartTimezoneRef.current;
+      const iso = (t: number) => {
+        try {
+          const d = new Date(t * 1000);
+          const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(d).map(x => [x.type, x.value]));
+          const wall = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+          const off = Math.round((wall - d.getTime()) / 60000);
+          const sign = off >= 0 ? '+' : '-', a = Math.abs(off);
+          return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}${off === 0 ? 'Z' : `${sign}${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}`}`;
+        } catch { return new Date(t * 1000).toISOString(); }
+      };
+      // indicator columns: each EMA's values by time
+      const emaCols = Object.entries(emasRef.current).map(([id, s]) => {
+        const byTime = new Map<number, number>();
+        (s.data() as any[]).forEach(p => { if (typeof p.value === 'number') byTime.set(p.time as number, p.value); });
+        const cfg = (emaConfigsRef.current as any)[id];
+        return { title: `EMA${cfg?.length ? ` ${cfg.length}` : ''}`, byTime };
+      });
+      const head = ['time', 'open', 'high', 'low', 'close', 'Volume', ...emaCols.map(c => c.title)].join(',');
+      const rows = bars.map((b: any) => [format === 'unix' ? String(b.time) : iso(b.time), b.open, b.high, b.low, b.close, b.volume ?? '', ...emaCols.map(c => c.byTime.get(b.time) ?? '')].join(','));
+      const blob = new Blob([[head, ...rows].join('\n')], { type: 'text/csv' });
+      const minutes: Record<string, string> = { '1min': '1', '5min': '5', '15min': '15', '30min': '30', '45min': '45', '1h': '60', '2h': '120', '4h': '240', '1day': '1D', '1week': '1W', '1month': '1M' };
+      const ex = (getSymbolInfo(symbolRef.current).exchange || 'NASDAQ').toUpperCase();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${ex}_${symbolRef.current.replace('/', '')}, ${minutes[intervalRef.current] || intervalRef.current}.csv`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    };
+    window.addEventListener('tv:download-chart-data', onDownload);
+    return () => window.removeEventListener('tv:download-chart-data', onDownload);
+  }, []);
 
   const modeRef = useRef(mode);
   modeRef.current = mode;
@@ -1964,7 +2109,7 @@ export default function ChartContainer({
        const top = Math.min(y1, y2);
        
        div.style.display = 'block';
-       div.style.left = `${x1}px`;
+       div.style.left = `${(x1 as number) + paneGeometry(chartRef.current).paneLeft}px`;
        div.style.top = `${top}px`;
        div.style.width = `${w}px`;
        div.style.height = `${h}px`;
@@ -2228,7 +2373,7 @@ export default function ChartContainer({
     const onLive = (e: Event) => {
       const d = (e as CustomEvent).detail;
       if (!d || d.symbol !== symbolRef.current || mode !== 'idle' || !d.marketOpen) return;
-      const bars = fullDataRef.current;
+      const bars = rawBars();
       const cs = candleSeriesRef.current;
       if (!bars.length || !cs) return;
       const step = getIntervalMs(intervalRef.current) / 1000;
@@ -2243,8 +2388,15 @@ export default function ChartContainer({
         bar = { time: last.time + step, open: last.close, high: Math.max(last.close, d.price), low: Math.min(last.close, d.price), close: d.price };
         bars.push(bar);
       } else return;
-      try { cs.update(bar); } catch { return; }
-      updateEmaData(bars);
+      if (brickTypeRef.current) {
+        fullDataRef.current = bars.slice();
+        (window as any).__chartFullData = fullDataRef.current;
+        try { cs.setData(rawBars()); } catch { return; }
+        if (volumeSeriesRef.current) volumeSeriesRef.current.setData(volumeHistogram(fullDataRef.current, volumeConfigRef.current.upColor, volumeConfigRef.current.downColor));
+      } else {
+        try { cs.update(bar); } catch { return; }
+      }
+      updateEmaData(fullDataRef.current);
       setLastPriceData({ price: d.price, prevPrice: bars.length > 1 ? bars[bars.length - 2].close : d.price });
       // Script execution "On realtime bar tick": the strategy recalculates on each real-time update
       // (at most every 1.5 s, one run at a time)
@@ -2359,15 +2511,28 @@ export default function ChartContainer({
           wickColor: c.wickVisible ? (up ? c.wickUpColor : c.wickDownColor) : 'transparent',
         };
       };
-      (candleSeries as any).setData = (data: any[]) => rawSetData(csRef.current.colorBarsOnPrevClose
-        ? data.map((b, i) => (typeof b.close === 'number' ? colorOf(b, i > 0 ? data[i - 1].close : null) : b))
-        : data);
+      // …and the chart type (lib/chartType): each bar reshaped for the type (chartPrimitives/
+      // ChartStyles), the type's extra series (line, area, bars…) given the same bars
+      const candleColor = (b: any, prevClose: number | null) => (csRef.current.colorBarsOnPrevClose ? colorOf(b, prevClose) : b);
+      (candleSeries as any).setData = (input: any[]) => {
+        const data = shownOf(input);
+        styleRawRef.current = data.slice();
+        styleStyledRef.current = styleBars(effectiveTypeRef.current, typeStyleRef.current, data, candleColor);
+        // the extra series first, so the two never hold different symbols' bars at once
+        styleOverlaySyncRef.current();
+        rawSetData(styleStyledRef.current);
+      };
       (candleSeries as any).update = (bar: any, ...rest: any[]) => {
-        if (!csRef.current.colorBarsOnPrevClose || typeof bar.close !== 'number') return (rawUpdate as any)(bar, ...rest);
-        const d = candleSeries.data() as any[];
-        const last = d[d.length - 1];
-        const prev = last && (last.time as any) === bar.time ? d[d.length - 2] : last;
-        return (rawUpdate as any)(colorOf(bar, prev ? prev.close : null), ...rest);
+        if (typeof bar.close !== 'number') return (rawUpdate as any)(bar, ...rest);
+        const raw = styleRawRef.current, styled = styleStyledRef.current;
+        const same = raw.length > 0 && raw[raw.length - 1].time === bar.time;
+        if (same) raw[raw.length - 1] = bar; else raw.push(bar);
+        const i = raw.length - 1;
+        const st = styleBar(effectiveTypeRef.current, typeStyleRef.current, bar, i > 0 ? raw[i - 1] : null, i > 0 ? styled[i - 1] : null, candleColor);
+        if (same && styled.length) styled[styled.length - 1] = st; else styled.push(st);
+        const res = (rawUpdate as any)(st, ...rest);
+        styleOverlayUpdateRef.current(bar);
+        return res;
       };
     }
 
@@ -2379,6 +2544,13 @@ export default function ChartContainer({
     const seriesSelection = new SeriesSelection();
     candleSeries.attachPrimitive(seriesSelection as any);
     seriesSelectionRef.current = seriesSelection;
+    const execMarks = new ExecutionMarks(() => snapshotHideTradesRef.current);
+    candleSeries.attachPrimitive(execMarks as any);
+    execMarksRef.current = execMarks;
+    const styleLayer = new StyleLayer();
+    candleSeries.attachPrimitive(styleLayer as any);
+    styleLayerRef.current = styleLayer;
+    styleOverlayRef.current = null;
     newChart.subscribeClick((param: any) => {
       const tool = activeToolRef.current;
       if (tool && !['cross', 'dot', 'arrow_cursor', 'demonstration', 'magic'].includes(tool)) return;
@@ -2469,7 +2641,7 @@ export default function ChartContainer({
       candleSeries.setData(stockData);
       applyPricePrecision(stockData);
       fullDataRef.current = stockData;
-      (window as any).__chartFullData = stockData;
+      (window as any).__chartFullData = fullDataRef.current;
 
       // Pre-compute higher timeframes from 1m data for instant switching
       if (interval === '1min' && stockData.length > 0) {
@@ -2484,11 +2656,11 @@ export default function ChartContainer({
       setDrawings(prevDrawings => remapDrawingPoints(prevDrawings, stockData, 'DrawingRemap-InitLoad', oldInitData));
       
       if (volumeSeriesRef.current) {
-        const volData = volumeHistogram(stockData, 'rgba(38, 166, 154, 0.5)', 'rgba(239, 83, 80, 0.5)');
+        const volData = volumeHistogram(shownOf(stockData), 'rgba(38, 166, 154, 0.5)', 'rgba(239, 83, 80, 0.5)');
         volumeSeriesRef.current.setData(volData);
       }
       
-      updateEmaData(stockData);
+      updateEmaData(shownOf(stockData));
       
       if (stockData.length > 1) {
         setLastPriceData({
@@ -2562,12 +2734,12 @@ export default function ChartContainer({
           const interval = intervalRef.current;
           
           if (isScrollingLeft) {
-          const oldestBar = fullDataRef.current[0];
+          const oldestBar = rawBars()[0];
           const dateStr = new Date(oldestBar.time * 1000).toISOString().split('T')[0];
           console.log(`[Chart] Infinite scroll (LEFT) triggered. Loading before ${dateStr}`);
           moreData = await fetchStockData(symbolRef.current, interval, dateStr, oldestBar.close);
         } else if (isScrollingRight) {
-          const newestBar = fullDataRef.current[fullDataRef.current.length - 1];
+          const newestBar = rawBars()[rawBars().length - 1];
           const isLiveEdge = Date.now() / 1000 - newestBar.time < 35 * 86400; // Within ~1 month, safe for all intervals
           if (isLiveEdge) {
             isFetchingMore = false;
@@ -2595,11 +2767,11 @@ export default function ChartContainer({
         if (moreData.length > 0) {
           let gapSeconds = 0;
           if (isScrollingLeft) {
-            const currentOldest = fullDataRef.current[0]?.time || 0;
+            const currentOldest = rawBars()[0]?.time || 0;
             const newestOfMore = moreData.reduce((max: number, d: any) => Math.max(max, d.time), 0);
             gapSeconds = currentOldest - newestOfMore;
           } else {
-            const currentNewest = fullDataRef.current[fullDataRef.current.length - 1]?.time || 0;
+            const currentNewest = rawBars()[rawBars().length - 1]?.time || 0;
             const oldestOfMore = moreData.reduce((min: number, d: any) => Math.min(min, d.time), Infinity);
             gapSeconds = oldestOfMore - currentNewest;
           }
@@ -2619,7 +2791,7 @@ export default function ChartContainer({
           // Add old data first
           moreData.forEach((d: any) => dataMap.set(d.time, d));
           // Add current data (will overwrite if same timestamp exists)
-          fullDataRef.current.forEach((d: any) => dataMap.set(d.time, d));
+          rawBars().forEach((d: any) => dataMap.set(d.time, d));
           
           let unique = Array.from(dataMap.values());
           unique.sort((a: any, b: any) => (a.time as number) - (b.time as number));
@@ -2632,8 +2804,9 @@ export default function ChartContainer({
           
           // Calculate shift for drawings
           const oldFirstTime = fullDataRef.current.length > 0 ? fullDataRef.current[0].time : null;
+          const shownBefore = fullDataRef.current;
           let shift = 0;
-          if (oldFirstTime !== null) {
+          if (oldFirstTime !== null && !brickTypeRef.current) {
             const newIdx = unique.findIndex(d => d.time === oldFirstTime);
             if (newIdx > 0) shift = newIdx;
           }
@@ -2645,20 +2818,21 @@ export default function ChartContainer({
           
           // Notify the ReplayContext first if active
           if (modeRef.current !== 'idle') {
-            updateReplayDataRef.current(unique);
+            updateReplayDataRef.current(shownOf(unique));
           } else {
             // Only update the series directly if NOT in replay mode
             candleSeries.setData(unique);
             if (volumeSeriesRef.current) {
-              const volData = volumeHistogram(unique, volumeConfigRef.current.upColor, volumeConfigRef.current.downColor);
+              const volData = volumeHistogram(shownOf(unique), volumeConfigRef.current.upColor, volumeConfigRef.current.downColor);
               volumeSeriesRef.current.setData(volData);
             }
-            updateEmaData(unique);
+            updateEmaData(shownOf(unique));
           }
 
           fullDataRef.current = unique;
-          (window as any).__chartFullData = unique;
-          recalcSessionBoxes(unique);
+          (window as any).__chartFullData = fullDataRef.current;
+          if (brickTypeRef.current) setDrawings((prev: any[]) => remapDrawingPoints(prev, fullDataRef.current, '', shownBefore));
+          recalcSessionBoxes(shownOf(unique));
           
           // Update aggregated cache with expanded data for future instant switching
           const currentInterval = intervalRef.current;
@@ -2708,7 +2882,7 @@ export default function ChartContainer({
         // IMPORTANT: Update refs BEFORE setData so any synchronous scroll
         // handler events during setData see the new data, not the old data
         fullDataRef.current = stockData;
-        (window as any).__chartFullData = stockData;
+        (window as any).__chartFullData = fullDataRef.current;
 
         // Cache in agg cache for future instant switching
         const currentInterval = intervalRef.current;
@@ -2722,9 +2896,9 @@ export default function ChartContainer({
         candleSeries.setData(stockData);
         applyPricePrecision(stockData);
         if (volumeSeriesRef.current) {
-          volumeSeriesRef.current.setData(volumeHistogram(stockData, volumeConfigRef.current.upColor, volumeConfigRef.current.downColor));
+          volumeSeriesRef.current.setData(volumeHistogram(shownOf(stockData), volumeConfigRef.current.upColor, volumeConfigRef.current.downColor));
         }
-        updateEmaData(stockData);
+        updateEmaData(shownOf(stockData));
 
         if (stockData.length > 1) {
           setLastPriceData({
@@ -2866,9 +3040,9 @@ export default function ChartContainer({
       const rect = containerEl.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      const priceScale = newChart.priceScale('right');
+      const priceScale = mainPriceScale(newChart);
       const axisWidth = priceScale.width();
-      if (axisWidth <= 0 || x < rect.width - axisWidth) return;
+      if (axisWidth <= 0 || !onPriceAxis(newChart, x, rect.width)) return;
 
       // Capture-phase + stopImmediatePropagation: the library binds its own wheel
       // handler (time-axis zoom) directly on an inner canvas, deeper in the DOM than
@@ -2899,7 +3073,7 @@ export default function ChartContainer({
     // library's (which zooms around the cursor, one fixed step per event)
     const handleChartWheel = (e: WheelEvent) => {
       const rect = containerEl.getBoundingClientRect();
-      if (applyChartWheel(newChart, e, e.clientX - rect.left)) { e.preventDefault(); e.stopImmediatePropagation(); }
+      if (applyChartWheel(newChart, e, e.clientX - rect.left - paneGeometry(newChart).paneLeft)) { e.preventDefault(); e.stopImmediatePropagation(); }
     };
     containerEl.addEventListener('wheel', handleChartWheel, { passive: false, capture: true });
 
@@ -2917,9 +3091,7 @@ export default function ChartContainer({
     const handlePriceAxisMouseDown = (e: MouseEvent) => {
       const rect = containerEl.getBoundingClientRect();
       const x = e.clientX - rect.left;
-      const priceScale = newChart.priceScale('right');
-      const axisWidth = priceScale.width();
-      if (axisWidth <= 0 || x < rect.width - axisWidth) return;
+      if (!onPriceAxis(newChart, x, rect.width)) return;
 
       const tick = () => {
         notifyPriceScaleChanged();
@@ -3095,12 +3267,12 @@ export default function ChartContainer({
           series.setData(stockData);
           applyPricePrecision(stockData);
           if (volumeSeriesRef.current) {
-            const volData = volumeHistogram(stockData, 'rgba(38, 166, 154, 0.5)', 'rgba(239, 83, 80, 0.5)');
+            const volData = volumeHistogram(shownOf(stockData), 'rgba(38, 166, 154, 0.5)', 'rgba(239, 83, 80, 0.5)');
             volumeSeriesRef.current.setData(volData);
           }
           const oldStockData = fullDataRef.current; // Save before overwriting
           fullDataRef.current = stockData;
-          (window as any).__chartFullData = stockData;
+          (window as any).__chartFullData = fullDataRef.current;
           pineRerunOnLoadRef.current();
           
           // Cache this interval's data in agg cache for future use
@@ -3111,8 +3283,8 @@ export default function ChartContainer({
           // Re-map drawings logically based on time to survive timeframe changes
           setDrawings(prevDrawings => remapDrawingPoints(prevDrawings, stockData, 'DrawingRemap-IntervalChange', oldStockData));
 
-          recalcSessionBoxes(stockData);
-          updateEmaData(stockData);
+          recalcSessionBoxes(shownOf(stockData));
+          updateEmaData(shownOf(stockData));
 
           if (stockData.length > 1) {
             setLastPriceData({
@@ -3301,7 +3473,8 @@ export default function ChartContainer({
   const handleOverlayMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (modeRef.current !== 'selecting') return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+    const pl = paneGeometry(chartRef.current).paneLeft;
+    const x = e.clientX - rect.left - pl;
 
     // Magnetic snap: jump the split-line to the exact center of the nearest bar,
     // the same horizontal snap-to-candle behavior drawing tools like Fibonacci
@@ -3313,12 +3486,12 @@ export default function ChartContainer({
         // Snaps to the middle of the bar under the cursor (its wick), as on TradingView; a click
         // cuts that bar and everything after it
         const snappedX = chartRef.current.timeScale().logicalToCoordinate(idx as any);
-        setVLineX(snappedX !== null ? snappedX : x);
+        setVLineX((snappedX !== null ? snappedX : x) + pl);
         setVLineTime(fullDataRef.current[idx].time);
         return;
       }
     }
-    setVLineX(x);
+    setVLineX(x + pl);
   }, []);
   handleOverlayMouseMoveRef.current = handleOverlayMouseMove;
 
@@ -3332,7 +3505,7 @@ export default function ChartContainer({
     if (!chartRef.current || fullDataRef.current.length === 0) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+    const x = e.clientX - rect.left - paneGeometry(chartRef.current).paneLeft;
     // Convert pixel X to logical index
     const logical = chartRef.current.timeScale().coordinateToLogical(x);
     if (logical === null) return;
@@ -3355,13 +3528,211 @@ export default function ChartContainer({
       const prev = stack.pop();
       if (prev) chartRef.current.timeScale().setVisibleLogicalRange(prev);
       else chartRef.current.timeScale().fitContent();
-      chartRef.current.priceScale('right').applyOptions({ autoScale: true });
+      mainPriceScale(chartRef.current).applyOptions({ autoScale: true });
       notifyPriceScaleChanged();
       window.dispatchEvent(new CustomEvent('tv:zoom-depth', { detail: stack.length }));
     };
     window.addEventListener('tv-zoom-out', handleZoomOut);
     return () => window.removeEventListener('tv-zoom-out', handleZoomOut);
   }, []);
+
+  // ── Chart type: the extra series a type is drawn with (or that carries its price label), on
+  // the main series' price scale; the type's style from Settings → Symbol (chartSettings.series) ──
+  const typeStyle = styleOf(cs.series, effectiveType);
+  typeStyleRef.current = typeStyle;
+  brickKeyRef.current = brickType ? `${brickType}|${JSON.stringify(brickParams)}` : null;
+  const typeStyleKey = JSON.stringify(typeStyle);
+  styleOverlaySyncRef.current = () => {
+    const o = styleOverlayRef.current;
+    if (!o) return;
+    const raw = styleRawRef.current, st = typeStyleRef.current;
+    try { o.api.setData(raw.map((b: any, i: number) => overlayPoint(o.type, st, b, i > 0 ? raw[i - 1] : null))); } catch { /* bars mid-swap */ }
+    styleLabelColorRef.current();
+  };
+  styleOverlayUpdateRef.current = (bar: any) => {
+    const o = styleOverlayRef.current;
+    if (!o) return;
+    const raw = styleRawRef.current;
+    try { o.api.update(overlayPoint(o.type, typeStyleRef.current, bar, raw.length > 1 ? raw[raw.length - 2] : null)); } catch { /* older than the last */ }
+    styleLabelColorRef.current();
+  };
+  // a label-only extra series takes the last bar's colour
+  const styleLabelColorRef = useRef<() => void>(() => {});
+  styleLabelColorRef.current = () => {
+    const o = styleOverlayRef.current;
+    if (!o || o.kind !== 'label') return;
+    const raw = styleRawRef.current, last = raw[raw.length - 1];
+    if (!last) return;
+    o.api.applyOptions({ color: labelColor(o.type, typeStyleRef.current, last, raw[raw.length - 2]) });
+  };
+  const lastBrickTypeRef = useRef<ChartType | null>(null);
+  useEffect(() => quietChartUpdates(() => {
+    if (!chart || !series) return;
+    const type = effectiveType, st = typeStyle, kind = overlayKind(type, st);
+    styleLayerRef.current?.setType(type, st);
+    // the extra series (a new one when the type or its kind changes)
+    if (styleOverlayRef.current && (styleOverlayRef.current.type !== type || styleOverlayRef.current.kind !== kind)) {
+      try { chart.removeSeries(styleOverlayRef.current.api); } catch { /* already gone */ }
+      styleOverlayRef.current = null;
+    }
+    if (kind && !styleOverlayRef.current) {
+      const Ctor: any = kind === 'bar' ? BarSeries : kind === 'area' ? AreaSeries : kind === 'baseline' ? BaselineSeries : LineSeries;
+      const api = chart.addSeries(Ctor, { priceScaleId: mainScaleSide(chart), priceFormat: series.options().priceFormat } as any);
+      styleOverlayRef.current = { type, kind, api };
+    }
+    styleOverlayRef.current?.api.applyOptions(overlayOptions(type, st));
+    const sr = candleSeriesRef.current as any;
+    const raw = rawBars();
+    if (sr && raw.length && barsRef.current.builtWith !== brickKeyRef.current) {
+      // the shown bars change (a built type, or its inputs): build them, place everything on them again
+      const before = fullDataRef.current;
+      fullDataRef.current = raw;
+      (window as any).__chartFullData = fullDataRef.current;
+      sr.setData(raw);
+      if (volumeSeriesRef.current) volumeSeriesRef.current.setData(volumeHistogram(fullDataRef.current, volumeConfigRef.current.upColor, volumeConfigRef.current.downColor));
+      updateEmaData(fullDataRef.current);
+      recalcSessionBoxes(fullDataRef.current);
+      setDrawings((prev: any[]) => remapDrawingPoints(prev, fullDataRef.current, '', before));
+      if (lastBrickTypeRef.current !== brickType) {
+        // Point & figure's X / O columns need room: wider bars, as on TradingView
+        chart.timeScale().applyOptions({ rightOffset: csRef.current.marginRight, barSpacing: brickType === 'pnf' ? 14 : DEFAULT_BAR_SPACING });
+        chart.timeScale().scrollToRealTime();
+      }
+    } else if (sr && styleRawRef.current.length) sr.setData(styleRawRef.current);   // re-style the bars on the chart
+    lastBrickTypeRef.current = brickType;
+    notifyPriceScaleChanged();
+  }), [chart, series, effectiveType, typeStyleKey]);
+  // the main series' own look per type: its candles, or transparent with the extra series
+  // carrying the price label and line (Heikin Ashi with real prices keeps its candles)
+  useEffect(() => quietChartUpdates(() => {
+    const sr = candleSeriesRef.current;
+    if (!sr || sr !== series) return;
+    const o = styleOverlayRef.current;
+    const candles = {
+      upColor: candleColors.bodyVisible ? candleColors.upColor : 'transparent', downColor: candleColors.bodyVisible ? candleColors.downColor : 'transparent',
+      borderUpColor: candleColors.borderVisible ? candleColors.borderUpColor : 'transparent', borderDownColor: candleColors.borderVisible ? candleColors.borderDownColor : 'transparent',
+      wickUpColor: candleColors.wickVisible ? candleColors.wickUpColor : 'transparent', wickDownColor: candleColors.wickVisible ? candleColors.wickDownColor : 'transparent',
+    };
+    if (!o) { sr.applyOptions({ ...candles, lastValueVisible: cs.symbolValue, priceLineVisible: cs.symbolLine }); return; }
+    const clear = 'transparent';
+    if (effectiveType === 'ha') sr.applyOptions({ ...candles, lastValueVisible: false, priceLineVisible: false });
+    else sr.applyOptions({ upColor: clear, downColor: clear, borderUpColor: clear, borderDownColor: clear, wickUpColor: clear, wickDownColor: clear, lastValueVisible: false, priceLineVisible: false });
+    o.api.applyOptions({ lastValueVisible: cs.symbolValue, priceLineVisible: cs.symbolLine, visible: mainVisible, priceScaleId: mainScaleSide(chart) });
+  }), [series, chart, effectiveType, typeStyleKey, cs, candleColors, lastPriceData, mainVisible, scaleSide]);
+  // Baseline: the base level sits at its percentage of the visible prices, so it follows scrolling / zooming
+  useEffect(() => {
+    if (!chart || effectiveType !== 'baseline') return;
+    const level = (typeStyle.level ?? 50) / 100;
+    let raf = 0;
+    const place = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const o = styleOverlayRef.current;
+        if (!o || o.type !== 'baseline') return;
+        const vr = mainPriceScale(chart).getVisibleRange();
+        if (!vr) return;
+        const base = vr.from + (vr.to - vr.from) * level;
+        o.api.applyOptions({ baseValue: { type: 'price', price: base } });
+        if (o.baseLine) o.api.removePriceLine(o.baseLine);
+        o.baseLine = o.api.createPriceLine({ price: base, color: '#8C8C8C', lineWidth: 1, lineStyle: 2, axisLabelVisible: false });
+      });
+    };
+    place();
+    chart.timeScale().subscribeVisibleLogicalRangeChange(place);
+    window.addEventListener('tv-price-scale-changed', place);
+    return () => { cancelAnimationFrame(raf); chart.timeScale().unsubscribeVisibleLogicalRangeChange(place); window.removeEventListener('tv-price-scale-changed', place); };
+  }, [chart, effectiveType, typeStyleKey]);
+
+  // ── Object tree and Data window (lib/chartObjects): the symbol's series, the indicators and a
+  // Pine script, with the legend's own visibility / settings / remove handlers ─────────────
+  const objectActionsRef = useRef<Record<string, { toggle: () => void; settings?: () => void; remove?: () => void }>>({});
+  const mainTitle = `${symbol.replace('/', '')}${symbolInfo.exchange ? ` · ${symbolInfo.exchange}` : ''}, ${legendIntervalLabel(interval)}`;
+  const treeObjects: ChartObject[] = [];
+  const addObject = (id: string, kind: ChartObject['kind'], title: string, fullName: string, visible: boolean, a: { toggle: () => void; settings?: () => void; remove?: () => void }) => {
+    objectActionsRef.current[id] = a;
+    treeObjects.push({
+      id, kind, title, fullName, visible,
+      toggleVisible: () => objectActionsRef.current[id]?.toggle(),
+      openSettings: a.settings && (() => objectActionsRef.current[id]?.settings?.()),
+      remove: a.remove && (() => objectActionsRef.current[id]?.remove?.()),
+    });
+  };
+  addObject('main', 'main', mainTitle, symbol, mainVisible, {
+    toggle: () => setMainVisible(v => !v),
+    settings: () => { setChartSettingsTab('symbol'); setShowChartSettings(true); },
+  });
+  for (const ind of activeIndicators || []) {
+    const remove = () => onRemoveIndicator?.(ind.id);
+    if (ind.name === 'Volume') addObject(ind.id, 'indicator', 'Vol', 'Volume', volumeVisible, { toggle: () => setVolumeVisible(v => !v), settings: () => setShowVolumeSettings(true), remove });
+    else if (ind.name === 'Moving Average Exponential') {
+      const cfg = normalizeEma(emaConfigs[ind.id] ?? savedEmaDefaults());
+      const vis = (emaVisibilities[ind.id] ?? true) && emaVisibleOnInterval(cfg, interval);
+      addObject(ind.id, 'indicator', `EMA (${emaInputsText(cfg).split(' ').join(', ')})`, 'Moving Average Exponential', vis, {
+        toggle: () => setEmaVisibilities(prev => ({ ...prev, [ind.id]: !(prev[ind.id] ?? true) })), settings: () => setShowEmaSettingsFor(ind.id), remove,
+      });
+    } else if (ind.name === 'FXN - Asian Session Range') addObject(ind.id, 'indicator', ind.name, ind.name, sessionVisible, { toggle: () => setSessionVisible(v => !v), settings: () => setSessionSettingsOpen(true), remove });
+  }
+  if (pineLegend) addObject('pine', strategyReport ? 'strategy' : 'indicator', pineLegend.inputs.length ? `${pineLegend.name} (${pineLegend.inputs.join(', ')})` : pineLegend.name, pineLegend.name, pineVisible, {
+    toggle: togglePineVisible, settings: () => setShowPineSettings(true), remove: removePineScript,
+  });
+  // The Data window: the hovered bar (or the last one), its change, and each indicator's values
+  const dataWindowRef = useRef<() => DataWindowData | null>(() => null);
+  dataWindowRef.current = () => {
+    const bars = fullDataRef.current;
+    if (!bars.length) return null;
+    const h = hoverStore.get();
+    const hoverIdx = h.bar ? barIndexAtTime(bars, h.bar.time as number) : -1;
+    const idx = hoverIdx >= 0 ? hoverIdx : bars.length - 1;
+    const bar = bars[idx], prev = idx > 0 ? bars[idx - 1] : null;
+    const fmt = (v: number) => v.toLocaleString('en-US', { minimumFractionDigits: pricePrecision, maximumFractionDigits: pricePrecision });
+    const signed = (v: number, text: string) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${text}`;
+    const change = (from: number, to: number) => {
+      const d = to - from, pct = from ? (d / from) * 100 : 0;
+      return { value: `${signed(d, fmt(Math.abs(d)))} (${signed(pct, Math.abs(pct).toFixed(2))}%)`, color: d >= 0 ? candleColors.upColor : candleColors.downColor };
+    };
+    const barColor = bar.close >= bar.open ? candleColors.upColor : candleColors.downColor;
+    const [date, time] = formatCrosshairTime(bar.time, chartTimezone).split('  ');
+    const sections: DataWindowSection[] = [];
+    const mainRows: DataWindowRow[] = [
+      { label: 'Open', value: fmt(bar.open), color: barColor }, { label: 'High', value: fmt(bar.high), color: barColor },
+      { label: 'Low', value: fmt(bar.low), color: barColor }, { label: 'Close', value: fmt(bar.close), color: barColor },
+    ];
+    if (prev) mainRows.push({ label: 'Change', ...change(prev.close, bar.close) });
+    const pdc = previousDayClose(bars, idx, interval);
+    if (pdc != null) mainRows.push({ label: 'Last day change', ...change(pdc, bar.close) });
+    sections.push({ id: 'main', kind: 'main', title: [symbol.replace('/', ''), legendIntervalLabel(interval), symbolInfo.exchange].filter(Boolean).join(' · '), rows: mainRows });
+    for (const o of treeObjects) {
+      if (o.kind === 'main') continue;
+      const ind = (activeIndicators || []).find(i => i.id === o.id);
+      let rows: DataWindowRow[] = [];
+      if (ind?.name === 'Volume') rows = [{ label: 'Volume', value: o.visible && (bar as any).volume != null ? formatVolume((bar as any).volume) : '∅', color: barColor }];
+      else if (ind?.name === 'Moving Average Exponential') {
+        const cfg = normalizeEma(emaConfigs[ind.id] ?? savedEmaDefaults());
+        const prec = cfg.precision === 'Default' ? pricePrecision : Number(cfg.precision);
+        const v = (key: string, sr: any) => { const pt = hoverIdx >= 0 ? h.emas[key] : lastSeriesPoint(sr); return o.visible && pt && typeof pt.value === 'number' ? pt.value.toLocaleString('en-US', { minimumFractionDigits: prec, maximumFractionDigits: prec }) : '∅'; };
+        const x = emaExtrasRef.current[ind.id];
+        rows = [{ label: 'EMA', value: v(ind.id, emasRef.current[ind.id]), color: cfg.color }];
+        if (x?.ma) rows.push({ label: 'Smoothing', value: v(`${ind.id}:ma`, x.ma), color: cfg.maPlot.color });
+        if (x?.upper) rows.push({ label: 'Upper', value: v(`${ind.id}:upper`, x.upper), color: cfg.upperPlot.color });
+        if (x?.lower) rows.push({ label: 'Lower', value: v(`${ind.id}:lower`, x.lower), color: cfg.lowerPlot.color });
+      } else if (o.id === 'pine' && pineLegend) {
+        rows = pineLegend.plots.map((pl: any) => ({ label: pl.title, value: o.visible && pl.lastValue != null ? fmt(pl.lastValue) : '∅', color: pl.color }));
+      }
+      sections.push({ id: o.id, kind: o.kind, title: o.title, rows });
+    }
+    return { date, time: time ?? null, sections };
+  };
+  useEffect(() => {
+    const cur = chartObjects.get();
+    if (!sameObjects(cur.objects, treeObjects) || cur.hover !== hoverStore) {
+      chartObjects.set({ objects: treeObjects, hover: hoverStore, dataWindow: () => dataWindowRef.current() });
+    }
+  });
+  useEffect(() => () => chartObjects.set({ objects: [], hover: null, dataWindow: null }), []);
+  // The symbol's own series can be hidden from the Object tree
+  useEffect(() => {
+    try { candleSeriesRef.current?.applyOptions({ visible: mainVisible }); } catch { /* not created yet */ }
+  }, [mainVisible, chart]);
 
   return (
     <div
@@ -3372,7 +3743,7 @@ export default function ChartContainer({
         // only on the chart itself (a drawing over the candle has its own double-click)
         if (!(e.target as HTMLElement).closest?.('.tv-lightweight-charts')) return;
         const rect = e.currentTarget.getBoundingClientRect();
-        if (candleAt(e.clientX - rect.left, e.clientY - rect.top) < 0) return;
+        if (candleAt(e.clientX - rect.left - paneGeometry(chartRef.current).paneLeft, e.clientY - rect.top) < 0) return;
         setChartSettingsTab('symbol');
         setShowChartSettings(true);
       }}
@@ -3380,7 +3751,7 @@ export default function ChartContainer({
         e.preventDefault();
         if (!chartRef.current || !candleSeriesRef.current) return;
         const rect = e.currentTarget.getBoundingClientRect();
-        const x = e.clientX - rect.left;
+        const x = e.clientX - rect.left - paneGeometry(chartRef.current).paneLeft;
         const y = e.clientY - rect.top;
         const price = candleSeriesRef.current.coordinateToPrice(y as any);
         const logical = chartRef.current.timeScale().coordinateToLogical(x as any);
@@ -3393,7 +3764,7 @@ export default function ChartContainer({
     >
       {/* Watermark - bottom left like TradingView */}
       <div style={{
-        position: "absolute", bottom: "32px", left: "12px",
+        position: "absolute", bottom: "32px", left: 12 + leftScaleW,
         fontSize: "13px", fontWeight: 600, letterSpacing: "-0.3px",
         color: theme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
         pointerEvents: "none", zIndex: 1,
@@ -3520,7 +3891,7 @@ export default function ChartContainer({
         });
 
         return (
-          <div style={{ position: "absolute", top: "6px", left: "9px", maxWidth: "calc(100% - 90px)", zIndex: 11, display: "flex", flexDirection: "column", alignItems: "flex-start", pointerEvents: "none", color: "var(--tv-hdr-text)" }}>
+          <div style={{ position: "absolute", top: "6px", left: 9 + leftScaleW, maxWidth: "calc(100% - 90px)", zIndex: 11, display: "flex", flexDirection: "column", alignItems: "flex-start", pointerEvents: "none", color: "var(--tv-hdr-text)" }}>
             {/* Title line */}
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0 8px", minHeight: "22px" }}>
               {(sl.logo || sl.title) && (
@@ -3648,7 +4019,8 @@ export default function ChartContainer({
       {/* Settings → Scales: the currency label at the top of the price scale and the A (auto)
           / L (logarithmic) buttons at its bottom — shown on hover, always or never */}
       {chart && dimensions.width > 0 && (() => {
-        const psW = (() => { try { return chart.priceScale('right').width(); } catch { return 0; } })();
+        const { scaleW: psW, side } = paneGeometry(chart);
+        const atAxis = side === 'left' ? { left: 0 } : { right: 0 };
         const axisH = (() => { try { return chart.timeScale().height(); } catch { return 26; } })();
         if (!psW) return null;
         const cls = (v: string) => (v === 'Always visible' ? '' : 'tv-hover-reveal');
@@ -3660,10 +4032,10 @@ export default function ChartContainer({
         );
         return (<>
           {cs.currencyUnit !== 'Always invisible' && (
-            <div className={cls(cs.currencyUnit)} aria-label="Currency and unit" style={{ position: 'absolute', top: 4, right: 0, width: psW, textAlign: 'center', fontSize: 11, color: cs.text, pointerEvents: 'none', zIndex: 6 }}>{currency}</div>
+            <div className={cls(cs.currencyUnit)} aria-label="Currency and unit" style={{ position: 'absolute', top: 4, ...atAxis, width: psW, textAlign: 'center', fontSize: 11, color: cs.text, pointerEvents: 'none', zIndex: 6 }}>{currency}</div>
           )}
           {cs.scaleModes !== 'Always invisible' && (
-            <div className={cls(cs.scaleModes)} style={{ position: 'absolute', right: 0, bottom: axisH + 4 + (mode !== 'idle' ? 38 : 0), width: psW, display: 'flex', justifyContent: 'center', gap: 4, zIndex: 6 }}>
+            <div className={cls(cs.scaleModes)} style={{ position: 'absolute', ...atAxis, bottom: axisH + 4 + (mode !== 'idle' ? 38 : 0), width: psW, display: 'flex', justifyContent: 'center', gap: 4, zIndex: 6 }}>
               {btn('A', 'Auto (fits data to screen)', psAutoScale, () => setPsAutoScale(!psAutoScale))}
               {btn('L', 'Logarithmic scale', psMode === PriceScaleMode.Logarithmic, () => setPsMode(psMode === PriceScaleMode.Logarithmic ? PriceScaleMode.Normal : PriceScaleMode.Logarithmic))}
             </div>
@@ -3686,10 +4058,50 @@ export default function ChartContainer({
         </div>
       )}
 
+      {/* The clicked execution arrow's fills: "1 Sell" and a row per fill, "qty @ price  date" */}
+      {execCard && chart && (() => {
+        const m = execMarksRef.current?.mark(execCard);
+        const g = m && execMarksRef.current?.geometry(m);
+        if (!m || !g) return null;
+        const { paneLeft } = paneGeometry(chart);
+        const dark = theme === 'dark';
+        const color = m.side === 'buy' ? '#2962ff' : '#f23645';
+        const tz = (window as any).__chartTimezone;
+        const when = (ms: number) => {
+          const o: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false };
+          try { if (tz && tz !== 'exchange') o.timeZone = tz; return new Date(ms).toLocaleString('en-US', o); } catch { return new Date(ms).toLocaleString('en-US', { ...o, timeZone: undefined }); }
+        };
+        const top = Math.min(g.tip, g.tail) - 8;
+        const left = Math.min(g.x + paneLeft + 20, Math.max(0, dimensions.width - 300));
+        return (
+          <div role="dialog" aria-label={`${m.side === 'buy' ? 'Buy' : 'Sell'} executions`} data-exec-card={m.key}
+            onMouseDown={e => e.stopPropagation()}
+            style={{ position: 'absolute', left, top: Math.max(4, Math.min(top, dimensions.height - 120)), minWidth: 260, zIndex: 75, borderRadius: 6, overflow: 'hidden',
+              background: dark ? '#131722' : '#ffffff', color: dark ? '#d1d4dc' : '#131722', boxShadow: '0 2px 12px rgba(0,0,0,0.3)', borderLeft: `4px solid ${color}`, padding: '14px 18px 14px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <span style={{ minWidth: 20, height: 20, padding: '0 5px', borderRadius: 10, background: color, color: '#fff', fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>{m.fills.length}</span>
+              <span style={{ fontSize: 18, fontWeight: 600 }}>{m.side === 'buy' ? 'Buy' : 'Sell'}</span>
+            </div>
+            <table style={{ borderCollapse: 'collapse', fontSize: 13 }}>
+              <tbody>
+                {m.fills.map((f, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: '2px 8px 2px 4px' }}>{formatQty(f.qty)}</td>
+                    <td style={{ padding: '2px 8px 2px 0' }}>@</td>
+                    <td style={{ padding: '2px 26px 2px 0', fontVariantNumeric: 'tabular-nums' }}>{f.price.toFixed(pricePrecision)}</td>
+                    <td style={{ padding: '2px 0', color: dark ? '#787b86' : '#9598a1', whiteSpace: 'nowrap' }}>{when(f.time)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
+
       {/* Countdown to bar close, joined under the last-price label */}
       {countdown && (
         <div aria-label="Time to bar close" style={{
-          position: "absolute", right: 0, top: Math.round(countdown.top + 10), width: countdown.width, height: 17,
+          position: "absolute", ...(scaleSide === 'left' ? { left: 0 } : { right: 0 }), top: Math.round(countdown.top + 10), width: countdown.width, height: 17,
           background: countdown.color, color: "#ffffff", fontSize: "12px", lineHeight: "15px", textAlign: "center",
           borderRadius: "0 0 2px 2px", pointerEvents: "none", zIndex: 5, fontVariantNumeric: "tabular-nums",
         }}>
@@ -4144,11 +4556,11 @@ export default function ChartContainer({
         onClick={(e) => {
           const b = e.currentTarget.getBoundingClientRect();
           const c = e.currentTarget.parentElement?.getBoundingClientRect();
-          setPsAnchor({ right: c ? c.right : b.right, top: b.top });
+          setPsAnchor(scaleSide === 'left' ? { left: c ? c.left : b.left, top: b.top } : { right: c ? c.right : b.right, top: b.top });
           setShowTimezoneMenu(false); setShowPriceScaleMenu(v => !v); setPriceScaleSubmenu(null);
         }}
         style={{
-          position: "absolute", bottom: "4px", right: "6px",
+          position: "absolute", bottom: "4px", ...(scaleSide === 'left' ? { left: "6px" } : { right: "6px" }),
           width: "20px", height: "20px", borderRadius: "50%",
           background: showPriceScaleMenu ? "var(--tv-color-hover-bg, rgba(135,141,157,0.15))" : "none",
           border: "none",
@@ -4216,7 +4628,7 @@ function lastSeriesPoint(series: any): { value: number } | null {
 }
 
 // The interval as TradingView's legend writes it: minutes as a bare number, then 1h, 1D, 1W, 1M
-function legendIntervalLabel(interval: string): string {
+export function legendIntervalLabel(interval: string): string {
   const m = interval.match(/^(\d+)(min|h|day|week|month)$/);
   if (!m) return interval;
   const unit = { min: "", h: "h", day: "D", week: "W", month: "M" }[m[2] as "min"];
@@ -4446,7 +4858,7 @@ function PriceScaleMenu({
     { label: "Indexed to 100", checked: psMode === PriceScaleMode.IndexedTo100, keepOpen: true, onClick: () => setPsMode(PriceScaleMode.IndexedTo100) },
     { label: "Logarithmic", checked: psMode === PriceScaleMode.Logarithmic, shortcut: "Alt + L", keepOpen: true, onClick: () => setPsMode(PriceScaleMode.Logarithmic) },
     { kind: "divider" },
-    { label: "Move scale to left", checked: !!psScaleLeft, keepOpen: true, onClick: () => setPsScaleLeft(!psScaleLeft) },
+    { label: psScaleLeft ? "Move scale to right" : "Move scale to left", onClick: () => setPsScaleLeft(!psScaleLeft) },
     { kind: "divider" },
     { label: "Labels", testId: "ps-labels", submenu: [
       { label: "Symbol name label", checked: !!labelSettings.symbolName, keepOpen: true, onClick: () => toggleLabel('symbolName') },
@@ -4479,8 +4891,9 @@ function PriceScaleMenu({
 // its time label on the time axis, drawn like the crosshair's
 function LockedCursorLine({ chart, time, theme, tz }: { chart: any; time: number; theme: string; tz: string }) {
   useChartTick(chart);
-  const x = chart.timeScale().timeToCoordinate(time as any);
-  if (x === null || x === undefined) return null;
+  const px = chart.timeScale().timeToCoordinate(time as any);
+  if (px === null || px === undefined) return null;
+  const x = px + paneGeometry(chart).paneLeft;
   const axisH = chart.timeScale().height();
   const dark = theme === "dark";
   return (

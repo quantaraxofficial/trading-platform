@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Search, X } from "lucide-react";
 import { useEscapeClose } from "../lib/useEscapeClose";
 
@@ -27,6 +27,21 @@ const SYMBOLS: SymbolItem[] = [
   { symbol: "GOOGL", name: "Alphabet Inc.", type: "stock", exchange: "NASDAQ", color: "#4285f4" },
 ];
 
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+// The provider's instrument types, as the dialog's categories
+function categoryOf(type: string): string {
+  const t = type.toLowerCase();
+  if (/etf|fund|trust/.test(t)) return "Funds";
+  if (/stock|share|depositary|reit/.test(t)) return "Stocks";
+  if (/future/.test(t)) return "Futures";
+  if (/currency|forex|precious metal|commodity/.test(t)) return "Forex";
+  if (/digital|crypto/.test(t)) return "Crypto";
+  if (/index/.test(t)) return "Indices";
+  if (/bond/.test(t)) return "Bonds";
+  if (/option/.test(t)) return "Options";
+  return "All";
+}
+
 const CATEGORIES = ["All", "Stocks", "Funds", "Futures", "Forex", "Crypto", "Indices", "Bonds", "Economy", "Options"];
 
 interface SymbolSearchProps {
@@ -50,15 +65,48 @@ export default function SymbolSearch({ onClose, onSelect, initialSearch = "" }: 
     }
   }, []);
 
-  const filteredSymbols = SYMBOLS.filter(s => {
-    const matchesSearch = s.symbol.toLowerCase().includes(search.toLowerCase()) || 
-                         s.name.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = activeCategory === "All" || 
-                           (activeCategory === "Stocks" && s.type === "stock") ||
-                           (activeCategory === "Crypto" && s.type.includes("crypto")) ||
-                           (activeCategory === "Futures" && s.type === "futures");
-    return matchesSearch && matchesCategory;
-  });
+  // Matching ignores "/", spaces and case: "xauusd" finds XAU/USD, "eur usd" EUR/USD
+  const q = search.trim();
+  const nq = norm(q);
+  const local = SYMBOLS
+    .map(s => ({ s, rank: !nq ? 2 : norm(s.symbol) === nq ? 0 : norm(s.symbol).startsWith(nq) ? 1 : norm(s.symbol).includes(nq) || s.name.toLowerCase().includes(q.toLowerCase()) ? 2 : -1 }))
+    .filter(x => x.rank >= 0).sort((a, b) => a.rank - b.rank).map(x => x.s);
+  // …plus everything the data provider knows (any symbol), fetched as you type
+  const [remote, setRemote] = useState<{ q: string; items: SymbolItem[] }>({ q: "", items: [] });
+  const searchRemote = useCallback(async (query: string): Promise<SymbolItem[]> => {
+    try {
+      const d = await (await fetch(`/api/symbol-search?q=${encodeURIComponent(query)}`)).json();
+      const items: SymbolItem[] = (d.data || []).map((h: any) => ({ symbol: h.symbol, name: h.name, type: String(h.type || "").toLowerCase(), exchange: h.exchange }));
+      setRemote({ q: query, items });
+      return items;
+    } catch { return []; }
+  }, []);
+  useEffect(() => {
+    if (!q) { setRemote({ q: "", items: [] }); return; }
+    const t = setTimeout(() => { searchRemote(q); }, 250);
+    return () => clearTimeout(t);
+  }, [q, searchRemote]);
+  const merged = [...local, ...(remote.q === q ? remote.items.filter(r => !local.some(l => norm(l.symbol) === norm(r.symbol))) : [])];
+  const filteredSymbols = merged.filter(s => activeCategory === "All" || categoryOf(s.type) === activeCategory);
+
+  // ↑ / ↓ move the highlight, Enter opens it — with nothing listed yet, the provider's best match
+  const [active, setActive] = useState(0);
+  useEffect(() => { setActive(0); }, [q, activeCategory]);
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" }); }, [active]);
+  const onKeyDown = async (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive(i => Math.min(filteredSymbols.length - 1, i + 1)); return; }
+    if (e.key === "ArrowUp") { e.preventDefault(); setActive(i => Math.max(0, i - 1)); return; }
+    if (e.key !== "Enter" || !q) return;
+    e.preventDefault();
+    const pick = filteredSymbols[active] && (active > 0 || norm(filteredSymbols[active].symbol) === nq || remote.q === q) ? filteredSymbols[active] : null;
+    if (pick) { onSelect(pick.symbol); return; }
+    const exact = merged.find(s => norm(s.symbol) === nq);
+    if (exact) { onSelect(exact.symbol); return; }
+    const items = await searchRemote(q);
+    const best = items.find(s => norm(s.symbol) === nq) || items[0] || filteredSymbols[0];
+    onSelect(best ? best.symbol : q.toUpperCase());
+  };
 
   return (
     <div style={{
@@ -98,6 +146,8 @@ export default function SymbolSearch({ onClose, onSelect, initialSearch = "" }: 
               placeholder="Symbol, ISIN, or CUSIP"
               value={search}
               onChange={e => setSearch(e.target.value)}
+              onKeyDown={onKeyDown}
+              aria-label="Symbol search"
               style={{
                 flex: 1, border: "none", outline: "none", background: "transparent",
                 padding: "12px", fontSize: "16px", color: "var(--tv-color-text)"
@@ -129,18 +179,26 @@ export default function SymbolSearch({ onClose, onSelect, initialSearch = "" }: 
         </div>
 
         {/* Results List */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "0 0 20px" }}>
+        <div ref={listRef} role="listbox" aria-label="Symbols" style={{ flex: 1, overflowY: "auto", padding: "0 0 20px" }}>
+          {filteredSymbols.length === 0 && q && (
+            <div style={{ padding: "24px 20px", textAlign: "center", color: "var(--tv-color-text-muted)", fontSize: 14 }}>
+              {remote.q === q ? "No symbols match your criteria" : "Searching…"}
+            </div>
+          )}
           {filteredSymbols.map((s, i) => (
             <div
-              key={s.symbol + i}
+              key={s.symbol + s.exchange + i}
+              role="option"
+              aria-selected={i === active}
+              data-index={i}
               onClick={() => onSelect(s.symbol)}
               style={{
                 display: "flex", alignItems: "center", padding: "10px 20px",
                 cursor: "pointer", transition: "background-color 0.1s",
-                borderBottom: "1px solid var(--tv-color-border)"
+                borderBottom: "1px solid var(--tv-color-border)",
+                backgroundColor: i === active ? "var(--tv-color-item-hover)" : "transparent",
               }}
-              onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--tv-color-item-hover)"}
-              onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
+              onMouseEnter={() => setActive(i)}
             >
               <div style={{
                 width: "32px", height: "32px", borderRadius: "50%",

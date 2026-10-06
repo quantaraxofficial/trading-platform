@@ -20,7 +20,7 @@ export type TvMenuItem =
 
 export type TvMenuPosition =
   | { x: number; y: number }                                   // top-left at a point (right-click)
-  | { above: { right: number; top: number } };                 // right-aligned, just above (gear)
+  | { above: { right: number; top: number } | { left: number; top: number } }; // just above (gear), right- or left-aligned
 
 export function tvMenuPalette(isDark: boolean) {
   return isDark
@@ -46,7 +46,7 @@ export default function TvMenu({ items, position, isDark, onClose, ariaLabel, te
     const w = el.offsetWidth, h = el.offsetHeight;
     let left: number, top: number;
     if ("above" in position) {
-      left = position.above.right - w;
+      left = "left" in position.above ? position.above.left : position.above.right - w;
       top = position.above.top - 3 - h;
     } else {
       left = position.x;
