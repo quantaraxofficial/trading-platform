@@ -18,6 +18,7 @@ interface PineSettingsModalProps {
   plots: { title: string; color: string }[];
   onApply: (overrides: Record<string, any>, capital: number, plotColors: Record<string, string>) => void;
   onClose: () => void;
+  showProperties?: boolean;   // strategies' Properties tab (initial capital); indicators have none
 }
 
 // A curated set of Pine timeframe strings for the dropdown — this is just a
@@ -33,7 +34,7 @@ const TIMEFRAME_OPTIONS: { label: string; value: string }[] = [
 ];
 
 export default function PineSettingsModal({
-  theme = "dark", scriptName, inputsMeta, currentOverrides, initialCapital, pyramiding, defaultQtyValue, defaultQtyType,
+  theme = "dark", scriptName, inputsMeta, currentOverrides, initialCapital, pyramiding, defaultQtyValue, defaultQtyType, showProperties = true,
   plots, onApply, onClose,
 }: PineSettingsModalProps) {
   useEscapeClose(onClose);
@@ -154,7 +155,7 @@ export default function PineSettingsModal({
         </div>
 
         <div style={{ display: "flex", gap: "20px", padding: "14px 20px 0", borderBottom: `1px solid ${border}` }}>
-          {(["inputs", "properties", "style"] as const).map((t) => (
+          {(showProperties ? (["inputs", "properties", "style"] as const) : (["inputs", "style"] as const)).map((t) => (
             <div
               key={t}
               onClick={() => setTab(t)}

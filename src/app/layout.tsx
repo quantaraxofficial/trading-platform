@@ -13,6 +13,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { TelemetryProvider } from "@/context/TelemetryContext";
 import { AlertsProvider } from "@/context/AlertsContext";
 import { PaperTradingProvider } from "@/context/PaperTradingContext";
+import CloudSync from "./components/CloudSync";
 
 export default function RootLayout({
   children,
@@ -27,6 +28,7 @@ export default function RootLayout({
       </head>
       <body>
         <AuthProvider>
+          <CloudSync />
           <PaperTradingProvider>
             <AlertsProvider>
               <TelemetryProvider>

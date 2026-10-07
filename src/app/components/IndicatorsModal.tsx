@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { DEFAULT_FAVORITE_INDICATORS, loadFavoriteIndicators, saveFavoriteIndicators } from "@/app/utils/favoriteIndicators";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import { PINE_INDICATOR_NAMES } from "./pine/usePineIndicators";
 
 interface IndicatorsModalProps {
   onClose: () => void;
@@ -37,11 +38,13 @@ export default function IndicatorsModal({ onClose, onSelect }: IndicatorsModalPr
     });
   };
 
-  const indicators = [
+  // The chart's own indicators plus the Pine-based built-ins (VWAP, Ichimoku, Pivot Points, RSI, MACD…)
+  const indicators = Array.from(new Set([
     "Moving Average Exponential",
     "FXN - Asian Session Range",
-    "Volume"
-  ];
+    "Volume",
+    ...PINE_INDICATOR_NAMES,
+  ]));
 
   return (
     <div style={{

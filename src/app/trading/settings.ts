@@ -109,6 +109,10 @@ export const DEFAULT_TICKET: TicketPrefs = {
   domTif: "Day",
 };
 
+// Every store by its localStorage key, so cloud sync can make one re-read a value it just wrote
+const storeReloaders = new Map<string, () => void>();
+export function reloadStore(key: string) { storeReloaders.get(key)?.(); }
+
 export function makeStore<T extends object>(key: string, defaults: T, migrate?: (apply: (v: Partial<T>) => void) => void) {
   let value: T = defaults;
   let loaded = false;
@@ -142,6 +146,11 @@ export function makeStore<T extends object>(key: string, defaults: T, migrate?: 
     return () => { listeners.delete(l); window.removeEventListener("storage", onStorage); };
   };
   const useValue = () => useSyncExternalStore(subscribe, get, () => defaults);
+  storeReloaders.set(key, () => {
+    try { const raw = localStorage.getItem(key); value = raw ? { ...defaults, ...JSON.parse(raw) } : defaults; } catch { /* ignore */ }
+    loaded = true;
+    listeners.forEach(l => l());
+  });
   return { get, set, subscribe, useValue };
 }
 

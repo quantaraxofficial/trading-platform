@@ -43,6 +43,7 @@ export interface PineFill {
   title: string;
   color?: string;
   topValue?: number; bottomValue?: number; topColor?: string; bottomColor?: string;
+  colors?: Record<number, string>; // per-bar color (by bar time) when the script's color changes bar to bar
   hidden?: boolean;
 }
 
@@ -116,6 +117,7 @@ export interface PineRunResult {
   plots: PinePlotResult[];
   hlines?: PineHline[];
   fills?: PineFill[];
+  drawings?: PineDrawing[];
   markers: PineMarker[];
   tables: PineTableResult[];
   strategyReport: PineStrategyReport | null;
@@ -123,7 +125,7 @@ export interface PineRunResult {
   logs: string[];
   warnings: string[];
   errors: PineScriptError[];
-  meta: { title: string; shortTitle?: string; isStrategy: boolean; overlay: boolean; initialCapital: number; pyramiding?: number; defaultQtyValue?: number; defaultQtyType?: string; precision?: number };
+  meta: { title: string; shortTitle?: string; isStrategy: boolean; overlay: boolean; initialCapital: number; pyramiding?: number; defaultQtyValue?: number; defaultQtyType?: string; precision?: number; maxLabels?: number; maxLines?: number; maxBoxes?: number };
   execMs: number;
   // Profiler mode: time spent on each script line (inclusive of the lines a block contains) and
   // how many times it ran
@@ -198,6 +200,17 @@ function tokenize(s: string): Token[] {
       else if (word === "not") toks.push({ t: "not" });
       else toks.push({ t: "id", v: word });
       i = j;
+      // `array.new<float>(…)`, `matrix.new<myType>()`: the type argument only matters to the compiler
+      if (/\.new$/.test(word) && s[i] === "<") {
+        const g = s.slice(i).match(/^<[\w.<>, \[\]]*>(?=\s*\()/);
+        if (g) i += g[0].length;
+      }
+      continue;
+    }
+    // `.method()` / `.field` after a call or an index: `m.row(0).last().price`
+    if (c === "." && /[a-zA-Z_]/.test(s[i + 1] || "") && toks.length && (toks[toks.length - 1].t === ")" || toks[toks.length - 1].t === "]")) {
+      toks.push({ t: "." as any });
+      i++;
       continue;
     }
     const two = s.slice(i, i + 2);
@@ -234,10 +247,17 @@ type Expr =
   | { type: "call"; name: string; args: Expr[]; namedArgs: Record<string, Expr>; id: number }
   | { type: "tuple"; items: Expr[] }
   // switch [subject] / arms `value => body` (or `cond => body` without a subject); `=> body` is the default
-  | { type: "switch"; subject: Expr | null; arms: { cond: Expr | null; body: Stmt[] }[] };
+  | { type: "switch"; subject: Expr | null; arms: { cond: Expr | null; body: Stmt[] }[] }
+  // `expr.method(…)` / `expr.field` on the result of an expression; `path` may hold several names
+  | { type: "mcall"; recv: Expr; name: string; args: Expr[]; namedArgs: Record<string, Expr>; id: number }
+  | { type: "field"; base: Expr; path: string }
+  // An already-computed value (a method's receiver passed on as its first argument)
+  | { type: "value"; value: any };
 
-interface FuncParam { name: string; default: Expr | null }
-interface FunctionDef { name: string; params: FuncParam[]; body: Stmt[] }
+interface FuncParam { name: string; default: Expr | null; type?: string }
+interface FunctionDef { name: string; params: FuncParam[]; body: Stmt[]; isMethod?: boolean }
+// A user-defined type: `type Name` and its fields
+interface TypeDef { name: string; fields: { name: string; default: Expr | null }[] }
 
 // Real (not simulated-in-name-only) strategy state: pending orders get
 // checked against each subsequent bar's actual OHLC range for a fill,
@@ -462,7 +482,12 @@ type Stmt =
   | { type: "assign"; name: string; expr: Expr; isVarDecl: boolean; line: number }
   | { type: "tupleAssign"; names: string[]; expr: Expr; line: number }
   | { type: "funcdef"; def: FunctionDef; line: number }
-  | { type: "expr"; expr: Expr; line: number };
+  | { type: "expr"; expr: Expr; line: number }
+  | { type: "typedef"; def: TypeDef; line: number }
+  // `obj.field := value` (and `+=` …)
+  | { type: "fieldAssign"; target: string; expr: Expr; line: number }
+  // `for x in arr` / `for [i, x] in arr`
+  | { type: "forin"; idxVar: string | null; valVar: string; expr: Expr; body: Stmt[]; line: number };
 
 function parseExpression(text: string, nextId: () => number): Expr {
   const toks = tokenize(text);
@@ -524,13 +549,37 @@ function parseExpression(text: string, nextId: () => number): Expr {
     if (peek().t === "not") { consume(); return { type: "not", expr: parseUnary() }; }
     return parsePostfix();
   }
+  function parseArgs(): { args: Expr[]; namedArgs: Record<string, Expr> } {
+    const args: Expr[] = [];
+    const namedArgs: Record<string, Expr> = {};
+    if (peek().t !== ")") {
+      while (true) {
+        if (peek().t === "id" && toks[pos + 1] && toks[pos + 1].t === "=") {
+          const key = (consume() as any).v as string;
+          consume(); // '='
+          namedArgs[key] = parseTernary();
+        } else args.push(parseTernary());
+        if (peek().t === ",") { consume(); continue; }
+        break;
+      }
+    }
+    expect(")");
+    return { args, namedArgs };
+  }
   function parsePostfix(): Expr {
     let node = parsePrimary();
-    while (peek().t === "[") {
-      consume();
-      const idx = parseTernary();
-      expect("]");
-      node = { type: "histref", base: node, offset: idx, id: nextId() };
+    while (peek().t === "[" || (peek().t as string) === ".") {
+      if (consume().t === "[") {
+        const idx = parseTernary();
+        expect("]");
+        node = { type: "histref", base: node, offset: idx, id: nextId() };
+        continue;
+      }
+      const nameTok = consume();
+      if (nameTok.t !== "id") throw new PineError("Syntax error: expected a name after '.'", "CE10001");
+      const name = (nameTok as any).v as string;
+      if (peek().t === "(") { consume(); const { args, namedArgs } = parseArgs(); node = { type: "mcall", recv: node, name, args, namedArgs, id: nextId() }; }
+      else node = { type: "field", base: node, path: name };
     }
     return node;
   }
@@ -620,8 +669,12 @@ function parseMeta(text: string, meta: PineRunResult["meta"]) {
   // Pine's default is overlay=false: the script gets its own pane
   const overlayMatch = text.match(/overlay\s*=\s*(true|false)/);
   meta.overlay = overlayMatch ? overlayMatch[1] === "true" : false;
-  const precisionMatch = text.match(/precision\s*=\s*(\d+)/);
+  const precisionMatch = text.match(/[(,]\s*precision\s*=\s*(\d+)/);
   if (precisionMatch) meta.precision = parseInt(precisionMatch[1], 10);
+  const count = (re: RegExp) => { const m = text.match(re); return m ? parseInt(m[1], 10) : undefined; };
+  meta.maxLabels = count(/max_labels_count\s*=\s*(\d+)/);
+  meta.maxLines = count(/max_lines_count\s*=\s*(\d+)/);
+  meta.maxBoxes = count(/max_boxes_count\s*=\s*(\d+)/);
   const capMatch = text.match(/initial_capital\s*=\s*(-?[0-9.]+)/);
   if (capMatch) meta.initialCapital = parseFloat(capMatch[1]);
   const pyramidingMatch = text.match(/pyramiding\s*=\s*([0-9]+)/);
@@ -705,12 +758,30 @@ function matchFuncDecl(text: string): { name: string; paramsText: string; rest: 
 function parseParams(paramsText: string, nextId: () => number): FuncParam[] {
   const trimmed = paramsText.trim();
   if (!trimmed) return [];
-  return trimmed.split(",").map((chunk) => {
-    const c = chunk.trim().replace(/^[a-zA-Z_][a-zA-Z0-9_.<>\[\]]*\s+(?=[a-zA-Z_])/, "");
-    const m = c.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=\s*(.+))?$/);
-    if (!m) return { name: c, default: null };
-    return { name: m[1], default: m[2] ? parseExpression(m[2], nextId) : null };
+  return splitTopLevel(trimmed).map((chunk) => {
+    // `simple bool flag = true`, `pivotGraphic g`, `array<float> xs`: qualifiers and the type go,
+    // the type (its last word) is kept for method overloads
+    const m = chunk.trim().match(/^((?:[a-zA-Z_][\w.<>,\[\]]*\s+)*)([a-zA-Z_]\w*)\s*(?:=\s*([\s\S]+))?$/);
+    if (!m) return { name: chunk.trim(), default: null };
+    const words = m[1].trim().split(/\s+/).filter(Boolean).filter(w => !/^(simple|series|const)$/.test(w));
+    return { name: m[2], default: m[3] ? parseExpression(m[3], nextId) : null, type: words[words.length - 1] };
   });
+}
+
+// Splits on commas outside brackets and strings
+function splitTopLevel(text: string): string[] {
+  const out: string[] = [];
+  let depth = 0, inStr: string | null = null, start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) { if (c === "\\") { i++; continue; } if (c === inStr) inStr = null; continue; }
+    if (c === '"' || c === "'") { inStr = c; continue; }
+    if (c === "(" || c === "[" || c === "<") depth++;
+    else if (c === ")" || c === "]" || c === ">") depth--;
+    else if (c === "," && depth === 0) { out.push(text.slice(start, i)); start = i + 1; }
+  }
+  out.push(text.slice(start));
+  return out;
 }
 
 // Splits `for i = <from> to <to> [by <step>]` into its pieces, honoring
@@ -750,12 +821,13 @@ function splitForHeader(text: string): { varName: string; fromText: string; toTe
 // before block structure is parsed.
 function startsBlock(text: string): boolean {
   return /^if\b/.test(text) || /^else\b/.test(text) || /^while\b/.test(text) || splitForHeader(text) !== null || matchFuncDecl(text) !== null
-    || switchHead(text) !== null || armSplit(text) !== null;
+    || switchHead(text) !== null || armSplit(text) !== null
+    || /^(export\s+)?(type|method)\s/.test(text) || /^for\s.*\sin\s/.test(text);
 }
 
 // `switch x`, `y = switch x`, `var float y = switch`: the text before `switch`, and its subject
 function switchHead(text: string): { prefix: string; subject: string } | null {
-  const m = text.match(/^((?:var(?:ip)?\s+)?(?:[a-zA-Z_][a-zA-Z0-9_.<>]*\s+)?[a-zA-Z_][a-zA-Z0-9_]*\s*(?::=|=)\s*)?switch\b\s*(.*)$/);
+  const m = text.match(/^((?:var(?:ip)?\s+)?(?:[a-zA-Z_][a-zA-Z0-9_.<>]*\s+)?(?:[a-zA-Z_][a-zA-Z0-9_]*|\[[\w\s,]+\])\s*(?::=|=)\s*)?switch\b\s*(.*)$/);
   if (!m) return null;
   return { prefix: m[1] || "", subject: m[2].trim() };
 }
@@ -812,16 +884,36 @@ function withLine<T>(lineNo: number, fn: () => T): T {
 // `color = get_color()` but whitespace then '=', which the lookahead rejects).
 const TYPE_PREFIX_RE = /^(int|float|bool|string|color|line|label|box|table|linefill|polyline|array<[a-zA-Z_][a-zA-Z0-9_.]*>|matrix<[a-zA-Z_][a-zA-Z0-9_.]*>)\s+(?=[a-zA-Z_])/;
 
+// The script's own type names (`type pivotGraphic`), so `pivotGraphic g = …` reads as a declaration
+let udtNames = new Set<string>();
+
+// Removes a declaration's qualifiers and type: `series float x = …`, `myType t = …`, `chart.point p = …`
+function stripTypePrefix(text: string): string {
+  let t = text.replace(/^(?:simple|series|const)\s+/, "");
+  t = t.replace(TYPE_PREFIX_RE, "");
+  const m = t.match(/^([a-zA-Z_][\w.]*(?:<[\w.<>, ]*>)?)\s+(?=[a-zA-Z_]\w*\s*(?::=|=|$))/);
+  if (m && (udtNames.has(m[1]) || /^(chart\.point|map<.*>|array<.*>|matrix<.*>)$/.test(m[1]))) t = t.slice(m[0].length);
+  return t;
+}
+
 function parseSimpleStatement(line: Line, nextId: () => number): Stmt {
   let text = line.text;
   let isVar = false;
   if (/^var(ip)?\s+/.test(text)) { isVar = true; text = text.replace(/^var(ip)?\s+/, ""); }
-  text = text.replace(TYPE_PREFIX_RE, "");
+  text = stripTypePrefix(text);
 
   const tupleMatch = text.match(/^\[\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\]\s*=(?!=)\s*(.+)$/);
   if (tupleMatch) {
     const names = tupleMatch[1].split(",").map((n) => n.trim());
     return { type: "tupleAssign", names, expr: withLine(line.lineNo, () => parseExpression(tupleMatch[2], nextId)), line: line.lineNo };
+  }
+
+  // A field of an object: `obj.field := x`, `obj.count += 1`
+  const fa = text.match(/^([a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)+)\s*(:=|\+=|-=|\*=|\/=|%=)\s*(.+)$/);
+  if (fa) {
+    const rhs = withLine(line.lineNo, () => parseExpression(fa[3], nextId));
+    const expr: Expr = fa[2] === ":=" ? rhs : { type: "arith", op: fa[2][0], left: { type: "ident", name: fa[1] }, right: rhs };
+    return { type: "fieldAssign", target: fa[1], expr, line: line.lineNo };
   }
 
   // Compound assignment (`j -= 1`, etc.) desugars to `j := j - 1`.
@@ -882,7 +974,7 @@ function parseBlock(lines: Line[], start: number, indent: number, nextId: () => 
   const stmts: Stmt[] = [];
   let i = start;
   while (i < lines.length && lines[i].indent >= indent) {
-    const line = lines[i];
+    let line = lines[i];
     const sw = switchHead(line.text);
     if (sw) {
       const subject = sw.subject ? withLine(line.lineNo, () => parseExpression(sw.subject, nextId)) : null;
@@ -910,12 +1002,39 @@ function parseBlock(lines: Line[], start: number, indent: number, nextId: () => 
       if (sw.prefix) {
         // `x = switch …`: an ordinary assignment whose value is the switch
         const assign = parseSimpleStatement({ indent: line.indent, text: sw.prefix + "na", lineNo: line.lineNo }, nextId);
-        if (assign.type === "assign") assign.expr = swExpr;
+        if (assign.type === "assign" || assign.type === "tupleAssign") assign.expr = swExpr;
         stmts.push(assign);
       } else stmts.push({ type: "expr", expr: swExpr, line: line.lineNo });
       continue;
     }
-    const fnDecl = matchFuncDecl(line.text);
+    // `export` (libraries) changes nothing here
+    if (/^export\s+/.test(line.text)) lines[i] = line = { ...line, text: line.text.replace(/^export\s+/, "") };
+    // type Name / its fields, one per indented line: `float price = 0.0`
+    const typeHead = line.text.match(/^type\s+([a-zA-Z_]\w*)\s*$/);
+    if (typeHead) {
+      const fields: TypeDef["fields"] = [];
+      i++;
+      while (i < lines.length && lines[i].indent > line.indent) {
+        const f = parseParams(lines[i].text, nextId)[0];
+        if (f) fields.push({ name: f.name, default: f.default });
+        i++;
+      }
+      stmts.push({ type: "typedef", def: { name: typeHead[1], fields }, line: line.lineNo });
+      continue;
+    }
+    // for x in array / for [i, x] in array
+    const forIn = line.text.match(/^for\s+(?:\[\s*([a-zA-Z_]\w*)\s*,\s*([a-zA-Z_]\w*)\s*\]|([a-zA-Z_]\w*))\s+in\s+(.+)$/);
+    if (forIn) {
+      const expr = withLine(line.lineNo, () => parseExpression(forIn[4], nextId));
+      i++;
+      let body: Stmt[] = [];
+      if (i < lines.length && lines[i].indent > indent) { const res = parseBlock(lines, i, lines[i].indent, nextId); body = res.stmts; i = res.next; }
+      stmts.push({ type: "forin", idxVar: forIn[1] || null, valVar: forIn[2] || forIn[3], expr, body, line: line.lineNo });
+      continue;
+    }
+    // method name(Type this, …) => …: a function also callable as this.name(…)
+    const isMethod = /^method\s+/.test(line.text);
+    const fnDecl = matchFuncDecl(isMethod ? line.text.replace(/^method\s+/, "") : line.text);
     const forHeader = !fnDecl ? splitForHeader(line.text) : null;
     if (fnDecl) {
       const params = parseParams(fnDecl.paramsText, nextId);
@@ -931,7 +1050,7 @@ function parseBlock(lines: Line[], start: number, indent: number, nextId: () => 
           i = res.next;
         }
       }
-      stmts.push({ type: "funcdef", def: { name: fnDecl.name, params, body }, line: line.lineNo });
+      stmts.push({ type: "funcdef", def: { name: fnDecl.name, params, body, isMethod }, line: line.lineNo });
     } else if (forHeader) {
       const from = withLine(line.lineNo, () => parseExpression(forHeader.fromText, nextId));
       const to = withLine(line.lineNo, () => parseExpression(forHeader.toText, nextId));
@@ -986,6 +1105,9 @@ interface Ctx {
   barIndex: number;
   bar: Bar;
   functions: Record<string, FunctionDef>;
+  types?: Record<string, TypeDef>;
+  methods?: Record<string, FunctionDef[]>;
+  scopeStmts?: Stmt[];   // the statements of the script / function being run (request.security dependencies)
   strategyInitialCapital: number;
   strategyState: StrategyState;
   inputsList: { value: any; isBool: boolean }[];
@@ -1018,9 +1140,10 @@ interface Ctx {
   backtestFrom?: number;
   backtestTo?: number;
   mintick?: number;
+  drawings?: any;
   hlines?: PineHline[];
   fills?: PineFill[];
-  fillSeen?: Set<number>;
+  fillSeen?: Map<number, PineFill>;
 }
 
 function truthy(v: any): boolean {
@@ -1031,7 +1154,16 @@ function truthy(v: any): boolean {
   return !!v;
 }
 
+// Built-in variables a script's own variable can't shadow here (checked before the fast path)
+const CORE_IDENTS = new Set(["close", "open", "high", "low", "volume", "hl2", "hlc3", "ohlc4", "hlcc4", "bar_index", "na", "time", "time_close",
+  "true", "false", "last_bar_index", "timenow", "year", "month", "dayofmonth", "dayofweek", "hour", "minute", "second", "time_tradingday"]);
+
 function resolveIdent(name: string, ctx: Ctx): any {
+  // Fast path: an ordinary variable of the script (most reads)
+  if (!CORE_IDENTS.has(name) && name.indexOf(".") < 0) {
+    if (own(ctx.vars, name)) return ctx.vars[name];
+    if (ctx.globalCtx && ctx.globalCtx !== ctx && own(ctx.globalCtx.vars, name)) return ctx.globalCtx.vars[name];
+  }
   switch (name) {
     case "close": return ctx.bar.close;
     case "open": return ctx.bar.open;
@@ -1082,6 +1214,31 @@ function resolveIdent(name: string, ctx: Ctx): any {
     case "barstate.ishistory": return ctx.barIndex < ctx.bars.length - 1;
     case "barstate.isrealtime": return false;
     case "barstate.isnew": case "barstate.isconfirmed": return true;
+    // The bar's date and time, UTC
+    case "year": return new Date(ctx.bar.time * 1000).getUTCFullYear();
+    case "month": return new Date(ctx.bar.time * 1000).getUTCMonth() + 1;
+    case "dayofmonth": return new Date(ctx.bar.time * 1000).getUTCDate();
+    case "dayofweek": return new Date(ctx.bar.time * 1000).getUTCDay() + 1;
+    case "hour": return new Date(ctx.bar.time * 1000).getUTCHours();
+    case "minute": return new Date(ctx.bar.time * 1000).getUTCMinutes();
+    case "second": return new Date(ctx.bar.time * 1000).getUTCSeconds();
+    case "time_tradingday": return Math.floor(ctx.bar.time / 86400) * 86400 * 1000;
+    case "syminfo.timezone": return "Etc/UTC";
+    case "syminfo.currency": return "USD";
+    case "syminfo.prefix": return (ctx.symbol || "").includes(":") ? ctx.symbol.split(":")[0] : "";
+    case "syminfo.root": return (ctx.symbol || "").split(":").pop() || "";
+    case "label.all": return drawStore(ctx).label.slice();
+    case "line.all": return drawStore(ctx).line.slice();
+    case "box.all": return drawStore(ctx).box.slice();
+    case "timeframe.isintraday": return ctx.barDurationSec > 0 && ctx.barDurationSec < 86400;
+    case "timeframe.isdaily": return ctx.barDurationSec === 86400;
+    case "timeframe.isweekly": return ctx.barDurationSec === 7 * 86400;
+    case "timeframe.ismonthly": return ctx.barDurationSec >= 28 * 86400;
+    case "timeframe.isdwm": return ctx.barDurationSec >= 86400;
+    // "15" → 15, "4H"/"240" → 240, "D" → 1, "3M" → 3
+    case "timeframe.multiplier": { const m = /^(\d+)/.exec(ctx.pineTf || ""); return m ? parseInt(m[1], 10) : 1; }
+    case "timeframe.isminutes": return /^\d+$/.test(ctx.pineTf || "");
+    case "timeframe.isseconds": return /S$/i.test(ctx.pineTf || "");
     case "dayofweek.sunday": return 1;
     case "dayofweek.monday": return 2;
     case "dayofweek.tuesday": return 3;
@@ -1095,6 +1252,12 @@ function resolveIdent(name: string, ctx: Ctx): any {
     case "ta.obv": return B.obv((ctx.callState["v:ta.obv"] = ctx.callState["v:ta.obv"] || {}), ctx);
     case "ta.accdist": return B.accdist((ctx.callState["v:ta.accdist"] = ctx.callState["v:ta.accdist"] || {}), ctx);
     case "ta.pvt": return B.pvt((ctx.callState["v:ta.pvt"] = ctx.callState["v:ta.pvt"] || {}), ctx);
+  }
+  // obj.field.subfield on a variable
+  const dotAt = name.indexOf(".");
+  if (dotAt > 0) {
+    const head = varOf(ctx, name.slice(0, dotAt));
+    if (head.found && head.value && typeof head.value === "object") return walkFields(head.value, name.slice(dotAt + 1).split("."));
   }
   if (name.startsWith("color.")) {
     const c = COLOR_NAMES[name.slice(6)];
@@ -1189,6 +1352,25 @@ function execTupleAssign(s: Extract<Stmt, { type: "tupleAssign" }>, ctx: Ctx): v
 // `return`. Side-effecting builtins (plot/strategy.entry/log/etc.) aren't
 // expected inside these two functions' bodies, so bare expression statements
 // go straight through evalNode rather than execExprStatement.
+// Statements both executors share: object fields and for…in loops
+function execFieldAssign(s: Extract<Stmt, { type: "fieldAssign" }>, ctx: Ctx) {
+  const segs = s.target.split(".");
+  const head = varOf(ctx, segs[0]);
+  const parent = head.found ? walkFields(head.value, segs.slice(1, -1)) : null;
+  if (!parent || typeof parent !== "object") throw new PineError(`Cannot assign to '${s.target}': '${segs[0]}' is not an object`, "CE10004");
+  parent[segs[segs.length - 1]] = evalNode(s.expr, ctx);
+}
+function execForIn(s: Extract<Stmt, { type: "forin" }>, ctx: Ctx, exec: (stmts: Stmt[], ctx: Ctx) => any) {
+  const coll = evalNode(s.expr, ctx);
+  const items: any[] = Array.isArray(coll) ? coll.slice() : isMatrix(coll) ? coll.data.map((r) => r.slice()) : [];
+  if (items.length > LOOP_LIMIT) throw new PineError("Loop iteration limit exceeded (possible infinite loop)", "CE90003");
+  items.forEach((item, i) => {
+    if (s.idxVar) ctx.vars[s.idxVar] = i;
+    ctx.vars[s.valVar] = item;
+    exec(s.body, ctx);
+  });
+}
+
 function execFunctionBody(stmts: Stmt[], ctx: Ctx): any {
   let lastValue: any = NaN;
   for (const s of stmts) {
@@ -1200,8 +1382,12 @@ function execFunctionBody(stmts: Stmt[], ctx: Ctx): any {
           else lastValue = NaN;
           break;
         case "for": execForStmt(s, ctx, execFunctionBody); lastValue = NaN; break;
+        case "forin": execForIn(s, ctx, execFunctionBody); lastValue = NaN; break;
+        case "fieldAssign": execFieldAssign(s, ctx); lastValue = NaN; break;
+        case "typedef": break;
         case "while": execWhileStmt(s, ctx, execFunctionBody); lastValue = NaN; break;
-        case "tupleAssign": execTupleAssign(s, ctx); lastValue = NaN; break;
+        // `[a, b] = f()` as a function's last line returns the tuple, as in Pine
+        case "tupleAssign": execTupleAssign(s, ctx); lastValue = s.names.map((n) => ctx.vars[n]); break;
         case "funcdef": break;
         case "assign":
           if (!(s.isVarDecl && ctx.barIndex !== 0 && Object.prototype.hasOwnProperty.call(ctx.vars, s.name))) {
@@ -1242,7 +1428,7 @@ function callUserFunction(fn: FunctionDef, node: Extract<Expr, { type: "call" }>
   // Each call site keeps its own series state for the ta.* calls inside the function, as in
   // Pine: ma(rsi, 14) and ma(close, 50) don't share one moving average
   if (!cs.innerState) cs.innerState = {};
-  const fnCtx: Ctx = { ...ctx, vars: cs.localVars, varHistory: cs.localVarHistory, callState: cs.innerState };
+  const fnCtx: Ctx = { ...ctx, vars: cs.localVars, varHistory: cs.localVarHistory, callState: cs.innerState, scopeStmts: fn.body };
   fn.params.forEach((p, idx) => {
     let v: any;
     if (node.namedArgs[p.name] !== undefined) v = evalNode(node.namedArgs[p.name], ctx);
@@ -1261,17 +1447,69 @@ function callUserFunction(fn: FunctionDef, node: Extract<Expr, { type: "call" }>
 // stateful sub-expressions like `ta.ema(close, len)` inside a
 // request.security() call behave as their own independent series rather
 // than sharing state with the primary chart.
-function evalSeriesOverBars(exprNode: Expr, otherBars: Bar[], tf: string, functions: Record<string, FunctionDef>, globalCtx: Ctx): { time: number; value: any }[] {
+// Every identifier an expression reads (through calls, fields, switches…)
+function exprIdents(e: Expr | null | undefined, out: Set<string>) {
+  if (!e) return;
+  switch (e.type) {
+    case "ident": out.add(e.name.split(".")[0]); return;
+    case "neg": case "not": exprIdents(e.expr, out); return;
+    case "or": case "and": case "cmp": case "arith": exprIdents(e.left, out); exprIdents(e.right, out); return;
+    case "ternary": exprIdents(e.cond, out); exprIdents(e.t, out); exprIdents(e.f, out); return;
+    case "histref": exprIdents(e.base, out); exprIdents(e.offset, out); return;
+    case "call": e.args.forEach((a) => exprIdents(a, out)); Object.values(e.namedArgs).forEach((a) => exprIdents(a, out)); { const head = e.name.split(".")[0]; if (e.name.includes(".")) out.add(head); } return;
+    case "mcall": exprIdents(e.recv, out); e.args.forEach((a) => exprIdents(a, out)); return;
+    case "field": exprIdents(e.base, out); return;
+    case "tuple": e.items.forEach((a) => exprIdents(a, out)); return;
+    case "switch": exprIdents(e.subject, out); e.arms.forEach((a) => { exprIdents(a.cond, out); a.body.forEach((st) => { if (st.type === "assign" || st.type === "expr" || st.type === "tupleAssign") exprIdents(st.expr, out); }); }); return;
+  }
+}
+
+// The assignments (at any depth) of a statement list, by the name they define
+function assignsByName(stmts: Stmt[] | undefined, out: Map<string, Stmt>) {
+  for (const st of stmts || []) {
+    if (st.type === "assign" && !out.has(st.name)) out.set(st.name, st);
+    else if (st.type === "tupleAssign") st.names.forEach((n) => { if (!out.has(n)) out.set(n, st); });
+    else if (st.type === "if") { assignsByName(st.body, out); assignsByName(st.elseBody || [], out); }
+  }
+}
+
+// Evaluates an expression bar by bar on another timeframe's bars, with its own ta.* and var
+// state. As in TradingView, the script variables it depends on are computed on that timeframe too
+// (e.g. a timeframe.change() flag defined before the request.security() call).
+function evalSeriesOverBars(exprNode: Expr, otherBars: Bar[], tf: string, functions: Record<string, FunctionDef>, globalCtx: Ctx, callerCtx?: Ctx): { time: number; value: any }[] {
   const subCtx: Ctx = {
-    vars: {}, varHistory: {}, callState: {}, plots: {}, plotOrder: [], markers: [], tables: [], logs: [],
+    vars: callerCtx ? { ...callerCtx.vars } : {}, varHistory: {}, callState: {}, plots: {}, plotOrder: [], markers: [], tables: [], logs: [],
     warnings: [], warned: new Set(), bars: otherBars, barIndex: 0, bar: otherBars[0],
-    functions, strategyInitialCapital: 0, strategyState: makeStrategyState(), inputsList: [], symbol: "", pineTf: tf, barDurationSec: pineTimeframeToSeconds(tf),
+    functions, types: globalCtx?.types, methods: globalCtx?.methods,
+    strategyInitialCapital: 0, strategyState: makeStrategyState(), inputsList: [], symbol: globalCtx?.symbol || "", pineTf: tf, barDurationSec: pineTimeframeToSeconds(tf),
     mtfData: {}, mtfSeriesCache: new Map(), globalCtx,
   };
+  // The assignments this expression depends on (not inputs: those keep the values they have)
+  const defs = new Map<string, Stmt>();
+  assignsByName(callerCtx?.scopeStmts, defs);
+  if (globalCtx?.scopeStmts && globalCtx !== callerCtx) assignsByName(globalCtx.scopeStmts, defs);
+  const needed: Stmt[] = [];
+  const seen = new Set<string>();
+  const visit = (e: Expr) => {
+    const names = new Set<string>();
+    exprIdents(e, names);
+    for (const n of Array.from(names)) {
+      if (seen.has(n)) continue;
+      seen.add(n);
+      const st = defs.get(n);
+      if (!st || needed.includes(st)) continue;
+      const rhs = (st as any).expr as Expr;
+      if (rhs && rhs.type === "call" && rhs.name.startsWith("input")) continue;
+      if (rhs) visit(rhs);
+      needed.push(st);
+    }
+  };
+  visit(exprNode);
   const out: { time: number; value: any }[] = [];
   for (let i = 0; i < otherBars.length; i++) {
     subCtx.barIndex = i;
     subCtx.bar = otherBars[i];
+    if (needed.length) execStmts(needed, subCtx);
     out.push({ time: otherBars[i].time, value: evalNode(exprNode, subCtx) });
   }
   return out;
@@ -1286,7 +1524,12 @@ function evalRequestSecurity(node: Extract<Expr, { type: "call" }>, ctx: Ctx): a
   if (node.args.length < 3) return NaN;
   let tf: string;
   try { tf = String(evalNode(node.args[1], ctx)); } catch { return NaN; }
-  const otherBars = ctx.mtfData[tf];
+  let otherBars = ctx.mtfData[tf];
+  // A higher timeframe that wasn't downloaded is built from the chart's own bars
+  if ((!otherBars || otherBars.length === 0) && tf && pineTimeframeToSeconds(tf) >= (ctx.barDurationSec || 0)) {
+    const g = ctx.globalCtx || ctx;
+    otherBars = ctx.mtfData[tf] = aggregateBars(g.bars, tf);
+  }
   if (!otherBars || otherBars.length === 0) {
     warnOnce(ctx, `request.security(...) for timeframe '${tf}' has no data available and was skipped (returns na).`);
     return NaN;
@@ -1294,7 +1537,7 @@ function evalRequestSecurity(node: Extract<Expr, { type: "call" }>, ctx: Ctx): a
   const cacheKey = `sec:${node.id}:${tf}`;
   let series = ctx.mtfSeriesCache.get(cacheKey);
   if (!series) {
-    series = evalSeriesOverBars(node.args[2], otherBars, tf, ctx.functions, ctx.globalCtx);
+    series = evalSeriesOverBars(node.args[2], otherBars, tf, ctx.functions, ctx.globalCtx, ctx);
     ctx.mtfSeriesCache.set(cacheKey, series);
   }
   const cs = (ctx.callState[node.id] = ctx.callState[node.id] || {});
@@ -1320,7 +1563,7 @@ function evalRequestSecurityLowerTf(node: Extract<Expr, { type: "call" }>, ctx: 
   const cacheKey = `ltf:${node.id}:${tf}`;
   let series = ctx.mtfSeriesCache.get(cacheKey);
   if (!series) {
-    series = evalSeriesOverBars(node.args[2], otherBars, tf, ctx.functions, ctx.globalCtx);
+    series = evalSeriesOverBars(node.args[2], otherBars, tf, ctx.functions, ctx.globalCtx, ctx);
     ctx.mtfSeriesCache.set(cacheKey, series);
   }
   const periodStart = ctx.bar.time;
@@ -1332,7 +1575,7 @@ function evalRequestSecurityLowerTf(node: Extract<Expr, { type: "call" }>, ctx: 
   return out;
 }
 
-const DRAWING_NAMESPACES = ["label.", "line.", "box.", "linefill.", "polyline.", "chart.point."];
+const DRAWING_NAMESPACES = ["linefill.", "polyline."];
 // Every function in Pine's reference ("ta.rma", "math.abs", "plot", …) from the editor's catalog
 const PINE_FUNCTIONS = new Set(Object.entries(PINE_CATALOG).flatMap(([ns, entries]) => entries.filter((e) => e[1] === "function").map((e) => (ns ? `${ns}.${e[0]}` : e[0]))));
 
@@ -1345,6 +1588,339 @@ function minTick(ctx: Ctx): number {
     g.mintick = Math.pow(10, -dec);
   }
   return g.mintick;
+}
+
+// ------------------------------------------------------------ drawings
+// label.* / line.* / box.*: objects a script creates, edits and deletes while it runs; what is
+// left after the last bar is drawn. x is a bar index (xloc.bar_index) or a time (xloc.bar_time);
+// both are stored as a bar time in seconds, extrapolated past the last bar for future points.
+
+export interface PineLabel { kind: "label"; id: number; xloc?: string; x: number; y: number; yloc: string; text: string; color: string; textColor: string; style: string; size: string; textAlign: string; tooltip?: string }
+export interface PineLine { kind: "line"; id: number; xloc?: string; x1: number; y1: number; x2: number; y2: number; color: string; width: number; style: string; extend: string }
+export interface PineBox { kind: "box"; id: number; xloc?: string; left: number; top: number; right: number; bottom: number; borderColor: string; borderWidth: number; borderStyle: string; bgColor: string; extend: string; text: string; textColor: string; textSize: string; textHalign: string; textValign: string }
+export type PineDrawing = PineLabel | PineLine | PineBox;
+
+interface DrawStore { seq: number; label: PineLabel[]; line: PineLine[]; box: PineBox[]; max: { label: number; line: number; box: number } }
+
+function drawStore(ctx: Ctx): DrawStore {
+  const g = ctx.globalCtx || ctx;
+  if (!g.drawings) g.drawings = { seq: 0, label: [], line: [], box: [], max: { label: 50, line: 50, box: 50 } };
+  return g.drawings;
+}
+
+// A bar's time in seconds from a bar index; past the last bar it continues at the usual bar spacing
+function timeOfIndex(ctx: Ctx, idx: number): number {
+  const bars = (ctx.globalCtx || ctx).bars;
+  if (!bars.length || isNaN(idx)) return NaN;
+  const i = Math.round(idx);
+  if (i >= 0 && i < bars.length) return bars[i].time;
+  const step = bars.length > 1 ? (bars[bars.length - 1].time - bars[Math.max(0, bars.length - 21)].time) / Math.min(20, bars.length - 1) : 60;
+  return i < 0 ? bars[0].time + i * step : bars[bars.length - 1].time + (i - bars.length + 1) * step;
+}
+const xToTime = (ctx: Ctx, x: any, xloc: any) => (typeof x !== "number" || isNaN(x) ? NaN : xloc === "bar_time" ? Math.round(x / 1000) : timeOfIndex(ctx, x));
+function timeToIndex(ctx: Ctx, t: number): number {
+  const bars = (ctx.globalCtx || ctx).bars;
+  let lo = 0, hi = bars.length - 1;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (bars[m].time < t) lo = m + 1; else hi = m; }
+  return lo;
+}
+
+// chart.point: an x (bar index and time) and a price
+const isPoint = (v: any) => v && typeof v === "object" && v.__point;
+function pointTime(ctx: Ctx, p: any, xloc: any): number {
+  if (xloc === "bar_time" && !isNaN(p.time)) return Math.round(p.time / 1000);
+  return !isNaN(p.index) ? timeOfIndex(ctx, p.index) : Math.round(p.time / 1000);
+}
+
+function addDrawing<T extends PineDrawing>(ctx: Ctx, d: T): T {
+  const st = drawStore(ctx);
+  const list = st[d.kind] as PineDrawing[];
+  list.push(d);
+  // Past the script's max_*_count the oldest object goes, as on TradingView
+  while (list.length > st.max[d.kind]) list.shift();
+  return d;
+}
+function deleteDrawing(ctx: Ctx, d: any) {
+  if (!d || typeof d !== "object" || !d.kind) return;
+  const list = drawStore(ctx)[d.kind as "label" | "line" | "box"] as PineDrawing[];
+  const i = list.indexOf(d);
+  if (i >= 0) list.splice(i, 1);
+}
+
+const colorOr = (v: any, def: string) => (typeof v === "string" ? v : typeof v === "number" && isNaN(v) ? "rgba(0, 0, 0, 0)" : def);
+const strOr = (v: any, def: string) => (typeof v === "string" ? v : def);
+
+function evalDrawing(name: string, node: Extract<Expr, { type: "call" }>, ctx: Ctx): { handled: boolean; value?: any } {
+  // An argument by position or name; a missing one is `def` (undefined), unlike an explicit na
+  const A = (i: number, key: string, def?: any): any =>
+    node.namedArgs[key] !== undefined ? evalNode(node.namedArgs[key], ctx) : node.args[i] !== undefined ? evalNode(node.args[i], ctx) : def;
+  const st = drawStore(ctx);
+  const obj = () => A(0, "id");
+  const live = (d: any) => d && typeof d === "object" && d.kind;
+  const set = (patch: (d: any) => void) => { const d = obj(); if (live(d)) patch(d); return { handled: true, value: NaN }; };
+  // x as the script gave it: a time (ms) for xloc.bar_time objects, else a bar index
+  const xOut = (d: any, t: number) => (d.xloc === "bar_time" ? t * 1000 : timeToIndex(ctx, t));
+
+  switch (name) {
+    case "chart.point.new": return { handled: true, value: { __point: true, time: A(0, "time"), index: A(1, "index"), price: A(2, "price") } };
+    case "chart.point.from_index": { const i = A(0, "index"); return { handled: true, value: { __point: true, index: i, time: timeOfIndex(ctx, i) * 1000, price: A(1, "price") } }; }
+    case "chart.point.from_time": { const t = A(0, "time"); return { handled: true, value: { __point: true, time: t, index: timeToIndex(ctx, t / 1000), price: A(1, "price") } }; }
+    case "chart.point.now": return { handled: true, value: { __point: true, time: ctx.bar.time * 1000, index: ctx.barIndex, price: A(0, "price", ctx.bar.close) } };
+    case "chart.point.copy": { const p = A(0, "id"); return { handled: true, value: isPoint(p) ? { ...p } : NaN }; }
+
+    case "label.new": {
+      const p0 = A(0, "point");
+      const pt = isPoint(p0);
+      const shift = pt ? 1 : 0; // label.new(point, text, …) has one argument less
+      const xloc = A(3 - shift, "xloc", "bar_index");
+      const x = pt ? pointTime(ctx, p0, xloc) : xToTime(ctx, A(0, "x"), xloc);
+      const y = pt ? p0.price : A(1, "y");
+      const lbl: PineLabel = {
+        kind: "label", id: ++st.seq, xloc, x, y: Number(y), yloc: strOr(A(4 - shift, "yloc"), "price"),
+        text: strOr(A(2 - shift, "text"), ""), color: colorOr(A(5 - shift, "color"), "#2962FF"),
+        style: strOr(A(6 - shift, "style"), "style_label_down"), textColor: colorOr(A(7 - shift, "textcolor"), "#FFFFFF"),
+        size: strOr(A(8 - shift, "size"), "normal"), textAlign: strOr(A(9 - shift, "textalign"), "align_center"),
+        tooltip: typeof A(10 - shift, "tooltip") === "string" ? A(10 - shift, "tooltip") : undefined,
+      };
+      if (lbl.yloc !== "price") lbl.y = lbl.yloc === "abovebar" ? ctx.bar.high : ctx.bar.low;
+      return { handled: true, value: addDrawing(ctx, lbl) };
+    }
+    case "line.new": {
+      const p0 = A(0, "first_point");
+      const pt = isPoint(p0);
+      const shift = pt ? 2 : 0; // line.new(p1, p2, …)
+      const xloc = A(4 - shift, "xloc", "bar_index");
+      const p1 = pt ? p0 : null, p2 = pt ? A(1, "second_point") : null;
+      const ln: PineLine = {
+        kind: "line", id: ++st.seq, xloc,
+        x1: pt ? pointTime(ctx, p1, xloc) : xToTime(ctx, A(0, "x1"), xloc), y1: Number(pt ? p1.price : A(1, "y1")),
+        x2: pt ? pointTime(ctx, p2, xloc) : xToTime(ctx, A(2, "x2"), xloc), y2: Number(pt ? p2.price : A(3, "y2")),
+        extend: strOr(A(5 - shift, "extend"), "none"), color: colorOr(A(6 - shift, "color"), "#2962FF"),
+        style: strOr(A(7 - shift, "style"), "style_solid"), width: Number(A(8 - shift, "width", 1)) || 1,
+      };
+      return { handled: true, value: addDrawing(ctx, ln) };
+    }
+    case "box.new": {
+      const p0 = A(0, "top_left");
+      const pt = isPoint(p0);
+      const shift = pt ? 2 : 0; // box.new(top_left, bottom_right, …)
+      const xloc = A(8 - shift, "xloc", "bar_index");
+      const p1 = pt ? p0 : null, p2 = pt ? A(1, "bottom_right") : null;
+      const bx: PineBox = {
+        kind: "box", id: ++st.seq, xloc,
+        left: pt ? pointTime(ctx, p1, xloc) : xToTime(ctx, A(0, "left"), xloc), top: Number(pt ? p1.price : A(1, "top")),
+        right: pt ? pointTime(ctx, p2, xloc) : xToTime(ctx, A(2, "right"), xloc), bottom: Number(pt ? p2.price : A(3, "bottom")),
+        borderColor: colorOr(A(4 - shift, "border_color"), "#2962FF"), borderWidth: Number(A(5 - shift, "border_width", 1)),
+        borderStyle: strOr(A(6 - shift, "border_style"), "style_solid"), extend: strOr(A(7 - shift, "extend"), "none"),
+        bgColor: colorOr(A(9 - shift, "bgcolor"), "rgba(41, 98, 255, 0.2)"), text: strOr(A(10 - shift, "text"), ""),
+        textSize: strOr(A(11 - shift, "text_size"), "auto"), textColor: colorOr(A(12 - shift, "text_color"), "#000000"),
+        textHalign: strOr(A(13 - shift, "text_halign"), "align_center"), textValign: strOr(A(14 - shift, "text_valign"), "align_center"),
+      };
+      return { handled: true, value: addDrawing(ctx, bx) };
+    }
+
+    case "label.delete": case "line.delete": case "box.delete": deleteDrawing(ctx, obj()); return { handled: true, value: NaN };
+    case "label.copy": case "line.copy": case "box.copy": { const d = obj(); return { handled: true, value: live(d) ? addDrawing(ctx, { ...d, id: ++st.seq }) : NaN }; }
+
+    // ---- setters ----
+    case "label.set_x": return set((d) => { d.x = xToTime(ctx, A(1, "x"), d.xloc); });
+    case "label.set_y": return set((d) => { d.y = Number(A(1, "y")); });
+    case "label.set_xy": return set((d) => { d.x = xToTime(ctx, A(1, "x"), d.xloc); d.y = Number(A(2, "y")); });
+    case "label.set_point": return set((d) => { const p = A(1, "point"); if (isPoint(p)) { d.x = pointTime(ctx, p, d.xloc); d.y = p.price; } });
+    case "label.set_text": return set((d) => { d.text = strOr(A(1, "text"), ""); });
+    case "label.set_color": return set((d) => { d.color = colorOr(A(1, "color"), d.color); });
+    case "label.set_textcolor": return set((d) => { d.textColor = colorOr(A(1, "textcolor"), d.textColor); });
+    case "label.set_style": return set((d) => { d.style = strOr(A(1, "style"), d.style); });
+    case "label.set_size": return set((d) => { d.size = strOr(A(1, "size"), d.size); });
+    case "label.set_textalign": return set((d) => { d.textAlign = strOr(A(1, "textalign"), d.textAlign); });
+    case "label.set_tooltip": return set((d) => { d.tooltip = strOr(A(1, "tooltip"), ""); });
+    case "label.set_yloc": return set((d) => { d.yloc = strOr(A(1, "yloc"), "price"); });
+    case "label.set_xloc": return set((d) => { d.x = xToTime(ctx, A(1, "x"), A(2, "xloc")); });
+    case "line.set_x1": return set((d) => { d.x1 = xToTime(ctx, A(1, "x"), d.xloc); });
+    case "line.set_x2": return set((d) => { d.x2 = xToTime(ctx, A(1, "x"), d.xloc); });
+    case "line.set_y1": return set((d) => { d.y1 = Number(A(1, "y")); });
+    case "line.set_y2": return set((d) => { d.y2 = Number(A(1, "y")); });
+    case "line.set_xy1": return set((d) => { d.x1 = xToTime(ctx, A(1, "x"), d.xloc); d.y1 = Number(A(2, "y")); });
+    case "line.set_xy2": return set((d) => { d.x2 = xToTime(ctx, A(1, "x"), d.xloc); d.y2 = Number(A(2, "y")); });
+    case "line.set_first_point": return set((d) => { const p = A(1, "point"); if (isPoint(p)) { d.x1 = pointTime(ctx, p, d.xloc); d.y1 = p.price; } });
+    case "line.set_second_point": return set((d) => { const p = A(1, "point"); if (isPoint(p)) { d.x2 = pointTime(ctx, p, d.xloc); d.y2 = p.price; } });
+    case "line.set_xloc": return set((d) => { const xl = A(3, "xloc"); d.x1 = xToTime(ctx, A(1, "x1"), xl); d.x2 = xToTime(ctx, A(2, "x2"), xl); });
+    case "line.set_color": return set((d) => { d.color = colorOr(A(1, "color"), d.color); });
+    case "line.set_width": return set((d) => { d.width = Number(A(1, "width")) || 1; });
+    case "line.set_style": return set((d) => { d.style = strOr(A(1, "style"), d.style); });
+    case "line.set_extend": return set((d) => { d.extend = strOr(A(1, "extend"), d.extend); });
+    case "box.set_left": return set((d) => { d.left = xToTime(ctx, A(1, "left"), d.xloc); });
+    case "box.set_right": return set((d) => { d.right = xToTime(ctx, A(1, "right"), d.xloc); });
+    case "box.set_top": return set((d) => { d.top = Number(A(1, "top")); });
+    case "box.set_bottom": return set((d) => { d.bottom = Number(A(1, "bottom")); });
+    case "box.set_lefttop": return set((d) => { d.left = xToTime(ctx, A(1, "left"), d.xloc); d.top = Number(A(2, "top")); });
+    case "box.set_rightbottom": return set((d) => { d.right = xToTime(ctx, A(1, "right"), d.xloc); d.bottom = Number(A(2, "bottom")); });
+    case "box.set_top_left_point": return set((d) => { const p = A(1, "point"); if (isPoint(p)) { d.left = pointTime(ctx, p, d.xloc); d.top = p.price; } });
+    case "box.set_bottom_right_point": return set((d) => { const p = A(1, "point"); if (isPoint(p)) { d.right = pointTime(ctx, p, d.xloc); d.bottom = p.price; } });
+    case "box.set_bgcolor": return set((d) => { d.bgColor = colorOr(A(1, "color"), d.bgColor); });
+    case "box.set_border_color": return set((d) => { d.borderColor = colorOr(A(1, "color"), d.borderColor); });
+    case "box.set_border_width": return set((d) => { d.borderWidth = Number(A(1, "width")); });
+    case "box.set_border_style": return set((d) => { d.borderStyle = strOr(A(1, "style"), d.borderStyle); });
+    case "box.set_extend": return set((d) => { d.extend = strOr(A(1, "extend"), d.extend); });
+    case "box.set_text": return set((d) => { d.text = strOr(A(1, "text"), ""); });
+    case "box.set_text_color": return set((d) => { d.textColor = colorOr(A(1, "text_color"), d.textColor); });
+    case "box.set_text_size": return set((d) => { d.textSize = strOr(A(1, "text_size"), d.textSize); });
+    case "box.set_text_halign": return set((d) => { d.textHalign = strOr(A(1, "text_halign"), d.textHalign); });
+    case "box.set_text_valign": return set((d) => { d.textValign = strOr(A(1, "text_valign"), d.textValign); });
+
+    // ---- getters (x as a bar index, as Pine returns it for xloc.bar_index) ----
+    case "label.get_x": { const d = obj(); return { handled: true, value: live(d) ? xOut(d, d.x) : NaN }; }
+    case "label.get_y": { const d = obj(); return { handled: true, value: live(d) ? d.y : NaN }; }
+    case "label.get_text": { const d = obj(); return { handled: true, value: live(d) ? d.text : "" }; }
+    case "line.get_x1": { const d = obj(); return { handled: true, value: live(d) ? xOut(d, d.x1) : NaN }; }
+    case "line.get_x2": { const d = obj(); return { handled: true, value: live(d) ? xOut(d, d.x2) : NaN }; }
+    case "line.get_y1": { const d = obj(); return { handled: true, value: live(d) ? d.y1 : NaN }; }
+    case "line.get_y2": { const d = obj(); return { handled: true, value: live(d) ? d.y2 : NaN }; }
+    case "line.get_price": {
+      const d = obj(); if (!live(d)) return { handled: true, value: NaN };
+      const x = timeOfIndex(ctx, A(1, "x"));
+      return { handled: true, value: d.x2 === d.x1 ? d.y1 : d.y1 + ((d.y2 - d.y1) * (x - d.x1)) / (d.x2 - d.x1) };
+    }
+    case "box.get_left": { const d = obj(); return { handled: true, value: live(d) ? xOut(d, d.left) : NaN }; }
+    case "box.get_right": { const d = obj(); return { handled: true, value: live(d) ? xOut(d, d.right) : NaN }; }
+    case "box.get_top": { const d = obj(); return { handled: true, value: live(d) ? d.top : NaN }; }
+    case "box.get_bottom": { const d = obj(); return { handled: true, value: live(d) ? d.bottom : NaN }; }
+  }
+  return { handled: false };
+}
+
+// ------------------------------------------------- objects, fields, methods
+// User-defined types are plain objects tagged with __udt; `a.b.c` reads fields along the path.
+
+const own = (o: any, k: string) => Object.prototype.hasOwnProperty.call(o, k);
+function varOf(ctx: Ctx, name: string): { found: boolean; value?: any } {
+  if (own(ctx.vars, name)) return { found: true, value: ctx.vars[name] };
+  if (ctx.globalCtx && ctx.globalCtx !== ctx && own(ctx.globalCtx.vars, name)) return { found: true, value: ctx.globalCtx.vars[name] };
+  return { found: false };
+}
+function walkFields(v: any, segs: string[]): any {
+  for (const s of segs) {
+    if (v && typeof v === "object" && s in v) v = v[s];
+    else return NaN;
+  }
+  return v;
+}
+
+// `obj.method(args)`: the script's own method for that type, else the built-in one for the
+// receiver's kind (array.*, matrix.*, line.*, label.*, box.*, str.*)
+function evalMethod(recv: any, method: string, node: { args: Expr[]; namedArgs: Record<string, Expr>; id: number }, ctx: Ctx): any {
+  const synth: Extract<Expr, { type: "call" }> = { type: "call", name: method, args: [{ type: "value", value: recv }, ...node.args], namedArgs: node.namedArgs, id: node.id };
+  const g = ctx.globalCtx || ctx;
+  const candidates = (g.methods || {})[method] || [];
+  const udt = recv && typeof recv === "object" ? recv.__udt : undefined;
+  const user = candidates.find((f) => f.params[0]?.type === udt) || (udt ? candidates.find((f) => !f.params[0]?.type) : undefined);
+  if (user) return callUserFunction(user, synth, ctx);
+  const ns = Array.isArray(recv) ? "array" : recv && recv.__matrix ? "matrix" : recv && recv.__point ? "chart.point" : recv && recv.__pineTable ? "table"
+    : recv && recv.kind ? recv.kind : typeof recv === "string" ? "str" : null;
+  if (ns) return evalCall({ ...synth, name: `${ns}.${method}` }, ctx);
+  if (candidates.length) return callUserFunction(candidates[0], synth, ctx);
+  throw new PineError(`Could not find method '${method}'`, "CE10003");
+}
+
+function newObject(def: TypeDef, node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
+  const o: any = { __udt: def.name };
+  def.fields.forEach((f, i) => {
+    if (node.namedArgs[f.name] !== undefined) o[f.name] = evalNode(node.namedArgs[f.name], ctx);
+    else if (node.args[i] !== undefined) o[f.name] = evalNode(node.args[i], ctx);
+    else o[f.name] = f.default ? evalNode(f.default, ctx) : NaN;
+  });
+  return o;
+}
+
+// ------------------------------------------------------------ matrices
+interface PineMatrix { __matrix: true; data: any[][] }
+const isMatrix = (m: any): m is PineMatrix => !!(m && m.__matrix);
+function evalMatrix(name: string, A: (i: number, key: string, def?: any) => any): { handled: boolean; value?: any } {
+  const m = () => { const v = A(0, "id"); return isMatrix(v) ? v : null; };
+  switch (name) {
+    case "matrix.new": {
+      const rows = Math.max(0, Math.round(A(0, "rows", 0))), cols = Math.max(0, Math.round(A(1, "columns", 0))), init = A(2, "initial_value", NaN);
+      return { handled: true, value: { __matrix: true, data: Array.from({ length: rows }, () => new Array(cols).fill(init)) } };
+    }
+    case "matrix.rows": return { handled: true, value: m()?.data.length ?? 0 };
+    case "matrix.columns": { const x = m(); return { handled: true, value: x && x.data.length ? x.data[0].length : 0 }; }
+    case "matrix.elements_count": { const x = m(); return { handled: true, value: x ? x.data.reduce((a, r) => a + r.length, 0) : 0 }; }
+    case "matrix.get": { const x = m(); const r = x?.data[Math.round(A(1, "row"))]; return { handled: true, value: r ? r[Math.round(A(2, "column"))] ?? NaN : NaN }; }
+    case "matrix.set": { const x = m(); const r = x?.data[Math.round(A(1, "row"))]; if (r) r[Math.round(A(2, "column"))] = A(3, "value"); return { handled: true, value: NaN }; }
+    case "matrix.row": { const x = m(); const r = x?.data[Math.round(A(1, "row"))]; return { handled: true, value: r ? r.slice() : [] }; }
+    case "matrix.col": { const x = m(); const c = Math.round(A(1, "column")); return { handled: true, value: x ? x.data.map((r) => r[c]) : [] }; }
+    case "matrix.add_row": {
+      const x = m(); if (!x) return { handled: true, value: NaN };
+      const arr = A(2, "array_id", undefined);
+      const idx = A(1, "row", x.data.length);
+      const at = typeof idx === "number" && !isNaN(idx) ? Math.round(idx) : x.data.length;
+      const cols = x.data.length ? x.data[0].length : (Array.isArray(arr) ? arr.length : 0);
+      x.data.splice(at, 0, Array.isArray(arr) ? arr.slice() : new Array(cols).fill(NaN));
+      return { handled: true, value: NaN };
+    }
+    case "matrix.remove_row": {
+      const x = m(); if (!x || !x.data.length) return { handled: true, value: [] };
+      const idx = A(1, "row", x.data.length - 1);
+      return { handled: true, value: x.data.splice(Math.round(idx), 1)[0] || [] };
+    }
+    case "matrix.fill": { const x = m(); const v = A(1, "value"); x?.data.forEach((r) => r.fill(v)); return { handled: true, value: NaN }; }
+    case "matrix.copy": { const x = m(); return { handled: true, value: x ? { __matrix: true, data: x.data.map((r) => r.slice()) } : NaN }; }
+  }
+  return { handled: false };
+}
+
+// ------------------------------------------------------------- pivots
+// ta.pivot_point_levels(type, anchor, developing): [P, R1, S1, R2, S2, R3, S3, R4, S4, R5, S5] from
+// the last finished period's high / low / close (developing: the current period's so far)
+function pivotLevels(type: string, h: number, l: number, c: number, o: number, curOpen: number): number[] {
+  const r = h - l;
+  const na = NaN;
+  switch (type) {
+    case "Fibonacci": { const p = (h + l + c) / 3; return [p, p + 0.382 * r, p - 0.382 * r, p + 0.618 * r, p - 0.618 * r, p + r, p - r, na, na, na, na]; }
+    case "Woodie": { const p = (h + l + 2 * curOpen) / 4; const r3 = h + 2 * (p - l), s3 = l - 2 * (h - p); return [p, 2 * p - l, 2 * p - h, p + r, p - r, r3, s3, r3 + r, s3 - r, na, na]; }
+    case "Classic": { const p = (h + l + c) / 3; return [p, 2 * p - l, 2 * p - h, p + r, p - r, p + 2 * r, p - 2 * r, p + 3 * r, p - 3 * r, na, na]; }
+    case "DM": { const x = c < o ? h + 2 * l + c : c > o ? 2 * h + l + c : h + l + 2 * c; const p = x / 4; return [p, x / 2 - l, x / 2 - h, na, na, na, na, na, na, na, na]; }
+    case "Camarilla": {
+      const p = (h + l + c) / 3, k = 1.1 * r;
+      const r5 = (h / l) * c;
+      return [p, c + k / 12, c - k / 12, c + k / 6, c - k / 6, c + k / 4, c - k / 4, c + k / 2, c - k / 2, r5, c - (r5 - c)];
+    }
+    default: { // Traditional
+      const p = (h + l + c) / 3;
+      return [p, 2 * p - l, 2 * p - h, p + r, p - r, 2 * p + (h - 2 * l), 2 * p - (2 * h - l), 3 * p + (h - 3 * l), 3 * p - (3 * h - l), 4 * p + (h - 4 * l), 4 * p - (4 * h - l)];
+    }
+  }
+}
+
+// Bars of a higher timeframe built from the chart's own bars (no extra download): what
+// request.security() uses for a timeframe that wasn't fetched
+function periodKey(t: number, tf: string): number {
+  const u = tf.trim().toUpperCase();
+  const n = parseInt(u, 10) || 1;
+  const d = new Date(t * 1000);
+  if (/M$/.test(u) && !/^\d+$/.test(u)) return Math.floor((d.getUTCFullYear() * 12 + d.getUTCMonth()) / n);
+  if (/W$/.test(u)) return Math.floor((t / 86400 + 3) / 7 / n);
+  if (/D$/.test(u)) return Math.floor(t / 86400 / n);
+  const sec = pineTimeframeToSeconds(u) || 86400;
+  return Math.floor(t / sec);
+}
+function periodStart(key: number, tf: string): number {
+  const u = tf.trim().toUpperCase();
+  const n = parseInt(u, 10) || 1;
+  if (/M$/.test(u) && !/^\d+$/.test(u)) { const months = key * n; return Date.UTC(Math.floor(months / 12), months % 12, 1) / 1000; }
+  if (/W$/.test(u)) return (key * 7 * n - 3) * 86400;
+  if (/D$/.test(u)) return key * n * 86400;
+  return key * (pineTimeframeToSeconds(u) || 86400);
+}
+function aggregateBars(bars: Bar[], tf: string): Bar[] {
+  const out: Bar[] = [];
+  let key: number | null = null;
+  for (const b of bars) {
+    const k = periodKey(b.time, tf);
+    if (k !== key) { key = k; out.push({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume ?? 0 }); }
+    else { const o = out[out.length - 1]; o.high = Math.max(o.high, b.high); o.low = Math.min(o.low, b.low); o.close = b.close; o.volume = (o.volume ?? 0) + (b.volume ?? 0); }
+  }
+  return out;
 }
 
 function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
@@ -1415,7 +1991,16 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
     case "ta.dmi": return B.dmi(cs, ctx, A(0, "diLength"), A(1, "adxSmoothing"));
     case "ta.sar": return B.sar(cs, ctx, A(0, "start"), A(1, "inc"), A(2, "max"));
     case "ta.supertrend": return B.supertrend(cs, ctx, A(0, "factor"), A(1, "atrPeriod"));
-    case "ta.vwap": return B.vwap(cs, ctx, A(0, "source", (ctx.bar.high + ctx.bar.low + ctx.bar.close) / 3));
+    case "ta.vwap": {
+      // ta.vwap(source) resets each day; ta.vwap(source, anchor) when anchor is true; with
+      // stdev_mult it returns [vwap, upper band, lower band]
+      const src = A(0, "source", (ctx.bar.high + ctx.bar.low + ctx.bar.close) / 3);
+      const hasAnchor = node.args[1] !== undefined || node.namedArgs.anchor !== undefined;
+      const hasMult = node.args[2] !== undefined || node.namedArgs.stdev_mult !== undefined;
+      if (!hasAnchor) return B.vwap(cs, ctx, src);
+      const r = B.vwapAnchored(cs, ctx, src, truthy(A(1, "anchor")), hasMult ? A(2, "stdev_mult") : 1);
+      return hasMult ? r : r[0];
+    }
     case "ta.barssince": {
       const cond = truthy(argAt(0));
       if (cs.lastBar !== ctx.barIndex) {
@@ -1441,6 +2026,10 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
         if (isNaN(v)) return "NaN";
         if (node.args[1] !== undefined) {
           const fmt = String(argAt(1));
+          // format.mintick / price / percent / volume
+          if (fmt === "mintick" || fmt === "price") { const dec = Math.max(0, Math.round(-Math.log10(minTick(ctx)))); return v.toFixed(dec); }
+          if (fmt === "percent") return `${v.toFixed(2)}%`;
+          if (fmt === "volume") { const a = Math.abs(v); return a >= 1e9 ? `${(v / 1e9).toFixed(3)}B` : a >= 1e6 ? `${(v / 1e6).toFixed(3)}M` : a >= 1e3 ? `${(v / 1e3).toFixed(3)}K` : String(Math.round(v)); }
           const decMatch = fmt.match(/\.(#+)/);
           if (decMatch) return v.toFixed(decMatch[1].length);
           if (/^#+$/.test(fmt)) return String(Math.round(v));
@@ -1577,6 +2166,65 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
       return NaN;
     }
 
+    // ---- more array.* ----
+    case "array.new": {
+      const size = Math.max(0, Math.round(A(0, "size", 0)));
+      return new Array(size).fill(A(1, "initial_value", NaN));
+    }
+    case "array.first": { const arr = argAt(0); return Array.isArray(arr) && arr.length ? arr[0] : NaN; }
+    case "array.last": { const arr = argAt(0); return Array.isArray(arr) && arr.length ? arr[arr.length - 1] : NaN; }
+    case "array.reverse": { const arr = argAt(0); if (Array.isArray(arr)) arr.reverse(); return NaN; }
+    case "array.fill": { const arr = argAt(0); if (Array.isArray(arr)) { const from = node.args[2] !== undefined ? Math.round(argAt(2)) : 0; const to = node.args[3] !== undefined ? Math.round(argAt(3)) : arr.length; arr.fill(argAt(1), from, to); } return NaN; }
+    case "array.concat": { const a = argAt(0), b = argAt(1); if (Array.isArray(a) && Array.isArray(b)) a.push(...b); return a; }
+    case "array.join": { const arr = argAt(0); return Array.isArray(arr) ? arr.map(String).join(node.args[1] !== undefined ? String(argAt(1)) : ",") : ""; }
+    case "array.lastindexof": { const arr = argAt(0); return Array.isArray(arr) ? arr.lastIndexOf(argAt(1)) : -1; }
+    case "array.range": { const arr = argAt(0); return Array.isArray(arr) && arr.length ? Math.max(...arr) - Math.min(...arr) : NaN; }
+    case "array.median": { const arr = argAt(0); if (!Array.isArray(arr) || !arr.length) return NaN; const s2 = arr.slice().sort((a: number, b: number) => a - b); const m = s2.length >> 1; return s2.length % 2 ? s2[m] : (s2[m - 1] + s2[m]) / 2; }
+    case "array.stdev": { const arr = argAt(0); if (!Array.isArray(arr) || !arr.length) return NaN; const mean = arr.reduce((a: number, b: number) => a + b, 0) / arr.length; return Math.sqrt(arr.reduce((a: number, b: number) => a + (b - mean) ** 2, 0) / arr.length); }
+
+    // ---- pivots ----
+    case "ta.pivot_point_levels": {
+      // Levels from the last finished period (developing: from the current one so far); the period
+      // ends whenever `anchor` is true
+      const type = String(A(0, "type", "Traditional"));
+      const anchor = truthy(A(1, "anchor"));
+      const developing = truthy(A(2, "developing", false));
+      const b = ctx.bar;
+      if (cs.lastBar !== ctx.barIndex) {
+        cs.lastBar = ctx.barIndex;
+        if (anchor && cs.cur) { cs.prev = cs.cur; cs.cur = null; }
+        if (!cs.cur) cs.cur = { o: b.open, h: b.high, l: b.low, c: b.close };
+        else { cs.cur.h = Math.max(cs.cur.h, b.high); cs.cur.l = Math.min(cs.cur.l, b.low); cs.cur.c = b.close; }
+      }
+      const src = developing ? cs.cur : cs.prev;
+      if (!src) return new Array(11).fill(NaN);
+      return pivotLevels(type, src.h, src.l, src.c, src.o, developing ? cs.cur.c : cs.cur.o);
+    }
+
+    // ---- symbols, time ----
+    case "ticker.modify": case "ticker.new": case "ticker.standard": case "ticker.heikinashi": return node.args[0] !== undefined ? argAt(0) : ctx.symbol;
+    case "time": case "time_close": {
+      // time(timeframe, session, bars_back, timeframe_bars_back): a bar's open time (ms)
+      const tf = String(A(0, "timeframe", "") || "");
+      const barsBack = Math.round(Number(A(2, "bars_back", 0)) || 0);
+      const tfBack = Math.round(Number(A(3, "timeframe_bars_back", 0)) || 0);
+      const t = timeOfIndex(ctx, ctx.barIndex - barsBack);
+      if (!tf || tf === ctx.pineTf) return (t + (name === "time_close" ? ctx.barDurationSec : 0)) * 1000;
+      const key = periodKey(t, tf) - tfBack;
+      return (name === "time_close" ? periodStart(key + 1, tf) : periodStart(key, tf)) * 1000;
+    }
+    case "runtime.error": throw new PineError(String(argAt(0) ?? "Runtime error"), "RE10001");
+    case "timeframe.change": {
+      // True on the first bar of each new period of that timeframe ("D", "W", "M", "60"…)
+      const tf = String(A(0, "timeframe", ctx.pineTf));
+      const t = ctx.bar.time;
+      let key: number;
+      if (/^\d*M$/i.test(tf)) { const d = new Date(t * 1000); const n = parseInt(tf, 10) || 1; key = Math.floor((d.getUTCFullYear() * 12 + d.getUTCMonth()) / n); }
+      else if (/^\d*W$/i.test(tf)) key = Math.floor((t / 86400 + 3) / 7 / (parseInt(tf, 10) || 1));
+      else { const sec = pineTimeframeToSeconds(tf) || 86400; key = Math.floor(t / sec); }
+      if (cs.lastBar !== ctx.barIndex) { cs.result = cs.key !== undefined && key !== cs.key; cs.key = key; cs.lastBar = ctx.barIndex; }
+      return cs.result;
+    }
     case "timeframe.in_seconds": return pineTimeframeToSeconds(String(node.args[0] !== undefined ? argAt(0) : ctx.pineTf));
 
     case "request.security": return evalRequestSecurity(node, ctx);
@@ -1606,9 +2254,27 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
     case "strategy.closedtrades.size": { const t = ctx.strategyState.closedTrades[Math.round(argAt(0))]; return t ? (t.type === "Long" ? t.qty : -t.qty) : NaN; }
 
     default: {
+      const g = ctx.globalCtx || ctx;
       const fn = ctx.functions[name];
       if (fn) return callUserFunction(fn, node, ctx);
-      // Drawing objects (labels, lines, boxes…) aren't drawn here yet: the script still runs
+      // MyType.new(…) / MyType.copy(obj)
+      const dot = name.lastIndexOf(".");
+      if (dot > 0 && g.types) {
+        const def = g.types[name.slice(0, dot)];
+        if (def && name.slice(dot + 1) === "new") return newObject(def, node, ctx);
+        if (def && name.slice(dot + 1) === "copy") { const o = argAt(0); return o && typeof o === "object" ? { ...o } : NaN; }
+      }
+      // obj.method(…) / obj.field.method(…) on a variable
+      if (dot > 0) {
+        const segs = name.split(".");
+        const head = varOf(ctx, segs[0]);
+        if (head.found) return evalMethod(walkFields(head.value, segs.slice(1, -1)), segs[segs.length - 1], node, ctx);
+      }
+      const mx = evalMatrix(name, A);
+      if (mx.handled) return mx.value;
+      const drawn = evalDrawing(name, node, ctx);
+      if (drawn.handled) return drawn.value;
+      // linefill / polyline aren't drawn yet: the script still runs
       if (DRAWING_NAMESPACES.some((ns) => name.startsWith(ns))) {
         warnOnce(ctx, `'${name.split(".")[0]}.*' drawings aren't supported by this editor yet and were skipped.`);
         return NaN;
@@ -1672,6 +2338,13 @@ function evalNode(node: Expr, ctx: Ctx): any {
       return v === undefined ? NaN : v;
     }
     case "switch": return evalSwitch(node, ctx);
+    case "value": return node.value;
+    case "field": { const v = evalNode(node.base, ctx); return walkFields(v, node.path.split(".")); }
+    case "mcall": {
+      const segs = node.name.split(".");
+      const recv = walkFields(evalNode(node.recv, ctx), segs.slice(0, -1));
+      return evalMethod(recv, segs[segs.length - 1], node, ctx);
+    }
     case "call":
       // `u = plot(...)` / `h = hline(...)` (kept for fill()) still draw: the call's side effect
       // runs, and a reference to the plot / level stands in for its value
@@ -1697,11 +2370,15 @@ function evalSwitch(node: Extract<Expr, { type: "switch" }>, ctx: Ctx): any {
   return NaN;
 }
 
+// Each plot's offset= (bars it's drawn shifted by)
+const plotOffsets = new WeakMap<PinePlotResult, any>();
+
 // Drawing-only calls with no effect on values: accepted so scripts run, not drawn here
-const KNOWN_IGNORED_CALLS = new Set(["bgcolor", "alertcondition", "alert", "barcolor", "runtime.error", "max_bars_back", "library", "export"]);
+const KNOWN_IGNORED_CALLS = new Set(["bgcolor", "alertcondition", "alert", "barcolor", "max_bars_back", "library", "export"]);
 
 function execExprStatement(node: Expr, ctx: Ctx) {
   if (node.type === "switch") { evalSwitch(node, ctx); return; }
+  if (node.type === "mcall") { evalNode(node, ctx); return; }
   if (node.type !== "call") return;
   const name = node.name;
   const argAt = (i: number) => (node.args[i] !== undefined ? evalNode(node.args[i], ctx) : undefined);
@@ -1722,8 +2399,10 @@ function execExprStatement(node: Expr, ctx: Ctx) {
   // The bar `offset` bars away (plots / shapes drawn shifted), or null off the chart
   const shiftedTime = (offset: any) => {
     const o = typeof offset === "number" && !isNaN(offset) ? Math.round(offset) : 0;
-    const b = ctx.bars[ctx.barIndex + o];
-    return b ? b.time : null;
+    const i = ctx.barIndex + o;
+    if (i < 0) return null;
+    // A positive offset runs past the last bar into the future (Ichimoku's cloud)
+    return i < ctx.bars.length ? ctx.bars[i].time : timeOfIndex(ctx, i);
   };
 
   if (name === "plot") {
@@ -1743,6 +2422,7 @@ function execExprStatement(node: Expr, ctx: Ctx) {
         hidden: display === "none" || (c !== undefined && typeof c !== "string"),
       };
       ctx.plotOrder.push(node.id);
+      plotOffsets.set(ctx.plots[node.id], arg(7, "offset"));
     }
     const plot = ctx.plots[node.id];
     const v = argAt(0);
@@ -1768,20 +2448,32 @@ function execExprStatement(node: Expr, ctx: Ctx) {
     return;
   }
   if (name === "fill") {
-    // Recorded once, from the bar it first runs on; the ends are plots or hlines
-    if (!ctx.fillSeen) ctx.fillSeen = new Set();
-    if (ctx.fillSeen.has(node.id)) return;
-    ctx.fillSeen.add(node.id);
-    const ref = (v: any): PineFill["a"] | null => v && typeof v === "object" ? (v.__plot !== undefined ? { kind: "plot", index: v.__plot } : v.__hline !== undefined ? { kind: "hline", index: v.__hline } : null) : null;
-    const a = ref(argAt(0)), b = ref(argAt(1));
-    if (!a || !b) return;
-    // fill(p1, p2, top_value, bottom_value, top_color, bottom_color, …) is the gradient form
-    const gradient = node.namedArgs.top_color !== undefined || (node.args.length >= 6 && typeof argAt(2) === "number");
-    const fill: PineFill = gradient
-      ? { a, b, title: String(arg(6, "title") ?? ""), topValue: Number(arg(2, "top_value")), bottomValue: Number(arg(3, "bottom_value")), topColor: arg(4, "top_color"), bottomColor: arg(5, "bottom_color"), hidden: arg(7, "display") === "none" }
-      : { a, b, title: String(arg(3, "title") ?? ""), color: arg(2, "color"), hidden: arg(a.kind === "hline" ? 6 : 7, "display") === "none" };
-    if (!gradient && (typeof fill.color !== "string" || isNaColor(fill.color))) fill.hidden = true;
-    (ctx.fills = ctx.fills || []).push(fill);
+    // Created on the bar it first runs on (the ends are plots or hlines). A color that's an
+    // expression (Ichimoku's green / red cloud) is recorded for every bar.
+    if (!ctx.fillSeen) ctx.fillSeen = new Map();
+    let fill = ctx.fillSeen.get(node.id);
+    if (!fill) {
+      const ref = (v: any): PineFill["a"] | null => v && typeof v === "object" ? (v.__plot !== undefined ? { kind: "plot", index: v.__plot } : v.__hline !== undefined ? { kind: "hline", index: v.__hline } : null) : null;
+      const a = ref(argAt(0)), b = ref(argAt(1));
+      if (!a || !b) return;
+      // fill(p1, p2, top_value, bottom_value, top_color, bottom_color, …) is the gradient form
+      const gradient = node.namedArgs.top_color !== undefined || (node.args.length >= 6 && typeof argAt(2) === "number");
+      fill = gradient
+        ? { a, b, title: String(arg(6, "title") ?? ""), topValue: Number(arg(2, "top_value")), bottomValue: Number(arg(3, "bottom_value")), topColor: arg(4, "top_color"), bottomColor: arg(5, "bottom_color"), hidden: arg(7, "display") === "none" }
+        : { a, b, title: String(arg(3, "title") ?? ""), color: arg(2, "color"), hidden: arg(a.kind === "hline" ? 6 : 7, "display") === "none" };
+      ctx.fillSeen.set(node.id, fill);
+      (ctx.fills = ctx.fills || []).push(fill);
+    }
+    if (fill.topValue === undefined) {
+      const colorNode = node.namedArgs.color ?? node.args[2];
+      if (colorNode && colorNode.type !== "str" && colorNode.type !== "ident") {
+        const c = arg(2, "color");
+        // keyed by where the plots draw this bar (their offset), as the fill follows them
+        const end = fill.a.kind === "plot" ? ctx.plots[fill.a.index] : undefined;
+        const at = shiftedTime(end ? plotOffsets.get(end) : 0);
+        if (at !== null) (fill.colors = fill.colors || {})[at] = typeof c === "string" ? c : "rgba(0, 0, 0, 0)";
+      }
+    }
     return;
   }
   if (name === "plotshape" || name === "plotchar") {
@@ -1901,6 +2593,9 @@ function execStmts(stmts: Stmt[], ctx: Ctx) {
           else if (s.elseBody) execStmts(s.elseBody, ctx);
           break;
         case "for": execForStmt(s, ctx, execStmts); break;
+        case "forin": execForIn(s, ctx, execStmts); break;
+        case "fieldAssign": execFieldAssign(s, ctx); break;
+        case "typedef": break;
         case "while": execWhileStmt(s, ctx, execStmts); break;
         case "tupleAssign": execTupleAssign(s, ctx); break;
         case "funcdef": break; // collected into ctx.functions up front; nothing to run per-bar
@@ -1937,13 +2632,21 @@ function execStmts(stmts: Stmt[], ctx: Ctx) {
   }
 }
 
-function collectFunctions(stmts: Stmt[], out: Record<string, FunctionDef>) {
-  for (const s of stmts) if (s.type === "funcdef") out[s.def.name] = s.def;
+function collectFunctions(stmts: Stmt[], out: Record<string, FunctionDef>, types?: Record<string, TypeDef>, methods?: Record<string, FunctionDef[]>) {
+  for (const s of stmts) {
+    if (s.type === "funcdef") {
+      if (s.def.isMethod && methods) (methods[s.def.name] = methods[s.def.name] || []).push(s.def);
+      if (!s.def.isMethod || !out[s.def.name]) out[s.def.name] = s.def;
+    } else if (s.type === "typedef" && types) types[s.def.name] = s.def;
+  }
 }
 
 function parseProgram(code: string): { stmts: Stmt[]; meta: PineRunResult["meta"] } {
   const meta: PineRunResult["meta"] = { title: "Untitled script", isStrategy: false, overlay: true, initialCapital: 100000 };
-  const rawLines = code.split("\n");
+  // Windows line endings (code pasted from a Windows editor) read as plain newlines
+  const rawLines = code.replace(/\r\n?/g, "\n").split("\n");
+  // The script's own type names, known before any declaration that uses them is parsed
+  udtNames = new Set(rawLines.map(l => (l.match(/^\s*(?:export\s+)?type\s+([a-zA-Z_]\w*)\s*$/) || [])[1]).filter(Boolean) as string[]);
   const merged = mergeContinuationLines(rawLines);
   const lines: Line[] = [];
   for (const m of merged) {
@@ -1951,7 +2654,9 @@ function parseProgram(code: string): { stmts: Stmt[]; meta: PineRunResult["meta"
     if (!trimmed) continue;
     if (/^\/\/@version/.test(trimmed)) continue;
     if (/^(indicator|strategy|library)\s*\(/.test(trimmed)) { parseMeta(trimmed, meta); continue; }
-    const indent = m.indentRaw.length - m.indentRaw.replace(/^[ \t]+/, "").length;
+    // Pine counts a tab as 4 spaces (TradingView's own scripts mix the two)
+    const lead = (m.indentRaw.match(/^[ \t]*/) || [""])[0];
+    const indent = lead.replace(/\t/g, "    ").length;
     lines.push({ indent, text: trimmed, lineNo: m.lineNo });
   }
   const joined = mergeIndentContinuations(lines);
@@ -1977,6 +2682,8 @@ function checkUndeclared(stmts: Stmt[]) {
       else if (s.type === "tupleAssign") s.names.forEach(n => declared.add(n));
       else if (s.type === "funcdef") { declared.add(s.def.name); s.def.params.forEach(p => declared.add(p.name)); collect(s.def.body); }
       else if (s.type === "for") { declared.add(s.varName); collect(s.body); }
+      else if (s.type === "forin") { declared.add(s.valVar); if (s.idxVar) declared.add(s.idxVar); collect(s.body); }
+      else if (s.type === "typedef") declared.add(s.def.name);
       else if (s.type === "if") { collect(s.body); if (s.elseBody) collect(s.elseBody); }
       else if (s.type === "while") collect(s.body);
     }
@@ -1996,6 +2703,8 @@ function checkUndeclared(stmts: Stmt[]) {
       case "call": e.args.forEach(a => walk(a, line)); Object.values(e.namedArgs).forEach(a => walk(a, line)); return;
       case "tuple": e.items.forEach(a => walk(a, line)); return;
       case "switch": walk(e.subject, line); e.arms.forEach(a => { walk(a.cond, line); visit(a.body); }); return;
+      case "mcall": walk(e.recv, line); e.args.forEach(a => walk(a, line)); Object.values(e.namedArgs).forEach(a => walk(a, line)); return;
+      case "field": walk(e.base, line); return;
     }
   };
   const visit = (list: Stmt[]) => {
@@ -2006,6 +2715,9 @@ function checkUndeclared(stmts: Stmt[]) {
         case "while": walk(s.cond, s.line); visit(s.body); break;
         case "assign": case "tupleAssign": case "expr": walk(s.expr, s.line); break;
         case "funcdef": s.def.params.forEach(p => walk(p.default, s.line)); visit(s.def.body); break;
+        case "forin": walk(s.expr, s.line); visit(s.body); break;
+        case "fieldAssign": walk(s.expr, s.line); break;
+        case "typedef": s.def.fields.forEach(f => walk(f.default, s.line)); break;
       }
     }
   };
@@ -2015,6 +2727,7 @@ function checkUndeclared(stmts: Stmt[]) {
 interface RunOpts { symbol?: string; pineTf?: string; mtfData?: Record<string, Bar[]>; initialCapital?: number; inputOverrides?: Record<string, any>; backtestFrom?: number; backtestTo?: number; profile?: boolean }
 
 function executeParsed(stmts: Stmt[], meta: PineRunResult["meta"], bars: Bar[], opts: RunOpts): PineRunResult {
+  let logsSoFar: string[] | null = null;
   const result: PineRunResult = { plots: [], markers: [], tables: [], strategyReport: null, inputs: [], logs: [], warnings: [], errors: [], meta, execMs: 0 };
   try {
     if (!bars || bars.length === 0) {
@@ -2022,13 +2735,15 @@ function executeParsed(stmts: Stmt[], meta: PineRunResult["meta"], bars: Bar[], 
       return result;
     }
     const functions: Record<string, FunctionDef> = {};
-    collectFunctions(stmts, functions);
+    const types: Record<string, TypeDef> = {};
+    const methods: Record<string, FunctionDef[]> = {};
+    collectFunctions(stmts, functions, types, methods);
     const pineTf = opts.pineTf || "";
     const ctx: Ctx = {
       vars: {}, varHistory: {}, callState: {}, plots: {}, plotOrder: [],
       markers: [], tables: [], logs: [], warnings: [], warned: new Set(), bars,
       barIndex: 0, bar: bars[0],
-      functions,
+      functions, types, methods,
       strategyInitialCapital: opts.initialCapital ?? meta.initialCapital,
       strategyState: makeStrategyState(),
       inputsList: [],
@@ -2044,6 +2759,11 @@ function executeParsed(stmts: Stmt[], meta: PineRunResult["meta"], bars: Bar[], 
       profile: opts.profile ? new Map() : undefined,
     };
     ctx.globalCtx = ctx;
+    ctx.scopeStmts = stmts;
+    logsSoFar = ctx.logs;
+    // indicator(max_lines_count=…) etc.: how many of each drawing the script keeps (TradingView: 50 by default, 500 at most)
+    const lim = (v: number | undefined) => Math.max(1, Math.min(500, v ?? 50));
+    ctx.drawings = { seq: 0, label: [], line: [], box: [], max: { label: lim(meta.maxLabels), line: lim(meta.maxLines), box: lim(meta.maxBoxes) } };
     for (let i = 0; i < bars.length; i++) {
       ctx.barIndex = i;
       ctx.bar = bars[i];
@@ -2052,8 +2772,11 @@ function executeParsed(stmts: Stmt[], meta: PineRunResult["meta"], bars: Bar[], 
     }
     result.plots = ctx.plotOrder.map((id) => ctx.plots[id]);
     result.hlines = ctx.hlines || [];
+    result.drawings = ctx.drawings ? [...ctx.drawings.box, ...ctx.drawings.line, ...ctx.drawings.label] : [];
     // fill() ends point at plots / hlines by their position in those lists
     result.fills = (ctx.fills || []).map((f) => {
+      const transparent = (c: any) => typeof c !== "string" || B.parseColor(c)?.a === 0;
+      if (f.topValue === undefined && (f.colors ? Object.values(f.colors).every(transparent) : transparent(f.color))) f = { ...f, hidden: true };
       const at = (r: PineFill["a"]) => ({ kind: r.kind, index: r.kind === "plot" ? ctx.plotOrder.indexOf(r.index) : (ctx.hlines || []).findIndex((h) => h.id === r.index) });
       return { ...f, a: at(f.a), b: at(f.b) };
     }).filter((f) => f.a.index >= 0 && f.b.index >= 0);
@@ -2070,6 +2793,8 @@ function executeParsed(stmts: Stmt[], meta: PineRunResult["meta"], bars: Bar[], 
     result.warnings = ctx.warnings;
     if (ctx.profile) result.profile = Array.from(ctx.profile.entries()).map(([line, v]) => ({ line, ms: v.ms, count: v.count })).sort((a, b) => a.line - b.line);
   } catch (err: any) {
+    // The log so far stays visible next to the error (TradingView keeps it too)
+    if (logsSoFar) result.logs = logsSoFar.slice(-200);
     if (err instanceof PineError) {
       result.errors.push({ message: err.message, code: err.code, line: err.line ?? 1 });
     } else {
@@ -2079,14 +2804,14 @@ function executeParsed(stmts: Stmt[], meta: PineRunResult["meta"], bars: Bar[], 
   return result;
 }
 
-export function runPineScript(code: string, bars: Bar[], opts?: { symbol?: string; pineTf?: string }): PineRunResult {
+export function runPineScript(code: string, bars: Bar[], opts?: { symbol?: string; pineTf?: string; inputOverrides?: Record<string, any> }): PineRunResult {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
   let meta: PineRunResult["meta"] = { title: "Untitled script", isStrategy: false, overlay: true, initialCapital: 100000 };
   let result: PineRunResult;
   try {
     const parsed = parseProgram(code);
     meta = parsed.meta;
-    result = executeParsed(parsed.stmts, meta, bars, { symbol: opts?.symbol, pineTf: opts?.pineTf, mtfData: {} });
+    result = executeParsed(parsed.stmts, meta, bars, { symbol: opts?.symbol, pineTf: opts?.pineTf, mtfData: {}, inputOverrides: opts?.inputOverrides });
   } catch (err: any) {
     result = { plots: [], markers: [], tables: [], strategyReport: null, inputs: [], logs: [], warnings: [], errors: [], meta, execMs: 0 };
     if (err instanceof PineError) result.errors.push({ message: err.message, code: err.code, line: err.line ?? 1 });
@@ -2119,6 +2844,8 @@ function collectRequestTimeframes(stmts: Stmt[], inputOverrides?: Record<string,
       case "histref": visitExpr(e.base); visitExpr(e.offset); break;
       case "tuple": e.items.forEach(visitExpr); break;
       case "switch": if (e.subject) visitExpr(e.subject); e.arms.forEach(a => { if (a.cond) visitExpr(a.cond); visitStmts(a.body); }); break;
+      case "mcall": visitExpr(e.recv); e.args.forEach(visitExpr); break;
+      case "field": visitExpr(e.base); break;
     }
   };
   const visitStmts = (list: Stmt[]) => {
@@ -2130,6 +2857,7 @@ function collectRequestTimeframes(stmts: Stmt[], inputOverrides?: Record<string,
         case "assign": visitExpr(s.expr); break;
         case "tupleAssign": visitExpr(s.expr); break;
         case "funcdef": visitStmts(s.def.body); break;
+        case "forin": visitExpr(s.expr); visitStmts(s.body); break;
         case "expr": visitExpr(s.expr); break;
       }
     }

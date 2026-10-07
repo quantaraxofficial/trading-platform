@@ -52,7 +52,8 @@ import { statusLine, type StatusLineSettings } from "../lib/statusLine";
 import { loadFavoriteIndicators, saveFavoriteIndicators } from "@/app/utils/favoriteIndicators";
 import { rememberExchangeTimezone, toChartTime, exchangeTimezoneOf } from "@/app/utils/exchangeTime";
 import { createSeriesMarkers } from "lightweight-charts";
-import { PineFills } from "./chartPrimitives/PineFills";
+import { PineChartView } from "./pine/PineChartView";
+import { usePineIndicators, isPineIndicator } from "./pine/usePineIndicators";
 import { precomputeAllTimeframes, getAggCachedData, setAggCachedData, AGGREGATABLE_INTERVALS } from "@/app/utils/aggregateCandles";
 
 // The full "UTC" timezone selector list — city groups exactly as shown in the reference dropdown.
@@ -284,7 +285,9 @@ interface ChartContainerProps {
   interval: string;
   intervalLabel?: string;
   symbol?: string;
-  activeIndicators?: {id: string, name: string}[];
+  activeIndicators?: {id: string, name: string, visible?: boolean, inputs?: Record<string, any>}[];
+  // Changes one indicator entry (its inputs or visibility), saved with the layout
+  onUpdateIndicator?: (id: string, patch: { inputs?: Record<string, any>; visible?: boolean }) => void;
   onRemoveIndicator?: (id: string) => void;
   onOpenOrderPanel?: (side: "buy" | "sell") => void;
   initialTargetTimestamp?: number | null;
@@ -317,6 +320,7 @@ import { chartSettings, themeCanvas, precisionFormat, type ChartSettings } from 
 import type { DateRangeSpan } from "./BottomPanel";
 import { detectPrecision, simulatedQuote } from "@/app/utils/pricePrecision";
 import { feedTimeToUnix } from "../utils/feedTime";
+import { backendFetch } from "@/lib/backend";
 export { getCacheKey, getCachedData, setCachedData } from "../lib/stockDataCache";
 
 // Requests currently on the wire, keyed like the localStorage cache. The cache only
@@ -536,7 +540,7 @@ export function remapDrawingPoints(drawings: any[], stockData: any[], label: str
 
 export default function ChartContainer({ 
   theme = "light", interval = "15min", intervalLabel = "15m", symbol = "AAPL",
-  activeIndicators = [], onRemoveIndicator, onOpenOrderPanel,
+  activeIndicators = [], onRemoveIndicator, onUpdateIndicator, onOpenOrderPanel,
   initialTargetTimestamp = null, initialBarSpacing = null, onChartStateChange,
   triggerSettings
 }: ChartContainerProps) {
@@ -607,7 +611,6 @@ export default function ChartContainer({
   const seriesMarkersRef = useRef<{ series: any; api: any } | null>(null);
   const snapshotHideTradesRef = useRef(false);
   const pineMarkersRef = useRef<any[]>([]);
-  const pineSeriesRef = useRef<Record<number, ISeriesApi<"Line">>>({});
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [isLoading, setIsLoading] = useState(true);
   // The data plan's limit: per minute (retried automatically once the minute resets) or per day
@@ -883,7 +886,7 @@ export default function ChartContainer({
   const [savedTemplates, setSavedTemplates] = useState<any[]>([]);
   const fetchSavedTemplates = useCallback(() => {
     if (!user?.uid) return;
-    fetch(`http://localhost:8000/api/users/templates/${user.uid}/?tool_type=chart_settings`)
+    backendFetch(`http://localhost:8000/api/users/templates/${user.uid}/?tool_type=chart_settings`)
       .then(res => res.json())
       .then(data => { if (Array.isArray(data)) setSavedTemplates(data); })
       .catch(e => console.error("Failed to load chart templates:", e));
@@ -1300,7 +1303,7 @@ export default function ChartContainer({
   function applyAllMarkers() {
     if (!series) return;
     const trades = snapshotHideTradesRef.current ? [] : tradeMarkersRef.current;
-    const merged = [...trades, ...(pineVisibleRef.current ? pineMarkersRef.current : [])].sort((a, b) => a.time - b.time);
+    const merged = [...trades, ...(pineVisibleRef.current ? pineMarkersRef.current : []), ...pineIndMarkersRef.current()].sort((a, b) => a.time - b.time);
     try {
       if (!seriesMarkersRef.current || seriesMarkersRef.current.series !== series) {
         seriesMarkersRef.current = { series, api: createSeriesMarkers(series, []) };
@@ -1311,16 +1314,36 @@ export default function ChartContainer({
     }
   }
 
+  const applyAllMarkersRef = useRef(applyAllMarkers);
+  applyAllMarkersRef.current = applyAllMarkers;
+
+  // Pine-based built-in indicators (VWAP, Ichimoku, Pivot Points, RSI…) and the visible-range
+  // volume profile: one instance per indicator entry, on the bars the chart shows (replay-clipped)
+  const pineIndicators = usePineIndicators({
+    chart,
+    mainSeries: () => candleSeriesRef.current as any,
+    getBars: () => {
+      const d = fullDataRef.current || [];
+      return modeRef.current !== 'idle' && replayIndexRef.current >= 0 && replayIndexRef.current < d.length ? d.slice(0, replayIndexRef.current + 1) : d;
+    },
+    symbol,
+    pineTf: appIntervalToPineTf(interval),
+    indicators: (activeIndicators || []) as any,
+    onChangeInputs: (id, inputs) => onUpdateIndicator?.(id, { inputs }),
+    onMarkersChanged: () => applyAllMarkersRef.current(),
+  });
+  const pineIndRerunRef = useRef(pineIndicators.rerunAll);
+  pineIndRerunRef.current = pineIndicators.rerunAll;
+  const pineIndMarkersRef = useRef(pineIndicators.overlayMarkers);
+  pineIndMarkersRef.current = pineIndicators.overlayMarkers;
+
   const pineVisibleRef = useRef(true);
   useEffect(() => { pineVisibleRef.current = pineVisible; }, [pineVisible]);
 
   function togglePineVisible() {
     const next = !pineVisible;
     setPineVisible(next);
-    Object.values(pineSeriesRef.current).forEach((s) => { try { (s as any).applyOptions({ visible: next }); } catch { /* ignore */ } });
-    // The pane's own anchor carries the hlines; fills and pane markers hide with the plots
-    try { pineAnchorRef.current?.applyOptions({ visible: next }); } catch { /* ignore */ }
-    pineFillsRef.current?.setVisible(next);
+    pineViewRef.current?.setVisible(next);
     pineVisibleRef.current = next;
     applyAllMarkers();
   }
@@ -1414,111 +1437,29 @@ export default function ChartContainer({
   const [reportToast, setReportToast] = useState<"updating" | "success" | null>(null);
   const reportToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // The Pine editor script's output on the chart (series, pane, levels, fills, drawings)
+  const pineViewRef = useRef<PineChartView | null>(null);
+  const barTimes = () => (fullDataRef.current || []).map((b: any) => b.time as number);
+  function pineView(): PineChartView | null {
+    const chart = chartRef.current;
+    if (!chart) return null;
+    if (!pineViewRef.current) pineViewRef.current = new PineChartView(chart, () => candleSeriesRef.current as any, barTimes);
+    return pineViewRef.current;
+  }
+
+  // Removes everything the editor's script drew
+  function clearPineGraphics() {
+    pineViewRef.current?.clear();
+  }
+
   // Renders a completed PineRunResult onto the chart (series/markers/tables/
   // legend/report) — shared by the initial run (tv:run-pine-script) and by
   // re-running the same script over a different backtest date range.
-  // Removes everything a script drew: its series, its own pane (overlay=false), its fills
-  function clearPineGraphics() {
-    const chart = chartRef.current;
-    if (!chart) return;
-    Object.values(pineSeriesRef.current).forEach((s) => { try { chart.removeSeries(s); } catch { /* ignore */ } });
-    pineSeriesRef.current = {};
-    if (pineAnchorRef.current) { try { chart.removeSeries(pineAnchorRef.current); } catch { /* ignore */ } pineAnchorRef.current = null; }
-    pineFillsRef.current = null;
-    try { pinePaneMarkersRef.current?.setMarkers([]); } catch { /* ignore */ }
-    pinePaneMarkersRef.current = null;
-    if (pinePaneRef.current) {
-      try { if (chart.panes().length > 1) chart.removePane(1); } catch { /* ignore */ }
-      pinePaneRef.current = false;
-    }
-  }
-
   function applyPineResult(result: any, scriptName: string) {
-    if (!chartRef.current) return;
-    const chart = chartRef.current;
-    clearPineGraphics();
-    const allPlots: any[] = result?.plots || [];
-    // Plots with display=display.none or color=na feed fills and values, not lines
-    const plots = allPlots.filter((p: any) => !p.hidden);
-    const hlines: any[] = result?.hlines || [];
-    const fills: any[] = result?.fills || [];
-    // overlay=false (Pine's default) puts the script in its own pane under the price, as on TradingView
-    const overlay = result?.meta?.overlay !== false;
-    const pane = overlay ? 0 : 1;
-    if (!overlay) pinePaneRef.current = true;
-    const precision = result?.meta?.precision;
-    const priceFormat = typeof precision === "number" ? { priceFormat: { type: "price" as const, precision, minMove: Math.pow(10, -precision) } } : {};
-    // The pane's scale also fits its hlines (RSI's 30 / 70), as TradingView autoscales them in
-    const levels = hlines.map((h: any) => h.price);
-    const autoscaleInfoProvider = levels.length && !overlay ? (original: () => any) => {
-      const r = original();
-      const lo = Math.min(...levels), hi = Math.max(...levels);
-      if (!r || !r.priceRange) return { priceRange: { minValue: lo, maxValue: hi } };
-      return { ...r, priceRange: { minValue: Math.min(r.priceRange.minValue, lo), maxValue: Math.max(r.priceRange.maxValue, hi) } };
-    } : undefined;
-
-    plots.forEach((p: any, idx: number) => {
-      try {
-        const color = plotColorOverrides[p.title] || p.color;
-        const common = { title: p.title, priceLineVisible: false, lastValueVisible: true, ...priceFormat, ...(autoscaleInfoProvider ? { autoscaleInfoProvider } : {}) };
-        let s: any;
-        if (p.style === "histogram" || p.style === "columns") {
-          s = chart.addSeries(HistogramSeries, { color, ...common }, pane);
-        } else if (p.style === "area") {
-          s = chart.addSeries(AreaSeries, { lineColor: color, topColor: color, bottomColor: "rgba(0, 0, 0, 0)", lineWidth: p.lineWidth ?? 1, ...common } as any, pane);
-        } else {
-          const dots = p.style === "circles" || p.style === "cross";
-          s = chart.addSeries(LineSeries, {
-            color,
-            lineWidth: p.lineWidth ?? 1,
-            lineType: p.style === "stepline" ? LineType.WithSteps : LineType.Simple,
-            crosshairMarkerVisible: true,
-            pointMarkersVisible: dots,
-            // On the price chart the line is painted by CandleBodyAwareLine (ducking under candle
-            // bodies) and this series only drives the axis label, crosshair and legend values
-            lineVisible: !overlay && !dots,
-            ...common,
-          }, pane);
-          if (overlay) s.attachPrimitive(new CandleBodyAwareLine());
-        }
-        s.setData(p.values);
-        pineSeriesRef.current[idx] = s;
-      } catch { /* ignore */ }
-    });
-
-    // hlines, fills and pane markers hang off one series of the pane; with no visible plot there,
-    // an invisible one spanning the bars
-    if (!overlay && (hlines.length || fills.length || (result?.markers || []).length)) {
-      let anchor: any = pineSeriesRef.current[0];
-      if (!anchor) {
-        const bars = fullDataRef.current;
-        const v = levels.length ? levels[0] : 0;
-        anchor = chart.addSeries(LineSeries, { lineVisible: false, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false, ...(autoscaleInfoProvider ? { autoscaleInfoProvider } : {}) }, pane);
-        anchor.setData(bars.length ? [{ time: bars[0].time, value: v }, { time: bars[bars.length - 1].time, value: v }] : []);
-        pineAnchorRef.current = anchor;
-      }
-      const dash: Record<string, number> = { solid: LineStyle.Solid, dotted: LineStyle.Dotted, dashed: LineStyle.Dashed };
-      hlines.forEach((h: any) => {
-        try { anchor.createPriceLine({ price: h.price, color: h.color, lineWidth: h.lineWidth, lineStyle: dash[h.lineStyle] ?? LineStyle.Dashed, axisLabelVisible: false, title: "" }); } catch { /* ignore */ }
-      });
-      if (fills.length) {
-        const prim = new PineFills(fills, allPlots, hlines);
-        anchor.attachPrimitive(prim);
-        pineFillsRef.current = prim;
-      }
-      if ((result?.markers || []).length) {
-        try { pinePaneMarkersRef.current = createSeriesMarkers(anchor, result.markers); } catch { /* ignore */ }
-      }
-    } else if (overlay && fills.length && pineSeriesRef.current[0]) {
-      const prim = new PineFills(fills, allPlots, hlines);
-      pineSeriesRef.current[0].attachPrimitive(prim as any);
-      pineFillsRef.current = prim;
-    }
-    // TradingView gives an indicator pane about a quarter of the chart
-    if (!overlay) { try { chart.panes()[0]?.setStretchFactor(3); chart.panes()[1]?.setStretchFactor(1); } catch { /* ignore */ } }
-
-    // An overlay script's markers join the trade markers on the candles
-    pineMarkersRef.current = overlay ? (result?.markers || []) : [];
+    const view = pineView();
+    if (!view) return;
+    const plots = view.apply(result, plotColorOverrides);
+    pineMarkersRef.current = view.overlayMarkers();
     setPineVisible(true);
     applyAllMarkers();
     setPineTables(result?.tables || []);
@@ -1529,13 +1470,9 @@ export default function ChartContainer({
       // The legend uses the script's short title ("RSI"), as TradingView's does
       name: result?.meta?.shortTitle || scriptName || (report ? "Strategy" : "Script"),
       inputs: result?.inputs || [],
-      plots: plots.map((p: any) => ({ title: p.title, color: plotColorOverrides[p.title] || p.color, lastValue: p.values?.length ? p.values[p.values.length - 1].value : null })),
+      plots,
     });
   }
-  const pinePaneRef = useRef(false);
-  const pineAnchorRef = useRef<any>(null);
-  const pineFillsRef = useRef<PineFills | null>(null);
-  const pinePaneMarkersRef = useRef<any>(null);
 
   // The chart only ever holds as much history as has actually been fetched
   // (an initial ~5000-bar load, plus whatever infinite-scroll has backfilled)
@@ -1722,7 +1659,7 @@ export default function ChartContainer({
       const updatedPlots = pineLegend.plots.map((p, idx) => {
         const newColor = plotColors[p.title];
         if (newColor && newColor !== p.color) {
-          try { (pineSeriesRef.current[idx] as any)?.applyOptions({ color: newColor }); } catch { /* ignore */ }
+          pineViewRef.current?.setPlotColor(idx, newColor);
           return { ...p, color: newColor };
         }
         return p;
@@ -2084,6 +2021,8 @@ export default function ChartContainer({
 
   const updateEmaData = (data: any[]) => {
     if (!data || data.length === 0) return;
+    // The Pine indicators follow the same bar updates (debounced, off the main thread)
+    pineIndRerunRef.current();
     // In replay mode, clip data to the replay index
     let effectiveData = data;
     if (modeRef.current !== 'idle' && replayIndexRef.current >= 0 && replayIndexRef.current < data.length) {
@@ -3192,8 +3131,7 @@ export default function ChartContainer({
       volumeSeriesRef.current = null;
       emasRef.current = {};
       emaExtrasRef.current = {};
-      pineSeriesRef.current = {};
-      pineAnchorRef.current = null; pineFillsRef.current = null; pinePaneMarkersRef.current = null; pinePaneRef.current = false;
+      pineViewRef.current = null;
       setChart(null); setSeries(null);
     };
     // Built once: a theme switch only recolours the chart (the canvas-colours effect applies the
@@ -3766,6 +3704,11 @@ export default function ChartContainer({
         toggle: () => setEmaVisibilities(prev => ({ ...prev, [ind.id]: !(prev[ind.id] ?? true) })), settings: () => setShowEmaSettingsFor(ind.id), remove,
       });
     } else if (ind.name === 'FXN - Asian Session Range') addObject(ind.id, 'indicator', ind.name, ind.name, sessionVisible, { toggle: () => setSessionVisible(v => !v), settings: () => setSessionSettingsOpen(true), remove });
+    else if (isPineIndicator(ind.name)) {
+      const inst = pineIndicators.instances.find(i => i.id === ind.id);
+      const title = inst ? (inst.inputsText.length ? `${inst.title} (${inst.inputsText.join(', ')})` : inst.title) : ind.name;
+      addObject(ind.id, 'indicator', title, ind.name, ind.visible !== false, { toggle: () => onUpdateIndicator?.(ind.id, { visible: ind.visible === false }), settings: () => pineIndicators.setSettingsFor(ind.id), remove });
+    }
   }
   if (pineLegend) addObject('pine', strategyReport ? 'strategy' : 'indicator', pineLegend.inputs.length ? `${pineLegend.name} (${pineLegend.inputs.join(', ')})` : pineLegend.name, pineLegend.name, pineVisible, {
     toggle: togglePineVisible, settings: () => setShowPineSettings(true), remove: removePineScript,
@@ -3911,7 +3854,7 @@ export default function ChartContainer({
 
         const rows: React.ReactNode[] = [];
         // A script in its own pane (overlay=false) has its legend at the top of that pane
-        const pinePaneTop = pinePaneRef.current ? chartRef.current?.panes()[0]?.getHeight() : undefined;
+        const pinePaneTop = pineViewRef.current?.paneTop();
         if (pineLegend) rows.push(
           <div key="pine" style={pinePaneTop ? { position: "absolute", top: pinePaneTop - 2, left: 0 } : undefined}>
           <PineScriptLegendRow
@@ -3931,6 +3874,23 @@ export default function ChartContainer({
           />
           </div>
         );
+        // Pine-based indicators: overlay ones in this list, pane ones at the top of their pane
+        pineIndicators.instances.forEach(inst => rows.push(
+          <div key={`pi-${inst.id}`} style={!inst.overlay && inst.paneTop ? { position: "absolute", top: inst.paneTop - 2, left: 0 } : undefined}>
+            <PineScriptLegendRow
+              name={inst.error ? `${inst.title} — ${inst.error}` : inst.title}
+              inputs={inst.inputsText}
+              plots={inst.plots}
+              status={statusLineSettings}
+              background={indicatorBg}
+              format={inst.overlay ? fmt : (v: number) => v.toFixed(2)}
+              isVisible={inst.visible}
+              onToggleVisibility={() => onUpdateIndicator?.(inst.id, { visible: !inst.visible })}
+              onOpenSettings={() => pineIndicators.setSettingsFor(inst.id)}
+              onRemove={() => onRemoveIndicator?.(inst.id)}
+            />
+          </div>
+        ));
         activeIndicators?.forEach(ind => {
           if (ind.name === "Volume") {
             rows.push(
@@ -4330,6 +4290,24 @@ export default function ChartContainer({
 
       {/* Settings modal — opened from the legend row's gear icon, built
           dynamically from the running script's own declared inputs. */}
+      {pineIndicators.settingsFor && (() => {
+        const sp = pineIndicators.settingsProps(pineIndicators.settingsFor);
+        if (!sp) return null;
+        return (
+          <PineSettingsModal
+            theme={theme}
+            scriptName={sp.scriptName}
+            inputsMeta={sp.inputsMeta}
+            currentOverrides={sp.currentOverrides}
+            initialCapital={0}
+            showProperties={false}
+            plots={sp.plots}
+            onApply={(overrides) => { sp.onApply(overrides); pineIndicators.setSettingsFor(null); }}
+            onClose={() => pineIndicators.setSettingsFor(null)}
+          />
+        );
+      })()}
+
       {showPineSettings && pineLegend && (
         <PineSettingsModal
           theme={theme}

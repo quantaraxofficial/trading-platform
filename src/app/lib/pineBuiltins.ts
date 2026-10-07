@@ -380,6 +380,19 @@ export function vwap(s: State, c: TaCtx, v: number): number {
     return s.vol ? s.pv / s.vol : NaN;
   });
 }
+// VWAP restarting whenever `anchor` is true, with bands `mult` volume-weighted standard deviations away
+export function vwapAnchored(s: State, c: TaCtx, v: number, anchor: boolean, mult: number): number[] {
+  return once(s, c, () => {
+    if (anchor || s.vol === undefined) { s.pv = 0; s.pv2 = 0; s.vol = 0; }
+    const vol = c.bar.volume ?? 0;
+    if (!isNa(v)) { s.pv += v * vol; s.pv2 += v * v * vol; s.vol += vol; }
+    if (!s.vol) return [NaN, NaN, NaN];
+    const w = s.pv / s.vol;
+    const sd = Math.sqrt(Math.max(0, s.pv2 / s.vol - w * w));
+    return [w, w + mult * sd, w - mult * sd];
+  });
+}
+
 export function obv(s: State, c: TaCtx): number {
   return once(s, c, () => { const p = c.barIndex > 0 ? c.bars[c.barIndex - 1].close : NaN; const d = isNa(p) ? 0 : Math.sign(c.bar.close - p); s.v = (s.v ?? 0) + d * (c.bar.volume ?? 0); return s.v; });
 }
@@ -408,12 +421,20 @@ export function parseColor(c: any): { r: number; g: number; b: number; a: number
 }
 const rgba = (r: number, g: number, b: number, a: number) => `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${+Math.max(0, Math.min(1, a)).toFixed(3)})`;
 // Pine transparency is 0 (opaque) … 100 (invisible)
+// Scripts recompute the same colors on every bar: remember them
+const colorCache = new Map<string, string>();
+const cached = (key: string, make: () => string) => {
+  let v = colorCache.get(key);
+  if (v === undefined) { v = make(); if (colorCache.size > 2000) colorCache.clear(); colorCache.set(key, v); }
+  return v;
+};
 export function colorNew(c: any, transp: number): any {
-  const p = parseColor(c);
-  if (!p || isNa(transp)) return c;
-  return rgba(p.r, p.g, p.b, 1 - transp / 100);
+  if (typeof c !== "string" || isNa(transp)) return c;
+  return cached(`${c}|${transp}`, () => { const p = parseColor(c); return p ? rgba(p.r, p.g, p.b, 1 - transp / 100) : c; });
 }
-export function colorRgb(r: number, g: number, b: number, transp = 0): string { return rgba(r, g, b, 1 - (isNa(transp) ? 0 : transp) / 100); }
+export function colorRgb(r: number, g: number, b: number, transp = 0): string {
+  return cached(`${r},${g},${b},${transp}`, () => rgba(r, g, b, 1 - (isNa(transp) ? 0 : transp) / 100));
+}
 export function colorPart(c: any, part: "r" | "g" | "b" | "t"): number {
   const p = parseColor(c);
   if (!p) return NaN;

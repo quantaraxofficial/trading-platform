@@ -105,3 +105,18 @@ class UserActionLog(models.Model):
 
     def __str__(self):
         return f"{self.action_type} at {self.timestamp}"
+
+class UserSetting(models.Model):
+    """One synced app setting of a user (a saved layout list, watchlists, chart settings…), so they
+    follow the user across devices. `value` is the JSON text the browser keeps for that key;
+    `updated_at` is the browser's own change time (ms), the newer copy wins."""
+    owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='settings')
+    key = models.CharField(max_length=100)
+    value = models.TextField()
+    updated_at = models.BigIntegerField(default=0)
+
+    class Meta:
+        unique_together = ('owner', 'key')
+
+    def __str__(self):
+        return f"{self.owner.name}: {self.key}"

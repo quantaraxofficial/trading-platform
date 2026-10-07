@@ -64,12 +64,14 @@ export class PineFills {
           g.addColorStop(0, f.topColor || 'rgba(0,0,0,0)');
           g.addColorStop(1, f.bottomColor || 'rgba(0,0,0,0)');
           ctx.fillStyle = g;
-        } else {
+        } else if (!f.colors) {
           if (!f.color) continue;
           ctx.fillStyle = f.color;
         }
 
-        // One quad per pair of neighbouring bars where both sides have values
+        // One quad per pair of neighbouring bars where both sides have values; with a per-bar
+        // color each quad takes the color of the bar it ends on
+        const perBar = !gradient && !!f.colors;
         ctx.beginPath();
         let prev: { x: number; ya: number; yb: number } | null = null;
         for (const t of times) {
@@ -79,15 +81,17 @@ export class PineFills {
           const ya = y(clamp(va)), yb = y(clamp(vb));
           if (ya === null || yb === null) { prev = null; continue; }
           if (prev && (ya !== yb || prev.ya !== prev.yb)) {
+            if (perBar) { const c = f.colors![t]; if (!c) { prev = { x, ya, yb }; continue; } ctx.beginPath(); ctx.fillStyle = c; }
             ctx.moveTo(prev.x, prev.ya);
             ctx.lineTo(x, ya);
             ctx.lineTo(x, yb);
             ctx.lineTo(prev.x, prev.yb);
             ctx.closePath();
+            if (perBar) ctx.fill();
           }
           prev = { x, ya, yb };
         }
-        ctx.fill();
+        if (!perBar) ctx.fill();
       }
     });
   }
