@@ -1132,19 +1132,6 @@ export default function ChartContainer({
     return () => { lines.forEach(l => { try { sr.removePriceLine(l); } catch { /* chart gone */ } }); };
   }, [series, alerts, symbol, cs.alertLines, cs.alertLineColor, cs.onlyActiveAlerts]);
 
-  // ── Alerts → toasts for triggered alerts (closing by themselves unless that's turned off) ──
-  const [alertToasts, setAlertToasts] = useState<{ id: number; title: string; body: string }[]>([]);
-  useEffect(() => {
-    const onToast = (e: Event) => {
-      const d = (e as CustomEvent).detail || {};
-      const id = Date.now() + Math.random();
-      setAlertToasts(t => [...t, { id, title: d.title || 'Alert', body: d.body || '' }]);
-      if (csRef.current.autoHideToasts) setTimeout(() => setAlertToasts(t => t.filter(x => x.id !== id)), 6000);
-    };
-    window.addEventListener('tv:alert-toast', onToast);
-    return () => window.removeEventListener('tv:alert-toast', onToast);
-  }, []);
-
   // ── Symbol → Color bars based on previous close: each bar coloured by its close against
   // the previous bar's close, not its own open ──
   const recolorCandlesRef = useRef<() => void>(() => {});
@@ -2328,7 +2315,8 @@ export default function ChartContainer({
         const lastTime = bars.length ? (bars[bars.length - 1].time as number) * 1000 : Date.now();
         engine.setQuote(symbol, price, lastTime);
       }
-      checkAlerts(symbol, price);
+      // Replayed bars aren't live prices: alerts only check real ones (as in TradingView)
+      if (mode === 'idle') checkAlerts(symbol, price);
     } else {
       document.title = `${symbol} | TradePilot`;
     }
@@ -4063,20 +4051,6 @@ export default function ChartContainer({
         </>);
       })()}
       <style>{`.tv-chart-root .tv-hover-reveal{opacity:0;transition:opacity .15s}.tv-chart-root:hover .tv-hover-reveal{opacity:1}`}</style>
-
-      {/* Alert toasts (Settings → Alerts → Automatically hide toasts) */}
-      {alertToasts.length > 0 && (
-        <div style={{ position: 'absolute', right: 70, bottom: 40, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 60 }}>
-          {alertToasts.map(t => (
-            <div key={t.id} role="status" style={{ width: 300, background: 'var(--tv-color-pane-bg)', color: 'var(--tv-hdr-text)', borderRadius: 8, boxShadow: '0 2px 12px rgba(0,0,0,0.25)', padding: '12px 36px 12px 14px', position: 'relative', fontSize: 14 }}>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>{t.title}</div>
-              <div style={{ fontSize: 13, opacity: 0.8 }}>{t.body}</div>
-              <button type="button" aria-label="Close" onClick={() => setAlertToasts(x => x.filter(y => y.id !== t.id))}
-                style={{ position: 'absolute', top: 8, right: 8, width: 22, height: 22, border: 'none', background: 'transparent', color: 'inherit', cursor: 'pointer', fontSize: 16 }}>×</button>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* The clicked execution arrow's fills: "1 Sell" and a row per fill, "qty @ price  date" */}
       {execCard && chart && (() => {

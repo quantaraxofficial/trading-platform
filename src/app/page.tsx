@@ -11,6 +11,7 @@ import RightToolbar from "./components/RightToolbar";
 import OrderTicket from "./trading/OrderTicket";
 import TradingDialogs from "./trading/TradingDialogs";
 import TradingNotifications from "./trading/TradingNotifications";
+import AlertToasts from "./components/alerts/AlertToasts";
 import { requestTrade, tradingUi, useTradingUi, closeDock } from "./trading/store";
 import DockedTradingPanel from "./trading/DockedTradingPanel";
 import { useTicketPrefs } from "./trading/settings";
@@ -109,20 +110,26 @@ function AppLayout() {
   // Create Alert opens at a given price (e.g. a drawing's, from its toolbar) or else at the
   // latest close of the symbol on the chart
   const [alertInitialPrice, setAlertInitialPrice] = useState<number | undefined>(undefined);
+  // Editing an existing alert (its row's settings button or a toast's "Edit alert")
+  const [editAlertId, setEditAlertId] = useState<string | undefined>(undefined);
   const openAlert = (price?: number) => {
     const data = (window as any).__chartFullData;
     const lastClose = Array.isArray(data) && data.length > 0 ? data[data.length - 1].close : undefined;
     setAlertInitialPrice(typeof price === "number" ? price : lastClose);
+    setEditAlertId(undefined);
     setShowAlertModal(true);
   };
   // A drawing's toolbar can ask for an alert at its price, or (long/short position) an order
   useEffect(() => {
     const onAlert = (e: Event) => openAlert((e as CustomEvent).detail?.price);
     const onOrder = (e: Event) => requestTrade((e as CustomEvent).detail?.side === "sell" ? "sell" : "buy", symbolRef.current);
+    const onEditAlert = (e: Event) => { const id = (e as CustomEvent).detail?.id; if (id) { setEditAlertId(id); setShowAlertModal(true); } };
     window.addEventListener("tv:create-alert", onAlert);
+    window.addEventListener("tv:edit-alert", onEditAlert);
     window.addEventListener("tv:open-order-panel", onOrder);
     return () => {
       window.removeEventListener("tv:create-alert", onAlert);
+      window.removeEventListener("tv:edit-alert", onEditAlert);
       window.removeEventListener("tv:open-order-panel", onOrder);
     };
   }, []);
@@ -950,13 +957,16 @@ function AppLayout() {
       <OrderTicket placement="floating" />
       <TradingDialogs />
       <TradingNotifications />
+      <AlertToasts theme={theme} />
 
       {showAlertModal && (
-        <CreateAlertModal 
-          theme={theme} 
-          symbol={symbol} 
+        <CreateAlertModal
+          key={editAlertId ?? "new"}
+          theme={theme}
+          symbol={symbol}
           initialPrice={alertInitialPrice}
-          onClose={() => setShowAlertModal(false)} 
+          editId={editAlertId}
+          onClose={() => { setShowAlertModal(false); setEditAlertId(undefined); }}
         />
       )}
 

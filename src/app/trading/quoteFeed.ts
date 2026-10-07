@@ -1,7 +1,7 @@
 // Live prices for paper trading. The data plan has no streaming quotes and allows 8 requests
 // a minute (shared with the chart and the watchlist), so this polls once a minute, only while
 // the page is visible, and only the symbols that matter: the chart's and any symbol with an
-// open position or working order, one request every few seconds. Each price goes to the
+// open position or working order (or an active alert), one request every few seconds. Each price goes to the
 // engine (fills, P&L), to the chart (live last candle) and to the watchlist.
 
 import { engine, tradingUi } from "./store";
@@ -22,6 +22,10 @@ function isForexOpen(): boolean {
   return true;
 }
 
+// Symbols with an active alert (AlertsContext), so their alerts fire without being on the chart
+let alertSymbols: string[] = [];
+export function setAlertWatchSymbols(symbols: string[]) { alertSymbols = symbols; }
+
 function symbolsToWatch(): string[] {
   const set = new Set<string>();
   const chart = tradingUi.get().chartSymbol;
@@ -31,6 +35,7 @@ function symbolsToWatch(): string[] {
     b.positions.forEach(p => set.add(p.symbol));
     b.orders.forEach(o => { if (o.status === "working") set.add(o.symbol); });
   }
+  alertSymbols.forEach(sym => set.add(sym));
   return Array.from(set);
 }
 

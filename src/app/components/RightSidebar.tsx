@@ -14,6 +14,7 @@ import {
   TVReplayIcon,
 } from "./icons/TVIcons";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import { useAlerts } from "@/context/AlertsContext";
 
 // Trading Agent — a small chat-bubble-with-spark glyph (1px lines like the TradingView icons)
 function TVAgentIcon({ size = 28, ...props }: any) {
@@ -45,6 +46,8 @@ interface RightSidebarProps {
 export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEditor, onOpenAgent, onOpenReplay, onOpenShortcuts, pineOpen = false }: RightSidebarProps) {
   const router = useRouter();
   const [menu, setMenu] = useState<"products" | "help" | null>(null);
+  // Unread triggered alerts, as a red count on the Alerts button
+  const { unread } = useAlerts();
   const productsRef = useRef<HTMLButtonElement>(null);
   const helpRef = useRef<HTMLButtonElement>(null);
 
@@ -79,8 +82,11 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
       <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
         {panels.map(p => (
           <div key={p.id} className="tv-tooltip-container">
-            <button className={`tv-rt-btn ${activePanel === p.id ? "active" : ""}`} onClick={() => onPanelChange(p.id)} aria-label={p.tooltip} aria-pressed={activePanel === p.id}>
+            <button className={`tv-rt-btn ${activePanel === p.id ? "active" : ""}`} onClick={() => onPanelChange(p.id)} aria-label={p.tooltip} aria-pressed={activePanel === p.id} style={{ position: "relative" }}>
               {p.icon}
+              {p.id === "alerts" && unread > 0 && (
+                <span data-testid="alerts-badge" style={{ position: "absolute", top: 3, right: 3, minWidth: 16, height: 16, padding: "0 4px", boxSizing: "border-box", borderRadius: 8, background: "#f23645", color: "#fff", fontSize: 11, lineHeight: "16px", fontWeight: 600, pointerEvents: "none" }}>{unread > 99 ? "99+" : unread}</span>
+              )}
             </button>
             {tooltip(p.tooltip)}
           </div>
