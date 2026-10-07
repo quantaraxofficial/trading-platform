@@ -169,3 +169,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Sign-in (api/users/sync/) checks the Firebase ID token against this project
+FIREBASE_PROJECT_ID = env('FIREBASE_PROJECT_ID', default='quantarax')
+# Development only: let sync/ open sessions without a Firebase token (local test accounts)
+ALLOW_UNVERIFIED_SIGNIN = env.bool('ALLOW_UNVERIFIED_SIGNIN', default=False)

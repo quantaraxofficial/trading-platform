@@ -11,6 +11,7 @@ import { useEscapeClose } from "../../lib/useEscapeClose";
 import { layoutStore } from "../../lib/layoutStore";
 import { readDrawingIndex, writeDrawingIndex, type IndexedDrawing } from "../../lib/drawingIndex";
 import { DrawingIcon, drawingTreeName, formatModified, TrashIcon, Chevron } from "./treeIcons";
+import { backendFetch } from "@/lib/backend";
 
 type Filter = "global" | "layout" | "none";
 
@@ -29,7 +30,7 @@ export default function ManageDrawingsDialog({ onClose }: { onClose: () => void 
   useEffect(() => {
     if (!user?.uid) return;
     let alive = true;
-    fetch(`http://localhost:8000/api/users/drawings/${user.uid}/`).then(r => r.ok ? r.json() : null).then(list => {
+    backendFetch(`http://localhost:8000/api/users/drawings/${user.uid}/`).then(r => r.ok ? r.json() : null).then(list => {
       if (!alive || !Array.isArray(list)) return;
       const next: Record<string, IndexedDrawing[]> = {};
       for (const e of list) if (e?.symbol && Array.isArray(e.drawings) && e.drawings.length) next[e.symbol] = e.drawings.map((d: any) => ({ id: d.id, type: d.type, modifiedAt: d.modifiedAt }));
@@ -51,7 +52,7 @@ export default function ManageDrawingsDialog({ onClose }: { onClose: () => void 
   const removeAll = async (sym: string) => {
     if (sym === symbol) deleteMultipleDrawings(drawings.filter(d => d.type !== "measure").map(d => d.id));
     else if (user?.uid) {
-      try { await fetch(`http://localhost:8000/api/users/drawings/${user.uid}/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol: sym, drawings: [] }) }); } catch { /* offline */ }
+      try { await backendFetch(`http://localhost:8000/api/users/drawings/${user.uid}/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol: sym, drawings: [] }) }); } catch { /* offline */ }
     }
     writeDrawingIndex(sym, []);
     setOthers(prev => { const n = { ...prev }; delete n[sym]; return n; });

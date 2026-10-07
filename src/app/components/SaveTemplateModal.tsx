@@ -5,6 +5,7 @@ import { X } from 'lucide-react';
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import { backendFetch } from "@/lib/backend";
 
 interface SaveTemplateModalProps {
   onClose: (saved?: boolean) => void;
@@ -36,7 +37,7 @@ export default function SaveTemplateModal({ onClose, theme, settingsToSave }: Sa
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`http://localhost:8000/api/users/templates/${user.uid}/`, {
+      const res = await backendFetch(`http://localhost:8000/api/users/templates/${user.uid}/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

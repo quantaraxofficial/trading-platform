@@ -45,8 +45,8 @@ export default function SignupPage() {
 
   const handleGoogleSignUp = async () => {
     try {
-      await signInWithGoogle();
-      router.push('/');
+      // Closing the Google window just leaves the form as it was
+      if (await signInWithGoogle()) router.push('/');
     } catch (err: any) {
       setError(err.message || 'Failed to sign up with Google');
     }

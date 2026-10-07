@@ -1,6 +1,7 @@
 'use client';
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
+import { backendFetch } from "@/lib/backend";
 
 interface TelemetryAction {
   action_type: string;
@@ -32,7 +33,7 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
     const startSession = async () => {
       try {
         const symbol = new URLSearchParams(window.location.search).get('symbol') || 'UNKNOWN';
-        const res = await fetch(`http://localhost:8000/api/users/telemetry/session/start/${user.uid}/`, {
+        const res = await backendFetch(`http://localhost:8000/api/users/telemetry/session/start/${user.uid}/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ symbol })
@@ -75,7 +76,7 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
       actionBuffer.current = [];
 
       try {
-        const res = await fetch(`http://localhost:8000/api/users/telemetry/actions/log/${user.uid}/`, {
+        const res = await backendFetch(`http://localhost:8000/api/users/telemetry/actions/log/${user.uid}/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

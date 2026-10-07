@@ -31,6 +31,7 @@ import { ColorPickerPopup, parseColorInput } from './ColorPickerPopup';
 import { TvWidthMenu, TvLineStyleMenu } from './TvLineMenus';
 import { POSITION_TARGET_FILL, POSITION_STOP_FILL } from '../tools/PositionTool';
 import { PaletteInput } from "./PaletteInput";
+import { backendFetch } from "@/lib/backend";
 
 export function SubBar() {
   const { user } = useAuth();
@@ -490,7 +491,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
   const fetchTemplates = async () => {
     if (!user || !selectedShapeType) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/users/templates/${user.uid}/?tool_type=${selectedShapeType}`);
+      const res = await backendFetch(`http://localhost:8000/api/users/templates/${user.uid}/?tool_type=${selectedShapeType}`);
       if (!res.ok) {
         const text = await res.text();
         console.error("Server responded with error:", res.status, text);
@@ -526,7 +527,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
     setSaveTemplateError(null);
     try {
-      const res = await fetch(`http://localhost:8000/api/users/templates/${user.uid}/`, {
+      const res = await backendFetch(`http://localhost:8000/api/users/templates/${user.uid}/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -593,7 +594,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
 
   const deleteTemplate = async (id) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/users/templates/delete/${id}/`, {
+      const res = await backendFetch(`http://localhost:8000/api/users/templates/delete/${id}/`, {
         method: 'DELETE'
       });
       if (res.ok) fetchTemplates();

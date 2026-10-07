@@ -7,6 +7,7 @@ import SaveTemplateModal from '../../SaveTemplateModal';
 import { ColorPickerPopup, stopAll } from './ColorPickerPopup';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
 import { PaletteInput } from "./PaletteInput";
+import { backendFetch } from "@/lib/backend";
 
 interface FibonacciSettingsModalProps {
   onClose: () => void;
@@ -253,7 +254,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
 
   useEffect(() => {
     if (user && drawing) {
-      fetch(`http://localhost:8000/api/users/templates/${user.uid}/?tool_type=${drawing.type}`)
+      backendFetch(`http://localhost:8000/api/users/templates/${user.uid}/?tool_type=${drawing.type}`)
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data)) setTemplates(data.filter(t => t.name !== 'default'));
@@ -678,7 +679,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
           onClose={(saved) => {
             setShowSaveModal(false);
             if (saved && user && drawing) {
-              fetch(`http://localhost:8000/api/users/templates/${user.uid}/?tool_type=${drawing.type}`)
+              backendFetch(`http://localhost:8000/api/users/templates/${user.uid}/?tool_type=${drawing.type}`)
                 .then(res => res.json())
                 .then(data => { if (Array.isArray(data)) setTemplates(data.filter((t: any) => t.name !== 'default')); });
             }

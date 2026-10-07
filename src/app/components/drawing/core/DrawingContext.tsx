@@ -162,6 +162,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useTelemetry } from '@/context/TelemetryContext';
 import { isTypingTarget } from '../../../lib/isTypingTarget';
 import { writeDrawingIndex } from '../../../lib/drawingIndex';
+import { backendFetch } from "@/lib/backend";
 
 const DrawingContext = createContext<DrawingContextType | undefined>(undefined);
 
@@ -212,7 +213,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     if (user) {
       const loadDefaultSettings = async () => {
         try {
-          const res = await fetch(`http://localhost:8000/api/users/templates/${user.uid}/`);
+          const res = await backendFetch(`http://localhost:8000/api/users/templates/${user.uid}/`);
           if (res.ok) {
             const data = await res.json();
             const defaults: Partial<Record<DrawingType, Partial<BaseDrawing>>> = {};
@@ -242,7 +243,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
       delete settingsToSave.visible;
       delete settingsToSave.locked;
 
-      fetch(`http://localhost:8000/api/users/templates/${user.uid}/`, {
+      backendFetch(`http://localhost:8000/api/users/templates/${user.uid}/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -259,7 +260,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     const loadFavorites = async () => {
       if (user) {
         try {
-          const res = await fetch(`http://localhost:8000/api/users/favorites/${user.uid}/`);
+          const res = await backendFetch(`http://localhost:8000/api/users/favorites/${user.uid}/`);
           if (res.ok) {
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
@@ -294,7 +295,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('tv_favorite_tools', JSON.stringify(newFavs));
       // Save to backend if logged in (fire-and-forget)
       if (user) {
-        fetch(`http://localhost:8000/api/users/favorites/${user.uid}/`, {
+        backendFetch(`http://localhost:8000/api/users/favorites/${user.uid}/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ favorites: newFavs })
@@ -309,7 +310,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     if (user && symbol) {
       const loadDrawings = async () => {
         try {
-          const res = await fetch(`http://localhost:8000/api/users/drawings/${user.uid}/?symbol=${symbol}`);
+          const res = await backendFetch(`http://localhost:8000/api/users/drawings/${user.uid}/?symbol=${symbol}`);
           if (res.ok) {
             const data = await res.json();
             setDrawings(data);
@@ -342,7 +343,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     if (user && symbol && !isInitialLoad) {
       const saveDrawings = async () => {
         try {
-          await fetch(`http://localhost:8000/api/users/drawings/${user.uid}/`, {
+          await backendFetch(`http://localhost:8000/api/users/drawings/${user.uid}/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

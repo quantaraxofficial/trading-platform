@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Send, Sparkles } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { backendFetch } from "@/lib/backend";
 
 interface ChatMessage {
   id: string;
@@ -46,7 +47,7 @@ export default function AgentChatPanel({ theme, onClose }: AgentChatPanelProps) 
         return;
       }
       try {
-        const res = await fetch(`http://localhost:8000/api/users/agent/insights/${uid}/`);
+        const res = await backendFetch(`http://localhost:8000/api/users/agent/insights/${uid}/`);
         const data = await res.json();
         if (cancelled) return;
         const msgs: string[] = Array.isArray(data.messages) && data.messages.length > 0
@@ -101,7 +102,7 @@ export default function AgentChatPanel({ theme, onClose }: AgentChatPanelProps) 
     setSending(true);
     setTyping(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/users/agent/strategy-note/${uid}/`, {
+      const res = await backendFetch(`http://localhost:8000/api/users/agent/strategy-note/${uid}/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),

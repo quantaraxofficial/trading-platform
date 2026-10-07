@@ -1,8 +1,10 @@
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import TraderProfile, DrawingTemplate, UserDrawing, UserSession, PineScript, UserStrategyNote
+from .models import TraderProfile, DrawingTemplate, UserDrawing, UserSession, PineScript, UserStrategyNote, UserSetting
 from django.utils import timezone
+from django.conf import settings
+from .auth import verified_uid, require_session, session_owner
 
 @api_view(['POST'])
 def sync_user(request):
@@ -13,6 +15,11 @@ def sync_user(request):
     
     if not uid:
         return Response({"error": "UID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Only the user themself can open a session: the Firebase ID token must be theirs. (Local test
+    # accounts are allowed only with ALLOW_UNVERIFIED_SIGNIN on, for development.)
+    if not settings.ALLOW_UNVERIFIED_SIGNIN and verified_uid(data.get('id_token')) != uid:
+        return Response({"error": "Sign-in could not be verified"}, status=status.HTTP_401_UNAUTHORIZED)
     
     profile, created = TraderProfile.objects.update_or_create(
         uid=uid,
@@ -61,8 +68,10 @@ def sync_user(request):
 
 @api_view(['GET'])
 def get_user_data(request, uid):
+    profile, denied = require_session(request, uid)
+    if denied:
+        return denied
     try:
-        profile = TraderProfile.objects.get(uid=uid)
         return Response({
             "name": profile.name,
             "email": profile.email,
@@ -76,10 +85,9 @@ def get_user_data(request, uid):
 
 @api_view(['GET', 'POST'])
 def manage_templates(request, uid):
-    try:
-        profile = TraderProfile.objects.get(uid=uid)
-    except TraderProfile.DoesNotExist:
-        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+    profile, denied = require_session(request, uid)
+    if denied:
+        return denied
 
     if request.method == 'GET':
         tool_type = request.query_params.get('tool_type')
@@ -106,8 +114,11 @@ def manage_templates(request, uid):
 
 @api_view(['DELETE'])
 def delete_template(request, template_id):
+    owner = session_owner(request)
+    if owner is None:
+        return Response({"error": "Session expired or logged out from another device"}, status=status.HTTP_401_UNAUTHORIZED)
     try:
-        template = DrawingTemplate.objects.get(id=template_id)
+        template = DrawingTemplate.objects.get(id=template_id, owner=owner)
         template.delete()
         return Response({"success": True})
     except DrawingTemplate.DoesNotExist:
@@ -115,10 +126,9 @@ def delete_template(request, template_id):
 
 @api_view(['GET', 'POST'])
 def manage_pinescripts(request, uid):
-    try:
-        profile = TraderProfile.objects.get(uid=uid)
-    except TraderProfile.DoesNotExist:
-        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+    profile, denied = require_session(request, uid)
+    if denied:
+        return denied
 
     if request.method == 'GET':
         scripts = PineScript.objects.filter(owner=profile)
@@ -161,8 +171,11 @@ def manage_pinescripts(request, uid):
 
 @api_view(['DELETE'])
 def delete_pinescript(request, script_id):
+    owner = session_owner(request)
+    if owner is None:
+        return Response({"error": "Session expired or logged out from another device"}, status=status.HTTP_401_UNAUTHORIZED)
     try:
-        script = PineScript.objects.get(id=script_id)
+        script = PineScript.objects.get(id=script_id, owner=owner)
         script.delete()
         return Response({"success": True})
     except PineScript.DoesNotExist:
@@ -170,17 +183,9 @@ def delete_pinescript(request, script_id):
 
 @api_view(['GET', 'POST'])
 def manage_drawings(request, uid):
-    session_key = request.headers.get('X-Session-Key') or request.query_params.get('session_key') or request.data.get('session_key')
-    
-    try:
-        profile = TraderProfile.objects.get(uid=uid)
-    except TraderProfile.DoesNotExist:
-        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-
-    # Validate session
-    if session_key:
-        if not UserSession.objects.filter(user=profile, session_key=session_key).exists():
-            return Response({"error": "Session expired or logged out from another device"}, status=status.HTTP_401_UNAUTHORIZED)
+    profile, denied = require_session(request, uid)
+    if denied:
+        return denied
 
     symbol = request.query_params.get('symbol') or request.data.get('symbol')
     # Without a symbol, a GET lists every symbol's drawings (the Object tree's "Manage layout
@@ -266,10 +271,9 @@ def create_cashfree_order(request):
 
 @api_view(['GET', 'POST'])
 def manage_chart_state(request, uid):
-    try:
-        profile = TraderProfile.objects.get(uid=uid)
-    except TraderProfile.DoesNotExist:
-        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+    profile, denied = require_session(request, uid)
+    if denied:
+        return denied
 
     from .models import ChartState
     if request.method == 'GET':
@@ -309,10 +313,9 @@ def manage_chart_state(request, uid):
 @api_view(['POST'])
 def start_backtest_session(request, uid):
     from .models import BacktestSession
-    try:
-        profile = TraderProfile.objects.get(uid=uid)
-    except TraderProfile.DoesNotExist:
-        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+    profile, denied = require_session(request, uid)
+    if denied:
+        return denied
         
     symbol = request.data.get('symbol', 'UNKNOWN')
     session = BacktestSession.objects.create(user=profile, symbol=symbol)
@@ -321,10 +324,9 @@ def start_backtest_session(request, uid):
 @api_view(['POST'])
 def log_telemetry_actions(request, uid):
     from .models import BacktestSession, UserActionLog
-    try:
-        profile = TraderProfile.objects.get(uid=uid)
-    except TraderProfile.DoesNotExist:
-        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+    profile, denied = require_session(request, uid)
+    if denied:
+        return denied
         
     session_id = request.data.get('session_id')
     actions = request.data.get('actions', [])
@@ -363,10 +365,9 @@ def get_agent_insights(request, uid):
     from .models import BacktestSession, UserActionLog
     from collections import Counter
 
-    try:
-        profile = TraderProfile.objects.get(uid=uid)
-    except TraderProfile.DoesNotExist:
-        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+    profile, denied = require_session(request, uid)
+    if denied:
+        return denied
 
     logs = UserActionLog.objects.filter(session__user=profile)
     total_actions = logs.count()
@@ -435,10 +436,9 @@ def get_agent_insights(request, uid):
 
 @api_view(['POST'])
 def submit_strategy_note(request, uid):
-    try:
-        profile = TraderProfile.objects.get(uid=uid)
-    except TraderProfile.DoesNotExist:
-        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+    profile, denied = require_session(request, uid)
+    if denied:
+        return denied
 
     text = (request.data.get('text') or '').strip()
     if not text:
@@ -522,3 +522,35 @@ def predict_bot_action(request):
         'state_used': [tf_val, longs, shorts]
     })
 
+
+
+# Settings that follow the user across devices (layouts, watchlists, chart settings, templates…).
+SYNC_MAX_VALUE = 2_000_000  # characters per setting
+
+
+@api_view(['GET', 'POST'])
+def manage_settings(request, uid):
+    profile, denied = require_session(request, uid)
+    if denied:
+        return denied
+
+    if request.method == 'GET':
+        return Response({s.key: {"value": s.value, "updated_at": s.updated_at} for s in UserSetting.objects.filter(owner=profile)})
+
+    # POST {"settings": {key: {"value": "...", "updated_at": ms}}}: each key is stored unless the
+    # server already holds a newer copy; the reply lists what the server keeps for those keys
+    incoming = request.data.get('settings') or {}
+    if not isinstance(incoming, dict):
+        return Response({"error": "settings must be an object"}, status=status.HTTP_400_BAD_REQUEST)
+    kept = {}
+    for key, item in incoming.items():
+        if not isinstance(key, str) or len(key) > 100 or not isinstance(item, dict):
+            continue
+        value, updated_at = item.get('value'), item.get('updated_at')
+        if not isinstance(value, str) or len(value) > SYNC_MAX_VALUE or not isinstance(updated_at, (int, float)):
+            continue
+        current = UserSetting.objects.filter(owner=profile, key=key).first()
+        if current is None or int(updated_at) >= current.updated_at:
+            current, _ = UserSetting.objects.update_or_create(owner=profile, key=key, defaults={'value': value, 'updated_at': int(updated_at)})
+        kept[key] = {"value": current.value, "updated_at": current.updated_at}
+    return Response(kept)

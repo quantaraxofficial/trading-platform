@@ -11,12 +11,13 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
+import { backendFetch } from "@/lib/backend";
 
 interface AuthContextType {
   user: User | null;
   userData: any | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: () => Promise<boolean>; // false when the Google window was closed
   signUp: (email: string, pass: string, name: string, phone: string) => Promise<void>;
   signIn: (email: string, pass: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -26,11 +27,29 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   userData: null,
   loading: true,
-  signInWithGoogle: async () => {},
+  signInWithGoogle: async () => false,
   signUp: async () => {},
   signIn: async () => {},
   logout: async () => {},
 });
+
+// Firebase's error codes as messages for the sign-in / sign-up forms
+function authErrorMessage(error: any): string {
+  switch (error?.code) {
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+    case 'auth/invalid-login-credentials': return 'Incorrect email or password.';
+    case 'auth/invalid-email': return "That email address isn't valid.";
+    case 'auth/user-disabled': return 'This account has been disabled.';
+    case 'auth/too-many-requests': return 'Too many attempts. Please wait a moment and try again.';
+    case 'auth/email-already-in-use': return 'An account with this email already exists. Sign in instead.';
+    case 'auth/weak-password': return 'Choose a stronger password (at least 6 characters).';
+    case 'auth/network-request-failed': return "Couldn't reach the sign-in service. Check your connection and try again.";
+    case 'auth/operation-not-allowed': return "Email sign-in isn't enabled for this site.";
+    default: return 'Sign-in failed. Please try again.';
+  }
+}
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -75,7 +94,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               name: activeUser.displayName || 'Trader',
               email: activeUser.email,
               phone: '',
-              session_key: sessionKey
+              session_key: sessionKey,
+              id_token: fbUser ? await fbUser.getIdToken() : undefined
             })
           });
           
@@ -96,6 +116,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                   email: activeUser.email,
                   phone: '',
                   session_key: sessionKey,
+                  id_token: fbUser ? await fbUser.getIdToken() : undefined,
                   force: true
                 })
               });
@@ -113,7 +134,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
           
         // Fetch full profile from Django
-          const profileRes = await fetch(`http://localhost:8000/api/users/user/${activeUser.uid}/`);
+          const profileRes = await backendFetch(`http://localhost:8000/api/users/user/${activeUser.uid}/`);
           const profileData = await profileRes.json();
           setUserData(profileData);
         } catch (error) {
@@ -131,9 +152,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signInWithGoogle = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      console.error("Error signing in with Google", error);
-      throw error;
+      return true;
+    } catch (error: any) {
+      // Closing the Google window isn't an error worth showing
+      if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') return false;
+      if (error?.code === 'auth/popup-blocked') throw new Error('The sign-in window was blocked. Allow pop-ups for this site and try again.');
+      throw new Error(authErrorMessage(error));
     }
   };
 
@@ -141,7 +165,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       const res = await createUserWithEmailAndPassword(auth, email, pass);
       await updateProfile(res.user, { displayName: name });
-      
+
       // Sync with Django API
       await fetch('http://localhost:8000/api/users/sync/', {
         method: 'POST',
@@ -150,37 +174,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           uid: res.user.uid,
           name,
           email,
-          phone
+          phone,
+          session_key: sessionKey,
+          id_token: await res.user.getIdToken()
         })
       });
     } catch (error: any) {
-      console.warn("Firebase sign up failed. Falling back to local mock signup.", error);
-      
-      // Mock signup fallback
-      const mockUid = 'mock_uid_' + Math.random().toString(36).substring(2, 10);
-      const mockUser = {
-        uid: mockUid,
-        displayName: name,
-        email: email,
-        metadata: { creationTime: new Date().toISOString() }
-      };
-      
-      localStorage.setItem('tv_mock_user', JSON.stringify(mockUser));
-      
-      // Sync with Django API
-      await fetch('http://localhost:8000/api/users/sync/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          uid: mockUid,
-          name,
-          email,
-          phone,
-          session_key: sessionKey
-        })
-      });
-      
-      setUser(mockUser as any);
+      // A failed sign-up is shown to the user (no local stand-in account)
+      throw new Error(authErrorMessage(error));
     }
   };
 
@@ -188,33 +189,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       await signInWithEmailAndPassword(auth, email, pass);
     } catch (error: any) {
-      console.warn("Firebase sign in failed. Falling back to local mock signin.", error);
-      
-      // Mock signin fallback
-      const mockUid = 'mock_uid_' + email.split('@')[0];
-      const mockUser = {
-        uid: mockUid,
-        displayName: email.split('@')[0].toUpperCase(),
-        email: email,
-        metadata: { creationTime: new Date().toISOString() }
-      };
-      
-      localStorage.setItem('tv_mock_user', JSON.stringify(mockUser));
-      
-      // Sync with Django API
-      await fetch('http://localhost:8000/api/users/sync/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          uid: mockUid,
-          name: mockUser.displayName,
-          email: email,
-          phone: '',
-          session_key: sessionKey
-        })
-      });
-      
-      setUser(mockUser as any);
+      // A wrong password etc. is an error on the form, never a local stand-in account
+      throw new Error(authErrorMessage(error));
     }
   };
 

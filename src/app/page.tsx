@@ -12,6 +12,7 @@ import OrderTicket from "./trading/OrderTicket";
 import TradingDialogs from "./trading/TradingDialogs";
 import TradingNotifications from "./trading/TradingNotifications";
 import AlertToasts from "./components/alerts/AlertToasts";
+import { isPineIndicator } from "./components/pine/usePineIndicators";
 import { requestTrade, tradingUi, useTradingUi, closeDock } from "./trading/store";
 import DockedTradingPanel from "./trading/DockedTradingPanel";
 import { useTicketPrefs } from "./trading/settings";
@@ -45,6 +46,7 @@ import { LAYOUTS } from "./lib/chartLayouts";
 import { setLayoutSync } from "./lib/layoutSync";
 import SecondaryChart from "./components/SecondaryChart";
 import { watchlists, listSymbols, sameSymbol } from "./components/watchlist/store";
+import { backendFetch, sessionKey } from "@/lib/backend";
 
 const DRAWINGS_PANEL_KEY = "tv:drawingsPanelVisible";
 const RIGHT_PANEL_KEY = "tv:rightPanelOpen";
@@ -76,7 +78,7 @@ function AppLayout() {
   const viewBarSpacingRef = useRef<number | null>(null);
   const [triggerSettings, setTriggerSettings] = useState(0);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
-  const [activeIndicators, setActiveIndicators] = useState<{id: string, name: string, visible?: boolean}[]>([]);
+  const [activeIndicators, setActiveIndicators] = useState<{id: string, name: string, visible?: boolean, inputs?: Record<string, any>}[]>([]);
   const [isBotActive, setIsBotActive] = useState(false);
   // The order ticket docked in the right column (floating otherwise)
   const tradingUiState = useTradingUi();
@@ -513,10 +515,18 @@ function AppLayout() {
   const runSnapshotRef = useRef(runSnapshot);
   runSnapshotRef.current = runSnapshot;
 
+  // The chart's indicators as last kept in this browser (signed out, or the backend unreachable)
+  const restoreLocalIndicators = () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('tv:indicators') || 'null');
+      if (Array.isArray(saved) && saved.every((i: any) => i && typeof i.id === 'string' && typeof i.name === 'string')) setActiveIndicators(saved);
+    } catch { /* none kept */ }
+  };
+
   // Load Chart State from Django Backend
   useEffect(() => {
     if (user) {
-      fetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`)
+      backendFetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`)
         .then(res => {
           if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
           return res.json();
@@ -534,13 +544,20 @@ function AppLayout() {
             setActiveIndicators(data.indicators);
           }
         })
-        // the backend being down or failing just means the chart opens with its defaults
-        .catch(err => console.warn("Chart state not loaded, using defaults:", err.message))
+        // the backend being down or failing just means the chart opens with what this browser kept
+        .catch(err => { console.warn("Chart state not loaded, using this browser's:", err.message); restoreLocalIndicators(); })
         .finally(() => setIsStateLoaded(true));
     } else {
+      restoreLocalIndicators();
       setIsStateLoaded(true);
     }
   }, [user]);
+
+  // This browser's copy of the indicators (and, through cloud sync, the account's)
+  useEffect(() => {
+    if (!isStateLoaded) return;
+    try { localStorage.setItem('tv:indicators', JSON.stringify(activeIndicators)); } catch { /* full */ }
+  }, [activeIndicators, isStateLoaded]);
 
   // Save chart state when symbol or interval changes (skip initial load)
   useEffect(() => {
@@ -554,7 +571,7 @@ function AppLayout() {
       clearTimeout((window as any).__saveChartStateTimer);
       const timer = setTimeout(() => {
         console.log(`[Page] Saving state on symbol/interval change: ${symbol} / ${selectedInterval}`);
-        fetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
+        backendFetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -574,7 +591,7 @@ function AppLayout() {
     if (user && isStateLoaded && hasLoadedOnce.current) {
       const timer = setTimeout(() => {
         console.log(`[Page] Saving indicators: ${activeIndicators.length} indicators`);
-        fetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
+        backendFetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -601,7 +618,7 @@ function AppLayout() {
       });
       // Use sendBeacon for reliable delivery during page unload
       navigator.sendBeacon(
-        `http://localhost:8000/api/users/chart_state/${user.uid}/`,
+        `http://localhost:8000/api/users/chart_state/${user.uid}/?session_key=${encodeURIComponent(sessionKey())}`,
         new Blob([payload], { type: 'application/json' })
       );
     };
@@ -626,7 +643,7 @@ function AppLayout() {
     // Signed out, the layout is still kept on this device: stay on the chart
     if (!user) { setHeaderToast("Chart layout saved"); return; }
     clearTimeout((window as any).__saveChartStateTimer);
-    fetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
+    backendFetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -675,14 +692,18 @@ function AppLayout() {
 
   const handleIndicatorSelect = (indicator: string) => {
     setActiveIndicators(prev => {
-      // Allow multiple EMAs, restrict Volume/FXN to 1
-      if (indicator !== "Moving Average Exponential" && prev.some(i => i.name === indicator)) return prev;
+      // EMAs and the Pine-based indicators can be added several times (as on TradingView); Volume / FXN once
+      if (indicator !== "Moving Average Exponential" && !isPineIndicator(indicator) && prev.some(i => i.name === indicator)) return prev;
       return [...prev, { id: Math.random().toString(36).substring(7), name: indicator }];
     });
   };
 
   const handleRemoveIndicator = (id: string) => {
     setActiveIndicators(prev => prev.filter(i => i.id !== id));
+  };
+  // An indicator's inputs / visibility, kept on its entry so they save with the layout
+  const handleUpdateIndicator = (id: string, patch: { inputs?: Record<string, any>; visible?: boolean }) => {
+    setActiveIndicators(prev => prev.map(i => (i.id === id ? { ...i, ...patch } : i)));
   };
 
   // Applying an indicator template replaces the chart's indicators with the saved set
@@ -833,6 +854,7 @@ function AppLayout() {
             symbol={symbol}
             activeIndicators={activeIndicators}
             onRemoveIndicator={handleRemoveIndicator}
+            onUpdateIndicator={handleUpdateIndicator}
             initialTargetTimestamp={targetTimestamp}
             initialBarSpacing={targetBarSpacing}
             onOpenOrderPanel={(side) => requestTrade(side, symbol)}
@@ -847,7 +869,7 @@ function AppLayout() {
                   const currentSymbol = symbolRef.current;
                   const currentInterval = intervalRef.current;
                   console.log(`[Page] Saving state to DB: sym=${currentSymbol}, int=${currentInterval}, ts=${newTimestamp}, bs=${newBarSpacing}`);
-                  fetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
+                  backendFetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 

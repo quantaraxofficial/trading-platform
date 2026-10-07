@@ -8,6 +8,7 @@
 import { makeStore, tradingSettings, type TradingSettings } from "../trading/settings";
 import { statusLine, type StatusLineSettings } from "./statusLine";
 import type { SeriesStyles } from "./seriesStyles";
+import { backendFetch } from "@/lib/backend";
 
 export type Visibility3 = "Visible on mouse over" | "Always visible" | "Always invisible";
 export const VISIBILITY3: Visibility3[] = ["Visible on mouse over", "Always visible", "Always invisible"];
@@ -149,16 +150,16 @@ const API = "http://localhost:8000/api/users/templates";
 export function saveTemplate(name: string, uid?: string | null) {
   const settings = takeSnapshot();
   chartTemplates.set(p => ({ list: [...p.list.filter(t => t.name !== name), { name, settings }].sort((a, b) => a.name.localeCompare(b.name)) }));
-  if (uid) fetch(`${API}/${uid}/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, tool_type: "chart_settings", settings }) }).catch(() => {});
+  if (uid) backendFetch(`${API}/${uid}/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, tool_type: "chart_settings", settings }) }).catch(() => {});
 }
 export function removeTemplate(name: string, uid?: string | null) {
   const t = chartTemplates.get().list.find(x => x.name === name);
   chartTemplates.set(p => ({ list: p.list.filter(x => x.name !== name) }));
-  if (uid && t?.id !== undefined) fetch(`${API}/${uid}/${t.id}/`, { method: "DELETE" }).catch(() => {});
+  if (uid && t?.id !== undefined) backendFetch(`${API}/${uid}/${t.id}/`, { method: "DELETE" }).catch(() => {});
 }
 // Merges the account's templates in (older ones only held candle / canvas colours)
 export function syncTemplatesFromAccount(uid: string) {
-  fetch(`${API}/${uid}/?tool_type=chart_settings`).then(r => (r.ok ? r.json() : [])).then((data: any[]) => {
+  backendFetch(`${API}/${uid}/?tool_type=chart_settings`).then(r => (r.ok ? r.json() : [])).then((data: any[]) => {
     if (!Array.isArray(data)) return;
     const fromAccount: ChartTemplate[] = data.filter(d => d && d.name && d.name !== "default").map(d => ({ id: d.id, name: d.name, settings: upgradeTemplate(d.settings) }));
     chartTemplates.set(p => {
