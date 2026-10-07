@@ -52,6 +52,7 @@ import { statusLine, type StatusLineSettings } from "../lib/statusLine";
 import { loadFavoriteIndicators, saveFavoriteIndicators } from "@/app/utils/favoriteIndicators";
 import { rememberExchangeTimezone, toChartTime, exchangeTimezoneOf } from "@/app/utils/exchangeTime";
 import { createSeriesMarkers } from "lightweight-charts";
+import { PineFills } from "./chartPrimitives/PineFills";
 import { precomputeAllTimeframes, getAggCachedData, setAggCachedData, AGGREGATABLE_INTERVALS } from "@/app/utils/aggregateCandles";
 
 // The full "UTC" timezone selector list — city groups exactly as shown in the reference dropdown.
@@ -1317,6 +1318,9 @@ export default function ChartContainer({
     const next = !pineVisible;
     setPineVisible(next);
     Object.values(pineSeriesRef.current).forEach((s) => { try { (s as any).applyOptions({ visible: next }); } catch { /* ignore */ } });
+    // The pane's own anchor carries the hlines; fills and pane markers hide with the plots
+    try { pineAnchorRef.current?.applyOptions({ visible: next }); } catch { /* ignore */ }
+    pineFillsRef.current?.setVisible(next);
     pineVisibleRef.current = next;
     applyAllMarkers();
   }
@@ -1413,30 +1417,108 @@ export default function ChartContainer({
   // Renders a completed PineRunResult onto the chart (series/markers/tables/
   // legend/report) — shared by the initial run (tv:run-pine-script) and by
   // re-running the same script over a different backtest date range.
+  // Removes everything a script drew: its series, its own pane (overlay=false), its fills
+  function clearPineGraphics() {
+    const chart = chartRef.current;
+    if (!chart) return;
+    Object.values(pineSeriesRef.current).forEach((s) => { try { chart.removeSeries(s); } catch { /* ignore */ } });
+    pineSeriesRef.current = {};
+    if (pineAnchorRef.current) { try { chart.removeSeries(pineAnchorRef.current); } catch { /* ignore */ } pineAnchorRef.current = null; }
+    pineFillsRef.current = null;
+    try { pinePaneMarkersRef.current?.setMarkers([]); } catch { /* ignore */ }
+    pinePaneMarkersRef.current = null;
+    if (pinePaneRef.current) {
+      try { if (chart.panes().length > 1) chart.removePane(1); } catch { /* ignore */ }
+      pinePaneRef.current = false;
+    }
+  }
+
   function applyPineResult(result: any, scriptName: string) {
     if (!chartRef.current) return;
-    Object.values(pineSeriesRef.current).forEach((s) => { try { chartRef.current!.removeSeries(s); } catch { /* ignore */ } });
-    pineSeriesRef.current = {};
-    const plots = result?.plots || [];
+    const chart = chartRef.current;
+    clearPineGraphics();
+    const allPlots: any[] = result?.plots || [];
+    // Plots with display=display.none or color=na feed fills and values, not lines
+    const plots = allPlots.filter((p: any) => !p.hidden);
+    const hlines: any[] = result?.hlines || [];
+    const fills: any[] = result?.fills || [];
+    // overlay=false (Pine's default) puts the script in its own pane under the price, as on TradingView
+    const overlay = result?.meta?.overlay !== false;
+    const pane = overlay ? 0 : 1;
+    if (!overlay) pinePaneRef.current = true;
+    const precision = result?.meta?.precision;
+    const priceFormat = typeof precision === "number" ? { priceFormat: { type: "price" as const, precision, minMove: Math.pow(10, -precision) } } : {};
+    // The pane's scale also fits its hlines (RSI's 30 / 70), as TradingView autoscales them in
+    const levels = hlines.map((h: any) => h.price);
+    const autoscaleInfoProvider = levels.length && !overlay ? (original: () => any) => {
+      const r = original();
+      const lo = Math.min(...levels), hi = Math.max(...levels);
+      if (!r || !r.priceRange) return { priceRange: { minValue: lo, maxValue: hi } };
+      return { ...r, priceRange: { minValue: Math.min(r.priceRange.minValue, lo), maxValue: Math.max(r.priceRange.maxValue, hi) } };
+    } : undefined;
+
     plots.forEach((p: any, idx: number) => {
       try {
         const color = plotColorOverrides[p.title] || p.color;
-        const s = chartRef.current!.addSeries(LineSeries, {
-          color,
-          lineWidth: 2,
-          title: p.title,
-          crosshairMarkerVisible: true,
-          // The actual line is painted by CandleBodyAwareLine below (ducking under
-          // candle bodies); this series stays invisible but still drives the
-          // price-axis label, crosshair value and tooltip/legend readouts.
-          lineVisible: false,
-        });
+        const common = { title: p.title, priceLineVisible: false, lastValueVisible: true, ...priceFormat, ...(autoscaleInfoProvider ? { autoscaleInfoProvider } : {}) };
+        let s: any;
+        if (p.style === "histogram" || p.style === "columns") {
+          s = chart.addSeries(HistogramSeries, { color, ...common }, pane);
+        } else if (p.style === "area") {
+          s = chart.addSeries(AreaSeries, { lineColor: color, topColor: color, bottomColor: "rgba(0, 0, 0, 0)", lineWidth: p.lineWidth ?? 1, ...common } as any, pane);
+        } else {
+          const dots = p.style === "circles" || p.style === "cross";
+          s = chart.addSeries(LineSeries, {
+            color,
+            lineWidth: p.lineWidth ?? 1,
+            lineType: p.style === "stepline" ? LineType.WithSteps : LineType.Simple,
+            crosshairMarkerVisible: true,
+            pointMarkersVisible: dots,
+            // On the price chart the line is painted by CandleBodyAwareLine (ducking under candle
+            // bodies) and this series only drives the axis label, crosshair and legend values
+            lineVisible: !overlay && !dots,
+            ...common,
+          }, pane);
+          if (overlay) s.attachPrimitive(new CandleBodyAwareLine());
+        }
         s.setData(p.values);
-        s.attachPrimitive(new CandleBodyAwareLine());
         pineSeriesRef.current[idx] = s;
       } catch { /* ignore */ }
     });
-    pineMarkersRef.current = result?.markers || [];
+
+    // hlines, fills and pane markers hang off one series of the pane; with no visible plot there,
+    // an invisible one spanning the bars
+    if (!overlay && (hlines.length || fills.length || (result?.markers || []).length)) {
+      let anchor: any = pineSeriesRef.current[0];
+      if (!anchor) {
+        const bars = fullDataRef.current;
+        const v = levels.length ? levels[0] : 0;
+        anchor = chart.addSeries(LineSeries, { lineVisible: false, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false, ...(autoscaleInfoProvider ? { autoscaleInfoProvider } : {}) }, pane);
+        anchor.setData(bars.length ? [{ time: bars[0].time, value: v }, { time: bars[bars.length - 1].time, value: v }] : []);
+        pineAnchorRef.current = anchor;
+      }
+      const dash: Record<string, number> = { solid: LineStyle.Solid, dotted: LineStyle.Dotted, dashed: LineStyle.Dashed };
+      hlines.forEach((h: any) => {
+        try { anchor.createPriceLine({ price: h.price, color: h.color, lineWidth: h.lineWidth, lineStyle: dash[h.lineStyle] ?? LineStyle.Dashed, axisLabelVisible: false, title: "" }); } catch { /* ignore */ }
+      });
+      if (fills.length) {
+        const prim = new PineFills(fills, allPlots, hlines);
+        anchor.attachPrimitive(prim);
+        pineFillsRef.current = prim;
+      }
+      if ((result?.markers || []).length) {
+        try { pinePaneMarkersRef.current = createSeriesMarkers(anchor, result.markers); } catch { /* ignore */ }
+      }
+    } else if (overlay && fills.length && pineSeriesRef.current[0]) {
+      const prim = new PineFills(fills, allPlots, hlines);
+      pineSeriesRef.current[0].attachPrimitive(prim as any);
+      pineFillsRef.current = prim;
+    }
+    // TradingView gives an indicator pane about a quarter of the chart
+    if (!overlay) { try { chart.panes()[0]?.setStretchFactor(3); chart.panes()[1]?.setStretchFactor(1); } catch { /* ignore */ } }
+
+    // An overlay script's markers join the trade markers on the candles
+    pineMarkersRef.current = overlay ? (result?.markers || []) : [];
     setPineVisible(true);
     applyAllMarkers();
     setPineTables(result?.tables || []);
@@ -1444,11 +1526,16 @@ export default function ChartContainer({
     setStrategyReport(report || null);
     setStrategyScriptName(report ? (scriptName || "Strategy") : "");
     setPineLegend({
-      name: scriptName || (report ? "Strategy" : "Script"),
+      // The legend uses the script's short title ("RSI"), as TradingView's does
+      name: result?.meta?.shortTitle || scriptName || (report ? "Strategy" : "Script"),
       inputs: result?.inputs || [],
       plots: plots.map((p: any) => ({ title: p.title, color: plotColorOverrides[p.title] || p.color, lastValue: p.values?.length ? p.values[p.values.length - 1].value : null })),
     });
   }
+  const pinePaneRef = useRef(false);
+  const pineAnchorRef = useRef<any>(null);
+  const pineFillsRef = useRef<PineFills | null>(null);
+  const pinePaneMarkersRef = useRef<any>(null);
 
   // The chart only ever holds as much history as has actually been fetched
   // (an initial ~5000-bar load, plus whatever infinite-scroll has backfilled)
@@ -1675,8 +1762,7 @@ export default function ChartContainer({
     }
     function handleClearPine() {
       if (!chartRef.current) return;
-      Object.values(pineSeriesRef.current).forEach((s) => { try { chartRef.current!.removeSeries(s); } catch { /* ignore */ } });
-      pineSeriesRef.current = {};
+      clearPineGraphics();
       pineMarkersRef.current = [];
       applyAllMarkers();
       setPineTables([]);
@@ -3107,6 +3193,7 @@ export default function ChartContainer({
       emasRef.current = {};
       emaExtrasRef.current = {};
       pineSeriesRef.current = {};
+      pineAnchorRef.current = null; pineFillsRef.current = null; pinePaneMarkersRef.current = null; pinePaneRef.current = false;
       setChart(null); setSeries(null);
     };
     // Built once: a theme switch only recolours the chart (the canvas-colours effect applies the
@@ -3823,9 +3910,11 @@ export default function ChartContainer({
         const indicatorBg = legendBg(sl.indBackground, sl.indBackgroundOpacity);
 
         const rows: React.ReactNode[] = [];
+        // A script in its own pane (overlay=false) has its legend at the top of that pane
+        const pinePaneTop = pinePaneRef.current ? chartRef.current?.panes()[0]?.getHeight() : undefined;
         if (pineLegend) rows.push(
+          <div key="pine" style={pinePaneTop ? { position: "absolute", top: pinePaneTop - 2, left: 0 } : undefined}>
           <PineScriptLegendRow
-            key="pine"
             name={pineLegend.name}
             inputs={pineLegend.inputs}
             plots={pineLegend.plots}
@@ -3840,6 +3929,7 @@ export default function ChartContainer({
             }))}
             onRemove={removePineScript}
           />
+          </div>
         );
         activeIndicators?.forEach(ind => {
           if (ind.name === "Volume") {

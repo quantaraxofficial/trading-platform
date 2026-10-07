@@ -1,4 +1,5 @@
 import { PINE_CATALOG } from "./pineCatalog";
+import * as B from "./pineBuiltins";
 // A small, self-contained Pine Script (v5/v6-ish) interpreter.
 // It supports the subset of the language that shows up in typical simple
 // indicators/strategies: variable assignment (`=`, `:=`, `var`, typed
@@ -26,14 +27,33 @@ export interface PinePlotResult {
   title: string;
   color: string;
   values: { time: number; value: number }[];
+  lineWidth?: number;
+  style?: string;      // plot.style_* suffix: line, stepline, histogram, columns, circles, cross, area
+  hidden?: boolean;    // display=display.none or color=na: kept for fill() and the data window, not drawn
+}
+
+// hline(): a horizontal level in the script's pane
+export interface PineHline { id: number; price: number; title: string; color: string; lineStyle: string; lineWidth: number }
+
+// fill(): the area between two plots or two hlines. With topValue/bottomValue it is a gradient
+// from topColor (at topValue) to bottomColor (at bottomValue), clipped to that range.
+export interface PineFill {
+  a: { kind: "plot" | "hline"; index: number };
+  b: { kind: "plot" | "hline"; index: number };
+  title: string;
+  color?: string;
+  topValue?: number; bottomValue?: number; topColor?: string; bottomColor?: string;
+  hidden?: boolean;
 }
 
 export interface PineMarker {
   time: number;
-  position: "aboveBar" | "belowBar";
+  position: "aboveBar" | "belowBar" | "atPriceTop" | "atPriceBottom" | "atPriceMiddle";
   color: string;
-  shape: "arrowUp" | "arrowDown" | "circle";
+  shape: "arrowUp" | "arrowDown" | "circle" | "square";
   text: string;
+  price?: number;      // location.absolute: drawn at this value
+  textColor?: string;
 }
 
 export interface PineScriptError {
@@ -94,6 +114,8 @@ export interface PineStrategyReport {
 
 export interface PineRunResult {
   plots: PinePlotResult[];
+  hlines?: PineHline[];
+  fills?: PineFill[];
   markers: PineMarker[];
   tables: PineTableResult[];
   strategyReport: PineStrategyReport | null;
@@ -101,19 +123,19 @@ export interface PineRunResult {
   logs: string[];
   warnings: string[];
   errors: PineScriptError[];
-  meta: { title: string; isStrategy: boolean; overlay: boolean; initialCapital: number; pyramiding?: number; defaultQtyValue?: number; defaultQtyType?: string };
+  meta: { title: string; shortTitle?: string; isStrategy: boolean; overlay: boolean; initialCapital: number; pyramiding?: number; defaultQtyValue?: number; defaultQtyType?: string; precision?: number };
   execMs: number;
   // Profiler mode: time spent on each script line (inclusive of the lines a block contains) and
   // how many times it ran
   profile?: { line: number; ms: number; count: number }[];
 }
 
+// Pine's color.* constants, with TradingView's values
 const COLOR_NAMES: Record<string, string> = {
-  red: "#ef5350", green: "#26a69a", blue: "#2962ff", orange: "#ff9800",
-  purple: "#9c27b0", yellow: "#ffeb3b", lime: "#8bc34a", aqua: "#00bcd4",
-  fuchsia: "#e040fb", gray: "#787b86", grey: "#787b86", white: "#ffffff",
-  black: "#000000", teal: "#009688", maroon: "#800000", navy: "#001f3f",
-  olive: "#808000", silver: "#c0c0c0", pink: "#ff4081", magenta: "#e040fb",
+  red: "#F23645", green: "#089981", blue: "#2962FF", orange: "#FF9800",
+  purple: "#9C27B0", yellow: "#FDD835", lime: "#00E676", aqua: "#00BCD4",
+  fuchsia: "#E040FB", gray: "#787B86", white: "#FFFFFF", black: "#363A45",
+  teal: "#00897B", maroon: "#880E4F", navy: "#311B92", olive: "#808000", silver: "#B2B5BE",
 };
 
 const PALETTE = ["#2962ff", "#ef5350", "#26a69a", "#ff9800", "#9c27b0", "#00bcd4"];
@@ -208,9 +230,11 @@ type Expr =
   | { type: "cmp"; op: string; left: Expr; right: Expr }
   | { type: "arith"; op: string; left: Expr; right: Expr }
   | { type: "ternary"; cond: Expr; t: Expr; f: Expr }
-  | { type: "histref"; base: Expr; offset: Expr }
+  | { type: "histref"; base: Expr; offset: Expr; id: number }
   | { type: "call"; name: string; args: Expr[]; namedArgs: Record<string, Expr>; id: number }
-  | { type: "tuple"; items: Expr[] };
+  | { type: "tuple"; items: Expr[] }
+  // switch [subject] / arms `value => body` (or `cond => body` without a subject); `=> body` is the default
+  | { type: "switch"; subject: Expr | null; arms: { cond: Expr | null; body: Stmt[] }[] };
 
 interface FuncParam { name: string; default: Expr | null }
 interface FunctionDef { name: string; params: FuncParam[]; body: Stmt[] }
@@ -506,7 +530,7 @@ function parseExpression(text: string, nextId: () => number): Expr {
       consume();
       const idx = parseTernary();
       expect("]");
-      node = { type: "histref", base: node, offset: idx };
+      node = { type: "histref", base: node, offset: idx, id: nextId() };
     }
     return node;
   }
@@ -588,10 +612,16 @@ function stripComment(raw: string): string {
 
 function parseMeta(text: string, meta: PineRunResult["meta"]) {
   meta.isStrategy = /^strategy\s*\(/.test(text);
-  const titleMatch = text.match(/\(\s*"((?:[^"\\]|\\.)*)"/);
+  // indicator("Name", ...) or indicator(title="Name", shorttitle="RSI", ...)
+  const titleMatch = text.match(/\(\s*"((?:[^"\\]|\\.)*)"/) || text.match(/[(,]\s*title\s*=\s*"((?:[^"\\]|\\.)*)"/);
   if (titleMatch) meta.title = titleMatch[1];
+  const shortMatch = text.match(/shorttitle\s*=\s*"((?:[^"\\]|\\.)*)"/);
+  if (shortMatch) meta.shortTitle = shortMatch[1];
+  // Pine's default is overlay=false: the script gets its own pane
   const overlayMatch = text.match(/overlay\s*=\s*(true|false)/);
-  if (overlayMatch) meta.overlay = overlayMatch[1] === "true";
+  meta.overlay = overlayMatch ? overlayMatch[1] === "true" : false;
+  const precisionMatch = text.match(/precision\s*=\s*(\d+)/);
+  if (precisionMatch) meta.precision = parseInt(precisionMatch[1], 10);
   const capMatch = text.match(/initial_capital\s*=\s*(-?[0-9.]+)/);
   if (capMatch) meta.initialCapital = parseFloat(capMatch[1]);
   const pyramidingMatch = text.match(/pyramiding\s*=\s*([0-9]+)/);
@@ -719,7 +749,31 @@ function splitForHeader(text: string): { varName: string; fromText: string; toTe
 // nested body — so it's always safe to fold such lines back together here,
 // before block structure is parsed.
 function startsBlock(text: string): boolean {
-  return /^if\b/.test(text) || /^else\b/.test(text) || /^while\b/.test(text) || splitForHeader(text) !== null || matchFuncDecl(text) !== null;
+  return /^if\b/.test(text) || /^else\b/.test(text) || /^while\b/.test(text) || splitForHeader(text) !== null || matchFuncDecl(text) !== null
+    || switchHead(text) !== null || armSplit(text) !== null;
+}
+
+// `switch x`, `y = switch x`, `var float y = switch`: the text before `switch`, and its subject
+function switchHead(text: string): { prefix: string; subject: string } | null {
+  const m = text.match(/^((?:var(?:ip)?\s+)?(?:[a-zA-Z_][a-zA-Z0-9_.<>]*\s+)?[a-zA-Z_][a-zA-Z0-9_]*\s*(?::=|=)\s*)?switch\b\s*(.*)$/);
+  if (!m) return null;
+  return { prefix: m[1] || "", subject: m[2].trim() };
+}
+
+// A switch arm `cond => body`, split at its top-level `=>` (not one inside brackets or a string).
+// `name(params) => …` is a function declaration, not an arm.
+function armSplit(text: string): { cond: string; body: string } | null {
+  if (matchFuncDecl(text)) return null;
+  let depth = 0, inStr: string | null = null;
+  for (let i = 0; i < text.length - 1; i++) {
+    const c = text[i];
+    if (inStr) { if (c === "\\") { i++; continue; } if (c === inStr) inStr = null; continue; }
+    if (c === '"' || c === "'") { inStr = c; continue; }
+    if (c === "(" || c === "[") depth++;
+    else if (c === ")" || c === "]") depth--;
+    else if (depth === 0 && c === "=" && text[i + 1] === ">") return { cond: text.slice(0, i).trim(), body: text.slice(i + 2).trim() };
+  }
+  return null;
 }
 
 function mergeIndentContinuations(lines: Line[]): Line[] {
@@ -829,6 +883,38 @@ function parseBlock(lines: Line[], start: number, indent: number, nextId: () => 
   let i = start;
   while (i < lines.length && lines[i].indent >= indent) {
     const line = lines[i];
+    const sw = switchHead(line.text);
+    if (sw) {
+      const subject = sw.subject ? withLine(line.lineNo, () => parseExpression(sw.subject, nextId)) : null;
+      const arms: { cond: Expr | null; body: Stmt[] }[] = [];
+      i++;
+      if (i < lines.length && lines[i].indent > line.indent) {
+        const armIndent = lines[i].indent;
+        while (i < lines.length && lines[i].indent >= armIndent) {
+          const armLine = lines[i];
+          const parts = armSplit(armLine.text);
+          if (!parts || armLine.indent !== armIndent) {
+            const e = new PineError("Syntax error: each switch case needs the form `value => result`", "CE10001");
+            e.line = armLine.lineNo;
+            throw e;
+          }
+          const cond = parts.cond ? withLine(armLine.lineNo, () => parseExpression(parts.cond, nextId)) : null;
+          i++;
+          let body: Stmt[] = [];
+          if (parts.body) body = [parseSimpleStatement({ indent: armIndent + 1, text: parts.body, lineNo: armLine.lineNo }, nextId)];
+          else if (i < lines.length && lines[i].indent > armIndent) { const res = parseBlock(lines, i, lines[i].indent, nextId); body = res.stmts; i = res.next; }
+          arms.push({ cond, body });
+        }
+      }
+      const swExpr: Expr = { type: "switch", subject, arms };
+      if (sw.prefix) {
+        // `x = switch …`: an ordinary assignment whose value is the switch
+        const assign = parseSimpleStatement({ indent: line.indent, text: sw.prefix + "na", lineNo: line.lineNo }, nextId);
+        if (assign.type === "assign") assign.expr = swExpr;
+        stmts.push(assign);
+      } else stmts.push({ type: "expr", expr: swExpr, line: line.lineNo });
+      continue;
+    }
     const fnDecl = matchFuncDecl(line.text);
     const forHeader = !fnDecl ? splitForHeader(line.text) : null;
     if (fnDecl) {
@@ -888,7 +974,7 @@ interface Ctx {
   profile?: Map<number, { ms: number; count: number }>;
   vars: Record<string, any>;
   varHistory: Record<string, any[]>;
-  callState: Record<number, CallState>;
+  callState: Record<string | number, CallState>;
   plots: Record<number, PinePlotResult>;
   plotOrder: number[];
   markers: PineMarker[];
@@ -931,6 +1017,10 @@ interface Ctx {
   // "all"/entire-history case).
   backtestFrom?: number;
   backtestTo?: number;
+  mintick?: number;
+  hlines?: PineHline[];
+  fills?: PineFill[];
+  fillSeen?: Set<number>;
 }
 
 function truthy(v: any): boolean {
@@ -979,6 +1069,32 @@ function resolveIdent(name: string, ctx: Ctx): any {
     case "currency.USD": return "USD";
     case "true": return true;
     case "false": return false;
+    case "hlcc4": return (ctx.bar.high + ctx.bar.low + 2 * ctx.bar.close) / 4;
+    case "last_bar_index": return ctx.bars.length - 1;
+    case "timenow": return Date.now();
+    case "math.pi": return Math.PI;
+    case "math.e": return Math.E;
+    case "math.phi": return 1.618033988749895;
+    case "math.rphi": return 0.618033988749895;
+    case "syminfo.mintick": return minTick(ctx);
+    case "barstate.isfirst": return ctx.barIndex === 0;
+    case "barstate.islast": case "barstate.islastconfirmedhistory": return ctx.barIndex === ctx.bars.length - 1;
+    case "barstate.ishistory": return ctx.barIndex < ctx.bars.length - 1;
+    case "barstate.isrealtime": return false;
+    case "barstate.isnew": case "barstate.isconfirmed": return true;
+    case "dayofweek.sunday": return 1;
+    case "dayofweek.monday": return 2;
+    case "dayofweek.tuesday": return 3;
+    case "dayofweek.wednesday": return 4;
+    case "dayofweek.thursday": return 5;
+    case "dayofweek.friday": return 6;
+    case "dayofweek.saturday": return 7;
+    // Built-in series variables that need state: one per name
+    case "ta.tr": return B.tr({}, ctx, false);
+    case "ta.vwap": return B.vwap((ctx.callState["v:ta.vwap"] = ctx.callState["v:ta.vwap"] || {}), ctx, (ctx.bar.high + ctx.bar.low + ctx.bar.close) / 3);
+    case "ta.obv": return B.obv((ctx.callState["v:ta.obv"] = ctx.callState["v:ta.obv"] || {}), ctx);
+    case "ta.accdist": return B.accdist((ctx.callState["v:ta.accdist"] = ctx.callState["v:ta.accdist"] || {}), ctx);
+    case "ta.pvt": return B.pvt((ctx.callState["v:ta.pvt"] = ctx.callState["v:ta.pvt"] || {}), ctx);
   }
   if (name.startsWith("color.")) {
     const c = COLOR_NAMES[name.slice(6)];
@@ -1096,7 +1212,9 @@ function execFunctionBody(stmts: Stmt[], ctx: Ctx): any {
           lastValue = ctx.vars[s.name];
           break;
         case "expr":
-          lastValue = evalNode(s.expr, ctx);
+          // Orders, logs, table cells… inside a function or a switch case still happen
+          if (s.expr.type === "call" && isSideEffectCall(s.expr.name)) { execExprStatement(s.expr, ctx); lastValue = NaN; }
+          else lastValue = evalNode(s.expr, ctx);
           break;
       }
     } catch (err) {
@@ -1109,6 +1227,11 @@ function execFunctionBody(stmts: Stmt[], ctx: Ctx): any {
   return lastValue;
 }
 
+const SIDE_EFFECT_CALLS = new Set(["fill", "bgcolor", "barcolor", "alert", "alertcondition", "table.cell", "table.clear", "strategy.entry", "strategy.exit", "strategy.close", "strategy.close_all", "strategy.cancel", "strategy.cancel_all", "strategy.order"]);
+function isSideEffectCall(name: string): boolean {
+  return SIDE_EFFECT_CALLS.has(name) || name.startsWith("log.") || name.startsWith("label.") || name.startsWith("line.") || name.startsWith("box.");
+}
+
 function callUserFunction(fn: FunctionDef, node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
   // evalCall already lazily creates ctx.callState[node.id] as {} for every
   // call (builtins use it directly); that object is truthy, so `||` alone
@@ -1116,7 +1239,10 @@ function callUserFunction(fn: FunctionDef, node: Extract<Expr, { type: "call" }>
   const cs = (ctx.callState[node.id] = ctx.callState[node.id] || {});
   if (!cs.localVars) cs.localVars = {};
   if (!cs.localVarHistory) cs.localVarHistory = {};
-  const fnCtx: Ctx = { ...ctx, vars: cs.localVars, varHistory: cs.localVarHistory };
+  // Each call site keeps its own series state for the ta.* calls inside the function, as in
+  // Pine: ma(rsi, 14) and ma(close, 50) don't share one moving average
+  if (!cs.innerState) cs.innerState = {};
+  const fnCtx: Ctx = { ...ctx, vars: cs.localVars, varHistory: cs.localVarHistory, callState: cs.innerState };
   fn.params.forEach((p, idx) => {
     let v: any;
     if (node.namedArgs[p.name] !== undefined) v = evalNode(node.namedArgs[p.name], ctx);
@@ -1206,90 +1332,90 @@ function evalRequestSecurityLowerTf(node: Extract<Expr, { type: "call" }>, ctx: 
   return out;
 }
 
+const DRAWING_NAMESPACES = ["label.", "line.", "box.", "linefill.", "polyline.", "chart.point."];
+// Every function in Pine's reference ("ta.rma", "math.abs", "plot", …) from the editor's catalog
+const PINE_FUNCTIONS = new Set(Object.entries(PINE_CATALOG).flatMap(([ns, entries]) => entries.filter((e) => e[1] === "function").map((e) => (ns ? `${ns}.${e[0]}` : e[0]))));
+
+// syminfo.mintick, estimated from the decimals the bars are quoted in
+function minTick(ctx: Ctx): number {
+  const g = ctx.globalCtx || ctx;
+  if (g.mintick === undefined) {
+    let dec = 0;
+    for (const b of g.bars.slice(-50)) for (const v of [b.open, b.high, b.low, b.close]) { const t = String(v).split(".")[1]; if (t) dec = Math.max(dec, Math.min(t.length, 8)); }
+    g.mintick = Math.pow(10, -dec);
+  }
+  return g.mintick;
+}
+
 function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
   const name = node.name;
   const cs = (ctx.callState[node.id] = ctx.callState[node.id] || {});
   const argAt = (i: number) => (node.args[i] !== undefined ? evalNode(node.args[i], ctx) : undefined);
+  // An argument given by position or by its Pine parameter name, else the default
+  const A = (i: number, key: string, def?: any): any => {
+    if (node.namedArgs[key] !== undefined) return evalNode(node.namedArgs[key], ctx);
+    if (node.args[i] !== undefined) return evalNode(node.args[i], ctx);
+    return def === undefined ? NaN : def;
+  };
 
   switch (name) {
-    case "ta.sma": {
-      const v = argAt(0), len = Math.round(argAt(1));
-      const hist = pushBarIdempotent(cs, "s", ctx.barIndex, v);
-      if (hist.length < len) return NaN;
-      const slice = hist.slice(-len);
-      return slice.reduce((a, b) => a + b, 0) / len;
-    }
-    case "ta.ema": {
-      const v = argAt(0), len = argAt(1);
-      const alpha = 2 / (len + 1);
-      if (cs.lastBar !== ctx.barIndex) {
-        cs.ema = cs.ema === undefined ? v : v * alpha + cs.ema * (1 - alpha);
-        cs.lastBar = ctx.barIndex;
-      }
-      return cs.ema;
-    }
-    case "ta.rsi": {
-      const v = argAt(0), len = argAt(1);
-      if (cs.lastBar !== ctx.barIndex) {
-        if (cs.prev === undefined) { cs.avgGain = 0; cs.avgLoss = 0; }
-        else {
-          const diff = v - cs.prev;
-          const gain = Math.max(diff, 0), loss = Math.max(-diff, 0);
-          if (cs.avgGain === undefined) { cs.avgGain = gain; cs.avgLoss = loss; }
-          else { cs.avgGain = (cs.avgGain * (len - 1) + gain) / len; cs.avgLoss = (cs.avgLoss * (len - 1) + loss) / len; }
-        }
-        cs.prev = v;
-        cs.lastBar = ctx.barIndex;
-      }
-      if (!cs.avgLoss) return cs.avgGain ? 100 : 50;
-      const rs = cs.avgGain / cs.avgLoss;
-      return 100 - 100 / (1 + rs);
-    }
-    case "ta.highest": {
-      const v = argAt(0), len = Math.round(argAt(1));
-      const hist = pushBarIdempotent(cs, "s", ctx.barIndex, v);
-      if (hist.length < len) return NaN;
-      return Math.max(...hist.slice(-len));
-    }
-    case "ta.lowest": {
-      const v = argAt(0), len = Math.round(argAt(1));
-      const hist = pushBarIdempotent(cs, "s", ctx.barIndex, v);
-      if (hist.length < len) return NaN;
-      return Math.min(...hist.slice(-len));
-    }
-    case "ta.atr": {
-      const len = Math.round(argAt(0));
-      const prevClose = ctx.barIndex > 0 ? ctx.bars[ctx.barIndex - 1].close : ctx.bar.close;
-      const tr = Math.max(ctx.bar.high - ctx.bar.low, Math.abs(ctx.bar.high - prevClose), Math.abs(ctx.bar.low - prevClose));
-      if (cs.lastBar !== ctx.barIndex) {
-        cs.atr = cs.atr === undefined ? tr : (cs.atr * (len - 1) + tr) / len;
-        cs.lastBar = ctx.barIndex;
-      }
-      return cs.atr;
-    }
-    case "ta.crossover":
-    case "ta.crossunder": {
-      const a = argAt(0), b = argAt(1);
-      let result = false;
-      if (cs.lastBar !== ctx.barIndex) {
-        if (cs.prevA !== undefined) {
-          result = name === "ta.crossover" ? cs.prevA <= cs.prevB && a > b : cs.prevA >= cs.prevB && a < b;
-        }
-        cs.prevA = a; cs.prevB = b; cs.result = result; cs.lastBar = ctx.barIndex;
-      } else {
-        result = cs.result;
-      }
-      return result;
-    }
-    case "ta.change": {
-      const v = argAt(0);
-      if (cs.lastBar !== ctx.barIndex) {
-        cs.result = cs.prev === undefined ? NaN : v - cs.prev;
-        cs.prev = v;
-        cs.lastBar = ctx.barIndex;
-      }
-      return cs.result;
-    }
+    // ---- ta.*: the indicator library (pineBuiltins.ts), one series state per call site ----
+    case "ta.sma": return B.sma(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.ema": return B.ema(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.rma": return B.rma(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.wma": return B.wma(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.vwma": return B.vwma(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.hma": return B.hma(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.swma": return B.swma(cs, ctx, A(0, "source"));
+    case "ta.alma": return B.alma(cs, ctx, A(0, "series"), A(1, "length"), A(2, "offset", 0.85), A(3, "sigma", 6), truthy(A(4, "floor", false)));
+    case "ta.stdev": return B.stdev(cs, ctx, A(0, "source"), A(1, "length"), truthy(A(2, "biased", true)));
+    case "ta.variance": return B.variance(cs, ctx, A(0, "source"), A(1, "length"), truthy(A(2, "biased", true)));
+    case "ta.dev": return B.dev(cs, ctx, A(0, "source"), A(1, "length"));
+    // ta.highest(length) / ta.lowest(length) read high / low
+    case "ta.highest": return node.args.length + Object.keys(node.namedArgs).length >= 2 ? B.highest(cs, ctx, A(0, "source"), A(1, "length")) : B.highest(cs, ctx, ctx.bar.high, A(0, "length"));
+    case "ta.lowest": return node.args.length + Object.keys(node.namedArgs).length >= 2 ? B.lowest(cs, ctx, A(0, "source"), A(1, "length")) : B.lowest(cs, ctx, ctx.bar.low, A(0, "length"));
+    case "ta.highestbars": return node.args.length + Object.keys(node.namedArgs).length >= 2 ? B.highestbars(cs, ctx, A(0, "source"), A(1, "length")) : B.highestbars(cs, ctx, ctx.bar.high, A(0, "length"));
+    case "ta.lowestbars": return node.args.length + Object.keys(node.namedArgs).length >= 2 ? B.lowestbars(cs, ctx, A(0, "source"), A(1, "length")) : B.lowestbars(cs, ctx, ctx.bar.low, A(0, "length"));
+    case "ta.change": return B.change(cs, ctx, A(0, "source"), A(1, "length", 1));
+    case "ta.mom": return B.mom(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.roc": return B.roc(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.rising": return B.rising(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.falling": return B.falling(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.crossover": return B.crossover(cs, ctx, A(0, "source1"), A(1, "source2"));
+    case "ta.crossunder": return B.crossunder(cs, ctx, A(0, "source1"), A(1, "source2"));
+    case "ta.cross": return B.cross(cs, ctx, A(0, "source1"), A(1, "source2"));
+    case "ta.tr": return B.tr(cs, ctx, truthy(A(0, "handle_na", false)));
+    case "ta.atr": return B.atr(cs, ctx, A(0, "length"));
+    // ta.pivothigh(left, right) / ta.pivotlow(left, right) read high / low
+    case "ta.pivothigh": return node.args.length + Object.keys(node.namedArgs).length >= 3 ? B.pivothigh(cs, ctx, A(0, "source"), A(1, "leftbars"), A(2, "rightbars")) : B.pivothigh(cs, ctx, ctx.bar.high, A(0, "leftbars"), A(1, "rightbars"));
+    case "ta.pivotlow": return node.args.length + Object.keys(node.namedArgs).length >= 3 ? B.pivotlow(cs, ctx, A(0, "source"), A(1, "leftbars"), A(2, "rightbars")) : B.pivotlow(cs, ctx, ctx.bar.low, A(0, "leftbars"), A(1, "rightbars"));
+    case "ta.cum": return B.cum(cs, ctx, A(0, "source"));
+    case "math.sum": return B.sum(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.max": return B.allTimeMax(cs, ctx, A(0, "source"));
+    case "ta.min": return B.allTimeMin(cs, ctx, A(0, "source"));
+    case "ta.linreg": return B.linreg(cs, ctx, A(0, "source"), A(1, "length"), A(2, "offset", 0));
+    case "ta.correlation": return B.correlation(cs, ctx, A(0, "source1"), A(1, "source2"), A(2, "length"));
+    case "ta.percentrank": return B.percentrank(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.percentile_linear_interpolation": return B.percentile(cs, ctx, A(0, "source"), A(1, "length"), A(2, "percentage"), true);
+    case "ta.percentile_nearest_rank": return B.percentile(cs, ctx, A(0, "source"), A(1, "length"), A(2, "percentage"), false);
+    case "ta.median": return B.median(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.range": return B.range(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.cci": return B.cci(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.cmo": return B.cmo(cs, ctx, A(0, "series"), A(1, "length"));
+    case "ta.rsi": return B.rsi(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.mfi": return B.mfi(cs, ctx, A(0, "series"), A(1, "length"));
+    case "ta.stoch": return B.stoch(cs, ctx, A(0, "source"), A(1, "high"), A(2, "low"), A(3, "length"));
+    case "ta.wpr": return B.wpr(cs, ctx, A(0, "length"));
+    case "ta.tsi": return B.tsi(cs, ctx, A(0, "source"), A(1, "short_length"), A(2, "long_length"));
+    case "ta.macd": return B.macd(cs, ctx, A(0, "source"), A(1, "fastlen"), A(2, "slowlen"), A(3, "siglen"));
+    case "ta.bb": return B.bb(cs, ctx, A(0, "series"), A(1, "length"), A(2, "mult"));
+    case "ta.bbw": return B.bbw(cs, ctx, A(0, "series"), A(1, "length"), A(2, "mult"));
+    case "ta.kc": return B.kc(cs, ctx, A(0, "series"), A(1, "length"), A(2, "mult"), truthy(A(3, "useTrueRange", true)));
+    case "ta.kcw": return B.kcw(cs, ctx, A(0, "series"), A(1, "length"), A(2, "mult"), truthy(A(3, "useTrueRange", true)));
+    case "ta.dmi": return B.dmi(cs, ctx, A(0, "diLength"), A(1, "adxSmoothing"));
+    case "ta.sar": return B.sar(cs, ctx, A(0, "start"), A(1, "inc"), A(2, "max"));
+    case "ta.supertrend": return B.supertrend(cs, ctx, A(0, "factor"), A(1, "atrPeriod"));
+    case "ta.vwap": return B.vwap(cs, ctx, A(0, "source", (ctx.bar.high + ctx.bar.low + ctx.bar.close) / 3));
     case "ta.barssince": {
       const cond = truthy(argAt(0));
       if (cs.lastBar !== ctx.barIndex) {
@@ -1307,6 +1433,7 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
       }
       return cs.hist && cs.hist[occurrence] !== undefined ? cs.hist[occurrence] : NaN;
     }
+    case "fixnan": { const v = argAt(0); if (!B.isNa(v)) cs.last = v; return cs.last ?? NaN; }
     case "str.tostring": {
       const v = argAt(0);
       if (typeof v === "boolean") return v ? "true" : "false";
@@ -1338,21 +1465,81 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
     case "second": return new Date(node.args[0] !== undefined ? argAt(0) : ctx.bar.time * 1000).getUTCSeconds();
     case "math.max": return Math.max(...node.args.map((_, i) => argAt(i)));
     case "math.min": return Math.min(...node.args.map((_, i) => argAt(i)));
+    case "math.avg": { const xs = node.args.map((_, i) => Number(argAt(i))); return xs.reduce((a, b) => a + b, 0) / xs.length; }
     case "math.abs": return Math.abs(argAt(0));
-    case "math.round": return Math.round(argAt(0));
+    case "math.round": {
+      const v = argAt(0), prec = node.args[1] !== undefined ? Math.round(argAt(1)) : 0;
+      if (B.isNa(v)) return NaN;
+      const f = Math.pow(10, prec);
+      return Math.round(v * f) / f;
+    }
+    case "math.round_to_mintick": { const t = minTick(ctx); return Math.round(argAt(0) / t) * t; }
     case "math.floor": return Math.floor(argAt(0));
     case "math.ceil": return Math.ceil(argAt(0));
     case "math.sqrt": return Math.sqrt(argAt(0));
     case "math.pow": return Math.pow(argAt(0), argAt(1));
+    case "math.log": return Math.log(argAt(0));
+    case "math.log10": return Math.log10(argAt(0));
+    case "math.exp": return Math.exp(argAt(0));
+    case "math.sign": return Math.sign(argAt(0));
+    case "math.sin": return Math.sin(argAt(0));
+    case "math.cos": return Math.cos(argAt(0));
+    case "math.tan": return Math.tan(argAt(0));
+    case "math.asin": return Math.asin(argAt(0));
+    case "math.acos": return Math.acos(argAt(0));
+    case "math.atan": return Math.atan(argAt(0));
+    case "math.todegrees": return (argAt(0) * 180) / Math.PI;
+    case "math.toradians": return (argAt(0) * Math.PI) / 180;
+    case "math.random": { const lo = node.args[0] !== undefined ? argAt(0) : 0, hi = node.args[1] !== undefined ? argAt(1) : 1; return lo + Math.random() * (hi - lo); }
     case "nz": { const v = argAt(0); const fb = node.args[1] !== undefined ? argAt(1) : 0; return v === undefined || (typeof v === "number" && isNaN(v)) ? fb : v; }
-    case "na": { const v = argAt(0); return typeof v === "number" && isNaN(v); }
-    case "color.new": return argAt(0);
+    case "na": { const v = argAt(0); return v === undefined || v === null || (typeof v === "number" && isNaN(v)); }
+    case "int": { const v = argAt(0); return B.isNa(v) ? NaN : Math.trunc(v); }
+    case "float": return Number(argAt(0));
+    case "bool": return truthy(argAt(0));
+    case "string": return String(argAt(0));
+    case "timestamp": {
+      // timestamp(year, month, day, hour, minute, second) or timestamp(timezone, year, …), UTC
+      const xs = node.args.map((_, i) => argAt(i)).filter((x) => typeof x === "number");
+      if (!xs.length) { const t = Date.parse(String(argAt(0))); return isNaN(t) ? NaN : t; }
+      return Date.UTC(xs[0], (xs[1] ?? 1) - 1, xs[2] ?? 1, xs[3] ?? 0, xs[4] ?? 0, xs[5] ?? 0);
+    }
+
+    // ---- color.* ----
+    case "color.new": return B.colorNew(A(0, "color"), A(1, "transp", 0));
+    case "color.rgb": return B.colorRgb(A(0, "red"), A(1, "green"), A(2, "blue"), A(3, "transp", 0));
+    case "color.r": return B.colorPart(argAt(0), "r");
+    case "color.g": return B.colorPart(argAt(0), "g");
+    case "color.b": return B.colorPart(argAt(0), "b");
+    case "color.t": return B.colorPart(argAt(0), "t");
+    case "color.from_gradient": return B.fromGradient(A(0, "value"), A(1, "bottom_value"), A(2, "top_value"), A(3, "bottom_color"), A(4, "top_color"));
+
+    // ---- str.* ----
+    case "str.contains": return String(argAt(0)).includes(String(argAt(1)));
+    case "str.startswith": return String(argAt(0)).startsWith(String(argAt(1)));
+    case "str.endswith": return String(argAt(0)).endsWith(String(argAt(1)));
+    case "str.pos": { const i = String(argAt(0)).indexOf(String(argAt(1))); return i < 0 ? NaN : i; }
+    case "str.lower": return String(argAt(0)).toLowerCase();
+    case "str.upper": return String(argAt(0)).toUpperCase();
+    case "str.trim": return String(argAt(0)).trim();
+    case "str.substring": { const s = String(argAt(0)); return node.args[2] !== undefined ? s.substring(argAt(1), argAt(2)) : s.substring(argAt(1)); }
+    case "str.replace": {
+      const s = String(argAt(0)), target = String(argAt(1)), repl = String(argAt(2)), occ = node.args[3] !== undefined ? Math.round(argAt(3)) : 0;
+      let from = 0;
+      for (let k = 0; k <= occ; k++) { const at = s.indexOf(target, from); if (at < 0) return s; if (k === occ) return s.slice(0, at) + repl + s.slice(at + target.length); from = at + target.length; }
+      return s;
+    }
+    case "str.replace_all": return String(argAt(0)).split(String(argAt(1))).join(String(argAt(2)));
+    case "str.split": return String(argAt(0)).split(String(argAt(1)));
+    case "str.repeat": { const n = Math.max(0, Math.round(argAt(1))); const sep = node.args[2] !== undefined ? String(argAt(2)) : ""; return new Array(n).fill(String(argAt(0))).join(sep); }
     case "input": case "input.int": case "input.float": case "input.bool": case "input.string": case "input.color":
-    case "input.timeframe": case "input.session": case "input.symbol": case "input.source": case "input.text_area": {
+    case "input.timeframe": case "input.session": case "input.symbol": case "input.source": case "input.text_area": case "input.price": case "input.time": {
       const v = node.namedArgs.defval ? evalNode(node.namedArgs.defval, ctx) : (node.args[0] !== undefined ? argAt(0) : NaN);
       // Captured once (bar 0) for the on-chart legend line, which lists each
       // input's current value the way TradingView's own legend does.
-      if (ctx.barIndex === 0) ctx.inputsList.push({ value: v, isBool: name === "input.bool" });
+      // input.source shows its source's name ("close"), not a price
+      const src = node.namedArgs.defval ?? node.args[0];
+      const label = name === "input.source" && src?.type === "ident" ? src.name : v;
+      if (ctx.barIndex === 0) ctx.inputsList.push({ value: label, isBool: name === "input.bool" });
       return v;
     }
 
@@ -1421,7 +1608,13 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
     default: {
       const fn = ctx.functions[name];
       if (fn) return callUserFunction(fn, node, ctx);
-      return NaN;
+      // Drawing objects (labels, lines, boxes…) aren't drawn here yet: the script still runs
+      if (DRAWING_NAMESPACES.some((ns) => name.startsWith(ns))) {
+        warnOnce(ctx, `'${name.split(".")[0]}.*' drawings aren't supported by this editor yet and were skipped.`);
+        return NaN;
+      }
+      // A function we don't have stops the script with a clear error instead of quietly giving na
+      throw new PineError(PINE_FUNCTIONS.has(name) ? `'${name}()' isn't supported by this editor yet` : `Could not find function or function reference '${name}'`, "CE10003");
     }
   }
 }
@@ -1471,21 +1664,44 @@ function evalNode(node: Expr, ctx: Ctx): any {
         const h = ctx.varHistory[bn];
         return h && h[idx] !== undefined ? h[idx] : NaN;
       }
-      return evalNode(node.base, ctx); // best effort: no history for compound expressions
+      // `ta.sma(close, 5)[1]`, `(a + b)[2]`: this expression's own per-bar history
+      const cs = (ctx.callState[`h${node.id}`] = ctx.callState[`h${node.id}`] || { hist: [] as any[], bar: -1 });
+      const cur = evalNode(node.base, ctx);
+      if (cs.bar !== ctx.barIndex) { cs.hist[ctx.barIndex] = cur; cs.bar = ctx.barIndex; }
+      const v = cs.hist[idx];
+      return v === undefined ? NaN : v;
     }
+    case "switch": return evalSwitch(node, ctx);
     case "call":
-      // `u = plot(...)` (a plot kept for fill()) still draws: the call's side effect runs,
-      // and the plot's id stands in for its value
-      if (node.name === "plot" || node.name === "plotshape" || node.name === "plotchar" || node.name === "hline") { execExprStatement(node, ctx); return node.name === "hline" ? NaN : node.id; }
+      // `u = plot(...)` / `h = hline(...)` (kept for fill()) still draw: the call's side effect
+      // runs, and a reference to the plot / level stands in for its value
+      if (node.name === "plot" || node.name === "plotshape" || node.name === "plotchar" || node.name === "hline") {
+        execExprStatement(node, ctx);
+        if (node.name === "plot") return { __plot: node.id };
+        if (node.name === "hline") return { __hline: node.id };
+        return NaN;
+      }
       return evalCall(node, ctx);
     case "tuple": return node.items.map((it) => evalNode(it, ctx));
   }
   return NaN;
 }
 
-const KNOWN_IGNORED_CALLS = new Set(["hline", "fill", "bgcolor", "alertcondition", "alert", "barcolor", "runtime.error"]);
+// The first matching case's block runs and gives the switch its value; no match is na
+function evalSwitch(node: Extract<Expr, { type: "switch" }>, ctx: Ctx): any {
+  const subject = node.subject ? evalNode(node.subject, ctx) : undefined;
+  for (const arm of node.arms) {
+    const hit = arm.cond === null ? true : node.subject ? evalNode(arm.cond, ctx) === subject : truthy(evalNode(arm.cond, ctx));
+    if (hit) return execFunctionBody(arm.body, ctx);
+  }
+  return NaN;
+}
+
+// Drawing-only calls with no effect on values: accepted so scripts run, not drawn here
+const KNOWN_IGNORED_CALLS = new Set(["bgcolor", "alertcondition", "alert", "barcolor", "runtime.error", "max_bars_back", "library", "export"]);
 
 function execExprStatement(node: Expr, ctx: Ctx) {
+  if (node.type === "switch") { evalSwitch(node, ctx); return; }
   if (node.type !== "call") return;
   const name = node.name;
   const argAt = (i: number) => (node.args[i] !== undefined ? evalNode(node.args[i], ctx) : undefined);
@@ -1496,25 +1712,101 @@ function execExprStatement(node: Expr, ctx: Ctx) {
     return typeof v === "string" ? v : null;
   };
 
+  // An argument by position or Pine parameter name (plot(series, title, color, linewidth, style, …))
+  const arg = (i: number, key: string): any => {
+    if (node.namedArgs[key] !== undefined) return evalNode(node.namedArgs[key], ctx);
+    if (node.args[i] !== undefined) return evalNode(node.args[i], ctx);
+    return undefined;
+  };
+  const isNaColor = (c: any) => c === undefined ? false : typeof c !== "string" || (B.parseColor(c)?.a === 0);
+  // The bar `offset` bars away (plots / shapes drawn shifted), or null off the chart
+  const shiftedTime = (offset: any) => {
+    const o = typeof offset === "number" && !isNaN(offset) ? Math.round(offset) : 0;
+    const b = ctx.bars[ctx.barIndex + o];
+    return b ? b.time : null;
+  };
+
   if (name === "plot") {
     if (!ctx.plots[node.id]) {
-      const title = node.namedArgs.title ? String(evalNode(node.namedArgs.title, ctx)) : `Plot ${ctx.plotOrder.length + 1}`;
-      const color = namedColor("color") || PALETTE[ctx.plotOrder.length % PALETTE.length];
-      ctx.plots[node.id] = { title, color, values: [] };
+      const t = arg(1, "title");
+      const title = t !== undefined && typeof t === "string" ? t : `Plot ${ctx.plotOrder.length + 1}`;
+      const c = arg(2, "color");
+      const color = typeof c === "string" ? c : PALETTE[ctx.plotOrder.length % PALETTE.length];
+      const lw = arg(3, "linewidth");
+      const style = arg(4, "style");
+      const display = arg(11, "display");
+      ctx.plots[node.id] = {
+        title, color, values: [],
+        lineWidth: typeof lw === "number" && lw > 0 ? lw : undefined,
+        style: typeof style === "string" ? style.replace(/^style_/, "") : undefined,
+        // color=na hides it; a per-bar color that starts transparent doesn't
+        hidden: display === "none" || (c !== undefined && typeof c !== "string"),
+      };
       ctx.plotOrder.push(node.id);
     }
+    const plot = ctx.plots[node.id];
     const v = argAt(0);
-    if (typeof v === "number" && !isNaN(v)) ctx.plots[node.id].values.push({ time: ctx.bar.time, value: v });
+    const time = shiftedTime(arg(7, "offset"));
+    if (time !== null && typeof v === "number" && !isNaN(v)) {
+      // A per-bar color (color=cond ? a : b) colors that point
+      const c = node.namedArgs.color !== undefined || node.args[2] !== undefined ? arg(2, "color") : undefined;
+      const point: any = { time, value: v };
+      if (typeof c === "string" && c !== plot.color) point.color = isNaColor(c) ? "rgba(0, 0, 0, 0)" : c;
+      plot.values.push(point);
+    }
+    return;
+  }
+  if (name === "hline") {
+    if (!ctx.hlines) ctx.hlines = [];
+    if (!ctx.hlines.some((h) => h.id === node.id)) {
+      const price = Number(arg(0, "price"));
+      const t = arg(1, "title"), c = arg(2, "color"), ls = arg(3, "linestyle"), lw = arg(4, "linewidth"), display = arg(6, "display");
+      if (!isNaN(price) && display !== "none") {
+        ctx.hlines.push({ id: node.id, price, title: typeof t === "string" ? t : "", color: typeof c === "string" ? c : "#787B86", lineStyle: typeof ls === "string" ? ls.replace(/^style_/, "") : "dashed", lineWidth: typeof lw === "number" ? lw : 1 });
+      }
+    }
+    return;
+  }
+  if (name === "fill") {
+    // Recorded once, from the bar it first runs on; the ends are plots or hlines
+    if (!ctx.fillSeen) ctx.fillSeen = new Set();
+    if (ctx.fillSeen.has(node.id)) return;
+    ctx.fillSeen.add(node.id);
+    const ref = (v: any): PineFill["a"] | null => v && typeof v === "object" ? (v.__plot !== undefined ? { kind: "plot", index: v.__plot } : v.__hline !== undefined ? { kind: "hline", index: v.__hline } : null) : null;
+    const a = ref(argAt(0)), b = ref(argAt(1));
+    if (!a || !b) return;
+    // fill(p1, p2, top_value, bottom_value, top_color, bottom_color, …) is the gradient form
+    const gradient = node.namedArgs.top_color !== undefined || (node.args.length >= 6 && typeof argAt(2) === "number");
+    const fill: PineFill = gradient
+      ? { a, b, title: String(arg(6, "title") ?? ""), topValue: Number(arg(2, "top_value")), bottomValue: Number(arg(3, "bottom_value")), topColor: arg(4, "top_color"), bottomColor: arg(5, "bottom_color"), hidden: arg(7, "display") === "none" }
+      : { a, b, title: String(arg(3, "title") ?? ""), color: arg(2, "color"), hidden: arg(a.kind === "hline" ? 6 : 7, "display") === "none" };
+    if (!gradient && (typeof fill.color !== "string" || isNaColor(fill.color))) fill.hidden = true;
+    (ctx.fills = ctx.fills || []).push(fill);
     return;
   }
   if (name === "plotshape" || name === "plotchar") {
-    const cond = truthy(argAt(0));
-    if (!cond) return;
-    const loc = node.namedArgs.location ? String(evalNode(node.namedArgs.location, ctx)) : "abovebar";
-    const below = /below/i.test(loc);
-    const color = namedColor("color") || "#2962ff";
-    const text = node.namedArgs.text ? String(evalNode(node.namedArgs.text, ctx)) : "";
-    ctx.markers.push({ time: ctx.bar.time, position: below ? "belowBar" : "aboveBar", color, shape: "circle", text });
+    // A bool shows the shape when true; a number shows it when not na (and is its price with
+    // location.absolute)
+    const v = argAt(0);
+    if (typeof v === "number" ? isNaN(v) : !truthy(v)) return;
+    const isChar = name === "plotchar";
+    const style = isChar ? "" : String(arg(2, "style") ?? "xcross");
+    const loc = String(arg(isChar ? 3 : 3, "location") ?? "abovebar");
+    const time = shiftedTime(arg(isChar ? 5 : 5, "offset"));
+    if (time === null) return;
+    const c = arg(isChar ? 4 : 4, "color");
+    if (isNaColor(c)) return;
+    const color = typeof c === "string" ? c : "#2962FF";
+    const tc = arg(7, "textcolor");
+    const t = arg(6, "text");
+    const text = isChar ? String(arg(2, "char") ?? "★") + (typeof t === "string" ? ` ${t}` : "") : typeof t === "string" ? t.trim() : "";
+    const up = /up$/i.test(style), down = /down$/i.test(style);
+    const shape: PineMarker["shape"] = up ? "arrowUp" : down ? "arrowDown" : /square|diamond/i.test(style) ? "square" : "circle";
+    let position: PineMarker["position"];
+    let price: number | undefined;
+    if (/absolute/i.test(loc) && typeof v === "number") { price = v; position = down ? "atPriceTop" : up ? "atPriceBottom" : "atPriceMiddle"; }
+    else position = /below|bottom/i.test(loc) ? "belowBar" : "aboveBar";
+    ctx.markers.push({ time, position, color, shape, text, price, textColor: typeof tc === "string" ? tc : undefined });
     return;
   }
   if (name === "strategy.entry") {
@@ -1593,10 +1885,9 @@ function execExprStatement(node: Expr, ctx: Ctx) {
     return;
   }
   if (KNOWN_IGNORED_CALLS.has(name) || name.startsWith("strategy.")) return;
-  if (!ctx.warned.has(name)) {
-    ctx.warned.add(name);
-    ctx.warnings.push(`'${name}(...)' is not supported by this editor's built-in runtime and was skipped.`);
-  }
+  // Anything else (a user function called for its effects, label.new(…), array.* …) is an
+  // ordinary call: evalCall runs it, or raises the error for a function we don't have
+  evalCall(node, ctx);
 }
 
 function execStmts(stmts: Stmt[], ctx: Ctx) {
@@ -1681,6 +1972,7 @@ function checkUndeclared(stmts: Stmt[]) {
   const declared = new Set<string>();
   const collect = (list: Stmt[]) => {
     for (const s of list) {
+      if ((s.type === "assign" || s.type === "expr") && s.expr.type === "switch") s.expr.arms.forEach(a => collect(a.body));
       if (s.type === "assign") declared.add(s.name);
       else if (s.type === "tupleAssign") s.names.forEach(n => declared.add(n));
       else if (s.type === "funcdef") { declared.add(s.def.name); s.def.params.forEach(p => declared.add(p.name)); collect(s.def.body); }
@@ -1703,6 +1995,7 @@ function checkUndeclared(stmts: Stmt[]) {
       case "histref": walk(e.base, line); walk(e.offset, line); return;
       case "call": e.args.forEach(a => walk(a, line)); Object.values(e.namedArgs).forEach(a => walk(a, line)); return;
       case "tuple": e.items.forEach(a => walk(a, line)); return;
+      case "switch": walk(e.subject, line); e.arms.forEach(a => { walk(a.cond, line); visit(a.body); }); return;
     }
   };
   const visit = (list: Stmt[]) => {
@@ -1758,6 +2051,12 @@ function executeParsed(stmts: Stmt[], meta: PineRunResult["meta"], bars: Bar[], 
       execStmts(stmts, ctx);
     }
     result.plots = ctx.plotOrder.map((id) => ctx.plots[id]);
+    result.hlines = ctx.hlines || [];
+    // fill() ends point at plots / hlines by their position in those lists
+    result.fills = (ctx.fills || []).map((f) => {
+      const at = (r: PineFill["a"]) => ({ kind: r.kind, index: r.kind === "plot" ? ctx.plotOrder.indexOf(r.index) : (ctx.hlines || []).findIndex((h) => h.id === r.index) });
+      return { ...f, a: at(f.a), b: at(f.b) };
+    }).filter((f) => f.a.index >= 0 && f.b.index >= 0);
     result.markers = ctx.markers;
     result.tables = ctx.tables.map((t: any) => ({
       position: t.position, columns: t.columns, rows: t.rows,
@@ -1819,6 +2118,7 @@ function collectRequestTimeframes(stmts: Stmt[], inputOverrides?: Record<string,
       case "ternary": visitExpr(e.cond); visitExpr(e.t); visitExpr(e.f); break;
       case "histref": visitExpr(e.base); visitExpr(e.offset); break;
       case "tuple": e.items.forEach(visitExpr); break;
+      case "switch": if (e.subject) visitExpr(e.subject); e.arms.forEach(a => { if (a.cond) visitExpr(a.cond); visitStmts(a.body); }); break;
     }
   };
   const visitStmts = (list: Stmt[]) => {
