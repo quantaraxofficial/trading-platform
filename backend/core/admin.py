@@ -1,5 +1,22 @@
 from django.contrib import admin
-from .models import TraderProfile, BacktestSession, UserActionLog
+from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest
+
+@admin.register(FailedRequest)
+class FailedRequestAdmin(admin.ModelAdmin):
+    """Why a user's request did not come back: who, which endpoint, status, and the reason."""
+    list_display = ("created_at", "user", "source", "path", "method", "status_code", "reason_code", "ip")
+    list_filter = ("source", "status_code", "reason_code", "user")
+    date_hierarchy = "created_at"  # day/week/month drill-down (change_list block; the default admin index template doesn't render list_filter)
+    search_fields = ("path", "reason_message", "user__name", "user__email", "session_key")
+    readonly_fields = ("created_at", "user", "session_key", "source", "path",
+                       "method", "status_code", "reason_code", "reason_message",
+                       "user_agent", "ip")
+    ordering = ("-created_at",)
+
+    def has_add_permission(self, request):
+        return False   # records are system-generated, not hand-entered
+    def has_change_permission(self, request, obj=None):
+        return False   # read-only detail view
 
 @admin.register(TraderProfile)
 class TraderProfileAdmin(admin.ModelAdmin):

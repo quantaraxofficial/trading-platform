@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { reportServerFailure } from '@/lib/requestTracker';
 
 // Symbol search over the data provider (TwelveData's symbol_search, which also understands
 // "xauusd" for XAU/USD or "eurusd" for EUR/USD). Results are cached for a while per query.
@@ -18,7 +19,10 @@ export async function GET(request: Request) {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL) return NextResponse.json({ data: hit.hits });
   const apikey = process.env.TWELVEDATA_API_KEY;
-  if (!apikey) return NextResponse.json({ data: [], error: 'No data provider key' });
+  if (!apikey) {
+    reportServerFailure({ path: '/api/symbol-search', method: 'GET', status_code: 500, reason_code: 'api_key_missing', reason_message: 'No data provider key' });
+    return NextResponse.json({ data: [], error: 'No data provider key' });
+  }
   try {
     const r = await fetch(`https://api.twelvedata.com/symbol_search?symbol=${encodeURIComponent(q)}&outputsize=30&apikey=${apikey}`);
     const d = await r.json();
@@ -33,6 +37,7 @@ export async function GET(request: Request) {
     cache.set(key, { at: Date.now(), hits });
     return NextResponse.json({ data: hits });
   } catch {
+    reportServerFailure({ path: '/api/symbol-search', method: 'GET', status_code: 500, reason_code: 'search_failed', reason_message: 'Connection to TwelveData symbol_search failed' });
     return NextResponse.json({ data: [], error: 'Search failed' });
   }
 }

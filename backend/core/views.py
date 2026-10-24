@@ -1,10 +1,11 @@
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import TraderProfile, DrawingTemplate, UserDrawing, UserSession, PineScript, UserStrategyNote, UserSetting
+from .models import TraderProfile, DrawingTemplate, UserDrawing, UserSession, PineScript, UserStrategyNote, UserSetting, FailedRequest
 from django.utils import timezone
 from django.conf import settings
-from .auth import verified_uid, require_session, session_owner
+from .auth import verified_uid, require_session, session_owner, session_key_of
+from .middleware import get_client_ip
 
 @api_view(['POST'])
 def sync_user(request):
@@ -320,6 +321,38 @@ def start_backtest_session(request, uid):
     symbol = request.data.get('symbol', 'UNKNOWN')
     session = BacktestSession.objects.create(user=profile, symbol=symbol)
     return Response({'session_id': session.id})
+
+@api_view(['POST'])
+def track_failure(request):
+    """Browser self-report of a request that did not come back to the user (a Next.js /api/*
+    data-route failure, or a cloud-sync miss). The Django middleware already records the
+    /api/users/* failures authoritatively, so this only ingests what the middleware cannot
+    see. Always 200: the report must never become a tracked failure of itself, and it must
+    not block the caller (the browser posts it fire-and-forget)."""
+    owner = session_owner(request)
+    data = request.data or {}
+    path = str(data.get("path") or "")[:300]
+    if len(path) < 4:
+        return Response({"success": False, "error": "path is required"})
+    reason_code = str(data.get("reason_code") or "frontend_error")[:60]
+    reason_message = str(data.get("reason_message") or "")[:500]
+    try:
+        status_code = int(data.get("status_code") or 0)
+    except (TypeError, ValueError):
+        status_code = 0
+    FailedRequest.objects.create(
+        user=owner,
+        session_key=session_key_of(request) or "",
+        source=FailedRequest.Source.FRONTEND,
+        path=path,
+        method=str(data.get("method") or "GET")[:10],
+        status_code=status_code,
+        reason_code=reason_code,
+        reason_message=reason_message,
+        user_agent=str(request.headers.get("User-Agent", ""))[:300],
+        ip=get_client_ip(request),
+    )
+    return Response({"success": True})
 
 @api_view(['POST'])
 def log_telemetry_actions(request, uid):

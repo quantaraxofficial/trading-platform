@@ -61,6 +61,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'axes.middleware.AxesMiddleware', # Must be after AuthenticationMiddleware
     'csp.middleware.CSPMiddleware', # Content Security Policy
+    'core.middleware.FailedRequestMiddleware', # Records failed /api/users/* requests for the admin
 ]
 
 # Configure Authentication Backends to use Axes

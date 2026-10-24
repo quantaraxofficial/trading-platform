@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { reportServerFailure } from '@/lib/requestTracker';
 
 // TwelveData natively supported intervals
 const NATIVE_INTERVALS = new Set([
@@ -131,6 +132,7 @@ export async function GET(request: Request) {
   const apikey = process.env.TWELVEDATA_API_KEY;
 
   if (!apikey) {
+    reportServerFailure({ path: '/api/stock-data', method: 'GET', status_code: 500, reason_code: 'api_key_missing', reason_message: 'TwelveData API key not configured' });
     return NextResponse.json({ error: 'API key not configured' }, { status: 500 });
   }
 
@@ -142,10 +144,12 @@ export async function GET(request: Request) {
       const response = await fetch(`https://api.twelvedata.com/earliest_timestamp?symbol=${encodeURIComponent(symbol)}&interval=${base}&timezone=UTC&apikey=${apikey}`);
       const data = await response.json();
       if (data.status === 'error' || !data.datetime) {
+        reportServerFailure({ path: '/api/stock-data', method: 'GET', status_code: 400, reason_code: 'twelve_data_error', reason_message: data.message || 'Earliest date unavailable' });
         return NextResponse.json({ error: data.message || 'Earliest date unavailable' }, { status: 400 });
       }
       return NextResponse.json({ datetime: data.datetime, unix_time: data.unix_time });
     } catch {
+      reportServerFailure({ path: '/api/stock-data', method: 'GET', status_code: 500, reason_code: 'twelve_data_error', reason_message: 'Connection to TwelveData failed (earliest)' });
       return NextResponse.json({ error: 'Connection to TwelveData failed' }, { status: 500 });
     }
   }
@@ -172,6 +176,7 @@ export async function GET(request: Request) {
       const data = await response.json();
 
       if (data.status === 'error') {
+        reportServerFailure({ path: '/api/stock-data', method: 'GET', status_code: 400, reason_code: 'twelve_data_error', reason_message: data.message });
         return NextResponse.json({ error: data.message }, { status: 400 });
       }
 
@@ -187,6 +192,7 @@ export async function GET(request: Request) {
         status: 'ok',
       });
     } catch (error) {
+      reportServerFailure({ path: '/api/stock-data', method: 'GET', status_code: 500, reason_code: 'twelve_data_error', reason_message: 'Connection to TwelveData failed (custom interval)' });
       return NextResponse.json({ error: 'Connection to TwelveData failed' }, { status: 500 });
     }
   }
@@ -222,6 +228,7 @@ export async function GET(request: Request) {
         status: 'ok',
       });
     } catch (error) {
+      reportServerFailure({ path: '/api/stock-data', method: 'GET', status_code: 500, reason_code: 'twelve_data_error', reason_message: 'Connection to TwelveData failed (custom month interval)' });
       return NextResponse.json({ error: 'Connection to TwelveData failed' }, { status: 500 });
     }
   }
@@ -240,11 +247,13 @@ export async function GET(request: Request) {
     const data = await response.json();
 
     if (data.status === 'error') {
+      reportServerFailure({ path: '/api/stock-data', method: 'GET', status_code: 400, reason_code: 'twelve_data_error', reason_message: data.message });
       return NextResponse.json({ error: data.message }, { status: 400 });
     }
 
     return NextResponse.json(data);
   } catch (error) {
+    reportServerFailure({ path: '/api/stock-data', method: 'GET', status_code: 500, reason_code: 'twelve_data_error', reason_message: 'Connection to TwelveData failed' });
     return NextResponse.json({ error: 'Connection to TwelveData failed' }, { status: 500 });
   }
 }

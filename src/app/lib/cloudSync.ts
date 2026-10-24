@@ -5,6 +5,7 @@
 // recent change wins.
 
 import { reloadStore } from "../trading/settings";
+import { reportFailure } from "@/lib/requestTracker";
 
 const API = "http://localhost:8000/api/users/settings/";
 
@@ -89,7 +90,10 @@ async function push() {
   if (!Object.keys(settings).length) return;
   try {
     const res = await fetch(url(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ settings }) });
-    if (!res.ok) { retryLater(keys); return; }
+    if (!res.ok) {
+      reportFailure({ path: `${API}${encodeURIComponent(uid || "")}/`, method: "POST", status_code: res.status, reason_code: "cloud_sync_failed", reason_message: `settings upload failed (${res.status})` });
+      retryLater(keys); return;
+    }
     // The server keeps a newer copy (changed on another device meanwhile): take that one
     const kept = await res.json();
     const applied: string[] = [];
@@ -97,7 +101,8 @@ async function push() {
       if (item && item.updated_at > (settings[k]?.updated_at ?? 0)) { applyRemote(k, item.value, item.updated_at); applied.push(k); }
     }
     if (applied.length) window.dispatchEvent(new CustomEvent("tv:cloud-sync", { detail: { keys: applied } }));
-  } catch {
+  } catch (err: any) {
+    reportFailure({ path: `${API}${encodeURIComponent(uid || "")}/`, method: "POST", status_code: 0, reason_code: "cloud_sync_failed", reason_message: `settings upload threw: ${String(err?.message || err)}` });
     retryLater(keys); // offline or the server busy
   }
 }
@@ -109,9 +114,15 @@ export async function pullAndMerge(): Promise<string[]> {
   let remote: Record<string, { value: string; updated_at: number }> = {};
   try {
     const res = await fetch(url());
-    if (!res.ok) return [];
+    if (!res.ok) {
+      reportFailure({ path: `${API}${encodeURIComponent(uid || "")}/`, method: "GET", status_code: res.status, reason_code: "cloud_sync_failed", reason_message: `settings pull failed (${res.status})` });
+      return [];
+    }
     remote = await res.json();
-  } catch { return []; }
+  } catch (err: any) {
+    reportFailure({ path: `${API}${encodeURIComponent(uid || "")}/`, method: "GET", status_code: 0, reason_code: "cloud_sync_failed", reason_message: `settings pull threw: ${String(err?.message || err)}` });
+    return [];
+  }
   const meta = readMeta();
   const applied: string[] = [];
   for (const key of SYNCED_KEYS) {

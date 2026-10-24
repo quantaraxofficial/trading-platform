@@ -106,6 +106,40 @@ class UserActionLog(models.Model):
     def __str__(self):
         return f"{self.action_type} at {self.timestamp}"
 
+class FailedRequest(models.Model):
+    """A single user request that did NOT come back to the user successfully.
+
+    Captured two ways: a Django after-response middleware records every failed
+    /api/users/* call (source='backend'), and a browser self-report endpoint records
+    failures the middleware never sees — Next.js /api/* data-route errors and cloud-sync
+    misses (source='frontend'). Only failures are stored; successes are dropped on the way.
+    """
+    class Source(models.TextChoices):
+        BACKEND = "backend", "Backend (Django)"
+        FRONTEND = "frontend", "Frontend (browser)"
+
+    user = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL,
+                             null=True, blank=True, related_name='failed_requests')
+    session_key = models.CharField(max_length=255, blank=True)
+    source = models.CharField(max_length=10, choices=Source.choices, default=Source.BACKEND)
+    path = models.CharField(max_length=300)            # /api/users/drawings/<uid>/ or /api/stock-data
+    method = models.CharField(max_length=10)
+    status_code = models.PositiveIntegerField(default=0)
+    reason_code = models.CharField(max_length=60, default="")    # stable code, e.g. session_expired
+    reason_message = models.CharField(max_length=500, blank=True)  # the human-readable "why"
+    user_agent = models.CharField(max_length=300, blank=True)
+    ip = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["created_at"]),
+                   models.Index(fields=["status_code"]),
+                   models.Index(fields=["source", "created_at"])]
+
+    def __str__(self):
+        return f"{self.source} {self.method} {self.path} -> {self.status_code} ({self.reason_code})"
+
 class UserSetting(models.Model):
     """One synced app setting of a user (a saved layout list, watchlists, chart settings…), so they
     follow the user across devices. `value` is the JSON text the browser keeps for that key;

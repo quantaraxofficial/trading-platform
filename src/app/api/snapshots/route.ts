@@ -3,6 +3,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { SNAPSHOT_DIR, SnapshotMeta } from '@/app/lib/snapshotStore';
+import { reportServerFailure } from '@/lib/requestTracker';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -13,9 +14,11 @@ const clean = (v: string | null, max: number) => (v || '').replace(/[\u0000-\u00
 export async function POST(request: Request) {
   const bytes = Buffer.from(await request.arrayBuffer());
   if (bytes.length === 0 || bytes.length > MAX_BYTES) {
+    reportServerFailure({ path: '/api/snapshots', method: 'POST', status_code: 400, reason_code: 'snapshot_rejected', reason_message: `Image is empty or too large (${bytes.length} bytes)` });
     return NextResponse.json({ error: 'Image is empty or too large' }, { status: 400 });
   }
   if (!bytes.subarray(0, 8).equals(PNG_SIGNATURE)) {
+    reportServerFailure({ path: '/api/snapshots', method: 'POST', status_code: 400, reason_code: 'snapshot_rejected', reason_message: 'Only PNG images are accepted' });
     return NextResponse.json({ error: 'Only PNG images are accepted' }, { status: 400 });
   }
 

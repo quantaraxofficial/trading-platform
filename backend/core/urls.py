@@ -17,4 +17,5 @@ urlpatterns = [
     path('bot/predict/', views.predict_bot_action, name='predict_bot_action'),
     path('agent/insights/<str:uid>/', views.get_agent_insights, name='get_agent_insights'),
     path('agent/strategy-note/<str:uid>/', views.submit_strategy_note, name='submit_strategy_note'),
+    path('track-failure/', views.track_failure, name='track_failure'),
 ]
