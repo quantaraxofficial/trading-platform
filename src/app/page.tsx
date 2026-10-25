@@ -52,13 +52,16 @@ const RIGHT_PANEL_KEY = "tv:rightPanelOpen";
 // Short toolbar label for an interval value ("15min" → "15m", "1day" → "D")
 function intervalToLabel(interval: string): string | undefined {
   const labelMap: Record<string, string> = {
+    "30s": "30s",
     "1min": "1m", "5min": "5m", "15min": "15m", "30min": "30m", "45min": "45m",
     "1h": "1h", "2h": "2h", "4h": "4h", "1day": "D", "1week": "W", "1month": "M"
   };
   if (labelMap[interval]) return labelMap[interval];
-  // Custom intervals like "4min" -> "4m"
+  // Custom intervals like "4min" -> "4m"; "30s" -> "30s"
   const m = interval.match(/^(\d+)min$/);
-  return m ? `${m[1]}m` : undefined;
+  if (m) return `${m[1]}m`;
+  const s = interval.match(/^(\d+)s$/);
+  return s ? `${s[1]}s` : undefined;
 }
 
 function AppLayout() {

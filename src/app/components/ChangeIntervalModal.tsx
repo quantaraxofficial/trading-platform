@@ -31,26 +31,28 @@ export default function ChangeIntervalModal({ initialDigit, onApply, onClose, th
 
   useEscapeClose(onClose);
 
-  // A trailing unit letter picks minutes/hours/days/months/years, matching the
-  // same values TopBar's own interval dropdown already sends through
-  // handleIntervalChange (1h.."4h", 1day, 1month/3month/6month/12month, Nmin) —
-  // reusing those exact strings is what makes typed values here genuinely work
-  // rather than just looking accepted.
+  // A trailing unit letter picks seconds/minutes/hours/days/months/years,
+  // matching the same values TopBar's own interval dropdown already sends
+  // through handleIntervalChange (30s, 1h.."4h", 1day, 1month/3month/6month/
+  // 12month, Nmin) — reusing those exact strings is what makes typed values
+  // here genuinely work rather than just look accepted.
   const parsed = (() => {
-    const m = value.match(/^(\d+)\s*([hHdDwWmMyY]?)$/);
+    const m = value.match(/^(\d+)\s*([hHdDwWmMMyYsS]?)$/);
     if (!m) return null;
     const num = parseInt(m[1], 10);
     if (isNaN(num) || num <= 0) return null;
-    const unit = m[2].toLowerCase() as "" | "h" | "d" | "w" | "m" | "y";
+    const rawUnit = m[2].toLowerCase();
+    const unit = (rawUnit === "s" ? "s" : rawUnit) as "" | "h" | "d" | "w" | "m" | "y" | "s";
     return { num, unit };
   })();
 
-  const maxForUnit: Record<string, number> = { "": 1440, h: 24, d: 30, w: 52, m: 120, y: 50 };
+  const maxForUnit: Record<string, number> = { "": 1440, s: 30, h: 24, d: 30, w: 52, m: 120, y: 50 };
   const isValid = parsed !== null && parsed.num <= maxForUnit[parsed.unit];
 
   const displayLabel = (() => {
     if (!parsed) return "";
     const { num, unit } = parsed;
+    if (unit === "s") return `${num} second${num !== 1 ? "s" : ""}`;
     if (unit === "h") return `${num} hour${num !== 1 ? "s" : ""}`;
     if (unit === "d") return `${num} day${num !== 1 ? "s" : ""}`;
     if (unit === "w") return `${num} week${num !== 1 ? "s" : ""}`;
@@ -63,6 +65,13 @@ export default function ChangeIntervalModal({ initialDigit, onApply, onClose, th
     if (!isValid || !parsed) return;
     const { num, unit } = parsed;
 
+    if (unit === "s") {
+      // Sub-minute intervals only come from the MT5/ClickHouse 30-second feed;
+      // anything else is clamped to the 30-second bar.
+      const v = num === 30 ? "30s" : "30s";
+      onApply(v, "30s");
+      return;
+    }
     if (unit === "h") {
       onApply(`${num}h`, `${num}h`);
       return;

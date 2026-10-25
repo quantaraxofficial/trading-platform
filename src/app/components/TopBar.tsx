@@ -58,10 +58,12 @@ interface TopBarProps {
 interface TFItem { display: string; value: string; short: string; }
 interface TFGroup { label: string; items: TFItem[]; disabled?: boolean; }
 
-// Groups shown in the "more timeframes" dropdown, styled after TradingView's interval picker.
-// TICKS / SECONDS / RANGES are real trade-tick-based bar types that this app's data source
-// (TwelveData's time_series endpoint) cannot produce — it only serves 1-minute-or-coarser
-// OHLC candles — so those three groups are rendered but disabled.
+// Groups shown in the "more timeframes" dropdown, styled after TradingView's
+// interval picker. The only sub-minute interval this app can serve is 30
+// seconds — the MT5→ClickHouse pipeline resamples raw ticks to 30-second
+// bars, so that's the live-feed granularity. Every other sub-second bucket
+// (ticks, 1–15s, 45s, ranges) is rendered but disabled: the source can't
+// produce it.
 const TIMEFRAME_GROUPS: TFGroup[] = [
   {
     label: "TICKS",
@@ -75,14 +77,8 @@ const TIMEFRAME_GROUPS: TFGroup[] = [
   },
   {
     label: "SECONDS",
-    disabled: true,
     items: [
-      { display: "1 second", value: "1s", short: "1s" },
-      { display: "5 seconds", value: "5s", short: "5s" },
-      { display: "10 seconds", value: "10s", short: "10s" },
-      { display: "15 seconds", value: "15s", short: "15s" },
       { display: "30 seconds", value: "30s", short: "30s" },
-      { display: "45 seconds", value: "45s", short: "45s" },
     ],
   },
   {
@@ -140,6 +136,8 @@ function getShortLabel(value: string): string {
   if (found) return found.short;
   const mMin = value.match(/^(\d+)min$/);
   if (mMin) return `${mMin[1]}m`;
+  const mSec = value.match(/^(\d+)s$/);
+  if (mSec) return `${mSec[1]}s`;
   const mHour = value.match(/^(\d+)h$/);
   if (mHour) return `${mHour[1]}h`;
   const mMonth = value.match(/^(\d+)month$/);

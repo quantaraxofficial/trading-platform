@@ -262,12 +262,16 @@ function formatTickMark(unixSeconds: number, tickMarkType: TickMarkType, tz: str
 // Utility: get the duration of one candle in milliseconds for any interval string
 function getIntervalMs(interval: string): number {
   const map: Record<string, number> = {
+    '30s': 30_000,
     '1min': 60_000, '5min': 5 * 60_000, '15min': 15 * 60_000,
     '30min': 30 * 60_000, '45min': 45 * 60_000,
     '1h': 3600_000, '2h': 2 * 3600_000, '4h': 4 * 3600_000,
     '1day': 86400_000, '1week': 7 * 86400_000, '1month': 30 * 86400_000,
   };
   if (map[interval]) return map[interval];
+  // Sub-minute second intervals (e.g. "30s")
+  const ms = interval.match(/^(\d+)s$/);
+  if (ms) return parseInt(ms[1], 10) * 1000;
   // Custom minute intervals like "4min", "7min"
   const m = interval.match(/^(\d+)min$/);
   if (m) return parseInt(m[1], 10) * 60_000;
