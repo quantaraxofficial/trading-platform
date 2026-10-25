@@ -15,7 +15,7 @@ export const SYNCED_KEYS = [
   "tv:layouts", "tv:watchlists", "tv:chartSettings", "tv:chartSettingsTemplates", "tv:chartType", "tv:statusLine",
   "tv:tradingSettings", "tv:indicatorTemplates", "tv:emaDefaults", "tv:favoriteIndicators", "tv:favoriteIntervals",
   "tv_favorite_tools", "tv:customColors", "tv:savedReplays", "tv:theme", "tv:chartTimezone", "tv:pineEditorSettings",
-  "tv:alert-notify", "tv:indicators",
+  "tv:alert-notify", "tv:indicators", "tv:customIntervals", "tv:intervalMenuSections",
 ];
 const SYNCED = new Set(SYNCED_KEYS);
 const META_KEY = "tv:syncMeta"; // key -> time of its last change here (ms)

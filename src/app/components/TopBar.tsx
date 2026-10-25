@@ -10,8 +10,6 @@ import { loadFavoriteIndicators } from "@/app/utils/favoriteIndicators";
 import {
   ChevronDown,
   ChevronUp,
-  Plus,
-  Star,
   Download,
   Copy,
   Link2,
@@ -29,14 +27,14 @@ import IndicatorTemplatesMenu from "./IndicatorTemplatesMenu";
 import type { IndicatorTemplate } from "@/app/utils/indicatorTemplates";
 import AccountMenu from "./AccountMenu";
 import TradeButton from "../trading/TradeButton";
+import { IntervalMenu, DownChevron } from "./IntervalMenu";
+import { intervalName, intervalShort, sortIntervals, removeCustomInterval } from "../lib/intervals";
 
 interface TopBarProps {
   theme: string;
   toggleTheme: () => void;
   interval: string;
   onIntervalChange: (interval: string, label?: string) => void;
-  onOpenQuickChangeDialog?: () => void;
-  onOpenCustomIntervalDialog?: () => void;
   onReplayClick?: () => void;
   isReplayActive?: boolean;
   symbol: string;
@@ -57,105 +55,8 @@ interface TopBarProps {
   onToggleDrawingsPanel?: () => void;
 }
 
-interface TFItem { display: string; value: string; short: string; }
-interface TFGroup { label: string; items: TFItem[]; disabled?: boolean; }
-
-// Groups shown in the "more timeframes" dropdown, styled after TradingView's
-// interval picker. The only sub-minute interval this app can serve is 30
-// seconds — the MT5→ClickHouse pipeline resamples raw ticks to 30-second
-// bars, so that's the live-feed granularity. Every other sub-second bucket
-// (ticks, 1–15s, 45s, ranges) is rendered but disabled: the source can't
-// produce it.
-const TIMEFRAME_GROUPS: TFGroup[] = [
-  {
-    label: "TICKS",
-    disabled: true,
-    items: [
-      { display: "1 tick", value: "1t", short: "1t" },
-      { display: "10 ticks", value: "10t", short: "10t" },
-      { display: "100 ticks", value: "100t", short: "100t" },
-      { display: "1000 ticks", value: "1000t", short: "1000t" },
-    ],
-  },
-  {
-    label: "SECONDS",
-    items: [
-      { display: "30 seconds", value: "30s", short: "30s" },
-    ],
-  },
-  {
-    label: "MINUTES",
-    items: [
-      { display: "1 minute", value: "1min", short: "1m" },
-      { display: "2 minutes", value: "2min", short: "2m" },
-      { display: "3 minutes", value: "3min", short: "3m" },
-      { display: "5 minutes", value: "5min", short: "5m" },
-      { display: "10 minutes", value: "10min", short: "10m" },
-      { display: "15 minutes", value: "15min", short: "15m" },
-      { display: "30 minutes", value: "30min", short: "30m" },
-      { display: "45 minutes", value: "45min", short: "45m" },
-    ],
-  },
-  {
-    label: "HOURS",
-    items: [
-      { display: "1 hour", value: "1h", short: "1h" },
-      { display: "2 hours", value: "2h", short: "2h" },
-      { display: "3 hours", value: "3h", short: "3h" },
-      { display: "4 hours", value: "4h", short: "4h" },
-    ],
-  },
-  {
-    label: "DAYS",
-    items: [
-      { display: "1 day", value: "1day", short: "D" },
-      { display: "1 week", value: "1week", short: "W" },
-      { display: "1 month", value: "1month", short: "M" },
-      { display: "3 months", value: "3month", short: "3M" },
-      { display: "6 months", value: "6month", short: "6M" },
-      { display: "12 months", value: "12month", short: "12M" },
-    ],
-  },
-  {
-    label: "RANGES",
-    disabled: true,
-    items: [
-      { display: "1 range", value: "1r", short: "1R" },
-      { display: "10 ranges", value: "10r", short: "10R" },
-      { display: "100 ranges", value: "100r", short: "100R" },
-      { display: "1000 ranges", value: "1000r", short: "1000R" },
-    ],
-  },
-];
-
-const ALL_TF_ITEMS = TIMEFRAME_GROUPS.flatMap(g => g.items);
-
 const DEFAULT_FAVORITES = ["1min", "5min", "15min", "30min", "45min", "1h", "4h"];
 const FAVORITES_STORAGE_KEY = "tv:favoriteIntervals";
-
-function getShortLabel(value: string): string {
-  const found = ALL_TF_ITEMS.find(i => i.value === value);
-  if (found) return found.short;
-  const mMin = value.match(/^(\d+)min$/);
-  if (mMin) return `${mMin[1]}m`;
-  const mSec = value.match(/^(\d+)s$/);
-  if (mSec) return `${mSec[1]}s`;
-  const mHour = value.match(/^(\d+)h$/);
-  if (mHour) return `${mHour[1]}h`;
-  const mMonth = value.match(/^(\d+)month$/);
-  if (mMonth) return `${mMonth[1]}M`;
-  return value;
-}
-
-function getLongLabel(value: string): string {
-  const found = ALL_TF_ITEMS.find(i => i.value === value);
-  if (found) return found.display;
-  const m = value.match(/^(\d+)(min|h|day|week|month)$/);
-  if (!m) return value;
-  const n = Number(m[1]);
-  const unit = { min: "minute", h: "hour", day: "day", week: "week", month: "month" }[m[2] as "min"]!;
-  return `${n} ${unit}${n === 1 ? "" : "s"}`;
-}
 
 function loadFavoriteIntervals(): string[] {
   try {
@@ -163,7 +64,7 @@ function loadFavoriteIntervals(): string[] {
     if (!raw) return DEFAULT_FAVORITES;
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.every(v => typeof v === "string") && parsed.length > 0) {
-      return parsed;
+      return sortIntervals(parsed);
     }
     return DEFAULT_FAVORITES;
   } catch {
@@ -179,7 +80,7 @@ function saveFavoriteIntervals(values: string[]) {
   }
 }
 
-export default function TopBar({ theme, toggleTheme, interval, onIntervalChange, onOpenQuickChangeDialog, onOpenCustomIntervalDialog, onReplayClick, isReplayActive, symbol, onSymbolChange, onIndicatorSelect, onAlertClick, symbolSearchOpen, symbolSearchInitial, onSymbolSearchClose, onSettingsClick, onMaximizeClick, onSnapshot, activeIndicators = [], onApplyIndicatorTemplate, onQuickSearchClick, onMenuClick, drawingsPanelVisible, onToggleDrawingsPanel }: TopBarProps) {
+export default function TopBar({ theme, toggleTheme, interval, onIntervalChange, onReplayClick, isReplayActive, symbol, onSymbolChange, onIndicatorSelect, onAlertClick, symbolSearchOpen, symbolSearchInitial, onSymbolSearchClose, onSettingsClick, onMaximizeClick, onSnapshot, activeIndicators = [], onApplyIndicatorTemplate, onQuickSearchClick, onMenuClick, drawingsPanelVisible, onToggleDrawingsPanel }: TopBarProps) {
   const [showSymbolSearchInternal, setShowSymbolSearchInternal] = useState(false);
   const [internalSearchInitial, setInternalSearchInitial] = useState("");
   const showSymbolSearch = showSymbolSearchInternal || !!symbolSearchOpen;
@@ -207,18 +108,6 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
   useEffect(() => {
     setFavorites(loadFavoriteIntervals());
   }, []);
-
-  // Close the "more timeframes" dropdown on outside click
-  useEffect(() => {
-    if (!showMoreTf) return;
-    const handleClick = (e: MouseEvent) => {
-      if (tfMenuRef.current && !tfMenuRef.current.contains(e.target as Node)) {
-        setShowMoreTf(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [showMoreTf]);
 
   // Snapshot dropdown: Esc / outside click closes it
   useEscapeClose(() => setShowSnapshotMenu(false), showSnapshotMenu);
@@ -256,14 +145,26 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
 
   const toggleFavoriteInterval = useCallback((value: string) => {
     setFavorites(prev => {
-      const next = prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value];
+      // Kept in order of length, as TradingView lays them out on the toolbar
+      const next = prev.includes(value) ? prev.filter(v => v !== value) : sortIntervals([...prev, value]);
+      saveFavoriteIntervals(next);
+      return next;
+    });
+  }, []);
+
+  // A custom interval taken out of the menu also leaves the toolbar
+  const removeCustom = useCallback((value: string) => {
+    removeCustomInterval(value);
+    setFavorites(prev => {
+      if (!prev.includes(value)) return prev;
+      const next = prev.filter(v => v !== value);
       saveFavoriteIntervals(next);
       return next;
     });
   }, []);
 
   const selectInterval = useCallback((value: string) => {
-    onIntervalChange(value, getShortLabel(value));
+    onIntervalChange(value, intervalShort(value));
     setShowMoreTf(false);
   }, [onIntervalChange]);
 
@@ -309,41 +210,42 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
 
         <div className="tv-hdr-sep" />
 
-        {/* Intervals */}
-        {favorites.map((value) => (
-          <Tip key={value} text={getLongLabel(value)} placement="bottom">
+        {/* Intervals: the favorites, then the chart's interval if it isn't one, then the menu */}
+        {(favorites.includes(interval) ? favorites : [...favorites, interval]).map((value) => (
+          <Tip key={value} text={intervalName(value)} placement="bottom">
             <button
               className={`tv-hdr-btn tv-tf-fav ${interval === value ? "active" : ""}`}
               style={{ minWidth: 0, padding: "0 6px" }}
               onClick={() => selectInterval(value)}
             >
-              {getShortLabel(value)}
+              {intervalShort(value)}
             </button>
           </Tip>
         ))}
-        {/* More intervals */}
-        <div style={{ position: "relative" }} ref={tfMenuRef}>
-          <button
-            className={`tv-hdr-btn ${!favorites.includes(interval) || showMoreTf ? "active" : ""}`}
-            style={{ minWidth: 24, padding: "0 4px", gap: "2px" }}
-            aria-label="More intervals"
-            onClick={() => setShowMoreTf(!showMoreTf)}
-          >
-            {!favorites.includes(interval) ? getShortLabel(interval) : ""}
-            {showMoreTf ? <ChevronUp size={14} strokeWidth={1.5} /> : <ChevronDown size={14} strokeWidth={1.5} />}
-          </button>
-          {showMoreTf && (
-            <TimeframeDropdown
-              anchorRef={tfMenuRef}
-              interval={interval}
-              favorites={favorites}
-              onSelect={selectInterval}
-              onToggleFavorite={toggleFavoriteInterval}
-              onOpenQuickChange={onOpenQuickChangeDialog}
-              onOpenCustomForm={onOpenCustomIntervalDialog}
-            />
-          )}
+        <div ref={tfMenuRef} style={{ display: "flex" }}>
+          <Tip text="Chart interval" placement="bottom">
+            <button
+              className={`tv-hdr-btn ${showMoreTf ? "active" : ""}`}
+              style={{ minWidth: 24, width: 24, padding: 0 }}
+              aria-label="Chart interval"
+              aria-expanded={showMoreTf}
+              onClick={() => setShowMoreTf(!showMoreTf)}
+            >
+              <span style={{ display: "flex", transform: showMoreTf ? "rotate(180deg)" : undefined }}><DownChevron /></span>
+            </button>
+          </Tip>
         </div>
+        {showMoreTf && (
+          <IntervalMenu
+            anchor={tfMenuRef.current}
+            interval={interval}
+            favorites={favorites}
+            onSelect={selectInterval}
+            onToggleFavorite={toggleFavoriteInterval}
+            onRemoveCustom={removeCustom}
+            onClose={closeMoreTf}
+          />
+        )}
 
         <div className="tv-hdr-sep" />
 
@@ -420,7 +322,7 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
           activeIndicators={activeIndicators}
           symbol={symbol}
           interval={interval}
-          intervalLabel={getShortLabel(interval)}
+          intervalLabel={intervalShort(interval)}
           onApply={(t) => onApplyIndicatorTemplate?.(t)}
         />
 
@@ -551,148 +453,5 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
         />
       )}
     </>
-  );
-}
-
-function TimeframeDropdown({
-  anchorRef,
-  interval,
-  favorites,
-  onSelect,
-  onToggleFavorite,
-  onOpenQuickChange,
-  onOpenCustomForm,
-}: {
-  anchorRef: React.RefObject<HTMLDivElement | null>;
-  interval: string;
-  favorites: string[];
-  onSelect: (value: string) => void;
-  onToggleFavorite: (value: string) => void;
-  onOpenQuickChange?: () => void;
-  onOpenCustomForm?: () => void;
-}) {
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-
-  const toggleCollapsed = (label: string) => {
-    setCollapsed(prev => ({ ...prev, [label]: !prev[label] }));
-  };
-
-  // TradingView's "Change interval" row opens its quick-change dialog; the
-  // "Add custom interval..." row below it opens the custom-interval form.
-  const onCustomClick = () => {
-    onOpenCustomForm?.();
-  };
-
-  return (
-    <div ref={el => placeBelow(el, anchorRef.current)} style={{
-      position: "absolute", top: "100%", left: 0, marginTop: "4px",
-      backgroundColor: "var(--tv-color-pane-bg)", border: "1px solid var(--tv-color-border)",
-      borderRadius: "6px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-      zIndex: 9999, width: "230px", maxHeight: "70vh", overflowY: "auto",
-      padding: "4px 0",
-    }}>
-      {/* Add custom interval */}
-      <div
-        onClick={onCustomClick}
-        style={{
-          display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px",
-          fontSize: "13px", color: "var(--tv-color-text)", cursor: "pointer",
-          borderBottom: "1px solid var(--tv-color-border)"
-        }}
-        onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--tv-color-item-hover)"}
-        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
-      >
-        <Plus size={14} strokeWidth={2} />
-        Add custom interval...
-      </div>
-      {/* Quick-change interval (opens TradingView's "Change interval" dialog) */}
-      <div
-        onClick={() => onOpenQuickChange?.()}
-        style={{
-          display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px",
-          fontSize: "13px", color: "var(--tv-color-text)", cursor: "pointer"
-        }}
-        onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--tv-color-item-hover)"}
-        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
-      >
-        <span style={{ width: 14, display: "inline-flex" }} />
-        Change interval
-      </div>
-
-      {TIMEFRAME_GROUPS.map(group => {
-        const isCollapsed = !!collapsed[group.label];
-        return (
-          <div key={group.label}>
-            <div
-              onClick={() => toggleCollapsed(group.label)}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                padding: "10px 12px 4px", cursor: "pointer",
-              }}
-            >
-              <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--tv-color-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                {group.label}
-              </span>
-              {isCollapsed ? <ChevronDown size={14} color="var(--tv-color-text-muted)" /> : <ChevronUp size={14} color="var(--tv-color-text-muted)" />}
-            </div>
-            {!isCollapsed && group.items.map(item => (
-              <TimeframeRow
-                key={item.value}
-                item={item}
-                isActive={interval === item.value}
-                isFavorite={favorites.includes(item.value)}
-                disabled={!!group.disabled}
-                onSelect={() => onSelect(item.value)}
-                onToggleFavorite={() => onToggleFavorite(item.value)}
-              />
-            ))}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function TimeframeRow({
-  item,
-  isActive,
-  isFavorite,
-  disabled,
-  onSelect,
-  onToggleFavorite,
-}: {
-  item: TFItem;
-  isActive: boolean;
-  isFavorite: boolean;
-  disabled: boolean;
-  onSelect: () => void;
-  onToggleFavorite: () => void;
-}) {
-  const [hover, setHover] = useState(false);
-
-  return (
-    <div
-      onClick={() => !disabled && onSelect()}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "7px 12px", fontSize: "13px",
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.4 : 1,
-        color: disabled ? "var(--tv-color-text-muted)" : (isActive ? "var(--tv-color-accent)" : "var(--tv-color-text)"),
-        backgroundColor: isActive ? "var(--tv-color-item-active)" : (hover && !disabled ? "var(--tv-color-item-hover)" : "transparent"),
-      }}
-    >
-      <span>{item.display}</span>
-      {!disabled && (
-        <span
-          onClick={e => { e.stopPropagation(); onToggleFavorite(); }}
-          style={{ display: "flex", alignItems: "center", padding: "2px", opacity: (hover || isFavorite) ? 1 : 0 }}
-        >
-          <Star size={14} color={isFavorite ? "#f5b041" : "var(--tv-color-text-muted)"} fill={isFavorite ? "#f5b041" : "transparent"} />
-        </span>
-      )}
-    </div>
   );
 }

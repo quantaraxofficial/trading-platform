@@ -20,6 +20,7 @@ import BottomPanel from "./components/BottomPanel";
 import AlertsSidebar from "./components/AlertsSidebar";
 import CreateAlertModal from "./components/CreateAlertModal";
 import ChangeIntervalModal from "./components/ChangeIntervalModal";
+import { parseInterval, intervalShort } from "./lib/intervals";
 import ObjectTreePanel from "./components/objectTree/ObjectTreePanel";
 import FavoritesToolbar from "./components/FavoritesToolbar";
 import PineEditorPanel from "./components/PineEditorPanel";
@@ -49,19 +50,9 @@ import { backendFetch, sessionKey } from "@/lib/backend";
 const DRAWINGS_PANEL_KEY = "tv:drawingsPanelVisible";
 const RIGHT_PANEL_KEY = "tv:rightPanelOpen";
 
-// Short toolbar label for an interval value ("15min" → "15m", "1day" → "D")
+// Short toolbar label for an interval value ("15min" → "15m", "1day" → "D", "2week" → "2W")
 function intervalToLabel(interval: string): string | undefined {
-  const labelMap: Record<string, string> = {
-    "30s": "30s",
-    "1min": "1m", "5min": "5m", "15min": "15m", "30min": "30m", "45min": "45m",
-    "1h": "1h", "2h": "2h", "4h": "4h", "1day": "D", "1week": "W", "1month": "M"
-  };
-  if (labelMap[interval]) return labelMap[interval];
-  // Custom intervals like "4min" -> "4m"; "30s" -> "30s"
-  const m = interval.match(/^(\d+)min$/);
-  if (m) return `${m[1]}m`;
-  const s = interval.match(/^(\d+)s$/);
-  return s ? `${s[1]}s` : undefined;
+  return parseInterval(interval) ? intervalShort(interval) : undefined;
 }
 
 function AppLayout() {
@@ -497,15 +488,10 @@ function AppLayout() {
     if (label) setIntervalLabel(label);
   };
 
-  // Openers for the interval dialogs: the "Change interval" quick-change dialog
-  // (pre-filled from the chart's current interval) and its "Add custom interval..." form.
+  // The "Change interval" quick-change dialog, pre-filled from the chart's current interval
   const openQuickChangeInterval = () => {
     setIntervalInitialDigit("");
     setIntervalCustomForm(false);
-    setShowIntervalModal(true);
-  };
-  const openCustomInterval = () => {
-    setIntervalCustomForm(true);
     setShowIntervalModal(true);
   };
 
@@ -800,8 +786,6 @@ function AppLayout() {
             onToggleDrawingsPanel={toggleDrawingsPanel}
             interval={selectedInterval}
             onIntervalChange={handleIntervalChange}
-            onOpenQuickChangeDialog={openQuickChangeInterval}
-            onOpenCustomIntervalDialog={openCustomInterval}
             onReplayClick={handleReplayClick}
             isReplayActive={mode !== "idle"}
             symbol={symbol}

@@ -278,6 +278,11 @@ function getIntervalMs(interval: string): number {
   // Custom hour intervals like "3h"
   const mh = interval.match(/^(\d+)h$/);
   if (mh) return parseInt(mh[1], 10) * 3600_000;
+  // Custom day and week intervals like "2day", "3week"
+  const md = interval.match(/^(\d+)day$/);
+  if (md) return parseInt(md[1], 10) * 86400_000;
+  const mw = interval.match(/^(\d+)week$/);
+  if (mw) return parseInt(mw[1], 10) * 7 * 86400_000;
   // Custom multi-month intervals like "3month", "6month", "12month" (approximate)
   const mm = interval.match(/^(\d+)month$/);
   if (mm) return parseInt(mm[1], 10) * 30 * 86400_000;
