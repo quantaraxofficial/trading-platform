@@ -35,6 +35,8 @@ interface TopBarProps {
   toggleTheme: () => void;
   interval: string;
   onIntervalChange: (interval: string, label?: string) => void;
+  onOpenQuickChangeDialog?: () => void;
+  onOpenCustomIntervalDialog?: () => void;
   onReplayClick?: () => void;
   isReplayActive?: boolean;
   symbol: string;
@@ -177,7 +179,7 @@ function saveFavoriteIntervals(values: string[]) {
   }
 }
 
-export default function TopBar({ theme, toggleTheme, interval, onIntervalChange, onReplayClick, isReplayActive, symbol, onSymbolChange, onIndicatorSelect, onAlertClick, symbolSearchOpen, symbolSearchInitial, onSymbolSearchClose, onSettingsClick, onMaximizeClick, onSnapshot, activeIndicators = [], onApplyIndicatorTemplate, onQuickSearchClick, onMenuClick, drawingsPanelVisible, onToggleDrawingsPanel }: TopBarProps) {
+export default function TopBar({ theme, toggleTheme, interval, onIntervalChange, onOpenQuickChangeDialog, onOpenCustomIntervalDialog, onReplayClick, isReplayActive, symbol, onSymbolChange, onIndicatorSelect, onAlertClick, symbolSearchOpen, symbolSearchInitial, onSymbolSearchClose, onSettingsClick, onMaximizeClick, onSnapshot, activeIndicators = [], onApplyIndicatorTemplate, onQuickSearchClick, onMenuClick, drawingsPanelVisible, onToggleDrawingsPanel }: TopBarProps) {
   const [showSymbolSearchInternal, setShowSymbolSearchInternal] = useState(false);
   const [internalSearchInitial, setInternalSearchInitial] = useState("");
   const showSymbolSearch = showSymbolSearchInternal || !!symbolSearchOpen;
@@ -337,6 +339,8 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
               favorites={favorites}
               onSelect={selectInterval}
               onToggleFavorite={toggleFavoriteInterval}
+              onOpenQuickChange={onOpenQuickChangeDialog}
+              onOpenCustomForm={onOpenCustomIntervalDialog}
             />
           )}
         </div>
@@ -556,28 +560,27 @@ function TimeframeDropdown({
   favorites,
   onSelect,
   onToggleFavorite,
+  onOpenQuickChange,
+  onOpenCustomForm,
 }: {
   anchorRef: React.RefObject<HTMLDivElement | null>;
   interval: string;
   favorites: string[];
   onSelect: (value: string) => void;
   onToggleFavorite: (value: string) => void;
+  onOpenQuickChange?: () => void;
+  onOpenCustomForm?: () => void;
 }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [showCustomForm, setShowCustomForm] = useState(false);
-  const [customAmount, setCustomAmount] = useState("1");
-  const [customUnit, setCustomUnit] = useState<"min" | "h">("min");
 
   const toggleCollapsed = (label: string) => {
     setCollapsed(prev => ({ ...prev, [label]: !prev[label] }));
   };
 
-  const handleAddCustom = () => {
-    const n = parseInt(customAmount, 10);
-    if (!n || n < 1) return;
-    onSelect(`${n}${customUnit}`);
-    setShowCustomForm(false);
-    setCustomAmount("1");
+  // TradingView's "Change interval" row opens its quick-change dialog; the
+  // "Add custom interval..." row below it opens the custom-interval form.
+  const onCustomClick = () => {
+    onOpenCustomForm?.();
   };
 
   return (
@@ -589,57 +592,32 @@ function TimeframeDropdown({
       padding: "4px 0",
     }}>
       {/* Add custom interval */}
-      {showCustomForm ? (
-        <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 12px", borderBottom: "1px solid var(--tv-color-border)" }}>
-          <input
-            type="number"
-            min={1}
-            value={customAmount}
-            onChange={e => setCustomAmount(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleAddCustom()}
-            style={{
-              width: "48px", height: "26px", padding: "0 6px", fontSize: "13px",
-              border: "1px solid var(--tv-color-border)", borderRadius: "4px",
-              backgroundColor: "transparent", color: "var(--tv-color-text)", outline: "none"
-            }}
-          />
-          <select
-            value={customUnit}
-            onChange={e => setCustomUnit(e.target.value as "min" | "h")}
-            style={{
-              height: "26px", fontSize: "13px", border: "1px solid var(--tv-color-border)",
-              borderRadius: "4px", backgroundColor: "transparent", color: "var(--tv-color-text)"
-            }}
-          >
-            <option value="min">minutes</option>
-            <option value="h">hours</option>
-          </select>
-          <button
-            onClick={handleAddCustom}
-            style={{
-              height: "26px", padding: "0 10px", fontSize: "12px", fontWeight: 600,
-              border: "none", borderRadius: "4px", cursor: "pointer",
-              backgroundColor: "var(--tv-color-accent)", color: "#fff"
-            }}
-          >
-            Add
-          </button>
-        </div>
-      ) : (
-        <div
-          onClick={() => setShowCustomForm(true)}
-          style={{
-            display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px",
-            fontSize: "13px", color: "var(--tv-color-text)", cursor: "pointer",
-            borderBottom: "1px solid var(--tv-color-border)"
-          }}
-          onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--tv-color-item-hover)"}
-          onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
-        >
-          <Plus size={14} strokeWidth={2} />
-          Add custom interval...
-        </div>
-      )}
+      <div
+        onClick={onCustomClick}
+        style={{
+          display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px",
+          fontSize: "13px", color: "var(--tv-color-text)", cursor: "pointer",
+          borderBottom: "1px solid var(--tv-color-border)"
+        }}
+        onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--tv-color-item-hover)"}
+        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
+      >
+        <Plus size={14} strokeWidth={2} />
+        Add custom interval...
+      </div>
+      {/* Quick-change interval (opens TradingView's "Change interval" dialog) */}
+      <div
+        onClick={() => onOpenQuickChange?.()}
+        style={{
+          display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px",
+          fontSize: "13px", color: "var(--tv-color-text)", cursor: "pointer"
+        }}
+        onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--tv-color-item-hover)"}
+        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
+      >
+        <span style={{ width: 14, display: "inline-flex" }} />
+        Change interval
+      </div>
 
       {TIMEFRAME_GROUPS.map(group => {
         const isCollapsed = !!collapsed[group.label];

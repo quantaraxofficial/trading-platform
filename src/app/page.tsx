@@ -87,6 +87,8 @@ function AppLayout() {
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [showIntervalModal, setShowIntervalModal] = useState(false);
   const [intervalInitialDigit, setIntervalInitialDigit] = useState("");
+  // The "Change interval" quick-change dialog vs. its "Add custom interval..." form
+  const [intervalCustomForm, setIntervalCustomForm] = useState(false);
   const [showSymbolSearch, setShowSymbolSearch] = useState(false);
   const [symbolSearchInitial, setSymbolSearchInitial] = useState("");
   const [showQuickSearch, setShowQuickSearch] = useState(false);
@@ -434,10 +436,11 @@ function AppLayout() {
         return;
       }
 
-      // Numbers = Open interval change modal
+      // Numbers = Open interval quick-change dialog (TradingView's "Change interval")
       if (/^[0-9]$/.test(e.key)) {
         e.preventDefault();
         setIntervalInitialDigit(e.key);
+        setIntervalCustomForm(false);
         setShowIntervalModal(true);
         return;
       }
@@ -492,6 +495,18 @@ function AppLayout() {
   const handleIntervalChange = (interval: string, label?: string) => {
     setSelectedInterval(interval);
     if (label) setIntervalLabel(label);
+  };
+
+  // Openers for the interval dialogs: the "Change interval" quick-change dialog
+  // (pre-filled from the chart's current interval) and its "Add custom interval..." form.
+  const openQuickChangeInterval = () => {
+    setIntervalInitialDigit("");
+    setIntervalCustomForm(false);
+    setShowIntervalModal(true);
+  };
+  const openCustomInterval = () => {
+    setIntervalCustomForm(true);
+    setShowIntervalModal(true);
   };
 
   // Bottom bar date ranges: switch to the range's interval here; the chart then shows the
@@ -744,7 +759,7 @@ function AppLayout() {
     { id: 'alert', label: 'Create alert', section: 'FUNCTIONS', keywords: ['alarm', 'notify'], shortcut: ['Alt', 'A'], icon: <TVAlertIcon size={28} />, run: () => openAlert() },
     { id: 'replay', label: 'Bar replay', section: 'FUNCTIONS', keywords: ['replay', 'backtest', 'history'], icon: <TVReplayIcon size={28} />, run: handleReplayClick },
     { id: 'symbol', label: 'Change symbol', section: 'FUNCTIONS', keywords: ['search', 'ticker', 'stock'], icon: <Search {...icon18} />, run: () => { setSymbolSearchInitial(''); setShowSymbolSearch(true); } },
-    { id: 'interval', label: 'Change interval', section: 'FUNCTIONS', keywords: ['timeframe', 'resolution'], icon: <Clock3 {...icon18} />, run: () => { setIntervalInitialDigit(''); setShowIntervalModal(true); } },
+    { id: 'interval', label: 'Change interval', section: 'FUNCTIONS', keywords: ['timeframe', 'resolution'], icon: <Clock3 {...icon18} />, run: openQuickChangeInterval },
     { id: 'goto', label: 'Go to date', section: 'FUNCTIONS', keywords: ['calendar', 'jump', 'navigate'], shortcut: ['Alt', 'G'], icon: <TVGoToDateIcon size={28} />, run: () => window.dispatchEvent(new CustomEvent('tv:open-goto')) },
     { id: 'reset-view', label: 'Reset chart view', section: 'FUNCTIONS', keywords: ['zoom out', 'fit', 'autoscale'], shortcut: ['Alt', 'R'], icon: <RotateCcw {...icon18} />, run: () => window.dispatchEvent(new CustomEvent('tv-zoom-out')) },
     { id: 'watchlist', label: 'Add symbol to watchlist', section: 'FUNCTIONS', keywords: ['watchlist'], shortcut: ['Alt', 'W'], icon: <ListPlus {...icon18} />, run: () => window.dispatchEvent(new CustomEvent('tv:add-to-watchlist', { detail: symbol })) },
@@ -785,6 +800,8 @@ function AppLayout() {
             onToggleDrawingsPanel={toggleDrawingsPanel}
             interval={selectedInterval}
             onIntervalChange={handleIntervalChange}
+            onOpenQuickChangeDialog={openQuickChangeInterval}
+            onOpenCustomIntervalDialog={openCustomInterval}
             onReplayClick={handleReplayClick}
             isReplayActive={mode !== "idle"}
             symbol={symbol}
@@ -1045,7 +1062,9 @@ function AppLayout() {
       {showIntervalModal && (
         <ChangeIntervalModal
           theme={theme}
+          currentInterval={selectedInterval}
           initialDigit={intervalInitialDigit}
+          startInCustomForm={intervalCustomForm}
           onApply={(newInterval, newLabel) => {
             handleIntervalChange(newInterval, newLabel);
             setShowIntervalModal(false);
