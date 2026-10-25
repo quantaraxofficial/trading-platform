@@ -353,6 +353,22 @@ async function fetchStockDataUncached(symbol: string = 'AAPL', interval: string 
   }
 
   try {
+    // Live MT5→ClickHouse source takes precedence when it has data for this
+    // symbol; otherwise fall through to the existing TwelveData path below.
+    // A 30-second resampled bar series maps to the "30s" request interval.
+    const useMt5Live = interval === "30s" || interval === "1min";
+    if (useMt5Live) {
+      const { fetchMt5LiveCandles, liveMode } = await import("../lib/mt5Live");
+      if (liveMode()) {
+        const liveBars = await fetchMt5LiveCandles(symbol, 500);
+        if (liveBars && liveBars.length > 0) {
+          setCachedData(cacheKey, liveBars);
+          console.log(`[MT5-Live] ${symbol} (${liveBars.length} bars from ClickHouse)`);
+          return liveBars;
+        }
+      }
+    }
+
     let url = `/api/stock-data?symbol=${encodeURIComponent(symbol)}&interval=${interval}`;
     if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
     if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;

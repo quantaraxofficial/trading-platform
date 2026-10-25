@@ -465,3 +465,125 @@ def create_cashfree_order(request):
         return denied
     # Paper-trading only in this build: no real order is placed.
     return Response({"success": True, "order": request.data})
+
+# --- Live data read endpoints (serving ClickHouse tick_bars to the site) ---
+#
+# The pipeline writes 30-second bars from MT5 into ClickHouse; these views let
+# the frontend read that same data, so a live MT5 feed powers the site. Both are
+# public (no session) — they only read settled bar data, which is fine to serve
+# to anyone who has the app.
+
+def _ch_client():
+    """A ClickHouse client with a short read timeout so a missing/overloaded
+    server degrades to an empty response instead of hanging the request."""
+    from pipeline.clickhouse_client import ClickHouseClient
+    ch = ClickHouseClient()
+    ch._session.headers["Connection"] = "close"
+    # Short timeouts: these are low-latency chart reads, and a wedged ClickHouse
+    # must not stall the page (the frontend falls back to its TwelveData feed).
+    ch._session.verify = None
+    return ch
+
+
+def _ch_read(client, sql: str) -> list:
+    """A read query with the client's session timeouts. On any failure (no
+    ClickHouse, timeout, connection refused) it returns [] so the caller
+    degrades to an empty response instead of a 500 or a stall."""
+    try:
+        return client.query(sql)
+    except Exception:
+        return []
+
+
+@api_view(['GET'])
+def get_last_prices(request):
+    """Last 30-second bar per symbol — what the chart / watchlist shows live.
+
+    ?symbols=XAUUSD,AAPL  (comma list). Returns {symbol: {ts, open, high, low,
+    close, ticks}} plus a server wall-clock so the client can judge staleness.
+    """
+    from pipeline.config import CONFIG
+    raw = request.query_params.get("symbols") or ",".join(CONFIG.SYMBOLS)
+    syms = [s.strip() for s in raw.split(",") if s.strip()][:32]
+    if not syms:
+        return Response({}, status=status.HTTP_200_OK)
+    out = {}
+    try:
+        ch = _ch_client()
+        # One row per symbol: the most recent bar, read in a bounded 3-minute
+        # window so the query stays cheap and never full-scans the table.
+        sql = (
+            "SELECT symbol, any(open) AS open, max(high) AS high, min(low) AS low, "
+            "any(close) AS close, sum(ticks) AS ticks, max(ts) AS ts "
+            f"FROM {CONFIG.CH_DATABASE}.tick_bars "
+            f"WHERE symbol IN ({','.join(repr(s) for s in syms)}) "
+            "AND ts >= now() - toIntervalMinute(3) GROUP BY symbol"
+        )
+        for r in _ch_read(ch, sql):
+            out[r["symbol"]] = {
+                "ts": r.get("ts"),
+                "open": r.get("open"),
+                "high": r.get("high"),
+                "low": r.get("low"),
+                "close": r.get("close"),
+                "ticks": r.get("ticks"),
+            }
+    except Exception as e:
+        # No ClickHouse yet / unreachable: return 200 with nothing so the UI
+        # can fall back to its TwelveData feed silently.
+        import logging
+        logging.getLogger("core.live").warning("live last-prices unavailable: %s", e)
+    out.setdefault("_server_time", int(time.time()))
+    return Response(out)
+
+
+@api_view(['GET'])
+def get_candles(request):
+    """30-second candles for one symbol, shaped like /api/stock-data's
+    {values:[{datetime, open, high, low, close, volume}], meta} so the
+    chart can consume it through its existing TwelveData code path.
+    ?symbol=XAUUSD&interval=30s&limit=500  (limit = number of bars, default 500)
+    """
+    from pipeline.config import CONFIG
+    sym = request.query_params.get("symbol", "").strip().upper()
+    limit = int(request.query_params.get("limit", 500) or 500)
+    limit = max(1, min(limit, 5000))
+    if not sym:
+        return Response({"error": "symbol is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    values = []
+    try:
+        ch = _ch_client()
+        sql = (
+            "SELECT toDateTime(ts) AS dt, toString(open) AS open, toString(high) AS high, "
+            f"toString(low) AS low, toString(close) AS close, "
+            f"CAST(ticks AS String) AS volume "
+            f"FROM {CONFIG.CH_DATABASE}.tick_bars "
+            f"WHERE symbol = {repr(sym)} "
+            f"ORDER BY ts DESC LIMIT {limit}"
+        )
+        rows = _ch_read(ch, sql)
+        # newest-first, matching the TwelveData format the chart expects
+        values = [
+            {
+                "datetime": r["dt"],
+                "open": r["open"], "high": r["high"],
+                "low": r["low"], "close": r["close"],
+                "volume": int(r["volume"]) if r.get("volume") not in (None, "0", "") else None,
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        import logging
+        logging.getLogger("core.live").warning("live candles unavailable for %s: %s", sym, e)
+
+    return Response({
+        "values": values,
+        "meta": {
+            "symbol": sym,
+            "interval": "30s",
+            "source": "mt5-clickhouse",
+            "exchange_timezone": "UTC",
+            "candles": len(values),
+        },
+    })

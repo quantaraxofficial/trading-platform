@@ -17,4 +17,7 @@ urlpatterns = [
     path('bot/predict/', views.predict_bot_action, name='predict_bot_action'),
     path('track-failure/', views.track_failure, name='track_failure'),
     path('feedback/', views.submit_feedback, name='submit_feedback'),
+    # Live data read endpoints (ClickHouse -> the site)
+    path('live/last-prices/', views.get_last_prices, name='live_last_prices'),
+    path('live/candles/', views.get_candles, name='live_candles'),
 ]
