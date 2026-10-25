@@ -166,11 +166,11 @@ export default function ChangeIntervalModal({ initialDigit, onApply, onClose, th
           type="text"
           value={value}
           onChange={(e) => {
-            // Digits, plus at most one trailing unit letter (h/d/w/m/y)
-            const raw = e.target.value.replace(/[^0-9hHdDwWmMyY]/g, "");
+            // Digits, plus at most one trailing unit letter (s/h/d/w/m/y)
+            const raw = e.target.value.replace(/[^0-9sShHdDwWmMyY]/g, "");
             const digits = raw.match(/^\d*/)?.[0] || "";
-            const unit = raw.slice(digits.length).match(/[hHdDwWmMyY]/)?.[0] || "";
-            setValue(digits + unit);
+            const unit = raw.slice(digits.length).match(/[sShHdDwWmMyY]/)?.[0] || "";
+            setValue(digits + unit.toLowerCase());
           }}
           onKeyDown={handleKeyDown}
           style={{
