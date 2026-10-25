@@ -1,0 +1,79 @@
+# Deploy stack for the Oracle Cloud always-free A1 VM (Ubuntu, 4 GB RAM).
+#
+# Layout decided for the 200 GB block-storage cap:
+#   * clickhouse      - the ONLY persistent store for tick data (150 GB volume)
+#   * mt5-collector   - the tick pipeline (this branch's pipeline/ package)
+#   * Django + Next.js reuse your existing service definitions if you keep
+#     them in the same compose; this file scopes to the data layer only.
+#
+# Bring up:  docker compose up -d
+# The collector writes straight into ClickHouse; nothing lands on the VM's
+# filesystem except Docker's own layer cache and app code.
+#
+# Volumes:
+#   ch-data        150 GB  ClickHouse tables (tick_bars, heartbeat)
+#   app-code        20 GB  code + logs (rotated, bounded)
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: ticks
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-tickpw}
+      # Allow the collector to connect over TCP/HTTP without an auth prompt.
+    ports:
+      - "8123:8123"   # HTTP (the pipeline uses this)
+      - "9000:9000"   # native TCP
+    volumes:
+      - ch-data:/var/lib/clickhouse
+    shm_size: "256m"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  mt5-collector:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.collector
+    container_name: mt5-collector
+    restart: unless-stopped
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      PIPELINE_SYMBOLS: ${PIPELINE_SYMBOLS:-XAUUSD}
+      PIPELINE_RESAMPLE_SECONDS: "30"
+      PIPELINE_MT5_MODE: "headless"
+      CLICKHOUSE_HOST: clickhouse          # in-container, same compose network
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DATABASE: ticks
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-tickpw}
+      PIPELINE_DATA_TTL_DAYS: "730"
+      PIPELINE_MAX_PENDING_BARS: "5000"
+    # The headless MT5 terminal runs in its own container (see mt5-terminal
+    # below) and the collector talks to it over a local socket bridge.
+
+  mt5-terminal:
+    # A long-lived, logged-in MT5 terminal that the headless `mt5` python
+    # package attaches to. The Vantage demo account keeps it authenticated.
+    image: mt5-terminal:vantage
+    container_name: mt5-terminal
+    restart: unless-stopped
+    environment:
+      MT5_LOGIN: ${MT5_LOGIN}
+      MT5_PASSWORD: ${MT5_PASSWORD}
+      MT5_SERVER: ${MT5_SERVER:-Vantage-Demo}
+    volumes:
+      - mt5-data:/opt/mt5   # keep the terminal's auth data across restarts
+
+volumes:
+  ch-data:
+    # 150 GB of the 200 GB Oracle free block storage.
+  app-code:
+  mt5-data:

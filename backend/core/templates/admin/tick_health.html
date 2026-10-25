@@ -1,0 +1,47 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Tick feed health{% endblock %}
+{% block content %}
+<div id="content-main">
+  <h1>Tick feed health (MT5 → ClickHouse)</h1>
+  <p class="help">
+    Symbols: <b>{{ config.symbols|join:", " }}</b> · resample: <b>{{ config.resample }}s</b>
+    · TTL: <b>{{ config.ttl_days }} days</b> · storage cap target: {{ cap_gb }} GB
+  </p>
+
+  <h2>Last bar per symbol</h2>
+  {% if health.symbols %}
+  <table>
+    <thead><tr><th>Symbol</th><th>Last bar (UTC)</th><th>Bars stored</th></tr></thead>
+    <tbody>
+      {% for s in health.symbols %}
+      <tr>
+        <td>{{ s.symbol }}</td>
+        <td>{{ s.last_ts }}</td>
+        <td>{{ s.bars }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="warning">No bars yet — the collector may not have run, or the error below applies.</p>
+  {% if health.symbols_error %}<p class="warning">Query error: {{ health.symbols_error }}</p>{% endif %}
+  {% endif %}
+
+  <h2>Data size</h2>
+  <p>{{ health.data_size|default:"?" }}</p>
+
+  <h2>Zero-tick windows (feed gaps)</h2>
+  {% if health.zero_tick_windows %}
+  <table>
+    <thead><tr><th>Symbol</th><th>Gaps</th><th>First</th><th>Last</th></tr></thead>
+    <tbody>
+      {% for g in health.zero_tick_windows %}
+      <tr><td>{{ g.symbol }}</td><td>{{ g.gaps }}</td><td>{{ g.first }}</td><td>{{ g.last }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No gaps detected.</p>
+  {% endif %}
+</div>
+{% endblock %}

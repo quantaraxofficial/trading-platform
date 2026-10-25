@@ -1,0 +1,18 @@
+# Builds the MT5 tick collector from this branch's backend/pipeline package.
+# Base is a slim python image so the 4 GB VM keeps enough headroom for
+# ClickHouse + the terminal.
+
+FROM python:3.11-slim
+
+WORKDIR /opt/pipeline
+
+# `requests` powers the ClickHouse HTTP client. The native MT5 bridge
+# (MetaTrader5) is Windows-only, so on the Linux VM we rely on the pip
+# `mt5` package; install it too so headless mode can attach to the terminal.
+COPY backend/pipeline ./pipeline
+RUN pip install --no-cache-dir \
+    requests \
+    mt5
+
+# Run as the module entrypoint. Graceful SIGTERM drains the in-flight buffer.
+CMD ["python", "-m", "pipeline.runner"]
