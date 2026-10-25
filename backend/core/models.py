@@ -140,6 +140,36 @@ class FailedRequest(models.Model):
     def __str__(self):
         return f"{self.source} {self.method} {self.path} -> {self.status_code} ({self.reason_code})"
 
+class FeedbackMessage(models.Model):
+    """A user's bug report or feedback message, viewable in the Django admin.
+
+    Accepts text, an attached image (PNG/JPG screenshot), and the chart context
+    at the time of submission (symbol, interval, page URL). No session or login
+    required — anonymous users can submit too (session_key may be empty).
+    """
+    user = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL,
+                             null=True, blank=True, related_name='feedback')
+    session_key = models.CharField(max_length=255, blank=True)
+    message   = models.TextField()
+    images    = models.JSONField(default=list, blank=True)  # ["/media/feedback/...", ...] uploaded files
+    symbol    = models.CharField(max_length=50, blank=True)
+    interval  = models.CharField(max_length=20, blank=True)
+    page_url  = models.CharField(max_length=500, blank=True)
+    user_agent= models.CharField(max_length=300, blank=True)
+    ip        = models.GenericIPAddressField(null=True, blank=True)
+    created_at= models.DateTimeField(auto_now_add=True)
+    is_read   = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["created_at"]),
+                   models.Index(fields=["is_read", "created_at"])]
+
+    def __str__(self):
+        who = self.user.name if self.user else f"(anonymous {self.session_key[:8]})"
+        return f"{who} — {self.message[:50]}"
+
+
 class UserSetting(models.Model):
     """One synced app setting of a user (a saved layout list, watchlists, chart settings…), so they
     follow the user across devices. `value` is the JSON text the browser keeps for that key;

@@ -159,7 +159,6 @@ interface DrawingContextType {
 }
 
 import { useAuth } from '@/context/AuthContext';
-import { useTelemetry } from '@/context/TelemetryContext';
 import { isTypingTarget } from '../../../lib/isTypingTarget';
 import { writeDrawingIndex } from '../../../lib/drawingIndex';
 import { backendFetch } from "@/lib/backend";
@@ -168,7 +167,9 @@ const DrawingContext = createContext<DrawingContextType | undefined>(undefined);
 
 export function DrawingProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const { logAction } = useTelemetry();
+  // Telemetry (action logging to the bot backend) was cut from this branch — keep the
+  // call sites but route them to a no-op so nothing else needs to change
+  const logAction = (_action: string, _data: unknown) => {};
   const [symbol, setSymbol] = useState<string>('');
   const [activeTool, setActiveTool] = useState<DrawingType | null>(null);
   const [activeEmoji, setActiveEmoji] = useState<string | null>(null);

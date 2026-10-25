@@ -1,5 +1,56 @@
 from django.contrib import admin
-from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest
+from django.utils.html import format_html
+from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, FeedbackMessage
+
+@admin.register(FeedbackMessage)
+class FeedbackMessageAdmin(admin.ModelAdmin):
+    """Bug reports / feedback the users send from the chart's Send-feedback button.
+    New reports land here; `is_read` lets you tick off the ones you've handled."""
+    list_display = ("created_at", "user", "message_snippet", "symbol", "interval", "image_count", "is_read")
+    list_filter = ("is_read", "created_at", "symbol")
+    search_fields = ("message", "user__name", "user__email", "session_key", "page_url")
+    date_hierarchy = "created_at"
+    ordering = ("-created_at",)
+    actions = ["mark_read", "mark_unread"]
+    readonly_fields = ("created_at", "user", "session_key", "message", "images_full",
+                      "symbol", "interval", "page_url", "user_agent", "ip")
+
+    @admin.display(description="Message")
+    def message_snippet(self, obj):
+        return (obj.message or "")[:80]
+
+    @admin.display(description="Images")
+    def image_count(self, obj):
+        return len(obj.images or [])
+
+    @admin.display(description="Images")
+    def images_full(self, obj):
+        if not obj.images:
+            return "—"
+        urls = "".join(
+            f'<a href="{url}" target="_blank" style="display:block;margin:4px 0">'
+            f'<img src="{url}" style="max-width:220px;max-height:140px;border:1px solid #ccc;border-radius:4px"></a>'
+            for url in obj.images
+        )
+        return format_html("<div>{}</div>", urls)
+
+    @admin.action(description="Mark selected as read")
+    def mark_read(self, request, queryset):
+        queryset.update(is_read=True)
+
+    @admin.action(description="Mark selected as unread")
+    def mark_unread(self, request, queryset):
+        queryset.update(is_read=False)
+
+    def has_add_permission(self, request):
+        return False   # records come from the app, not the admin
+    def has_change_permission(self, request, obj=None):
+        # only the admin checkbox (is_read) is editable; content is readonly
+        return True
+    def get_readonly_fields(self, request, obj=None):
+        # everything except the read flag
+        return [f for f in self.readonly_fields if f != "is_read"]
+
 
 @admin.register(FailedRequest)
 class FailedRequestAdmin(admin.ModelAdmin):

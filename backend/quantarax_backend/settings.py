@@ -169,7 +169,11 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = "static/"
+
+# Media files (uploaded feedback screenshots)
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 # Sign-in (api/users/sync/) checks the Firebase ID token against this project
 FIREBASE_PROJECT_ID = env('FIREBASE_PROJECT_ID', default='quantarax')

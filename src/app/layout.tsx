@@ -10,7 +10,6 @@ export const metadata: Metadata = {
 };
 
 import { AuthProvider } from "@/context/AuthContext";
-import { TelemetryProvider } from "@/context/TelemetryContext";
 import { AlertsProvider } from "@/context/AlertsContext";
 import { PaperTradingProvider } from "@/context/PaperTradingContext";
 import CloudSync from "./components/CloudSync";
@@ -31,9 +30,7 @@ export default function RootLayout({
           <CloudSync />
           <PaperTradingProvider>
             <AlertsProvider>
-              <TelemetryProvider>
-                {children}
-              </TelemetryProvider>
+              {children}
             </AlertsProvider>
           </PaperTradingProvider>
         </AuthProvider>

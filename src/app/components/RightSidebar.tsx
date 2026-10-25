@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Wallet, Bot, Keyboard, Mail, Info, Tag } from "lucide-react";
+import { Wallet, Keyboard, Mail, Info, Tag, MessageCircle } from "lucide-react";
 import {
   TVPineIcon,
   TVWatchlistIcon,
@@ -16,12 +16,14 @@ import {
 import { useEscapeClose } from "../lib/useEscapeClose";
 import { useAlerts } from "@/context/AlertsContext";
 
-// Trading Agent — a small chat-bubble-with-spark glyph (1px lines like the TradingView icons)
+// Trading Agent — a small chat-bubble glyph (1px lines like the TradingView icons)
 function TVAgentIcon({ size = 28, ...props }: any) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" {...props}>
       <path d="M4 5h16v10H9l-4 4v-4H4Z" vectorEffect="non-scaling-stroke" />
-      <path d="M12 8.2 12.7 10 14.5 10.7 12.7 11.4 12 13.2 11.3 11.4 9.5 10.7 11.3 10Z" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="10" r="0.8" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="10" r="0.8" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="10" r="0.8" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -33,7 +35,6 @@ interface RightSidebarProps {
   activePanel: string | null;
   onPanelChange: (panelId: string) => void;
   onOpenPineEditor?: () => void;
-  onOpenAgent?: () => void;
   onOpenReplay?: () => void;
   onOpenShortcuts?: () => void;
   // Pine Editor is open (its button shows as selected, and clicking it closes the editor)
@@ -43,7 +44,7 @@ interface RightSidebarProps {
 // TradingView's right toolbar: the panel switches at the top (Watchlist, Alerts, Object
 // tree), the tools anchored at the bottom (Pine, our Trading Agent, Products) and Help
 // Center in the corner. Clicking the open panel's button again collapses the panel.
-export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEditor, onOpenAgent, onOpenReplay, onOpenShortcuts, pineOpen = false }: RightSidebarProps) {
+export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEditor, onOpenReplay, onOpenShortcuts, pineOpen = false }: RightSidebarProps) {
   const router = useRouter();
   const [menu, setMenu] = useState<"products" | "help" | null>(null);
   // Unread triggered alerts, as a red count on the Alerts button
@@ -63,14 +64,10 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     { icon: <TVPineIcon size={28} />, label: "Pine Editor", onClick: () => { if (!pineOpen) onOpenPineEditor?.(); } },
     { icon: <TVReplayIcon size={28} />, label: "Bar replay", onClick: () => onOpenReplay?.() },
     { icon: <Wallet {...i18} />, label: "Paper trading", onClick: () => window.dispatchEvent(new CustomEvent("tv:open-trading-panel")) },
-    { icon: <Bot {...i18} />, label: "Trading Agent", onClick: () => onOpenAgent?.() },
     "divider",
-    { icon: <Tag {...i18} />, label: "Pricing", onClick: () => router.push("/pricing") },
   ];
   const helpItems: MenuItem[] = [
     { icon: <Keyboard {...i18} />, label: "Keyboard shortcuts", hint: "Ctrl + /", onClick: () => onOpenShortcuts?.() },
-    { icon: <Mail {...i18} />, label: "Contact support", onClick: () => router.push("/contact") },
-    { icon: <Info {...i18} />, label: "About TradePilot", onClick: () => router.push("/about") },
   ];
 
   const tooltip = (text: string, hidden = false) => !hidden && (
@@ -101,8 +98,8 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
           {tooltip("Pine")}
         </div>
         <div className="tv-tooltip-container">
-          <button className="tv-rt-btn" onClick={() => onOpenAgent?.()} aria-label="Trading Agent"><TVAgentIcon size={28} /></button>
-          {tooltip("Trading Agent")}
+          <button className="tv-rt-btn" onClick={() => window.dispatchEvent(new CustomEvent("tv:open-feedback"))} aria-label="Send feedback"><TVAgentIcon size={28} /></button>
+          {tooltip("Send feedback / report a bug")}
         </div>
         <div className="tv-tooltip-container">
           <button ref={productsRef} className={`tv-rt-btn ${menu === "products" ? "active" : ""}`} onClick={() => setMenu(m => (m === "products" ? null : "products"))} aria-label="Products">

@@ -40,8 +40,6 @@ interface TopBarProps {
   symbol: string;
   onSymbolChange: (symbol: string) => void;
   onIndicatorSelect?: (indicator: string) => void;
-  isBotActive: boolean;
-  onToggleBot: () => void;
   onAlertClick?: () => void;
   symbolSearchOpen?: boolean;
   symbolSearchInitial?: string;
@@ -181,7 +179,7 @@ function saveFavoriteIntervals(values: string[]) {
   }
 }
 
-export default function TopBar({ theme, toggleTheme, interval, onIntervalChange, onReplayClick, isReplayActive, symbol, onSymbolChange, onIndicatorSelect, isBotActive, onToggleBot, onAlertClick, symbolSearchOpen, symbolSearchInitial, onSymbolSearchClose, onSettingsClick, onMaximizeClick, onSnapshot, activeIndicators = [], onApplyIndicatorTemplate, onQuickSearchClick, onMenuClick, drawingsPanelVisible, onToggleDrawingsPanel }: TopBarProps) {
+export default function TopBar({ theme, toggleTheme, interval, onIntervalChange, onReplayClick, isReplayActive, symbol, onSymbolChange, onIndicatorSelect, onAlertClick, symbolSearchOpen, symbolSearchInitial, onSymbolSearchClose, onSettingsClick, onMaximizeClick, onSnapshot, activeIndicators = [], onApplyIndicatorTemplate, onQuickSearchClick, onMenuClick, drawingsPanelVisible, onToggleDrawingsPanel }: TopBarProps) {
   const [showSymbolSearchInternal, setShowSymbolSearchInternal] = useState(false);
   const [internalSearchInitial, setInternalSearchInitial] = useState("");
   const showSymbolSearch = showSymbolSearchInternal || !!symbolSearchOpen;

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Info, Search, Clock3, RotateCcw, ListPlus, Download, Copy, Link2, Maximize, Bot, SunMoon, Globe, ArrowUpCircle, ArrowDownCircle, CloudUpload, Folder, Keyboard } from "lucide-react";
+import { Info, Search, Clock3, RotateCcw, ListPlus, Download, Copy, Link2, Maximize, SunMoon, Globe, ArrowUpCircle, ArrowDownCircle, CloudUpload, Folder, Keyboard, MessageCircle } from "lucide-react";
 import styles from "./page.module.css";
 import TopBar from "./components/TopBar";
 import LeftToolbar from "./components/LeftToolbar";
@@ -25,16 +25,14 @@ import FavoritesToolbar from "./components/FavoritesToolbar";
 import PineEditorPanel from "./components/PineEditorPanel";
 import { pineDock, openPine, defaultPineWidth } from "./components/pine/pineStore";
 import { isTypingTarget } from "./lib/isTypingTarget";
-import AgentChatPanel from "./components/AgentChatPanel";
 import dynamic from "next/dynamic";
 const ChartContainer = dynamic(() => import('./components/ChartContainer'), { ssr: false });
 import { DrawingProvider } from "./components/drawing/core/DrawingContext";
-import BotController from "./components/bot/BotController";
 import { ReplayProvider, useReplay } from "./components/ReplayContext";
 import { useAuth } from "@/context/AuthContext";
 import { useChartSnapshot } from "./components/SnapshotController";
-import { useTelemetry } from "@/context/TelemetryContext";
 import QuickSearchDialog, { QuickAction } from "./components/QuickSearchDialog";
+import FeedbackPanel from "./components/FeedbackPanel";
 import { TVAlertIcon, TVReplayIcon, TVGoToDateIcon, TVPineIcon, TVSettingsIcon, TVIndicatorsIcon } from "./components/icons/TVIcons";
 import type { IndicatorTemplate } from "./utils/indicatorTemplates";
 import MobileMenuDrawer, { MobilePanel, MobilePanelSheet } from "./components/MobileMenuDrawer";
@@ -79,7 +77,6 @@ function AppLayout() {
   const [triggerSettings, setTriggerSettings] = useState(0);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [activeIndicators, setActiveIndicators] = useState<{id: string, name: string, visible?: boolean, inputs?: Record<string, any>}[]>([]);
-  const [isBotActive, setIsBotActive] = useState(false);
   // The order ticket docked in the right column (floating otherwise)
   const tradingUiState = useTradingUi();
   const ticketPrefsState = useTicketPrefs();
@@ -109,6 +106,7 @@ function AppLayout() {
     try { localStorage.setItem(RIGHT_PANEL_KEY, String(open)); } catch { /* ignore */ }
   };
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   // Create Alert opens at a given price (e.g. a drawing's, from its toolbar) or else at the
   // latest close of the symbol on the chart
   const [alertInitialPrice, setAlertInitialPrice] = useState<number | undefined>(undefined);
@@ -195,7 +193,6 @@ function AppLayout() {
     window.addEventListener("tv:open-pine-editor", openPineEditor);
     return () => window.removeEventListener("tv:open-pine-editor", openPineEditor);
   }, []);
-  const [showAgentChat, setShowAgentChat] = useState(false);
   const [panelsHidden, setPanelsHidden] = useState(false);
   const [showPanelsHiddenToast, setShowPanelsHiddenToast] = useState(false);
 
@@ -492,7 +489,6 @@ function AppLayout() {
   const handleIntervalChange = (interval: string, label?: string) => {
     setSelectedInterval(interval);
     if (label) setIntervalLabel(label);
-    logAction('TIMEFRAME_CHANGED', { interval, label });
   };
 
   // Bottom bar date ranges: switch to the range's interval here; the chart then shows the
@@ -509,7 +505,6 @@ function AppLayout() {
   }, []);
 
   const { user } = useAuth();
-  const { logAction } = useTelemetry();
 
   const { runSnapshot, toastElement: snapshotToast } = useChartSnapshot({ symbol, intervalLabel, theme });
   const runSnapshotRef = useRef(runSnapshot);
@@ -664,13 +659,16 @@ function AppLayout() {
       setHeaderToast("Publishing ideas isn't available yet");
     };
     const onShortcuts = () => setShowShortcuts(true);
+    const onFeedback = () => setShowFeedback(true);
     window.addEventListener("tv:save-chart", onSave);
     window.addEventListener("tv:publish-idea", onPublish);
     window.addEventListener("tv:open-shortcuts", onShortcuts);
+    window.addEventListener("tv:open-feedback", onFeedback);
     return () => {
       window.removeEventListener("tv:save-chart", onSave);
       window.removeEventListener("tv:publish-idea", onPublish);
       window.removeEventListener("tv:open-shortcuts", onShortcuts);
+      window.removeEventListener("tv:open-feedback", onFeedback);
     };
   }, [router]);
 
@@ -723,7 +721,6 @@ function AppLayout() {
       interval: template.interval && template.interval !== selectedInterval ? template.interval : undefined,
     };
     setActiveIndicators(next.map(({ config, ...rest }) => rest));
-    logAction('INDICATOR_TEMPLATE_APPLIED', { name: template.name });
   };
 
   // A template's symbol/interval is switched to only after the chart has rebuilt the new
@@ -758,7 +755,7 @@ function AppLayout() {
     { id: 'market-buy', label: 'Market buy', section: 'FUNCTIONS', keywords: ['order', 'trade', 'long'], shortcut: ['Shift', 'B'], icon: <ArrowUpCircle {...icon18} />, run: () => requestTrade('buy', symbolRef.current) },
     { id: 'market-sell', label: 'Market sell', section: 'FUNCTIONS', keywords: ['order', 'trade', 'short'], shortcut: ['Shift', 'S'], icon: <ArrowDownCircle {...icon18} />, run: () => requestTrade('sell', symbolRef.current) },
     { id: 'toggle-panels', label: panelsHidden ? 'Show panels' : 'Hide panels', section: 'FUNCTIONS', keywords: ['fullscreen', 'maximize', 'focus'], shortcut: ['Shift', 'F'], icon: <Maximize {...icon18} />, run: togglePanelsHidden },
-    { id: 'agent', label: 'Open Trading Agent', section: 'FUNCTIONS', keywords: ['ai', 'assistant', 'chat', 'bot'], icon: <Bot {...icon18} />, run: () => setShowAgentChat(true) },
+    { id: 'feedback', label: 'Send feedback / report a bug', section: 'FUNCTIONS', keywords: ['feedback', 'bug', 'report', 'issue', 'contact'], icon: <MessageCircle {...icon18} />, run: () => window.dispatchEvent(new CustomEvent('tv:open-feedback')) },
     { id: 'shortcuts', label: 'Keyboard shortcuts', section: 'FUNCTIONS', keywords: ['hotkeys', 'keys', 'help'], shortcut: ['Ctrl', '/'], icon: <Keyboard {...icon18} />, run: () => setShowShortcuts(true) },
     { id: 'chart-settings', label: 'Chart settings', section: 'SETTINGS', keywords: ['settings', 'appearance', 'scales', 'canvas', 'colors'], icon: <TVSettingsIcon size={18} />, run: () => setTriggerSettings(t => t + 1) },
     { id: 'theme', label: theme === 'dark' ? 'Light theme' : 'Dark theme', section: 'SETTINGS', keywords: ['theme', 'color', 'mode', 'appearance'], icon: <SunMoon {...icon18} />, run: toggleTheme },
@@ -790,8 +787,6 @@ function AppLayout() {
             symbol={symbol}
             onSymbolChange={setSymbol}
             onIndicatorSelect={handleIndicatorSelect}
-            isBotActive={isBotActive}
-            onToggleBot={() => setIsBotActive(!isBotActive)}
             onAlertClick={() => openAlert()}
             symbolSearchOpen={showSymbolSearch}
             symbolSearchInitial={symbolSearchInitial}
@@ -806,12 +801,6 @@ function AppLayout() {
           />
         </header>
       )}
-
-      <BotController
-        isActive={isBotActive}
-        timeframe={selectedInterval}
-        setTimeframe={setSelectedInterval}
-      />
 
       {!panelsHidden && drawingsPanelVisible && (
         <aside className={styles.leftToolbar}>
@@ -923,7 +912,6 @@ function AppLayout() {
             }}
             onOpenPineEditor={() => setShowPineEditor(open => !open)}
             pineOpen={pineVisible}
-            onOpenAgent={() => setShowAgentChat(true)}
             onOpenReplay={handleReplayClick}
             onOpenShortcuts={() => setShowShortcuts(true)}
           />
@@ -942,10 +930,6 @@ function AppLayout() {
           initialCode={pineOpenRequest?.code}
           initialScriptName={pineOpenRequest?.scriptName}
         />
-      )}
-
-      {showAgentChat && (
-        <AgentChatPanel theme={theme} onClose={() => setShowAgentChat(false)} />
       )}
 
       {snapshotToast}
@@ -976,6 +960,28 @@ function AppLayout() {
         </div>
       )}
 
+      {/* The chart's feedback icon: a small bubble anchored above the bottom bar,
+          left of the center; clicking it opens the bug-report panel. Hidden when
+          panels are hidden or the panel itself is open. */}
+      {!panelsHidden && !showFeedback && (
+        <button
+          onClick={() => setShowFeedback(true)}
+          aria-label="Send feedback"
+          title="Send feedback / report a bug"
+          style={{
+            position: "fixed", left: "14px", bottom: "calc(var(--tv-bottom-toolbar-height) + 14px)",
+            width: "36px", height: "36px", borderRadius: "50%",
+            border: "1px solid var(--tv-color-border)",
+            backgroundColor: "var(--tv-color-pane-bg)", color: "var(--tv-color-text)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", zIndex: 5000,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+          }}
+        >
+          <MessageCircle size={17} strokeWidth={1.5} />
+        </button>
+      )}
+
       <OrderTicket placement="floating" />
       <TradingDialogs />
       <TradingNotifications />
@@ -999,6 +1005,15 @@ function AppLayout() {
       {leaveReplayOpen && <ReplayLeaveDialog onStay={() => setLeaveReplayOpen(false)} onLeave={leaveReplay} />}
       {showShortcuts && <KeyboardShortcutsDialog onClose={() => setShowShortcuts(false)} />}
 
+      {showFeedback && (
+        <FeedbackPanel
+          theme={theme}
+          symbol={symbol}
+          interval={intervalLabel}
+          onClose={() => setShowFeedback(false)}
+        />
+      )}
+
       {showMobileMenu && (
         <MobileMenuDrawer
           isDark={theme === "dark"}
@@ -1007,7 +1022,6 @@ function AppLayout() {
           onOpenPanel={setMobilePanel}
           onOpenPineEditor={() => setShowPineEditor(true)}
           onOpenTradingPanel={() => window.dispatchEvent(new CustomEvent('tv:open-trading-panel'))}
-          onOpenAgent={() => setShowAgentChat(true)}
           onToggleTheme={toggleTheme}
           onToggleDrawingsPanel={toggleDrawingsPanel}
         />

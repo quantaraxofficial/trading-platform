@@ -95,8 +95,8 @@ export default function AccountMenu({ isDark, onToggleTheme, height, drawingsPan
           backgroundColor: "var(--tv-color-pane-bg)", color: "var(--tv-hdr-text)", border: "1px solid var(--tv-color-border)", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
         }}>
           {/* The plan */}
-          <button type="button" onClick={() => go("/pricing")} aria-label={`${plan} plan`}
-            style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", height: 44, padding: "0 12px", border: "none", background: "transparent", color: "inherit", cursor: "pointer", fontFamily: "inherit" }}>
+          <button type="button" aria-label={`${plan} plan`}
+            style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", height: 44, padding: "0 12px", border: "none", background: "transparent", color: "inherit", cursor: "default", fontFamily: "inherit" }}>
             <BrandMark />
             <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.3px" }}>{plan}</span>
           </button>
@@ -110,20 +110,17 @@ export default function AccountMenu({ isDark, onToggleTheme, height, drawingsPan
                   position: "absolute", left: "100%", top: 0, marginLeft: -6, width: 190, padding: "6px 0",
                   background: "var(--tv-color-pane-bg)", border: "1px solid var(--tv-color-border)", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
                 }}>
-                  <button type="button" role="menuitem" className="tv-menu-row" style={{ height: 32, color: "var(--tv-color-accent)" }} onClick={() => go("/pricing")}>Explore our plans</button>
-                  <button type="button" role="menuitem" className="tv-menu-row" style={{ height: 32 }} onClick={() => go("/profile")}>Your profile</button>
-                  <button type="button" role="menuitem" className="tv-menu-row" style={{ height: 32 }} onClick={() => go("/profile?tab=settings")}>Settings and billing</button>
+                  <button type="button" role="menuitem" className="tv-menu-row" style={{ height: 32 }} onClick={() => { close(); window.dispatchEvent(new CustomEvent("tv:open-feedback")); }}>Send feedback / report a bug</button>
+                  <button type="button" role="menuitem" className="tv-menu-row" style={{ height: 32 }} onClick={() => { close(); logout(); }}>Sign out of this device</button>
                 </div>
               )}
             </div>
           ) : (
             <>
               {row(<SignInIcon />, "Sign in", () => go("/login"))}
-              {row(<UserPlusIcon />, "Create account", () => go("/signup"))}
             </>
           )}
-          {row(<HomeIcon />, "Home", () => go("/landing"))}
-          {row(<SupportIcon />, "Support requests", () => go("/contact"))}
+          {row(<SupportIcon />, "Support requests", () => { close(); window.dispatchEvent(new CustomEvent("tv:open-feedback")); })}
           {divider}
           {row(<MoonIcon />, "Dark theme", onToggleTheme, toggle(isDark))}
           {onToggleDrawingsPanel && row(<PanelIcon />, "Drawings panel", onToggleDrawingsPanel, toggle(!!drawingsPanelVisible))}
@@ -146,11 +143,9 @@ const ico = { width: 24, height: 24, viewBox: "0 0 24 24", fill: "none", stroke:
 const BrandMark = () => (
   <svg width="26" height="26" viewBox="0 0 36 36" fill="currentColor" aria-hidden><path d="M18 4L4 32h28L18 4zm0 8l8 16H10l8-16z" /></svg>
 );
-const HomeIcon = () => <svg {...ico}><path d="M4.5 11.5L12 5l7.5 6.5M6.5 10v9.5h4v-5h3v5h4V10" /></svg>;
 const SupportIcon = () => <svg {...ico}><path d="M4.5 10.5h15v9h-15zM4.5 10.5L12 15l7.5-4.5M7.5 10.5v-5h9v5" /></svg>;
 const MoonIcon = () => <svg {...ico}><path d="M18.5 14.5A7 7 0 0 1 9.5 5.5a7 7 0 1 0 9 9z" /></svg>;
 const PanelIcon = () => <svg {...ico}><path d="M4.5 5.5h15v13h-15zM9.5 5.5v13" /></svg>;
 const KeyboardIcon = () => <svg {...ico}><path d="M3.5 7.5h17v10h-17zM6.5 10.5h1M9.5 10.5h1M12.5 10.5h1M15.5 10.5h1M6.5 13h1M16.5 13h1M9 15h6" /></svg>;
 const SignOutIcon = () => <svg {...ico}><path d="M10.5 5.5h-5v13h5M14 8.5l3.5 3.5-3.5 3.5M17.5 12h-9" /></svg>;
 const SignInIcon = () => <svg {...ico}><path d="M13.5 5.5h5v13h-5M9.5 8.5L13 12l-3.5 3.5M13 12H4.5" /></svg>;
-const UserPlusIcon = () => <svg {...ico}><circle cx="10" cy="9" r="3.5" /><path d="M3.5 19.5c.8-3.3 3.3-5 6.5-5s5.7 1.7 6.5 5M18 7.5v5M15.5 10h5" /></svg>;

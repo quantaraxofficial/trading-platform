@@ -15,7 +15,6 @@ urlpatterns = [
     path('telemetry/session/start/<str:uid>/', views.start_backtest_session, name='start_backtest_session'),
     path('telemetry/actions/log/<str:uid>/', views.log_telemetry_actions, name='log_telemetry_actions'),
     path('bot/predict/', views.predict_bot_action, name='predict_bot_action'),
-    path('agent/insights/<str:uid>/', views.get_agent_insights, name='get_agent_insights'),
-    path('agent/strategy-note/<str:uid>/', views.submit_strategy_note, name='submit_strategy_note'),
     path('track-failure/', views.track_failure, name='track_failure'),
+    path('feedback/', views.submit_feedback, name='submit_feedback'),
 ]

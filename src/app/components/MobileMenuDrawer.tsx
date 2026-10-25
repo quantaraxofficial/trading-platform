@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { FileText, AlarmClock, Layers, Wallet, Bot, Home, Moon, PanelLeft, User, LogIn, LogOut, UserPlus, X } from "lucide-react";
+import { FileText, AlarmClock, Layers, Wallet, MessageCircle, Moon, PanelLeft, User, LogIn, LogOut, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useEscapeClose } from "../lib/useEscapeClose";
 import { TVPineIcon } from "./icons/TVIcons";
@@ -16,7 +16,6 @@ interface MobileMenuDrawerProps {
   onOpenPanel: (panel: MobilePanel) => void;
   onOpenPineEditor: () => void;
   onOpenTradingPanel: () => void;
-  onOpenAgent: () => void;
   onToggleTheme: () => void;
   onToggleDrawingsPanel: () => void;
 }
@@ -104,28 +103,20 @@ export default function MobileMenuDrawer(props: MobileMenuDrawerProps) {
         {divider}
         {row(<TVPineIcon size={28} />, "Pine Editor", run(props.onOpenPineEditor))}
         {row(<Wallet {...i20} />, "Trading panel", run(props.onOpenTradingPanel))}
-        {row(<Bot {...i20} />, "Trading Agent", run(props.onOpenAgent))}
+        {row(<MessageCircle {...i20} />, "Send feedback", run(() => window.dispatchEvent(new CustomEvent("tv:open-feedback"))))}
         {divider}
-        <Link href="/landing" style={{ textDecoration: "none" }} onClick={onClose}>
-          {row(<Home {...i20} />, "Home", () => {})}
-        </Link>
         {row(<Moon {...i20} />, "Dark theme", props.onToggleTheme, <Switch on={isDark} />)}
         {row(<PanelLeft {...i20} />, "Drawings panel", props.onToggleDrawingsPanel, <Switch on={drawingsPanelVisible} />)}
         {divider}
         {user ? (
           <>
-            <Link href="/profile" style={{ textDecoration: "none" }} onClick={onClose}>
-              {row(<User {...i20} />, user.displayName || user.email || "Profile", () => {})}
-            </Link>
+            {row(<User {...i20} />, user.displayName || user.email || "Profile", () => {})}
             {row(<LogOut {...i20} />, "Sign out", run(() => { logout(); }))}
           </>
         ) : (
           <>
             <Link href="/login" style={{ textDecoration: "none" }} onClick={onClose}>
               {row(<LogIn {...i20} />, "Sign in", () => {}, undefined, "var(--tv-color-accent)")}
-            </Link>
-            <Link href="/signup" style={{ textDecoration: "none" }} onClick={onClose}>
-              {row(<UserPlus {...i20} />, "Join now", () => {}, undefined, "var(--tv-color-accent)")}
             </Link>
           </>
         )}
