@@ -76,9 +76,11 @@ export default function PineMonaco({ value, onChange, onCursor, isDark, settings
   const diffRef = useRef<Monaco.editor.IEditorDecorationsCollection | null>(null);
   const disposers = useRef<Monaco.IDisposable[]>([]);
   const [mounted, setMounted] = useState(false);
-  // What this editor reported through onChange since it was last in step with `value`. The value
-  // coming back from the parent lags the typing; written back, it would wipe the newest
-  // keystrokes, so an echo of the editor's own text is never re-applied.
+  // The editor keeps its own text (it's given `value` only to start with). The value coming back
+  // from the parent lags the typing, and writing it back would wipe the newest keystrokes, so a
+  // `value` that is just an echo of what this editor reported is ignored; any other (opening a
+  // script, a version) replaces the text. Checked when it's applied, not when rendering, so a
+  // keystroke in between can't be lost.
   const emitted = useRef<string[]>([]);
   const handleChange = (v: string | undefined) => {
     const s = v ?? "";
@@ -86,9 +88,16 @@ export default function PineMonaco({ value, onChange, onCursor, isDark, settings
     if (emitted.current.length > 200) emitted.current.shift();
     onChange(s);
   };
-  const live = editorRef.current?.getModel()?.getValue();
-  if (live !== undefined && live === value) emitted.current = [];
-  const editorValue = live !== undefined && value !== live && emitted.current.includes(value) ? live : value;
+  useEffect(() => {
+    const editor = editorRef.current, model = editor?.getModel();
+    if (!editor || !model) return;
+    if (model.getValue() === value) { emitted.current = []; return; }
+    if (emitted.current.includes(value)) return;
+    emitted.current = [];
+    editor.pushUndoStop();
+    model.pushEditOperations([], [{ range: model.getFullModelRange(), text: value }], () => null);
+    editor.pushUndoStop();
+  }, [value, mounted]);
   // In a collab, the code is the room's, edited live by everyone allowed to
   const inCollab = useCollabActive();
   useEffect(() => {
@@ -182,7 +191,7 @@ export default function PineMonaco({ value, onChange, onCursor, isDark, settings
       <Editor
         language={PINE_LANG}
         theme={isDark ? PINE_THEME_DARK : PINE_THEME_LIGHT}
-        value={editorValue}
+        defaultValue={value}
         onChange={handleChange}
         beforeMount={beforeMount}
         onMount={onMount}
