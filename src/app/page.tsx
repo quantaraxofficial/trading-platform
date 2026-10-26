@@ -252,7 +252,8 @@ function AppLayout() {
     const cell = workingLayout.cells[workingLayout.active] || workingLayout.cells[0];
     if (!cell) return;
     if (cell.symbol !== symbolRef.current) setSymbol(cell.symbol);
-    if (cell.interval !== intervalRef.current) { setSelectedInterval(cell.interval); setIntervalLabel(cell.intervalLabel); }
+    // (an interval saved as its label, e.g. "15m" from an older bug, isn't applied)
+    if (cell.interval !== intervalRef.current && parseInterval(cell.interval)) { setSelectedInterval(cell.interval); setIntervalLabel(intervalShort(cell.interval)); }
   }, [workingLayout]);
   // …and the active chart follows the page (symbol search, interval menu, …), with Sync in layout
   useEffect(() => {
@@ -550,10 +551,11 @@ function AppLayout() {
         })
         .then(data => {
           if (data.symbol) setSymbol(data.symbol);
-          if (data.interval) {
+          // Only an interval the app knows ("15min", not the label "15m" older saves can hold)
+          const label = data.interval ? intervalToLabel(data.interval) : undefined;
+          if (label) {
             setSelectedInterval(data.interval);
-            const label = intervalToLabel(data.interval);
-            if (label) setIntervalLabel(label);
+            setIntervalLabel(label);
           }
           if (data.timestamp) { setTargetTimestamp(data.timestamp); viewTimestampRef.current = data.timestamp; }
           if (data.bar_spacing) { setTargetBarSpacing(data.bar_spacing); viewBarSpacingRef.current = data.bar_spacing; }

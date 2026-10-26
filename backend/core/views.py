@@ -233,7 +233,7 @@ def manage_chart_state(request, uid):
         except ChartState.DoesNotExist:
             return Response({
                 "symbol": "XAU/USD",
-                "interval": "15m",
+                "interval": "15min",   # the app's interval value ("15m" is only its label)
                 "timestamp": None,
                 "bar_spacing": None,
                 "indicators": [],
@@ -243,11 +243,13 @@ def manage_chart_state(request, uid):
     elif request.method == 'POST':
         from .models import ChartState
         data = request.data
+        # What's saved already, for the fields this save doesn't send
+        state = ChartState.objects.filter(owner=profile).first()
         state, _ = ChartState.objects.update_or_create(
             owner=profile,
             defaults={
                 'symbol': data.get('symbol', state.symbol if state else 'XAU/USD'),
-                'interval': data.get('interval', state.interval if state else '15m'),
+                'interval': data.get('interval', state.interval if state else '15min'),
                 'timestamp': data.get('timestamp', state.timestamp if state else None),
                 'bar_spacing': data.get('bar_spacing', state.bar_spacing if state else None),
                 'indicators': data.get('indicators', state.indicators if state else []),
