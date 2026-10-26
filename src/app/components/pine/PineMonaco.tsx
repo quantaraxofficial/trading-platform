@@ -5,12 +5,14 @@
 // colours — with Pine highlighting, autocomplete, hover cards, compile errors as markers (and
 // the "N of M problems" peek after a failed compile), and change bars against the last save.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Editor, { type BeforeMount, type OnMount } from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
 import { setupPine, attachReferenceClicks, PINE_LANG, PINE_THEME_DARK, PINE_THEME_LIGHT, PINE_FONT } from "./pineLanguage";
 import type { PineEditorSettings } from "./pineStore";
 import type { PineScriptError } from "../../lib/pineScriptEngine";
+import { collab, useCollabActive } from "../../lib/collab/session";
+import { pineDoc } from "../../lib/collab/pineDoc";
 
 export interface PineEditorApi {
   focus: () => void;
@@ -73,6 +75,38 @@ export default function PineMonaco({ value, onChange, onCursor, isDark, settings
   onCursorRef.current = onCursor;
   const diffRef = useRef<Monaco.editor.IEditorDecorationsCollection | null>(null);
   const disposers = useRef<Monaco.IDisposable[]>([]);
+  const [mounted, setMounted] = useState(false);
+  // The editor keeps its own text (it's given `value` only to start with). The value coming back
+  // from the parent lags the typing, and writing it back would wipe the newest keystrokes, so a
+  // `value` that is just an echo of what this editor reported is ignored; any other (opening a
+  // script, a version) replaces the text. Checked when it's applied, not when rendering, so a
+  // keystroke in between can't be lost.
+  const emitted = useRef<string[]>([]);
+  const handleChange = (v: string | undefined) => {
+    const s = v ?? "";
+    emitted.current.push(s);
+    if (emitted.current.length > 200) emitted.current.shift();
+    onChange(s);
+  };
+  useEffect(() => {
+    const editor = editorRef.current, model = editor?.getModel();
+    if (!editor || !model) return;
+    if (model.getValue() === value) { emitted.current = []; return; }
+    if (emitted.current.includes(value)) return;
+    emitted.current = [];
+    editor.pushUndoStop();
+    model.pushEditOperations([], [{ range: model.getFullModelRange(), text: value }], () => null);
+    editor.pushUndoStop();
+  }, [value, mounted]);
+  // In a collab, the code is the room's, edited live by everyone allowed to
+  const inCollab = useCollabActive();
+  useEffect(() => {
+    const editor = editorRef.current, monaco = monacoRef.current;
+    if (!inCollab || !mounted || !editor || !monaco) return;
+    const unbind = pineDoc.bind(editor, monaco);
+    // The collab ended: back to the code this editor had before; the editor closed: nothing to put back
+    return () => unbind(!collab.active);
+  }, [inCollab, mounted]);
 
   const beforeMount: BeforeMount = (monaco) => { setupPine(monaco); };
   const onMount: OnMount = (editor, monaco) => {
@@ -89,6 +123,7 @@ export default function PineMonaco({ value, onChange, onCursor, isDark, settings
       attachReferenceClicks(editor),
     );
     diffRef.current = editor.createDecorationsCollection([]);
+    setMounted(true);
     onReady?.({
       focus: () => editor.focus(),
       commandPalette: () => { editor.focus(); editor.trigger("pine", "editor.action.quickCommand", null); },
@@ -156,8 +191,8 @@ export default function PineMonaco({ value, onChange, onCursor, isDark, settings
       <Editor
         language={PINE_LANG}
         theme={isDark ? PINE_THEME_DARK : PINE_THEME_LIGHT}
-        value={value}
-        onChange={v => onChange(v ?? "")}
+        defaultValue={value}
+        onChange={handleChange}
         beforeMount={beforeMount}
         onMount={onMount}
         loading={<div style={{ padding: 16, fontSize: 13, color: "#9c9c9c" }}>Loading…</div>}
