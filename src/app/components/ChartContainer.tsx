@@ -5033,6 +5033,8 @@ function SeriesContextMenu({ pos, price, precision = 3, symbol, theme, onClose, 
     },
     { label: `Add text note for ${symbol}`, icon: <FilePenLine {...ic} />, shortcut: 'Alt + N', onClick: onAddNote },
     { kind: 'divider' },
+    { label: 'Collaborate…', icon: <CollabIcon size={28} />, onClick: () => { window.dispatchEvent(new CustomEvent('tv:open-collab')); onClose(); }, testId: 'series-menu-collaborate' },
+    { kind: 'divider' },
     { label: 'Settings…', icon: <MenuSettingsIcon />, onClick: onSettings },
   ];
   return <TvMenu items={items} position={pos} isDark={theme === 'dark'} onClose={onClose} ariaLabel='Series' testId='series-context-menu' />;

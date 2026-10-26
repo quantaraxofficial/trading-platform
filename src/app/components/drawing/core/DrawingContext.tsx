@@ -166,14 +166,14 @@ import { useTelemetry } from '@/context/TelemetryContext';
 import { isTypingTarget } from '../../../lib/isTypingTarget';
 import { writeDrawingIndex } from '../../../lib/drawingIndex';
 import { backendFetch } from "@/lib/backend";
-import { useCollabActive } from '../../../lib/collab/session';
+import { useCollabChartActive } from '../../../lib/collab/session';
 
 const DrawingContext = createContext<DrawingContextType | undefined>(undefined);
 
 export function DrawingProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   // In a collab chart the drawings are the room's (CollabDrawingSync), not this user's saved ones
-  const inCollab = useCollabActive();
+  const inCollab = useCollabChartActive();
   const { logAction } = useTelemetry();
   const [symbol, setSymbol] = useState<string>('');
   const [activeTool, setActiveTool] = useState<DrawingType | null>(null);

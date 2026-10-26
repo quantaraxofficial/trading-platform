@@ -35,6 +35,9 @@ ALERT_OPERATORS = {'Crossing', 'Crossing Up', 'Crossing Down', 'Greater Than', '
 ALERT_TRIGGERS = {'Once only', 'Every time'}
 # Several browsers report the same crossing: one firing per alert within this many seconds (a
 # level alert set to "Every time" fires at most once a minute, as for personal alerts)
+# A Pine-script collab shares only the code: the chart's messages are ignored there
+CHART_ONLY = {'chart', 'indicators', 'drawings.upsert', 'drawings.delete', 'drawings.replace', 'pine',
+              'replay', 'alert.add', 'alert.remove', 'alert.update', 'alert.fired', 'trades', 'cursor'}
 CROSSING_GAP = 10
 LEVEL_GAP = 60
 
@@ -160,6 +163,8 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
         kind = msg.get('type')
         state = self.state
         perms = self.peer['perms']
+        if self.room.kind == 'pine' and kind in CHART_ONLY:
+            return
         if kind in EDIT_TYPES and not perms['edit']:
             await self.send_json({"type": "error", "error": "You can view this chart but not change it"})
             return

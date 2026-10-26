@@ -25,9 +25,11 @@ function setUrlToken(token: string | null) {
 // shows the group panel
 export async function openCollab(token: string, uid: string): Promise<RoomInfo> {
   const room = await collabApi<RoomInfo>(uid, `room/${encodeURIComponent(token)}/`);
-  collab.join(token, uid);
+  collab.join(token, uid, room.kind);
   setUrlToken(token);
   window.dispatchEvent(new CustomEvent("tv:open-sidebar-panel", { detail: "collab" }));
+  // A shared script opens straight in the Pine Editor
+  if (room.kind === "pine") window.dispatchEvent(new CustomEvent("tv:open-pine-editor"));
   return room;
 }
 

@@ -14,7 +14,7 @@ import { useReplay } from "./ReplayContext";
 import ReplayAlertDialog from "./alerts/ReplayAlertDialog";
 import { SymbolChip } from "./alerts/AlertToasts";
 import { SOUND_GROUPS, SOUND_REPEATS, soundName, playAlertSound } from "../lib/alertSounds";
-import { collab, useCollabActive } from "../lib/collab/session";
+import { collab, useCollabChartActive } from "../lib/collab/session";
 
 interface CreateAlertModalProps {
   onClose: () => void;
@@ -78,7 +78,7 @@ function AlertDialog({ onClose, theme, symbol: chartSymbol = 'XAUUSD', initialPr
   const leaveNotifications = (apply: boolean) => { if (!apply) setNotify(notifyBefore.current); setPage('main'); };
   const valueRef = useRef<HTMLInputElement>(null);
   // In a collab, a new alert can be shared with everyone in it (ticked by default when allowed)
-  const inCollab = useCollabActive();
+  const inCollab = useCollabChartActive();
   const canShare = inCollab && !editing && collab.canAlert;
   const [shared, setShared] = useState(true);
 

@@ -161,7 +161,10 @@ class CollabRoom(models.Model):
     indicators and drawings live, plus a group chat and voice. Opened through its link
     (`?collab=<token>`); `link_access` says what someone who wasn't invited gets from the link."""
     LINK_ACCESS = [('restricted', 'Only people added'), ('view', 'Anyone with the link can view'), ('edit', 'Anyone with the link can edit')]
+    # What's shared: the whole chart, or only a Pine script being edited together
+    KINDS = [('chart', 'Chart'), ('pine', 'Pine script')]
     token = models.CharField(max_length=32, unique=True)
+    kind = models.CharField(max_length=10, choices=KINDS, default='chart')
     owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='owned_collabs')
     name = models.CharField(max_length=120)
     link_access = models.CharField(max_length=10, choices=LINK_ACCESS, default='edit')
