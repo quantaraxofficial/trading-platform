@@ -15,6 +15,8 @@ import {
 } from "./icons/TVIcons";
 import { useEscapeClose } from "../lib/useEscapeClose";
 import { useAlerts } from "@/context/AlertsContext";
+import { useCollab } from "../lib/collab/session";
+import { CollabIcon } from "./collab/icons";
 
 // Trading Agent — a small chat-bubble-with-spark glyph (1px lines like the TradingView icons)
 function TVAgentIcon({ size = 28, ...props }: any) {
@@ -48,6 +50,11 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
   const [menu, setMenu] = useState<"products" | "help" | null>(null);
   // Unread triggered alerts, as a red count on the Alerts button
   const { unread } = useAlerts();
+  // While a collab chart is open, its group panel (chat + voice) gets a button, with unread
+  // messages as a count and a green dot while anyone is in the voice call
+  const collabState = useCollab();
+  const inCollab = !!collabState.room && collabState.status !== "idle" && collabState.status !== "ended" && collabState.status !== "error";
+  const voiceLive = collabState.peers.some(p => p.voice);
   const productsRef = useRef<HTMLButtonElement>(null);
   const helpRef = useRef<HTMLButtonElement>(null);
 
@@ -55,6 +62,7 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     { id: "watchlist", icon: <TVWatchlistIcon size={28} />, tooltip: "Watchlist, details and news" },
     { id: "alerts", icon: <TVAlertsIcon size={28} />, tooltip: "Alerts" },
     { id: "object_tree", icon: <TVObjectTreeIcon size={28} />, tooltip: "Object tree" },
+    ...(inCollab ? [{ id: "collab", icon: <CollabIcon size={28} />, tooltip: "Collab: group chat and voice" }] : []),
   ];
 
   const i18 = { size: 18, strokeWidth: 1.5 };
@@ -86,6 +94,12 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
               {p.icon}
               {p.id === "alerts" && unread > 0 && (
                 <span data-testid="alerts-badge" style={{ position: "absolute", top: 3, right: 3, minWidth: 16, height: 16, padding: "0 4px", boxSizing: "border-box", borderRadius: 8, background: "#f23645", color: "#fff", fontSize: 11, lineHeight: "16px", fontWeight: 600, pointerEvents: "none" }}>{unread > 99 ? "99+" : unread}</span>
+              )}
+              {p.id === "collab" && collabState.unread > 0 && (
+                <span data-testid="collab-badge" style={{ position: "absolute", top: 3, right: 3, minWidth: 16, height: 16, padding: "0 4px", boxSizing: "border-box", borderRadius: 8, background: "#f23645", color: "#fff", fontSize: 11, lineHeight: "16px", fontWeight: 600, pointerEvents: "none" }}>{collabState.unread > 99 ? "99+" : collabState.unread}</span>
+              )}
+              {p.id === "collab" && voiceLive && (
+                <span aria-hidden style={{ position: "absolute", bottom: 5, right: 5, width: 8, height: 8, borderRadius: "50%", background: "#089981", boxShadow: "0 0 0 2px var(--tv-color-pane-bg)", pointerEvents: "none" }} />
               )}
             </button>
             {tooltip(p.tooltip)}

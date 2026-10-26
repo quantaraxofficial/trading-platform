@@ -38,6 +38,7 @@ ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',  # ASGI server: `runserver` then serves WebSockets too (collab charts)
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -47,6 +48,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'axes',  # For rate limiting / brute-force protection
+    'channels',
     'core',
 ]
 
@@ -88,6 +90,11 @@ else:
         "http://localhost:3000",
         # Add production frontend URL here
     ]
+
+# WebSockets (collab charts). One server process, so the channel layer can live in memory; with
+# several processes this becomes channels_redis.
+ASGI_APPLICATION = 'quantarax_backend.asgi.application'
+CHANNEL_LAYERS = {'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'}}
 
 # Rate Limiting (django-axes configuration)
 AXES_FAILURE_LIMIT = 5 # Lock out after 5 failed attempts

@@ -34,6 +34,9 @@ interface ReplayContextType {
   stepBack: () => void;
   stepForward: () => void;
   skipToEnd: () => void;
+  // Shows the replay up to the bar at or before this time (a collab's shared replay, followed
+  // from whoever drives it); stops this chart's own playback
+  seekToTime: (time: number) => void;
   setSpeed: (speed: number) => void;
   updateReplayData: (newData: CandleData[]) => void;
   reSelectBar: () => void;
@@ -235,6 +238,31 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     applyDataUpToIndex(last);
   }, [applyDataUpToIndex]);
 
+  const seekToTime = useCallback((time: number) => {
+    stopInterval();
+    setIsPlaying(false);
+    const data = fullDataRef.current;
+    if (!data.length) return;
+    let idx = 0;
+    if (time >= data[0].time) {
+      let lo = 0, hi = data.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (data[mid].time <= time) lo = mid; else hi = mid - 1;
+      }
+      idx = lo;
+    }
+    const cur = replayIndexRef.current;
+    if (idx === cur) return;
+    replayIndexRef.current = idx;
+    setReplayIndex(idx);
+    // One bar on: add it (the chart keeps its scroll); otherwise redraw up to it
+    if (idx === cur + 1 && seriesRef.current) {
+      try { seriesRef.current.update(data[idx]); return; } catch { /* fall back to a redraw */ }
+    }
+    applyDataUpToIndex(idx);
+  }, [applyDataUpToIndex]);
+
   const setSpeed = useCallback((speed: number) => {
     console.log(`[Replay] Speed changed to: ${speed}x`);
     speedRef.current = speed;
@@ -282,7 +310,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     <ReplayContext.Provider value={{
       mode, isPlaying, replayIndex, replaySpeed, fullData, hoverX, setHoverX,
       enterSelectMode, startReplayAt, getReplayTime, stopReplay, togglePlay,
-      stepBack, stepForward, skipToEnd, setSpeed, updateReplayData, reSelectBar, cancelSelect,
+      stepBack, stepForward, skipToEnd, seekToTime, setSpeed, updateReplayData, reSelectBar, cancelSelect,
       startMode, setStartMode, hasStarted,
     }}>
       {children}

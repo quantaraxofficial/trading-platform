@@ -321,6 +321,8 @@ import type { DateRangeSpan } from "./BottomPanel";
 import { detectPrecision, simulatedQuote } from "@/app/utils/pricePrecision";
 import { feedTimeToUnix } from "../utils/feedTime";
 import { backendFetch } from "@/lib/backend";
+import { CollabIcon } from "./collab/icons";
+import { useCollabAlerts } from "../lib/collab/session";
 export { getCacheKey, getCachedData, setCachedData } from "../lib/stockDataCache";
 
 // Requests currently on the wire, keyed like the localStorage cache. The cache only
@@ -549,6 +551,8 @@ export default function ChartContainer({
   const { activeTool, shiftDrawings, setSymbol: setDrawingSymbol, setDrawings, selectedShapeId } = useDrawing();
   const { mode, replayIndex, startReplayAt, getReplayTime, stopReplay, togglePlay, stepBack, stepForward, setHoverX, hoverX, updateReplayData, cancelSelect } = useReplay();
   const { checkAlerts, alerts } = useAlerts();
+  // A collab's shared alerts: drawn too, in the colour of whoever set them
+  const sharedAlerts = useCollabAlerts();
   const tradingState = useEngineState();
   const tradingSettings = useTradingSettings();
 
@@ -1133,8 +1137,10 @@ export default function ChartContainer({
     const norm = (x: string) => x.replace('/', '').toUpperCase();
     const mine = alerts.filter(a => norm(a.symbol) === norm(symbol) && (!cs.onlyActiveAlerts || a.status === 'active'));
     const lines = mine.map(a => sr.createPriceLine({ price: a.value, color: cs.alertLineColor, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: '' }));
+    const shared = sharedAlerts.filter(a => norm(a.symbol) === norm(symbol) && (!cs.onlyActiveAlerts || a.status === 'active'));
+    shared.forEach(a => lines.push(sr.createPriceLine({ price: a.value, color: a.color, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: `🔔 ${a.created_by_name}` })));
     return () => { lines.forEach(l => { try { sr.removePriceLine(l); } catch { /* chart gone */ } }); };
-  }, [series, alerts, symbol, cs.alertLines, cs.alertLineColor, cs.onlyActiveAlerts]);
+  }, [series, alerts, sharedAlerts, symbol, cs.alertLines, cs.alertLineColor, cs.onlyActiveAlerts]);
 
   // ── Symbol → Color bars based on previous close: each bar coloured by its close against
   // the previous bar's close, not its own open ──
@@ -1427,6 +1433,9 @@ export default function ChartContainer({
   // series fresh from the script's own colors) so a Style-tab recolor
   // doesn't get silently undone the next time the range/capital/inputs change.
   const [plotColorOverrides, setPlotColorOverrides] = useState<Record<string, string>>({});
+  // Read when a result is drawn, so a collab's script gets its colours on its first run
+  const plotColorsRef = useRef(plotColorOverrides);
+  plotColorsRef.current = plotColorOverrides;
   const [pineInputsMeta, setPineInputsMeta] = useState<PineInputMeta[]>([]);
   const [pineDeclMeta, setPineDeclMeta] = useState<{ initialCapital: number; pyramiding?: number; defaultQtyValue?: number; defaultQtyType?: string }>({ initialCapital: 100000 });
   const [showPineSettings, setShowPineSettings] = useState(false);
@@ -1458,7 +1467,7 @@ export default function ChartContainer({
   function applyPineResult(result: any, scriptName: string) {
     const view = pineView();
     if (!view) return;
-    const plots = view.apply(result, plotColorOverrides);
+    const plots = view.apply(result, plotColorsRef.current);
     pineMarkersRef.current = view.overlayMarkers();
     setPineVisible(true);
     applyAllMarkers();
@@ -1666,8 +1675,33 @@ export default function ChartContainer({
       });
       setPineLegend({ ...pineLegend, plots: updatedPlots });
     }
+    // In a collab, everyone's copy of the script takes the same settings
+    window.dispatchEvent(new CustomEvent("tv:pine-settings-changed", { detail: { overrides, capital, colors: { ...plotColorOverrides, ...plotColors } } }));
     return runBacktest(backtestRange, capital, overrides);
   }
+
+  // A collab's Pine script (or its removal), as someone else put it on the shared chart: run here
+  // on this chart's own bars with the same settings (now, or once the bars load)
+  const applyCollabPineRef = useRef<(p: any) => void>(() => {});
+  applyCollabPineRef.current = (p: any) => {
+    if (!p) {
+      if (lastPineRunRef.current) window.dispatchEvent(new CustomEvent("tv:clear-pine-script", { detail: { remote: true } }));
+      return;
+    }
+    lastPineRunRef.current = { code: p.code, symbol: symbolRef.current, pineTf: appIntervalToPineTf(intervalRef.current), scriptName: p.scriptName || "Script" };
+    (window as any).__pineScript = { code: p.code, scriptName: p.scriptName || "Script" };
+    setPineInputsMeta(getPineInputsMeta(p.code));
+    plotColorsRef.current = p.colors || {};
+    setPlotColorOverrides(p.colors || {});
+    setBacktestRange({ kind: "all" });
+    if (fullDataRef.current.length) runBacktest({ kind: "all" }, p.capital ?? null, p.overrides || {}, true);
+    else { setCapitalOverride(p.capital ?? null); setInputOverrides(p.overrides || {}); }
+  };
+  useEffect(() => {
+    const onCollabPine = (e: Event) => applyCollabPineRef.current((e as CustomEvent).detail?.pine ?? null);
+    window.addEventListener("tv:collab-pine", onCollabPine);
+    return () => window.removeEventListener("tv:collab-pine", onCollabPine);
+  }, []);
 
   useEffect(() => {
     function handleRunPine(e: any) {
@@ -1694,6 +1728,7 @@ export default function ChartContainer({
           pineTf: appIntervalToPineTf(interval),
           scriptName,
         };
+        (window as any).__pineScript = { code: e.detail.code, scriptName };
         setPineInputsMeta(getPineInputsMeta(e.detail.code));
       }
     }
@@ -1708,6 +1743,7 @@ export default function ChartContainer({
       setPineInputsMeta([]);
       setShowPineSettings(false);
       lastPineRunRef.current = null;
+      (window as any).__pineScript = null;
     }
     window.addEventListener('tv:run-pine-script', handleRunPine);
     window.addEventListener('tv:clear-pine-script', handleClearPine);
@@ -2341,7 +2377,11 @@ export default function ChartContainer({
         engine.setQuote(symbol, price, lastTime);
       }
       // Replayed bars aren't live prices: alerts only check real ones (as in TradingView)
-      if (mode === 'idle') checkAlerts(symbol, price);
+      if (mode === 'idle') {
+        checkAlerts(symbol, price);
+        // A collab's shared alerts check the chart's live price too
+        window.dispatchEvent(new CustomEvent('tv:chart-price', { detail: { symbol, price } }));
+      }
     } else {
       document.title = `${symbol} | TradePilot`;
     }
@@ -4530,6 +4570,7 @@ export default function ChartContainer({
           onToggleCursorLock={() => { setLockedCursorTime(t => (t !== null ? null : contextMenu.time)); setContextMenu(null); }}
           onTableView={() => { setShowTableView(true); setContextMenu(null); }}
           onObjectTree={() => { window.dispatchEvent(new CustomEvent('tv:open-sidebar-panel', { detail: 'object_tree' })); setContextMenu(null); }}
+          onCollaborate={() => { window.dispatchEvent(new CustomEvent('tv:open-collab')); setContextMenu(null); }}
         />
         )
       )}
@@ -4996,7 +5037,7 @@ function SeriesContextMenu({ pos, price, precision = 3, symbol, theme, onClose, 
   ];
   return <TvMenu items={items} position={pos} isDark={theme === 'dark'} onClose={onClose} ariaLabel='Series' testId='series-context-menu' />;
 }
-function ChartContextMenu({ pos, price, precision = 3, symbol, theme, onClose, viewChanged, onReset, drawingCount, indicatorCount, onRemoveDrawings, onRemoveIndicators, onSettings, onAddAlert, onCopyPrice, onPaste, canPaste, onQuickOrder, onAddOrder, quickQty, buyType, sellType, cursorLocked, onToggleCursorLock, onTableView, onObjectTree }: any) {
+function ChartContextMenu({ pos, price, precision = 3, symbol, theme, onClose, viewChanged, onReset, drawingCount, indicatorCount, onRemoveDrawings, onRemoveIndicators, onSettings, onAddAlert, onCopyPrice, onPaste, canPaste, onQuickOrder, onAddOrder, quickQty, buyType, sellType, cursorLocked, onToggleCursorLock, onTableView, onObjectTree, onCollaborate }: any) {
   const p = price !== null ? price.toFixed(precision) : "0";
   // The limit order comes first, with its shortcut (a buy below the market, a sell above it)
   const buy: TvMenuItem = { label: `Buy ${quickQty} ${symbol} @ ${p} ${buyType}`, icon: <MenuBuyIcon />, shortcut: buyType === 'limit' ? "Alt + Shift + B" : undefined, onClick: () => onQuickOrder('buy', buyType) };
@@ -5018,6 +5059,8 @@ function ChartContextMenu({ pos, price, precision = 3, symbol, theme, onClose, v
     { kind: "divider" },
     { label: "Table view", onClick: onTableView },
     { label: "Object tree", onClick: onObjectTree },
+    { kind: "divider" },
+    { label: "Collaborate…", icon: <CollabIcon size={28} />, onClick: onCollaborate, testId: "chart-menu-collaborate" },
     ...(removals.length ? [{ kind: "divider" } as TvMenuItem, ...removals] : []),
     { kind: "divider" },
     { label: "Settings…", icon: <MenuSettingsIcon />, onClick: onSettings },

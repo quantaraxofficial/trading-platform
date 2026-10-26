@@ -154,3 +154,69 @@ class UserSetting(models.Model):
 
     def __str__(self):
         return f"{self.owner.name}: {self.key}"
+
+
+class CollabRoom(models.Model):
+    """A chart several people work on together: everyone in it sees the same symbol, interval,
+    indicators and drawings live, plus a group chat and voice. Opened through its link
+    (`?collab=<token>`); `link_access` says what someone who wasn't invited gets from the link."""
+    LINK_ACCESS = [('restricted', 'Only people added'), ('view', 'Anyone with the link can view'), ('edit', 'Anyone with the link can edit')]
+    token = models.CharField(max_length=32, unique=True)
+    owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='owned_collabs')
+    name = models.CharField(max_length=120)
+    link_access = models.CharField(max_length=10, choices=LINK_ACCESS, default='edit')
+    symbol = models.CharField(max_length=40)
+    interval = models.CharField(max_length=20)
+    indicators = models.JSONField(default=list, blank=True)
+    drawings = models.JSONField(default=dict, blank=True)   # symbol -> that symbol's drawings
+    # The Pine script on the shared chart ({code, scriptName, overrides, colors, capital}) and the
+    # alerts shared with everyone in the collab
+    pine = models.JSONField(null=True, blank=True)
+    alerts = models.JSONField(default=list, blank=True)
+    # The Pine Editor's code, edited live by everyone allowed to (a Yjs document, base64)
+    pine_doc = models.TextField(blank=True, default='')
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.owner.name})"
+
+
+class CollabMember(models.Model):
+    """Someone with access to a collab chart. `last_seen` stays empty until they first open it, so
+    an invite they haven't opened yet can be shown to them."""
+    ROLES = [('owner', 'Owner'), ('editor', 'Can edit'), ('viewer', 'Can view')]
+    room = models.ForeignKey(CollabRoom, on_delete=models.CASCADE, related_name='members')
+    profile = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='collabs')
+    role = models.CharField(max_length=10, choices=ROLES, default='editor')
+    # What else the owner lets them do (the owner can do everything)
+    can_replay = models.BooleanField(default=True)    # drive the replay everyone follows
+    can_invite = models.BooleanField(default=False)   # add people
+    can_voice = models.BooleanField(default=True)     # talk in the voice call
+    can_alert = models.BooleanField(default=True)     # create alerts shared with the collab
+    can_pine = models.BooleanField(default=True)      # edit the Pine Editor's code live
+    invited_by = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    invited_at = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('room', 'profile')
+
+    def __str__(self):
+        return f"{self.profile.name} in {self.room.name} ({self.role})"
+
+
+class CollabMessage(models.Model):
+    """A group-chat message in a collab chart, or a notice such as "Asha joined"."""
+    room = models.ForeignKey(CollabRoom, on_delete=models.CASCADE, related_name='messages')
+    author = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    kind = models.CharField(max_length=10, choices=[('text', 'Text'), ('system', 'System')], default='text')
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.room.name}: {self.text[:40]}"

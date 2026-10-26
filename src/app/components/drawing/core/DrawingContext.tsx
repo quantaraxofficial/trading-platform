@@ -115,6 +115,9 @@ interface DrawingContextType {
   setDrawings: React.Dispatch<React.SetStateAction<BaseDrawing[]>>;
   // Replaces the drawings as one undoable step (reordering, grouping… from the Object tree)
   applyDrawings: (next: BaseDrawing[]) => void;
+  // A change someone else made in a collab chart: applied to the drawings and to every undo step
+  // (so undo only takes back this user's own changes); `reset` starts the history afresh
+  applyRemoteDrawings: (fn: (list: BaseDrawing[]) => BaseDrawing[], reset?: boolean) => void;
   addDrawing: (drawing: BaseDrawing) => void;
   updateDrawing: (id: string, updates: Partial<BaseDrawing>) => void;
   updateMultipleDrawings: (ids: string[], updates: Partial<BaseDrawing>) => void;
@@ -163,11 +166,14 @@ import { useTelemetry } from '@/context/TelemetryContext';
 import { isTypingTarget } from '../../../lib/isTypingTarget';
 import { writeDrawingIndex } from '../../../lib/drawingIndex';
 import { backendFetch } from "@/lib/backend";
+import { useCollabActive } from '../../../lib/collab/session';
 
 const DrawingContext = createContext<DrawingContextType | undefined>(undefined);
 
 export function DrawingProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  // In a collab chart the drawings are the room's (CollabDrawingSync), not this user's saved ones
+  const inCollab = useCollabActive();
   const { logAction } = useTelemetry();
   const [symbol, setSymbol] = useState<string>('');
   const [activeTool, setActiveTool] = useState<DrawingType | null>(null);
@@ -307,6 +313,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
 
   // Load drawings when user or symbol changes
   useEffect(() => {
+    if (inCollab) return;
     if (user && symbol) {
       const loadDrawings = async () => {
         try {
@@ -329,18 +336,18 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
       setHistory([[]]);
       setHistoryIndex(0);
     }
-  }, [user, symbol]);
+  }, [user, symbol, inCollab]);
 
   // The local per-symbol index of drawings (Manage layout drawings), once this symbol's are loaded
   useEffect(() => {
-    if (!symbol || (user && isInitialLoad)) return;
+    if (!symbol || (user && isInitialLoad) || inCollab) return;
     const t = setTimeout(() => writeDrawingIndex(symbol, drawings), 300);
     return () => clearTimeout(t);
-  }, [drawings, symbol, user, isInitialLoad]);
+  }, [drawings, symbol, user, isInitialLoad, inCollab]);
 
   // Save drawings when they change (debounced or after each action)
   useEffect(() => {
-    if (user && symbol && !isInitialLoad) {
+    if (user && symbol && !isInitialLoad && !inCollab) {
       const saveDrawings = async () => {
         try {
           await backendFetch(`http://localhost:8000/api/users/drawings/${user.uid}/`, {
@@ -359,7 +366,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
       const timer = setTimeout(saveDrawings, 1000); // Debounce save
       return () => clearTimeout(timer);
     }
-  }, [drawings, user, symbol, isInitialLoad]);
+  }, [drawings, user, symbol, isInitialLoad, inCollab]);
 
   // Push to history when drawings change meaningfully (refs written at once, so an undo
   // straight after sees the entry)
@@ -471,6 +478,17 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     commitDrawings(next);
     pushToHistory(next);
   };
+
+  const applyRemoteDrawings = useCallback((fn: (list: BaseDrawing[]) => BaseDrawing[], reset = false) => {
+    const next = fn(drawingsRef.current);
+    commitDrawings(next);
+    const history = reset ? [next] : historyRef.current.map(fn);
+    const index = reset ? 0 : historyIndexRef.current;
+    historyRef.current = history;
+    historyIndexRef.current = index;
+    setHistory(history);
+    setHistoryIndex(index);
+  }, []);
 
   const deleteDrawing = (id: string) => {
     const newDrawings = drawingsRef.current.filter(d => d.id !== id);
@@ -695,7 +713,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
   const contextValue = React.useMemo(() => ({
     activeTool, setActiveTool,
     activeEmoji, setActiveEmoji,
-    drawings, setDrawings, applyDrawings, addDrawing, updateDrawing, updateMultipleDrawings, deleteDrawing, deleteMultipleDrawings, clearDrawings,
+    drawings, setDrawings, applyDrawings, applyRemoteDrawings, addDrawing, updateDrawing, updateMultipleDrawings, deleteDrawing, deleteMultipleDrawings, clearDrawings,
     selectedShapeId, setSelectedShapeId,
     selectedShapeIds, setSelectedShapeIds, addToSelection, removeFromSelection, clearSelection,
     beginEditSession, cancelEditSession,
