@@ -77,7 +77,7 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
           <span>
             <i className={`tv-co-dot${status === "live" ? "" : " off"}`} />
             {status === "live" ? `${people.length} here now` : status === "reconnecting" ? "Reconnecting…" : "Connecting…"}
-            {!canEdit && " · View only"}
+            {room.kind === "pine" ? <>{" · Pine script"}{!room.perms?.pine && " · View only"}</> : !canEdit && " · View only"}
           </span>
         </div>
         <div className="tv-co-stack" aria-label="People here">

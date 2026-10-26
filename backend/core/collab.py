@@ -5,6 +5,7 @@ in consumers.py; these endpoints create rooms, open them, and manage who's in th
 Every endpoint takes the caller's user id in the path and needs one of their session keys, like
 the rest of the per-user API.
 """
+import base64
 import secrets
 
 from asgiref.sync import async_to_sync
@@ -15,6 +16,7 @@ from django.dispatch import receiver
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
+from pycrdt import Doc, Text
 from rest_framework.response import Response
 
 from .auth import require_session
@@ -69,7 +71,7 @@ def room_json(room, me=None):
     members = room.members.select_related('profile').order_by('invited_at')
     mine = next((m for m in members if me and m.profile_id == me.id), None)
     return {
-        "token": room.token, "name": room.name, "link_access": room.link_access, "active": room.active,
+        "token": room.token, "name": room.name, "kind": room.kind, "link_access": room.link_access, "active": room.active,
         "owner": room.owner.uid, "symbol": room.symbol, "interval": room.interval,
         "created_at": room.created_at.isoformat(),
         "role": mine.role if mine else None,
@@ -124,7 +126,8 @@ def clean_pine(p):
 @api_view(['GET', 'POST'])
 def collab_rooms(request, uid):
     """GET: the collab charts this user owns or was added to, and the invites they haven't opened.
-    POST {name?, symbol, interval, indicators, drawings}: starts a collab from the user's chart."""
+    POST {name?, symbol, interval, indicators, drawings, pine?}: starts a collab from the user's chart.
+    POST {kind: "pine", name?, pine: {code, scriptName}}: shares only a Pine script, to edit together."""
     me, denied = require_session(request, uid)
     if denied:
         return denied
@@ -132,11 +135,13 @@ def collab_rooms(request, uid):
     if request.method == 'GET':
         memberships = CollabMember.objects.filter(profile=me, room__active=True).select_related('room', 'room__owner').order_by('-room__updated_at')
         return Response({
-            "rooms": [{"token": m.room.token, "name": m.room.name, "role": m.role, "owner_name": display_name(m.room.owner),
+            "rooms": [{"token": m.room.token, "name": m.room.name, "kind": m.room.kind, "role": m.role, "owner_name": display_name(m.room.owner),
                        "symbol": m.room.symbol, "pending": m.last_seen is None and m.role != 'owner'} for m in memberships],
         })
 
     data = request.data
+    if data.get('kind') == 'pine':
+        return _create_pine_room(me, data)
     symbol, interval = str(data.get('symbol') or '')[:40], str(data.get('interval') or '')[:20]
     if not symbol or not interval:
         return Response({"error": "symbol and interval are required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -152,6 +157,26 @@ def collab_rooms(request, uid):
     )
     CollabMember.objects.create(room=room, profile=me, role='owner', last_seen=timezone.now())
     CollabMessage.objects.create(room=room, kind='system', text=f"{display_name(me)} started the collab")
+    return Response(room_json(room, me), status=status.HTTP_201_CREATED)
+
+
+def _create_pine_room(me, data):
+    """A collab of just a Pine script: the people in it edit the code together (and chat / talk);
+    nobody's chart is shared"""
+    pine = clean_pine(data.get('pine'))
+    script = pine['scriptName'] if pine else 'Pine script'
+    name = str(data.get('name') or '').strip()[:120] or script
+    doc = Doc()
+    if pine:
+        with doc.transaction():
+            doc.get('code', type=Text).insert(0, pine['code'])
+    room = CollabRoom.objects.create(
+        token=secrets.token_urlsafe(16)[:22], owner=me, name=name, kind='pine',
+        symbol=str(data.get('symbol') or '')[:40], interval=str(data.get('interval') or '')[:20],
+        pine_doc=base64.b64encode(doc.get_update()).decode(),
+    )
+    CollabMember.objects.create(room=room, profile=me, role='owner', last_seen=timezone.now())
+    CollabMessage.objects.create(room=room, kind='system', text=f"{display_name(me)} shared the script \u201c{script}\u201d")
     return Response(room_json(room, me), status=status.HTTP_201_CREATED)
 
 

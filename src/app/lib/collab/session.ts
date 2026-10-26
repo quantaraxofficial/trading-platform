@@ -18,8 +18,10 @@ export type LinkAccess = "restricted" | "view" | "edit";
 // What someone may do besides watching and chatting (the owner sets these; the owner can do all)
 export interface Perms { edit: boolean; replay: boolean; invite: boolean; voice: boolean; alert: boolean; pine: boolean }
 export interface Member { uid: string; name: string; email: string; role: Role; color: string; pending: boolean; perms: Perms }
+// "chart": the whole chart is shared; "pine": only a Pine script, edited together
+export type RoomKind = "chart" | "pine";
 export interface RoomInfo {
-  token: string; name: string; link_access: LinkAccess; active: boolean; owner: string;
+  token: string; name: string; kind: RoomKind; link_access: LinkAccess; active: boolean; owner: string;
   symbol: string; interval: string; created_at: string; role: Role | null; perms: Perms | null; members: Member[];
 }
 export interface Peer { id: string; uid: string; name: string; color: string; role: Role; perms: Perms; voice: boolean; muted: boolean }
@@ -46,6 +48,7 @@ export interface CollabState {
   status: Status;
   error: string | null;
   token: string | null;
+  kind: RoomKind | null;
   room: RoomInfo | null;
   you: string | null;            // this connection's id in the room
   uid: string | null;
@@ -63,7 +66,7 @@ export interface CollabState {
 }
 
 const INITIAL: CollabState = {
-  status: "idle", error: null, token: null, room: null, you: null, uid: null, peers: [], messages: [], unread: 0,
+  status: "idle", error: null, token: null, kind: null, room: null, you: null, uid: null, peers: [], messages: [], unread: 0,
   chatOpen: false, cursors: {}, trades: {}, voice: { joined: false, joining: false, muted: false, error: null, speaking: {} },
   replay: null, replayDetached: false, alerts: [],
 };
@@ -152,6 +155,8 @@ class CollabSession {
   }
 
   get active() { return this.state.status !== "idle" && this.state.status !== "ended" && this.state.status !== "error"; }
+  // A collab that shares the chart (not just a Pine script)
+  get chartActive() { return this.active && this.state.kind !== "pine"; }
   get live() { return this.state.status === "live"; }
   get canEdit() { return !!this.state.room?.perms?.edit; }
   get canReplay() { return !!this.state.room?.perms?.replay; }
@@ -162,12 +167,12 @@ class CollabSession {
 
   // ---- connection
 
-  join(token: string, uid: string) {
+  join(token: string, uid: string, kind: RoomKind = "chart") {
     if (this.state.token === token && this.active) return;
     this.leave();
     this.wanted = true;
     this.retry = 0;
-    this.set({ ...INITIAL, status: "connecting", token, uid });
+    this.set({ ...INITIAL, status: "connecting", token, uid, kind });
     this.connect();
   }
 
@@ -216,11 +221,11 @@ class CollabSession {
       case "init": {
         this.retry = 0;
         this.set({
-          status: "live", error: null, you: msg.you, room: msg.room, peers: msg.peers || [],
+          status: "live", error: null, you: msg.you, room: msg.room, kind: msg.room?.kind || "chart", peers: msg.peers || [],
           messages: msg.messages || [], trades: msg.trades || {}, cursors: {}, replay: msg.replay || null,
           alerts: msg.alerts || [],
         });
-        this.emitChart({ type: "init", chart: msg.chart });
+        if (msg.room?.kind !== "pine") this.emitChart({ type: "init", chart: msg.chart });
         if (typeof msg.pinedoc === "string") this.emitPineDoc({ type: "state", state: msg.pinedoc });
         const pending = this.outbox;
         this.outbox = [];
@@ -306,7 +311,7 @@ class CollabSession {
         this.set({ error: msg.error });
         break;
       case "chart": case "indicators": case "drawings.upsert": case "drawings.delete": case "drawings.replace": case "pine":
-        this.emitChart(msg);
+        if (this.state.kind !== "pine") this.emitChart(msg);
         break;
     }
   }
@@ -318,8 +323,8 @@ class CollabSession {
   sendDrawingsUpsert(symbol: string, drawings: any[]) { if (this.canEdit && drawings.length) this.send({ type: "drawings.upsert", symbol, drawings }); }
   sendDrawingsDelete(symbol: string, ids: string[]) { if (this.canEdit && ids.length) this.send({ type: "drawings.delete", symbol, ids }); }
   sendDrawingsReplace(symbol: string, drawings: any[]) { if (this.canEdit) this.send({ type: "drawings.replace", symbol, drawings }); }
-  sendCursor(symbol: string, time: number | null, price: number | null) { this.send({ type: "cursor", symbol, time, price }); }
-  sendTrades(symbol: string, lines: TradeLine[]) { this.send({ type: "trades", symbol, lines }); }
+  sendCursor(symbol: string, time: number | null, price: number | null) { if (this.chartActive) this.send({ type: "cursor", symbol, time, price }); }
+  sendTrades(symbol: string, lines: TradeLine[]) { if (this.chartActive) this.send({ type: "trades", symbol, lines }); }
 
   sendPine(pine: SharedPine | null) { if (this.canEdit) this.send({ type: "pine", pine }); }
   sendPineDocUpdate(u: string) { if (this.canPine) this.send({ type: "pinedoc.update", u }); }
@@ -339,7 +344,7 @@ class CollabSession {
   // ---- the shared replay (driven by one person, followed by everyone else)
 
   sendReplay(time: number, playing: boolean, speed: number, take = false) {
-    if (!this.canReplay || !this.state.you) return;
+    if (!this.canReplay || !this.state.you || !this.chartActive) return;
     const me = this.state.peers.find(p => p.id === this.state.you);
     this.set({
       replay: { driver: this.state.you, driver_uid: this.state.uid || "", driver_name: me?.name || "You", time, playing, speed },
@@ -520,6 +525,11 @@ export function useCollab(): CollabState {
 const NO_ALERTS: SharedAlert[] = [];
 export function useCollabAlerts(): SharedAlert[] {
   return useSyncExternalStore(collab.subscribe, () => (collab.active ? collab.get().alerts : NO_ALERTS), () => NO_ALERTS);
+}
+
+// Whether a collab that shares the chart is open (a Pine-script collab leaves the chart alone)
+export function useCollabChartActive(): boolean {
+  return useSyncExternalStore(collab.subscribe, () => collab.chartActive, () => false);
 }
 
 // Just whether a collab chart is open (re-renders only when that changes)

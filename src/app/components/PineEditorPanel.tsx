@@ -26,6 +26,8 @@ import {
 } from "./pine/PineDialogs";
 import { backendFetch } from "@/lib/backend";
 import PineLiveBadge from "./collab/PineLiveBadge";
+import CollabDialog from "./collab/CollabDialog";
+import { CollabIcon } from "./collab/icons";
 
 const PineMonaco = dynamic(() => import("./pine/PineMonaco"), { ssr: false, loading: () => null });
 
@@ -128,7 +130,9 @@ function Menu({ p, anchor, items, onClose, align = "left", width, submenuSide }:
   useEffect(() => {
     const down = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
-      if (t.closest?.("[data-pine-menu]")) return;
+      // A press on a menu's own button is left to its click, which toggles the menu (closing it
+      // here first made that click open it again)
+      if (t.closest?.("[data-pine-menu], [data-pine-menu-trigger]")) return;
       onClose();
     };
     document.addEventListener("mousedown", down, true);
@@ -572,8 +576,19 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       </button>
     </Tip>
   );
+  // Share just this script, to edit together live (a Pine-script collab: the chart isn't shared)
+  const [showCollab, setShowCollab] = useState(false);
+  const collabButton = (
+    <Tip text="Collaborate on this script">
+      <button type="button" aria-label="Collaborate on this script" data-name="pine-collab-button" className="pine-hover-btn" onClick={() => setShowCollab(true)}
+        style={{ ...btnBase, padding: wide ? "0 8px 0 2px" : 0, color: p.text }}>
+        <CollabIcon size={24} />
+        {wide && <span>Collaborate</span>}
+      </button>
+    </Tip>
+  );
   const nameButton = (
-    <button type="button" aria-label="Script menu" aria-haspopup="menu" aria-expanded={menu?.which === "name"} className="pine-hover-btn" onClick={e => openMenu("name", e)}
+    <button type="button" aria-label="Script menu" aria-haspopup="menu" aria-expanded={menu?.which === "name"} className="pine-hover-btn" data-pine-menu-trigger onClick={e => openMenu("name", e)}
       style={{ ...btnBase, padding: "0 6px", gap: 4, background: menu?.which === "name" ? p.hover : "transparent", minWidth: 0, flexShrink: 1 }}>
       {scriptType === "strategy" ? <Ic.StrategyIcon /> : scriptType === "library" ? <Ic.LibraryIcon /> : <Ic.TypeIndicatorIcon />}
       <h2 title={scriptName} style={{ margin: 0, fontSize: 20, fontWeight: 700, lineHeight: "24px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{scriptName}</h2>
@@ -667,6 +682,12 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       {confirm && <ConfirmDialog p={p} title={confirm.title} text={confirm.text} confirm={confirm.confirm} extra={confirm.extra} onExtra={confirm.onExtra} onCancel={() => setConfirm(null)} onConfirm={confirm.onConfirm} />}
       {menu?.which === "name" && <Menu p={p} anchor={menu.rect} items={nameItems} onClose={closeMenu} width={340} />}
       {menu?.which === "tab" && <Menu p={p} anchor={menu.rect} items={tabItems} onClose={closeMenu} width={300} />}
+      {showCollab && (
+        <CollabDialog mode="pine" pine={{ code, scriptName }}
+          symbol={(typeof window !== "undefined" && (window as any).__chartSymbol) || ""}
+          interval={(typeof window !== "undefined" && (window as any).__chartInterval) || ""}
+          indicators={[]} onClose={() => setShowCollab(false)} />
+      )}
       {menu?.which === "more" && <Menu p={p} anchor={menu.rect} items={moreItemsWithDot} onClose={closeMenu} align="right" width={200} submenuSide="left" />}
       {toast && createPortal(
         <div role="status" style={{ position: "fixed", left: "50%", bottom: 64, transform: "translateX(-50%)", zIndex: 3300, background: "#2e2e2e", color: "#f2f2f2", borderRadius: 6, padding: "10px 16px", fontSize: 14 }}>{toast}</div>,
@@ -697,7 +718,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       <div ref={panelRef} data-testid="pine-panel" data-dock="bottom" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", background: p.bg, color: p.text }}>
         {styles}
         <div style={{ display: "flex", alignItems: "center", height: 38, flexShrink: 0, padding: "0 6px" }}>
-          <button type="button" aria-label="Script menu" className="pine-hover-btn" onClick={e => openMenu("tab", e)}
+          <button type="button" aria-label="Script menu" className="pine-hover-btn" data-pine-menu-trigger onClick={e => openMenu("tab", e)}
             style={{ ...btnBase, height: 32, padding: "0 6px", gap: 4, fontSize: 14, background: p.hover }}>
             {scriptType === "strategy" ? <Ic.StrategyIcon /> : scriptType === "library" ? <Ic.LibraryIcon /> : <Ic.TypeIndicatorIcon />}
             <span style={{ whiteSpace: "nowrap" }}>{scriptName}</span>
@@ -767,6 +788,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
           {nameButton}
           {runButton}
           {saveButton}
+          {collabButton}
           <PineLiveBadge />
           <span style={{ flex: 1 }} />
           <Tip text="Share your script with community">
@@ -775,7 +797,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
             </button>
           </Tip>
           <Tip text="More">
-            <button type="button" aria-label="More" aria-haspopup="menu" className="pine-hover-btn" onClick={e => openMenu("more", e)}
+            <button type="button" aria-label="More" aria-haspopup="menu" className="pine-hover-btn" data-pine-menu-trigger onClick={e => openMenu("more", e)}
               style={{ ...bordered, position: "relative", width: 34, flexShrink: 0, background: menu?.which === "more" ? p.hover : "transparent" }}>
               <Ic.MoreIcon />
               {releaseDot && <span data-testid="pine-release-dot" style={{ position: "absolute", top: -3, right: -3, width: 7, height: 7, borderRadius: "50%", background: p.danger }} />}

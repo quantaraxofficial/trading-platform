@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 import "./collab.css";
 import { useAuth } from "@/context/AuthContext";
 import { useEscapeClose } from "../../lib/useEscapeClose";
-import { collab, collabApi, collabLink, useCollab, type LinkAccess, type Member, type RoomInfo } from "../../lib/collab/session";
+import { collab, collabApi, collabLink, useCollab, type LinkAccess, type Member, type RoomInfo, type RoomKind } from "../../lib/collab/session";
 import { AddPersonIcon, CloseIcon, CollabIcon, CopyIcon, GlobeIcon, LinkIcon, LockIcon } from "./icons";
 import { openCollab } from "./CollabController";
 import TvMenu, { type TvMenuItem } from "../ui/TvMenu";
@@ -27,8 +27,11 @@ const ACCESS_HINT: Record<LinkAccess, string> = {
 const ROLE_LABEL = { owner: "Owner", editor: "Can edit", viewer: "Can view" } as const;
 
 // What a member may do, as the line under their name
-function permsLine(m: Member): string {
+function permsLine(m: Member, kind: RoomKind): string {
   if (m.role === "owner") return "Manages the collab";
+  if (kind === "pine") {
+    return [m.perms.pine ? "Edits the script" : "Views the script", m.perms.invite && "adds people", m.perms.voice ? "voice" : "no voice"].filter(Boolean).join(" · ");
+  }
   const parts = [m.perms.edit ? "Edits the chart" : "Views the chart"];
   if (m.perms.replay) parts.push("replay");
   if (m.perms.invite) parts.push("adds people");
@@ -46,8 +49,10 @@ export function Avatar({ name, color, size, online, speaking }: { name: string; 
   );
 }
 
-export default function CollabDialog({ symbol, interval, indicators, onClose }: {
+// mode "pine": opened from the Pine Editor, to share only the script being edited
+export default function CollabDialog({ symbol, interval, indicators, onClose, mode = "chart", pine }: {
   symbol: string; interval: string; indicators: any[]; onClose: () => void;
+  mode?: RoomKind; pine?: { code: string; scriptName: string };
 }) {
   const { user } = useAuth();
   const state = useCollab();
@@ -58,7 +63,7 @@ export default function CollabDialog({ symbol, interval, indicators, onClose }: 
     <div className="tv-co-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="tv-co-dialog" role="dialog" aria-modal="true" aria-labelledby="tv-co-title" data-name="collab-dialog">
         <div className="tv-co-header">
-          <div className="tv-co-title" id="tv-co-title">{inRoom ? `Share “${state.room!.name}”` : "Collaborate"}</div>
+          <div className="tv-co-title" id="tv-co-title">{inRoom ? `Share “${state.room!.name}”` : mode === "pine" ? "Collaborate on this script" : "Collaborate"}</div>
           <button className="tv-co-iconbtn" aria-label="Close" onClick={onClose}><CloseIcon /></button>
         </div>
         {!user ? (
@@ -66,7 +71,7 @@ export default function CollabDialog({ symbol, interval, indicators, onClose }: 
             <div className="tv-co-content">
               <div className="tv-co-access">
                 <span className="tv-co-access-icon"><CollabIcon size={22} /></span>
-                <div>Sign in to collaborate on charts with other people.</div>
+                <div>Sign in to collaborate {mode === "pine" ? "on scripts" : "on charts"} with other people.</div>
               </div>
             </div>
             <div className="tv-co-footer"><span className="tv-co-spacer" /><button className="tv-co-btn primary" onClick={onClose}>Ok</button></div>
@@ -74,7 +79,7 @@ export default function CollabDialog({ symbol, interval, indicators, onClose }: 
         ) : inRoom ? (
           <ManageRoom uid={user.uid} room={state.room!} onClose={onClose} />
         ) : (
-          <StartRoom uid={user.uid} symbol={symbol} interval={interval} indicators={indicators} onClose={onClose} />
+          <StartRoom uid={user.uid} symbol={symbol} interval={interval} indicators={indicators} onClose={onClose} mode={mode} pine={pine} />
         )}
       </div>
     </div>,
@@ -82,12 +87,14 @@ export default function CollabDialog({ symbol, interval, indicators, onClose }: 
   );
 }
 
-function StartRoom({ uid, symbol, interval, indicators, onClose }: { uid: string; symbol: string; interval: string; indicators: any[]; onClose: () => void }) {
-  const [name, setName] = useState(`${symbol} analysis`);
+function StartRoom({ uid, symbol, interval, indicators, onClose, mode, pine }: {
+  uid: string; symbol: string; interval: string; indicators: any[]; onClose: () => void; mode: RoomKind; pine?: { code: string; scriptName: string };
+}) {
+  const [name, setName] = useState(mode === "pine" ? (pine?.scriptName || "Pine script") : `${symbol} analysis`);
   const [access, setAccess] = useState<LinkAccess>("edit");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rooms, setRooms] = useState<{ token: string; name: string; role: string; owner_name: string; symbol: string; pending: boolean }[] | null>(null);
+  const [rooms, setRooms] = useState<{ token: string; name: string; kind: RoomKind; role: string; owner_name: string; symbol: string; pending: boolean }[] | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -99,9 +106,15 @@ function StartRoom({ uid, symbol, interval, indicators, onClose }: { uid: string
     setBusy(true);
     setError(null);
     try {
-      const drawings = ((window as any).__drawings || []).filter((d: any) => d.type !== "measure");
-      const pine = (window as any).__pineScript ?? null;
-      const room = await collabApi<RoomInfo>(uid, "rooms/", { method: "POST", body: { name, symbol, interval, indicators, drawings, pine } });
+      let room: RoomInfo;
+      if (mode === "pine") {
+        // Only the script: its code becomes the shared document everyone edits
+        room = await collabApi<RoomInfo>(uid, "rooms/", { method: "POST", body: { kind: "pine", name, pine, symbol, interval } });
+      } else {
+        const drawings = ((window as any).__drawings || []).filter((d: any) => d.type !== "measure");
+        const chartPine = (window as any).__pineScript ?? null;
+        room = await collabApi<RoomInfo>(uid, "rooms/", { method: "POST", body: { name, symbol, interval, indicators, drawings, pine: chartPine } });
+      }
       if (access !== "edit") await collabApi(uid, `room/${room.token}/`, { method: "PATCH", body: { link_access: access } });
       await openCollab(room.token, uid);
     } catch (err: any) {
@@ -116,7 +129,9 @@ function StartRoom({ uid, symbol, interval, indicators, onClose }: { uid: string
       <div className="tv-co-content">
         <div className="tv-co-section">
           <div className="tv-co-hint" style={{ marginTop: 0, fontSize: 14, lineHeight: "21px", color: "var(--tv-co-text)" }}>
-            Analyze this chart together, live. Everyone in the collab sees the same symbol, interval, indicators and drawings, each other&apos;s cursors and paper trades, and can chat and talk in the group.
+            {mode === "pine"
+              ? <>Edit this Pine script together, live. Everyone with access types in the same code and sees each other&apos;s cursors, and can chat and talk in the group. Only the script is shared, not your chart.</>
+              : <>Analyze this chart together, live. Everyone in the collab sees the same symbol, interval, indicators and drawings, each other&apos;s cursors and paper trades, and can chat and talk in the group.</>}
           </div>
         </div>
         <div className="tv-co-section">
@@ -146,7 +161,7 @@ function StartRoom({ uid, symbol, interval, indicators, onClose }: { uid: string
                 <span className="tv-co-access-icon"><CollabIcon size={22} /></span>
                 <div className="tv-co-member-info">
                   <div className="tv-co-member-name">{r.name}</div>
-                  <div className="tv-co-member-sub">{r.role === "owner" ? "You own this" : `${r.owner_name}'s · ${ROLE_LABEL[r.role as keyof typeof ROLE_LABEL] ?? r.role}`}{r.pending ? " · New invite" : ""}</div>
+                  <div className="tv-co-member-sub">{r.kind === "pine" ? "Pine script · " : "Chart · "}{r.role === "owner" ? "You own this" : `${r.owner_name}'s · ${ROLE_LABEL[r.role as keyof typeof ROLE_LABEL] ?? r.role}`}{r.pending ? " · New invite" : ""}</div>
                 </div>
                 <button className="tv-co-btn secondary" onClick={() => openCollab(r.token, uid).catch(e => setError(e?.message))}>Open</button>
               </div>
@@ -244,7 +259,17 @@ function ManageRoom({ uid, room, onClose }: { uid: string; room: RoomInfo; onClo
     } catch (err: any) { setResult({ error: err?.message || "Couldn't hand the collab over" }); }
   };
   const menuMember = menuFor ? room.members.find(m => m.uid === menuFor.uid) : null;
-  const menuItems: TvMenuItem[] = menuMember ? [
+  const pineRoom = room.kind === "pine";
+  // In a script-only collab, "can edit" means editing the script
+  const roleLabel = (m: Member) => m.role === "owner" ? ROLE_LABEL.owner : pineRoom ? (m.perms.pine ? "Can edit" : "Can view") : ROLE_LABEL[m.role];
+  const menuItems: TvMenuItem[] = !menuMember ? [] : pineRoom ? [
+    { label: "Can edit the script", checked: menuMember.perms.pine, keepOpen: true, onClick: () => updateMember(menuMember, { can_pine: !menuMember.perms.pine }), testId: "perm-pine" },
+    { label: "Can add people", checked: menuMember.perms.invite, keepOpen: true, onClick: () => updateMember(menuMember, { can_invite: !menuMember.perms.invite }), testId: "perm-invite" },
+    { label: "Can talk in voice", checked: menuMember.perms.voice, keepOpen: true, onClick: () => updateMember(menuMember, { can_voice: !menuMember.perms.voice }), testId: "perm-voice" },
+    { kind: "divider" },
+    { label: "Make owner…", onClick: () => setTransferTo(menuMember), testId: "perm-transfer" },
+    { label: "Remove access", onClick: () => removeMember(menuMember), testId: "perm-remove" },
+  ] : [
     { label: "Can edit the chart", checked: menuMember.perms.edit, keepOpen: true, onClick: () => updateMember(menuMember, { role: menuMember.perms.edit ? "viewer" : "editor" }), testId: "perm-edit" },
     { label: "Can control the replay", checked: menuMember.perms.replay, keepOpen: true, onClick: () => updateMember(menuMember, { can_replay: !menuMember.perms.replay }), testId: "perm-replay" },
     { label: "Can add people", checked: menuMember.perms.invite, keepOpen: true, onClick: () => updateMember(menuMember, { can_invite: !menuMember.perms.invite }), testId: "perm-invite" },
@@ -254,7 +279,7 @@ function ManageRoom({ uid, room, onClose }: { uid: string; room: RoomInfo; onClo
     { kind: "divider" },
     { label: "Make owner…", onClick: () => setTransferTo(menuMember), testId: "perm-transfer" },
     { label: "Remove access", onClick: () => removeMember(menuMember), testId: "perm-remove" },
-  ] : [];
+  ];
   const endCollab = async () => {
     await patchRoom({ active: false });
     onClose();
@@ -332,7 +357,7 @@ function ManageRoom({ uid, room, onClose }: { uid: string; room: RoomInfo; onClo
               <Avatar name={m.name} color={m.color} online={online.has(m.uid)} />
               <div className="tv-co-member-info">
                 <div className="tv-co-member-name">{m.name}{m.uid === uid ? " (you)" : ""}{online.has(m.uid) && <span className="tv-co-member-sub" style={{ display: "inline" }}> · here now</span>}</div>
-                <div className="tv-co-member-sub">{m.pending ? "Invited · hasn't opened it yet" : permsLine(m)}</div>
+                <div className="tv-co-member-sub">{m.pending ? "Invited · hasn't opened it yet" : permsLine(m, room.kind)}</div>
               </div>
               {isOwner && m.role !== "owner" ? (
                 <button
@@ -343,10 +368,10 @@ function ManageRoom({ uid, room, onClose }: { uid: string; room: RoomInfo; onClo
                   data-name="member-permissions"
                   onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setMenuFor(f => (f?.uid === m.uid ? null : { uid: m.uid, x: r.right - 220, y: r.bottom + 4 })); }}
                 >
-                  {ROLE_LABEL[m.role]}
+                  {roleLabel(m)}
                 </button>
               ) : (
-                <span className="tv-co-role">{ROLE_LABEL[m.role]}</span>
+                <span className="tv-co-role">{roleLabel(m)}</span>
               )}
             </div>
           ))}

@@ -165,7 +165,7 @@ import { useAuth } from '@/context/AuthContext';
 import { isTypingTarget } from '../../../lib/isTypingTarget';
 import { writeDrawingIndex } from '../../../lib/drawingIndex';
 import { backendFetch } from "@/lib/backend";
-import { useCollabActive } from '../../../lib/collab/session';
+import { useCollabChartActive } from '../../../lib/collab/session';
 
 const DrawingContext = createContext<DrawingContextType | undefined>(undefined);
 
@@ -175,7 +175,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
   // call sites but route them to a no-op so nothing else needs to change
   const logAction = (_action: string, _data: unknown) => {};
   // In a collab chart the drawings are the room's (CollabDrawingSync), not this user's saved ones
-  const inCollab = useCollabActive();
+  const inCollab = useCollabChartActive();
   const [symbol, setSymbol] = useState<string>('');
   const [activeTool, setActiveTool] = useState<DrawingType | null>(null);
   const [activeEmoji, setActiveEmoji] = useState<string | null>(null);

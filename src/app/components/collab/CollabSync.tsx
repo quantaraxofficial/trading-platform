@@ -7,7 +7,7 @@
 
 import { useEffect, useRef } from "react";
 import { useDrawing, type BaseDrawing } from "../drawing/core/DrawingContext";
-import { collab, useCollab, useCollabActive, type SharedPine, type TradeLine } from "../../lib/collab/session";
+import { collab, useCollab, useCollabChartActive, type SharedPine, type TradeLine } from "../../lib/collab/session";
 import { alertSymbolKey, conditionMet, desktopNotify, DEFAULT_NOTIFY, type AlertNotify } from "@/context/AlertsContext";
 import { setCollabAlertWatchSymbols } from "../../trading/quoteFeed";
 import { useReplay } from "../ReplayContext";
@@ -32,7 +32,7 @@ function mergeById(list: BaseDrawing[], incoming: BaseDrawing[]): BaseDrawing[] 
 // out (a change that came from the room matches it and isn't sent back)
 export function CollabDrawingSync() {
   const { drawings, applyRemoteDrawings, symbol } = useDrawing();
-  const active = useCollabActive();
+  const active = useCollabChartActive();
   const shadow = useRef(new Map<string, string>());
   const shadowSymbol = useRef<string | null>(null);
   const latest = useRef(drawings);
@@ -111,7 +111,7 @@ export function CollabChartSync({ symbol, interval, indicators, setSymbol, setIn
   symbol: string; interval: string; indicators: any[];
   setSymbol: (s: string) => void; setInterval: (i: string) => void; setIndicators: (list: any[]) => void;
 }) {
-  const active = useCollabActive();
+  const active = useCollabChartActive();
   const remote = useRef<{ symbol: string; interval: string; indicators: string } | null>(null);
   const before = useRef<{ symbol: string; interval: string; indicators: any[] } | null>(null);
   const cur = useRef({ symbol, interval, indicators });
@@ -173,7 +173,7 @@ export function CollabChartSync({ symbol, interval, indicators, setSymbol, setIn
 // This user's crosshair (bar time + price) and their paper-trading positions and working orders
 // on the shared symbol, for everyone else's chart
 export function CollabPresenceSync({ symbol }: { symbol: string }) {
-  const active = useCollabActive();
+  const active = useCollabChartActive();
   const symbolRef = useRef(symbol);
   symbolRef.current = symbol;
 
@@ -329,7 +329,7 @@ const pineEvent = (pine: SharedPine | null) => window.dispatchEvent(new CustomEv
 // goes to everyone, whose charts run the same code on their own bars. The script the user had
 // before joining comes back when they leave.
 export function CollabPineSync() {
-  const active = useCollabActive();
+  const active = useCollabChartActive();
   const before = useRef<{ code: string; scriptName: string } | null | undefined>(undefined);
   const room = useRef<SharedPine | null>(null);
 
