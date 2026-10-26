@@ -14,6 +14,7 @@ import { useReplay } from "./ReplayContext";
 import ReplayAlertDialog from "./alerts/ReplayAlertDialog";
 import { SymbolChip } from "./alerts/AlertToasts";
 import { SOUND_GROUPS, SOUND_REPEATS, soundName, playAlertSound } from "../lib/alertSounds";
+import { collab, useCollabActive } from "../lib/collab/session";
 
 interface CreateAlertModalProps {
   onClose: () => void;
@@ -76,6 +77,10 @@ function AlertDialog({ onClose, theme, symbol: chartSymbol = 'XAUUSD', initialPr
   const openNotifications = () => { notifyBefore.current = notify; setPage('notifications'); };
   const leaveNotifications = (apply: boolean) => { if (!apply) setNotify(notifyBefore.current); setPage('main'); };
   const valueRef = useRef<HTMLInputElement>(null);
+  // In a collab, a new alert can be shared with everyone in it (ticked by default when allowed)
+  const inCollab = useCollabActive();
+  const canShare = inCollab && !editing && collab.canAlert;
+  const [shared, setShared] = useState(true);
 
   useEscapeClose(onClose);
   useEffect(() => { valueRef.current?.focus(); valueRef.current?.select(); }, []);
@@ -90,7 +95,8 @@ function AlertDialog({ onClose, theme, symbol: chartSymbol = 'XAUUSD', initialPr
   const submit = () => {
     if (!valid) return;
     const data = { symbol, condition: operator, value: parseFloat(value), trigger, expiration, message: (message ?? autoMessage).trim() || autoMessage, notify };
-    if (editing) updateAlert(editing.id, data); else addAlert(data);
+    if (canShare && shared) collab.addSharedAlert({ symbol, condition: data.condition, value: data.value, trigger, expiration, message: data.message });
+    else if (editing) updateAlert(editing.id, data); else addAlert(data);
     try { localStorage.setItem(NOTIFY_KEY, JSON.stringify(notify)); } catch { /* ignore */ }
     if (notify.app) requestDesktopPermission();
     onClose();
@@ -170,6 +176,13 @@ function AlertDialog({ onClose, theme, symbol: chartSymbol = 'XAUUSD', initialPr
               <div style={label}>Notifications</div>
               <button type="button" style={link} onClick={openNotifications}>{notifySummary(notify)} <ChevronRight size={14} /></button>
             </div>
+            {canShare && (
+              <label style={{ ...row, marginTop: 6, gap: 8, cursor: 'pointer' }}>
+                <div style={label}>Collab</div>
+                <input type="checkbox" checked={shared} onChange={e => setShared(e.target.checked)} data-name="share-alert-with-collab" style={{ width: 16, height: 16, margin: 0, accentColor: c.btn }} />
+                <span style={{ fontSize: 14 }}>Share with everyone in the collab</span>
+              </label>
+            )}
           </div>
         ) : (
           <NotificationsPage notify={notify} setNotify={setNotify} c={c} field={field} dark={dark} />

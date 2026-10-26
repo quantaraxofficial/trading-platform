@@ -46,6 +46,12 @@ import { setLayoutSync } from "./lib/layoutSync";
 import SecondaryChart from "./components/SecondaryChart";
 import { watchlists, listSymbols, sameSymbol } from "./components/watchlist/store";
 import { backendFetch, sessionKey } from "@/lib/backend";
+import CollabController from "./components/collab/CollabController";
+import CollabDialog from "./components/collab/CollabDialog";
+import CollabPanel from "./components/collab/CollabPanel";
+import CollabOverlay from "./components/collab/CollabOverlay";
+import { CollabAlertsSync, CollabChartSync, CollabDrawingSync, CollabPineSync, CollabPresenceSync, CollabReplaySync } from "./components/collab/CollabSync";
+import { useCollabActive } from "./lib/collab/session";
 
 const DRAWINGS_PANEL_KEY = "tv:drawingsPanelVisible";
 const RIGHT_PANEL_KEY = "tv:rightPanelOpen";
@@ -103,6 +109,14 @@ function AppLayout() {
   };
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  // Collab charts: the Collaborate dialog (from the chart's right-click menu or the group panel)
+  const [showCollabDialog, setShowCollabDialog] = useState(false);
+  const inCollab = useCollabActive();
+  useEffect(() => {
+    const open = () => setShowCollabDialog(true);
+    window.addEventListener("tv:open-collab", open);
+    return () => window.removeEventListener("tv:open-collab", open);
+  }, []);
   // Create Alert opens at a given price (e.g. a drawing's, from its toolbar) or else at the
   // latest close of the symbol on the chart
   const [alertInitialPrice, setAlertInitialPrice] = useState<number | undefined>(undefined);
@@ -139,6 +153,10 @@ function AppLayout() {
     });
   };
   const [activeSidebarPanel, setActiveSidebarPanel] = useState("watchlist");
+  // The group panel goes with the collab
+  useEffect(() => {
+    if (!inCollab) setActiveSidebarPanel(p => (p === "collab" ? "watchlist" : p));
+  }, [inCollab]);
   // The chart's right-click "Object tree" (and anything else) can open a right-panel page
   useEffect(() => {
     const open = (e: Event) => {
@@ -898,6 +916,8 @@ function AppLayout() {
             <AlertsSidebar />
           ) : activeSidebarPanel === "object_tree" ? (
             <ObjectTreePanel />
+          ) : activeSidebarPanel === "collab" && inCollab ? (
+            <CollabPanel onShare={() => setShowCollabDialog(true)} />
           ) : (
             <RightToolbar symbol={symbol} onSymbolChange={setSymbol} />
           )}
@@ -1016,6 +1036,26 @@ function AppLayout() {
           interval={intervalLabel}
           onClose={() => setShowFeedback(false)}
         />
+      )}
+
+      {/* Collab charts: opening links and invites, keeping the shared chart in step, others' cursors and trades */}
+      <CollabController />
+      <CollabDrawingSync />
+      <CollabChartSync
+        symbol={symbol}
+        interval={selectedInterval}
+        indicators={activeIndicators}
+        setSymbol={setSymbol}
+        setInterval={(i) => handleIntervalChange(i, intervalToLabel(i))}
+        setIndicators={setActiveIndicators}
+      />
+      <CollabPresenceSync symbol={symbol} />
+      <CollabReplaySync />
+      <CollabPineSync />
+      <CollabAlertsSync />
+      <CollabOverlay symbol={symbol} />
+      {showCollabDialog && (
+        <CollabDialog symbol={symbol} interval={selectedInterval} indicators={activeIndicators} onClose={() => setShowCollabDialog(false)} />
       )}
 
       {showMobileMenu && (

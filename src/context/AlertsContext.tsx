@@ -40,7 +40,8 @@ export interface Alert {
 
 export interface AlertLogEntry { id: string; alertId: string; symbol: string; message: string; time: number; read: boolean }
 
-export interface AlertFiredDetail { alert: Alert; logId: string; time: number; price: number }
+// sharedBy: a collab's shared alert, and who set it
+export interface AlertFiredDetail { alert: Alert; logId: string; time: number; price: number; sharedBy?: string }
 
 type NewAlert = Omit<Alert, 'id' | 'createdAt' | 'status'>;
 
@@ -75,7 +76,7 @@ export const alertSymbolKey = (s: string) => (s.split(':').pop() || s).toUpperCa
 
 const uid = () => Math.random().toString(36).slice(2, 11);
 
-function conditionMet(op: AlertOperator, value: number, prev: number | undefined, price: number): boolean {
+export function conditionMet(op: AlertOperator, value: number, prev: number | undefined, price: number): boolean {
   switch (op) {
     case 'Greater Than': return price > value;
     case 'Less Than': return price < value;
@@ -85,7 +86,7 @@ function conditionMet(op: AlertOperator, value: number, prev: number | undefined
   }
 }
 
-function desktopNotify(title: string, body: string) {
+export function desktopNotify(title: string, body: string) {
   if (typeof window === 'undefined' || !('Notification' in window) || Notification.permission !== 'granted') return;
   try { new Notification(title, { body, tag: `${title}:${body}:${Date.now()}` }); } catch { /* not allowed here */ }
 }

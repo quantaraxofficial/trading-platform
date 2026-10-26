@@ -32,6 +32,9 @@ function isForexOpen(): boolean {
 // Symbols with an active alert (AlertsContext), so their alerts fire without being on the chart
 let alertSymbols: string[] = [];
 export function setAlertWatchSymbols(symbols: string[]) { alertSymbols = symbols; }
+// …and those of a collab's shared alerts
+let collabAlertSymbols: string[] = [];
+export function setCollabAlertWatchSymbols(symbols: string[]) { collabAlertSymbols = symbols; }
 
 function symbolsToWatch(): string[] {
   const set = new Set<string>();
@@ -43,6 +46,7 @@ function symbolsToWatch(): string[] {
     b.orders.forEach(o => { if (o.status === "working") set.add(o.symbol); });
   }
   alertSymbols.forEach(sym => set.add(sym));
+  collabAlertSymbols.forEach(sym => set.add(sym));
   return Array.from(set);
 }
 

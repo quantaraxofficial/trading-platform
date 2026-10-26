@@ -6,6 +6,7 @@ import ReplayDateDialog from "./ReplayDateDialog";
 import { getEarliestBarTime } from "../utils/earliestBar";
 import { useEscapeClose } from "../lib/useEscapeClose";
 import { getSavedReplay, type SavedReplay } from "../lib/savedReplay";
+import { collab, useCollab } from "../lib/collab/session";
 
 const SPEED_OPTIONS = [
   { label: "10x", desc: "10 upd per 1 sec", value: 10 },
@@ -33,6 +34,11 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
     mode, isPlaying, replaySpeed, hasStarted, startMode, setStartMode,
     stopReplay, togglePlay, stepForward, skipToEnd, setSpeed, reSelectBar
   } = useReplay();
+  // In a collab: the replay everyone follows, and whether this person is driving or following it
+  const { status: collabStatus, replay: shared, replayDetached, you } = useCollab();
+  const inCollab = collabStatus === "live";
+  const isDriver = inCollab && !!shared && shared.driver === you;
+  const following = inCollab && !!shared && !isDriver && !replayDetached;
 
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const speedMenuRef = useRef<HTMLDivElement>(null);
@@ -81,7 +87,7 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
     return () => { cancelled = true; };
   }, [showDateDialog, symbol, interval, intraday]);
 
-  if (mode === 'idle') return null;
+  if (mode === 'idle' && !following) return null;
 
   const speedLabel = SPEED_OPTIONS.find(s => s.value === replaySpeed)?.label ?? "1x";
   const current = START_MODES.find(m => m.id === startMode) ?? START_MODES[0];
@@ -120,8 +126,69 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
     margin: "0 12px",
   };
 
+  if (following && shared) {
+    const when = new Date(shared.time * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    const speed = SPEED_OPTIONS.find(o => o.value === shared.speed)?.label ?? `${shared.speed}x`;
+    return (
+      <div style={barStyle} data-name="collab-replay-bar">
+        <div style={{ width: "30px" }} />
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, minWidth: 0 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {mode === "idle" ? (
+              <>Joining {shared.driver_name}&apos;s replay…</>
+            ) : (
+              <>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+                  {shared.playing ? <path d="M10 5h1v14h-1zM14 5h1v14h-1z" /> : <path d="M7 5l10 7-10 7V5z" />}
+                </svg>
+                {shared.driver ? <>Replaying with <b style={{ fontWeight: 600 }}>{shared.driver_name}</b></> : <>Replay paused · {shared.driver_name} left</>}
+                <span style={{ color: "var(--tv-legend-args)" }}>· {speed} · {intervalLabel} · {when}</span>
+              </>
+            )}
+          </span>
+          <div style={separatorStyle} />
+          {collab.canReplay && (
+            <button type="button" className="tv-bb-btn" style={{ padding: "0 10px", fontSize: 14 }}
+              title="Drive the replay: everyone follows you"
+              onClick={() => collab.sendReplay(shared.time, false, shared.speed, true)}>
+              Take control
+            </button>
+          )}
+          <button type="button" className="tv-bb-btn" style={{ padding: "0 10px", fontSize: 14 }}
+            title="Keep replaying from here without following the group"
+            onClick={() => collab.setReplayDetached(true)}>
+            Replay on my own
+          </button>
+        </div>
+        <IconButton onClick={() => { collab.setReplayDetached(true); if (mode !== "idle") stopReplay(); }} title="Exit Replay">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </IconButton>
+      </div>
+    );
+  }
+
+  // Who sees this replay, in a collab
+  const collabNote = !inCollab ? null
+    : isDriver ? "Everyone in the collab follows your replay"
+    : shared && replayDetached ? null
+    : !collab.canReplay ? "Only you see this replay" : null;
+
   return (
     <div style={barStyle}>
+      {(collabNote || (inCollab && shared && replayDetached)) && (
+        <div style={{ position: "absolute", left: 12, top: 0, bottom: 0, display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--tv-legend-args)", pointerEvents: "auto" }}>
+          {collabNote}
+          {inCollab && shared && replayDetached && (
+            <button type="button" className="tv-bb-btn" style={{ padding: "0 10px", fontSize: 13, height: 26 }}
+              title={`Go back to following ${shared.driver_name}'s replay`}
+              onClick={() => collab.setReplayDetached(false)}>
+              Rejoin {shared.driver_name}
+            </button>
+          )}
+        </div>
+      )}
       {/* Left spacer (matches close button width for perfect centering) */}
       <div style={{ width: "30px" }} />
 

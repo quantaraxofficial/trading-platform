@@ -94,10 +94,14 @@ export default function AlertToasts({ theme }: { theme?: string }) {
               </button>
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, paddingBottom: 4 }}>
-              <button type="button" onClick={() => { close(key); window.dispatchEvent(new CustomEvent("tv:edit-alert", { detail: { id: detail.alert.id } })); }}
-                style={{ padding: 0, border: "none", background: "transparent", color: c.link, fontSize: 14, lineHeight: "18px", cursor: "pointer", fontFamily: "inherit" }}>
-                Edit alert
-              </button>
+              {detail.sharedBy ? (
+                <span style={{ color: c.time, fontSize: 13 }}>Collab alert · set by {detail.sharedBy}</span>
+              ) : (
+                <button type="button" onClick={() => { close(key); window.dispatchEvent(new CustomEvent("tv:edit-alert", { detail: { id: detail.alert.id } })); }}
+                  style={{ padding: 0, border: "none", background: "transparent", color: c.link, fontSize: 14, lineHeight: "18px", cursor: "pointer", fontFamily: "inherit" }}>
+                  Edit alert
+                </button>
+              )}
               <span style={{ color: c.time, fontWeight: 500 }}>{clock(detail.time)}</span>
             </div>
           </div>

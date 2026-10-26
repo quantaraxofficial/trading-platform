@@ -25,6 +25,7 @@ import {
   KeyboardShortcutsDialog, StrategyReportEmptyDialog, ConfirmDialog, formatStamp, type PinePalette,
 } from "./pine/PineDialogs";
 import { backendFetch } from "@/lib/backend";
+import PineLiveBadge from "./collab/PineLiveBadge";
 
 const PineMonaco = dynamic(() => import("./pine/PineMonaco"), { ssr: false, loading: () => null });
 
@@ -766,6 +767,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
           {nameButton}
           {runButton}
           {saveButton}
+          <PineLiveBadge />
           <span style={{ flex: 1 }} />
           <Tip text="Share your script with community">
             <button type="button" aria-label="Publish script" className="pine-hover-btn" onClick={publish} style={{ ...bordered, padding: narrow ? 0 : "0 12px 0 6px", flexShrink: 0 }}>
