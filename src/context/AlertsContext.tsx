@@ -68,6 +68,18 @@ const AlertsContext = createContext<AlertsContextType>({
 });
 
 const LOCAL_KEY = 'tv:alerts';
+// A signed-in account's alerts are also kept in this browser, so they survive a reload when
+// Firestore can't be reached (or isn't enabled for the project)
+const accountKey = (uid: string) => `tv:alerts:${uid}`;
+function readLocal(key: string): { alerts?: Alert[]; log?: AlertLogEntry[] } | null {
+  try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; }
+}
+let firestoreWarned = false;
+function warnFirestore(what: string, error: unknown) {
+  if (firestoreWarned) return;
+  firestoreWarned = true;
+  console.warn(`Alerts: ${what} Firestore failed, using this browser's copy instead.`, error);
+}
 const LOG_LIMIT = 500;
 const EVERY_TIME_GAP_MS = 60000; // "Every time" level alerts (greater/less than) fire at most once a minute
 
@@ -121,13 +133,12 @@ export const AlertsProvider = ({ children }: { children: ReactNode }) => {
       loadedFor.current = owner;
     };
     if (!user?.uid) {
-      let data = null;
-      try { data = JSON.parse(localStorage.getItem(LOCAL_KEY) || 'null'); } catch { /* ignore */ }
-      apply(data);
+      apply(readLocal(LOCAL_KEY));
     } else {
-      getDoc(doc(db, 'userAlerts', user.uid))
-        .then(snap => apply(snap.exists() ? (snap.data() as any) : null))
-        .catch(error => { console.error('Failed to load alerts:', error); apply(null); });
+      const uid = user.uid;
+      getDoc(doc(db, 'userAlerts', uid))
+        .then(snap => apply(snap.exists() ? (snap.data() as any) : readLocal(accountKey(uid))))
+        .catch(error => { warnFirestore('loading from', error); apply(readLocal(accountKey(uid))); });
     }
     return () => { cancelled = true; };
   }, [user?.uid]);
@@ -140,8 +151,10 @@ export const AlertsProvider = ({ children }: { children: ReactNode }) => {
       try { localStorage.setItem(LOCAL_KEY, JSON.stringify({ alerts, log })); } catch { /* full or blocked */ }
       return;
     }
+    const uid = user.uid;
+    try { localStorage.setItem(accountKey(uid), JSON.stringify({ alerts, log })); } catch { /* full or blocked */ }
     const t = setTimeout(() => {
-      setDoc(doc(db, 'userAlerts', user.uid), { alerts, log }, { merge: true }).catch(error => console.error('Failed to save alerts:', error));
+      setDoc(doc(db, 'userAlerts', uid), { alerts, log }, { merge: true }).catch(error => warnFirestore('saving to', error));
     }, 400);
     return () => clearTimeout(t);
   }, [alerts, log, user?.uid]);

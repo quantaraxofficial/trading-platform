@@ -13,6 +13,7 @@ import { collab, collabApi, collabLink, useCollab, type LinkAccess, type Member,
 import { AddPersonIcon, CloseIcon, CollabIcon, CopyIcon, GlobeIcon, LinkIcon, LockIcon } from "./icons";
 import { openCollab } from "./CollabController";
 import TvMenu, { type TvMenuItem } from "../ui/TvMenu";
+import { cleanDrawings } from "../../lib/drawingData";
 
 const ACCESS_LABEL: Record<LinkAccess, string> = {
   restricted: "Only people added",
@@ -111,7 +112,7 @@ function StartRoom({ uid, symbol, interval, indicators, onClose, mode, pine }: {
         // Only the script: its code becomes the shared document everyone edits
         room = await collabApi<RoomInfo>(uid, "rooms/", { method: "POST", body: { kind: "pine", name, pine, symbol, interval } });
       } else {
-        const drawings = ((window as any).__drawings || []).filter((d: any) => d.type !== "measure");
+        const drawings = cleanDrawings((window as any).__drawings).filter((d: any) => d.type !== "measure");
         const chartPine = (window as any).__pineScript ?? null;
         room = await collabApi<RoomInfo>(uid, "rooms/", { method: "POST", body: { name, symbol, interval, indicators, drawings, pine: chartPine } });
       }

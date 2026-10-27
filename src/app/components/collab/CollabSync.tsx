@@ -12,6 +12,7 @@ import { alertSymbolKey, conditionMet, desktopNotify, DEFAULT_NOTIFY, type Alert
 import { setCollabAlertWatchSymbols } from "../../trading/quoteFeed";
 import { useReplay } from "../ReplayContext";
 import "../../lib/collab/pineDoc";
+import { cleanDrawings } from "../../lib/drawingData";
 import { engine } from "../../trading/store";
 import { activeBook } from "../../trading/engine";
 import { chartPane, logicalToTime } from "../../lib/collab/chartGeometry";
@@ -50,23 +51,27 @@ export function CollabDrawingSync() {
     const replaceAll = (list: BaseDrawing[]) => (cur: BaseDrawing[]) => [...list, ...cur.filter(d => !syncable(d))];
     return collab.onChart(e => {
       if (e.type === "init") {
-        setShadow(e.chart.symbol, e.chart.drawings || []);
-        applyRemoteDrawings(replaceAll(e.chart.drawings || []), true);
+        const list = cleanDrawings<BaseDrawing>(e.chart.drawings);
+        setShadow(e.chart.symbol, list);
+        applyRemoteDrawings(replaceAll(list), true);
       } else if (e.type === "chart") {
         if (e.symbol === shadowSymbol.current) return;   // only the interval changed
-        setShadow(e.symbol, e.drawings || []);
-        applyRemoteDrawings(replaceAll(e.drawings || []), true);
+        const list = cleanDrawings<BaseDrawing>(e.drawings);
+        setShadow(e.symbol, list);
+        applyRemoteDrawings(replaceAll(list), true);
       } else if (e.type !== "indicators" && e.type !== "pine" && e.symbol === shadowSymbol.current) {
         if (e.type === "drawings.upsert") {
-          e.drawings.forEach(d => shadow.current.set(d.id, JSON.stringify(d)));
-          applyRemoteDrawings(list => mergeById(list, e.drawings));
+          const incoming = cleanDrawings<BaseDrawing>(e.drawings);
+          incoming.forEach(d => shadow.current.set(d.id, JSON.stringify(d)));
+          applyRemoteDrawings(list => mergeById(list, incoming));
         } else if (e.type === "drawings.delete") {
           const gone = new Set(e.ids);
           e.ids.forEach(id => shadow.current.delete(id));
           applyRemoteDrawings(list => list.filter(d => !gone.has(d.id)));
         } else if (e.type === "drawings.replace") {
-          setShadow(e.symbol, e.drawings);
-          applyRemoteDrawings(replaceAll(e.drawings));
+          const list = cleanDrawings<BaseDrawing>(e.drawings);
+          setShadow(e.symbol, list);
+          applyRemoteDrawings(replaceAll(list));
         }
       }
     });

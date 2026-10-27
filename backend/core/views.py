@@ -186,27 +186,25 @@ def manage_drawings(request, uid):
     if denied:
         return denied
 
+    symbol = request.query_params.get('symbol') or request.data.get('symbol')
+    # Without a symbol, a GET lists every symbol's drawings (the Object tree's "Manage layout
+    # drawings": a count per symbol and what they are)
+    if not symbol and request.method == 'GET':
+        return Response([{"symbol": d.symbol, "drawings": d.data or []} for d in UserDrawing.objects.filter(owner=profile)])
+    if not symbol:
+        return Response({"error": "Symbol is required"}, status=status.HTTP_400_BAD_REQUEST)
+
     if request.method == 'GET':
-        symbol = request.query_params.get('symbol')
-        drawings = UserDrawing.objects.filter(owner=profile)
-        if symbol:
-            drawings = drawings.filter(symbol=symbol)
-        return Response([{
-            "id": d.id,
-            "symbol": d.symbol,
-            "data": d.data,
-            "updated_at": d.updated_at.isoformat(),
-        } for d in drawings])
+        # The symbol's drawings themselves (what the chart's drawing layer loads)
+        drawing = UserDrawing.objects.filter(owner=profile, symbol=symbol).first()
+        return Response(drawing.data if drawing else [])
 
     elif request.method == 'POST':
-        data = request.data
-        symbol = data.get('symbol')
-        if not symbol:
-            return Response({"error": "symbol is required"}, status=status.HTTP_400_BAD_REQUEST)
+        # The chart sends {symbol, drawings}
         UserDrawing.objects.update_or_create(
             owner=profile,
             symbol=symbol,
-            defaults={'data': data.get('data', [])}
+            defaults={'data': request.data.get('drawings', [])}
         )
         return Response({"success": True})
 

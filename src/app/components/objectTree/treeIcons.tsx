@@ -53,6 +53,7 @@ const TREE_NAMES: Record<string, string> = {
   text: "Text", measure: "Measure",
 };
 export function drawingTreeName(type: string): string {
+  if (!type) return "Drawing";
   if (TREE_NAMES[type]) return TREE_NAMES[type];
   const label = DRAWING_TOOL_BY_TYPE[type]?.label;
   if (!label) return type.replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase());

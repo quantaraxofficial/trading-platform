@@ -165,6 +165,7 @@ import { useAuth } from '@/context/AuthContext';
 import { isTypingTarget } from '../../../lib/isTypingTarget';
 import { writeDrawingIndex } from '../../../lib/drawingIndex';
 import { backendFetch } from "@/lib/backend";
+import { cleanDrawings } from '../../../lib/drawingData';
 import { useCollabChartActive } from '../../../lib/collab/session';
 
 const DrawingContext = createContext<DrawingContextType | undefined>(undefined);
@@ -320,7 +321,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
         try {
           const res = await backendFetch(`http://localhost:8000/api/users/drawings/${user.uid}/?symbol=${symbol}`);
           if (res.ok) {
-            const data = await res.json();
+            const data = cleanDrawings<BaseDrawing>(await res.json());
             setDrawings(data);
             setHistory([data]);
             setHistoryIndex(0);
