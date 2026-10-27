@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, FeedbackMessage, CollabRoom, CollabMember, CollabMessage
+from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, FeedbackMessage, CollabRoom, CollabMember, CollabMessage, CollabJoinRequest
 
 @admin.register(FeedbackMessage)
 class FeedbackMessageAdmin(admin.ModelAdmin):
@@ -101,8 +101,9 @@ class CollabMemberInline(admin.TabularInline):
 @admin.register(CollabRoom)
 class CollabRoomAdmin(admin.ModelAdmin):
     """Collab charts: who owns them, who's in them, and their link access."""
-    list_display = ("name", "owner", "symbol", "interval", "link_access", "active", "updated_at")
-    list_filter = ("active", "link_access")
+    list_display = ("name", "owner", "symbol", "interval", "link_access", "allow_requests", "allow_voice", "active", "updated_at")
+    list_filter = ("active", "link_access", "allow_requests", "allow_voice")
+    raw_id_fields = ("owner", "kicked")
     search_fields = ("name", "token", "owner__name", "owner__email")
     readonly_fields = ("token", "created_at", "updated_at")
     exclude = ("pine_doc",)
@@ -118,6 +119,15 @@ class CollabMemberAdmin(admin.ModelAdmin):
     list_filter = ("role", "room")
     search_fields = ("profile__name", "profile__email", "room__name")
     raw_id_fields = ("profile", "invited_by", "room")
+
+
+@admin.register(CollabJoinRequest)
+class CollabJoinRequestAdmin(admin.ModelAdmin):
+    """People who opened a collab's link without access and asked to be let in"""
+    list_display = ("profile", "room", "status", "created_at")
+    list_filter = ("status",)
+    search_fields = ("profile__name", "profile__email", "room__name")
+    raw_id_fields = ("profile", "room")
 
 
 @admin.register(CollabMessage)

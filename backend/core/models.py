@@ -208,6 +208,12 @@ class CollabRoom(models.Model):
     alerts = models.JSONField(default=list, blank=True)
     # The Pine Editor's code, edited live by everyone allowed to (a Yjs document, base64)
     pine_doc = models.TextField(blank=True, default='')
+    # Someone opening the link without access may ask the owner to let them in
+    allow_requests = models.BooleanField(default=True)
+    # Off: nobody but the owner can use their mic (each member's can_voice applies when on)
+    allow_voice = models.BooleanField(default=True)
+    # Kicked out: can't come back through the link or ask to, until added again
+    kicked = models.ManyToManyField(TraderProfile, blank=True, related_name='+')
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -238,6 +244,23 @@ class CollabMember(models.Model):
 
     def __str__(self):
         return f"{self.profile.name} in {self.room.name} ({self.role})"
+
+
+class CollabJoinRequest(models.Model):
+    """Someone without access who opened a collab's link and asked to be let in. The owner (or
+    anyone allowed to add people) approves it, which adds them, or declines it."""
+    STATUSES = [('pending', 'Waiting'), ('declined', 'Declined')]
+    room = models.ForeignKey(CollabRoom, on_delete=models.CASCADE, related_name='join_requests')
+    profile = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='+')
+    status = models.CharField(max_length=10, choices=STATUSES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('room', 'profile')
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.profile.name} asks to join {self.room.name} ({self.status})"
 
 
 class CollabMessage(models.Model):

@@ -217,11 +217,9 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
             saved = await self._save_message(text)
             await self._broadcast({"type": "chat", "message": saved, "client_id": msg.get('client_id')})
         elif kind == 'voice':
-            if msg.get('voice') and not perms['voice']:
-                await self.send_json({"type": "voice.revoked", "error": "The owner hasn't let you talk in the voice call"})
-                return
+            # Without mic permission they can still listen in, always muted
             self.peer['voice'] = bool(msg.get('voice'))
-            self.peer['muted'] = bool(msg.get('muted'))
+            self.peer['muted'] = bool(msg.get('muted')) or not perms['voice']
             await self._broadcast({"type": "peer.updated", "peer": self.peer}, exclude=self.channel_name)
         elif kind == 'replay':
             await self._on_replay(msg)
@@ -239,7 +237,7 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
                                    "anchor": msg.get('anchor'), "head": msg.get('head')}, exclude=self.channel_name)
         elif kind == 'rtc':
             to = msg.get('to')
-            if not perms['voice'] or not self.peer['voice']:
+            if not self.peer['voice']:
                 return
             if isinstance(to, str) and to in state.peers and isinstance(msg.get('data'), dict):
                 await self.channel_layer.send(to, {"type": "relay", "payload": {"type": "rtc", "from": self.channel_name, "data": msg['data']}})
@@ -259,19 +257,26 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
     async def access_changed(self, event):
         """Members or access changed through the API: re-check this person's access"""
         member = await self._reload_member()
-        if member is None:
-            await self.send_json({"type": "removed"})
+        if member is None or member == 'kicked':
+            await self.send_json({"type": "removed", "kicked": member == 'kicked'})
             await self.close(code=4403)
             return
         self.peer['role'] = member.role
         self.peer['perms'] = perms_of(member)
-        if self.peer['voice'] and not self.peer['perms']['voice']:
-            self.peer['voice'] = False
-            await self.send_json({"type": "voice.revoked", "error": "The owner turned off your voice"})
+        if self.peer['voice'] and not self.peer['perms']['voice'] and not self.peer['muted']:
+            # Their mic goes off; they stay in the call, listening
+            self.peer['muted'] = True
+            await self.send_json({"type": "voice.revoked", "error": "The owner turned off your mic"})
         if not self.peer['perms']['replay']:
             await self._release_replay()
         await self._broadcast({"type": "peer.updated", "peer": self.peer}, exclude=self.channel_name)
         await self.send_json({"type": "room", "room": await self._room_json(), "peers": list(self.state.peers.values())})
+
+    async def join_request(self, event):
+        """Someone without access asked to be let in: tell those who can let them in"""
+        if self.peer['perms'].get('invite'):
+            await self.send_json({"type": "join.request", "request": event['request']})
+            await self.send_json({"type": "room", "room": await self._room_json(), "peers": list(self.state.peers.values())})
 
     async def room_ended(self, event):
         await self.send_json({"type": "ended"})
@@ -459,14 +464,18 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
         room = CollabRoom.objects.filter(token=self.token, active=True).select_related('owner').first()
         if not room:
             return None
-        member = CollabMember.objects.filter(room=room, profile=session.user).select_related('profile').first()
+        member = CollabMember.objects.filter(room=room, profile=session.user).select_related('profile', 'room').first()
         return (room, member) if member else None
 
     @database_sync_to_async
     def _reload_member(self):
-        if not CollabRoom.objects.filter(id=self.room.id, active=True).exists():
+        room = CollabRoom.objects.filter(id=self.room.id, active=True).first()
+        if not room:
             return None
-        return CollabMember.objects.filter(room_id=self.room.id, profile=self.member.profile).first()
+        member = CollabMember.objects.filter(room=room, profile=self.member.profile).select_related('room').first()
+        if member is None and room.kicked.filter(id=self.member.profile_id).exists():
+            return 'kicked'
+        return member
 
     @database_sync_to_async
     def _room_json(self):

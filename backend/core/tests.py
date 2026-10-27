@@ -99,3 +99,85 @@ class AccessTests(TestCase):
     def test_unverified_sign_in_only_when_allowed(self):
         r = self.c.post("/api/users/sync/", {"uid": "ua", "session_key": "dev", "email": "ua@example.com"}, format="json")
         self.assertEqual(r.status_code, 200)
+
+
+class CollabAccessTests(TestCase):
+    """Collab rooms: asking to join, kicking out, and the owner's settings after starting one"""
+
+    def setUp(self):
+        from .models import CollabRoom
+        self.c = APIClient()
+        for u in ("own", "bob", "eve"):
+            p = TraderProfile.objects.create(uid=u, name=u.title(), email=f"{u}@example.com")
+            UserSession.objects.create(user=p, session_key=f"sk-{u}")
+        r = self.call("own", "rooms/", "post", {"name": "R", "symbol": "AAPL", "interval": "1D", "link_access": "restricted", "allow_requests": True})
+        self.assertEqual(r.status_code, 201)
+        self.token = r.json()["token"]
+        self.room = CollabRoom.objects.get(token=self.token)
+
+    def call(self, uid, path, method="get", body=None):
+        url = f"/api/users/collab/{uid}/{path}{'&' if '?' in path else '?'}session_key=sk-{uid}"
+        return getattr(self.c, method)(url, body, format="json") if body is not None else getattr(self.c, method)(url)
+
+    def room_path(self, rest=""):
+        return f"room/{self.token}/{rest}"
+
+    def test_not_invited_can_ask_and_be_let_in(self):
+        r = self.call("bob", self.room_path())
+        self.assertEqual(r.status_code, 403)
+        self.assertTrue(r.json()["not_invited"])
+        self.assertTrue(r.json()["can_request"])
+        self.assertIsNone(r.json()["request"])
+        self.assertEqual(self.call("bob", self.room_path("request/"), "post", {}).status_code, 201)
+        self.assertEqual(self.call("bob", self.room_path()).json()["request"], "pending")
+        # The owner sees it, a stranger can't answer it
+        self.assertEqual([q["uid"] for q in self.call("own", self.room_path()).json()["requests"]], ["bob"])
+        self.assertEqual(self.call("eve", self.room_path("requests/bob/"), "post", {"action": "approve"}).status_code, 403)
+        r = self.call("own", self.room_path("requests/bob/"), "post", {"action": "approve", "role": "viewer"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["requests"], [])
+        got = self.call("bob", self.room_path())
+        self.assertEqual(got.status_code, 200)
+        self.assertEqual(got.json()["role"], "viewer")
+
+    def test_declined_and_requests_turned_off(self):
+        self.call("bob", self.room_path("request/"), "post", {})
+        self.call("own", self.room_path("requests/bob/"), "post", {"action": "decline"})
+        self.assertEqual(self.call("bob", self.room_path()).json()["request"], "declined")
+        self.call("own", self.room_path(), "patch", {"allow_requests": False})
+        r = self.call("eve", self.room_path())
+        self.assertFalse(r.json()["can_request"])
+        self.assertEqual(self.call("eve", self.room_path("request/"), "post", {}).status_code, 403)
+
+    def test_kicked_out_stays_out_until_added_again(self):
+        self.call("own", self.room_path(), "patch", {"link_access": "edit"})
+        self.assertEqual(self.call("bob", self.room_path()).status_code, 200)   # joins through the link
+        self.assertEqual(self.call("own", self.room_path("member/bob/?kick=1"), "delete").status_code, 200)
+        r = self.call("bob", self.room_path())
+        self.assertEqual(r.status_code, 403)
+        self.assertTrue(r.json()["kicked"])
+        self.assertEqual(self.call("bob", self.room_path("request/"), "post", {}).status_code, 403)
+        self.assertEqual([k["uid"] for k in self.call("own", self.room_path()).json()["kicked"]], ["bob"])
+        self.call("own", self.room_path("kicked/bob/"), "delete")
+        self.assertEqual(self.call("bob", self.room_path()).status_code, 200)
+
+    def test_plain_remove_lets_them_back_through_the_link(self):
+        self.call("own", self.room_path(), "patch", {"link_access": "view"})
+        self.call("bob", self.room_path())
+        self.call("own", self.room_path("member/bob/"), "delete")
+        self.assertEqual(self.call("bob", self.room_path()).status_code, 200)
+
+    def test_mics_for_everyone_and_for_some(self):
+        self.call("own", self.room_path(), "patch", {"link_access": "edit"})
+        self.call("bob", self.room_path())
+        self.call("eve", self.room_path())
+        r = self.call("own", self.room_path("members/"), "patch", {"uids": ["bob"], "can_voice": False})
+        voice = {m["uid"]: m["perms"]["voice"] for m in r.json()["members"]}
+        self.assertEqual(voice, {"own": True, "bob": False, "eve": True})
+        r = self.call("own", self.room_path(), "patch", {"allow_voice": False})
+        voice = {m["uid"]: m["perms"]["voice"] for m in r.json()["members"]}
+        self.assertEqual(voice, {"own": True, "bob": False, "eve": False})
+        r = self.call("own", self.room_path("members/"), "patch", {"uids": "all", "role": "viewer"})
+        self.assertEqual({m["uid"]: m["role"] for m in r.json()["members"]}, {"own": "owner", "bob": "viewer", "eve": "viewer"})
+        # Only the owner
+        self.assertEqual(self.call("bob", self.room_path("members/"), "patch", {"uids": "all", "can_voice": True}).status_code, 403)
