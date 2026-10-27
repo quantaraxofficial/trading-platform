@@ -16,7 +16,7 @@ from django.dispatch import receiver
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
-from pycrdt import Doc, Text
+from pycrdt import Doc, Map, Text
 from rest_framework.response import Response
 
 from .auth import require_session
@@ -105,10 +105,16 @@ def display_name(profile):
 
 
 MAX_PINE_CODE = 200_000
+SCRIPT_LANGUAGES = ('pine', 'python', 'mql5')
+
+
+def clean_language(lang):
+    """The language a shared script is written in (Pine Script, Python or MQL5)"""
+    return lang if lang in SCRIPT_LANGUAGES else 'pine'
 
 
 def clean_pine(p):
-    """A Pine script for the shared chart, or None: {code, scriptName, overrides, colors, capital}"""
+    """A script for the shared chart, or None: {code, scriptName, language, overrides, colors, capital}"""
     if not isinstance(p, dict) or not isinstance(p.get('code'), str) or not p['code'].strip():
         return None
     if len(p['code']) > MAX_PINE_CODE:
@@ -117,6 +123,7 @@ def clean_pine(p):
     return {
         "code": p['code'],
         "scriptName": str(p.get('scriptName') or 'Script')[:100],
+        "language": clean_language(p.get('language')),
         "overrides": p['overrides'] if isinstance(p.get('overrides'), dict) else {},
         "colors": p['colors'] if isinstance(p.get('colors'), dict) else {},
         "capital": capital if isinstance(capital, (int, float)) and not isinstance(capital, bool) else None,
@@ -170,6 +177,7 @@ def _create_pine_room(me, data):
     if pine:
         with doc.transaction():
             doc.get('code', type=Text).insert(0, pine['code'])
+            doc.get('meta', type=Map)['language'] = pine['language']
     room = CollabRoom.objects.create(
         token=secrets.token_urlsafe(16)[:22], owner=me, name=name, kind='pine',
         symbol=str(data.get('symbol') or '')[:40], interval=str(data.get('interval') or '')[:20],

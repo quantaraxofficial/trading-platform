@@ -41,6 +41,8 @@ class PineScript(models.Model):
     owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='pine_scripts')
     name = models.CharField(max_length=100)
     script_type = models.CharField(max_length=20, default='indicator')
+    # The language the script is written in: Pine Script, Python or MQL5
+    language = models.CharField(max_length=10, default='pine', choices=[('pine', 'Pine Script'), ('python', 'Python'), ('mql5', 'MQL5')])
     code = models.TextField(blank=True)
     versions = models.JSONField(default=list, blank=True) # [{code, savedAt}]
     order = models.IntegerField(default=0)

@@ -13,6 +13,8 @@ import type { PineEditorSettings } from "./pineStore";
 import type { PineScriptError } from "../../lib/pineScriptEngine";
 import { collab, useCollabActive } from "../../lib/collab/session";
 import { pineDoc } from "../../lib/collab/pineDoc";
+import type { ScriptLanguage } from "../../lib/scripting";
+import { monacoLanguageFor, setupScriptLanguages } from "./scriptLanguages";
 
 export interface PineEditorApi {
   focus: () => void;
@@ -23,6 +25,8 @@ export interface PineEditorApi {
 
 export interface PineMonacoProps {
   value: string;
+  // Pine Script (this app's Pine mode), Python or MQL5 (Monaco's Python / C++ modes)
+  language?: ScriptLanguage;
   onChange: (v: string) => void;
   onCursor: (line: number, col: number) => void;
   isDark: boolean;
@@ -66,7 +70,9 @@ function lineDiff(base: string, cur: string) {
   return { added, modified, deletedAfter };
 }
 
-export default function PineMonaco({ value, onChange, onCursor, isDark, settings, errors, problemsTick, diffBase, onReady, keys }: PineMonacoProps) {
+export default function PineMonaco({ value, language = "pine", onChange, onCursor, isDark, settings, errors, problemsTick, diffBase, onReady, keys }: PineMonacoProps) {
+  const languageRef = useRef(language);
+  languageRef.current = language;
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof Monaco | null>(null);
   const keysRef = useRef(keys);
@@ -103,12 +109,12 @@ export default function PineMonaco({ value, onChange, onCursor, isDark, settings
   useEffect(() => {
     const editor = editorRef.current, monaco = monacoRef.current;
     if (!inCollab || !mounted || !editor || !monaco) return;
-    const unbind = pineDoc.bind(editor, monaco);
+    const unbind = pineDoc.bind(editor, monaco, () => languageRef.current);
     // The collab ended: back to the code this editor had before; the editor closed: nothing to put back
     return () => unbind(!collab.active);
   }, [inCollab, mounted]);
 
-  const beforeMount: BeforeMount = (monaco) => { setupPine(monaco); };
+  const beforeMount: BeforeMount = (monaco) => { setupPine(monaco); setupScriptLanguages(monaco); };
   const onMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
@@ -189,7 +195,7 @@ export default function PineMonaco({ value, onChange, onCursor, isDark, settings
         .monaco-hover .markdown-hover p, .monaco-hover .markdown-hover code { font-size: 13px; }
       `}</style>
       <Editor
-        language={PINE_LANG}
+        language={monacoLanguageFor(language, PINE_LANG)}
         theme={isDark ? PINE_THEME_DARK : PINE_THEME_LIGHT}
         defaultValue={value}
         onChange={handleChange}

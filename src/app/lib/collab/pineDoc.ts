@@ -1,7 +1,9 @@
 // The Pine Editor's code in a collab, edited live by everyone allowed to: a Yjs document kept in
 // step with the room (which holds the master copy), and a binding to the Monaco editor that
 // turns local typing into document changes and others' changes into edits, shows everyone's
-// cursor and selection in their colour, and undoes only this person's own edits.
+// cursor and selection in their colour, and undoes only this person's own edits. The document's
+// "meta" map holds the language the script is written in (Pine Script, Python or MQL5), so
+// switching it switches it for everyone.
 
 import * as Y from "yjs";
 import type * as Monaco from "monaco-editor";
@@ -15,15 +17,16 @@ const REMOTE = "remote";
 const CURSOR_TTL = 120_000;
 
 export interface RemoteCursor { id: string; uid: string; name: string; color: string; anchor: any; head: any; at: number }
-export interface PineDocInfo { ready: boolean; canEdit: boolean; cursors: RemoteCursor[]; error: string | null }
+export interface PineDocInfo { ready: boolean; canEdit: boolean; cursors: RemoteCursor[]; error: string | null; language: string | null }
 
 class PineDocSync {
   private doc = new Y.Doc();
   private text = this.doc.getText("code");
+  private meta = this.doc.getMap("meta");
   private ready = false;
   private cursors = new Map<string, RemoteCursor>();
   private subs = new Set<() => void>();
-  private info: PineDocInfo = { ready: false, canEdit: false, cursors: [], error: null };
+  private info: PineDocInfo = { ready: false, canEdit: false, cursors: [], error: null, language: null };
   private error: string | null = null;
   private redraw: (() => void) | null = null;
 
@@ -34,6 +37,8 @@ class PineDocSync {
         this.doc.destroy();
         this.doc = new Y.Doc();
         this.text = this.doc.getText("code");
+        this.meta = this.doc.getMap("meta");
+        this.meta.observe(() => this.emit());
         Y.applyUpdate(this.doc, fromB64(e.state), REMOTE);
         this.ready = true;
         this.error = e.type === "denied" ? e.error : null;
@@ -75,16 +80,22 @@ class PineDocSync {
   private reset: (() => void) | null = null;
   private emit(docChanged = false) {
     const now = Date.now();
-    this.info = { ready: this.ready, canEdit: collab.canPine, error: this.error, cursors: Array.from(this.cursors.values()).filter(c => now - c.at < CURSOR_TTL) };
+    const language = this.ready ? (this.meta.get("language") as string | undefined) ?? null : null;
+    this.info = { ready: this.ready, canEdit: collab.canPine, error: this.error, language, cursors: Array.from(this.cursors.values()).filter(c => now - c.at < CURSOR_TTL) };
     if (docChanged) this.reset?.();
     this.subs.forEach(f => f());
   }
   subscribe = (f: () => void) => { this.subs.add(f); return () => { this.subs.delete(f); }; };
+  // The script's language, for everyone in the collab (needs permission to edit the script)
+  setLanguage(language: string) {
+    if (!this.ready || !collab.canPine || this.meta.get("language") === language) return;
+    this.doc.transact(() => this.meta.set("language", language));
+  }
   get = () => this.info;
 
   // Ties a Monaco editor to the shared document; returns the unbinding. `restore` puts back the
   // code the editor had before (when the collab ended, not when the editor closed)
-  bind(editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco): (restore: boolean) => void {
+  bind(editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco, language?: () => string): (restore: boolean) => void {
     const model = editor.getModel();
     if (!model) return () => {};
     const before = model.getValue();
@@ -109,7 +120,10 @@ class PineDocSync {
       if (!this.ready) return;
       if (text.length === 0) {
         // An empty room document: the first editor fills it with its code (the room accepts one)
-        if (model.getValue() && collab.canPine) collab.seedPineDoc(model.getValue());
+        if (model.getValue() && collab.canPine) {
+          collab.seedPineDoc(model.getValue());
+          if (language && !this.meta.get("language")) this.setLanguage(language());
+        }
       } else {
         setModel(text.toString());
       }
@@ -234,6 +248,7 @@ class PineDocSync {
 export const pineDoc = new PineDocSync();
 if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") (window as any).__pineDoc = pineDoc;
 
+const SERVER_INFO: PineDocInfo = { ready: false, canEdit: false, cursors: [], error: null, language: null };
 export function usePineDoc(): PineDocInfo {
-  return useSyncExternalStore(pineDoc.subscribe, pineDoc.get, () => ({ ready: false, canEdit: false, cursors: [], error: null }));
+  return useSyncExternalStore(pineDoc.subscribe, pineDoc.get, () => SERVER_INFO);
 }

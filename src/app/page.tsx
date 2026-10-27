@@ -53,6 +53,7 @@ import CollabPanel from "./components/collab/CollabPanel";
 import CollabOverlay from "./components/collab/CollabOverlay";
 import { CollabAlertsSync, CollabChartSync, CollabDrawingSync, CollabPineSync, CollabPresenceSync, CollabReplaySync } from "./components/collab/CollabSync";
 import { useCollabActive } from "./lib/collab/session";
+import type { ScriptLanguage } from "./lib/scripting";
 
 const DRAWINGS_PANEL_KEY = "tv:drawingsPanelVisible";
 const RIGHT_PANEL_KEY = "tv:rightPanelOpen";
@@ -203,11 +204,11 @@ function AppLayout() {
   // without ChartContainer needing to own the editor's open state. The
   // "{}" icon includes the exact running script's code/name in the event so
   // the editor opens showing THAT script, not whatever it last had.
-  const [pineOpenRequest, setPineOpenRequest] = useState<{ code?: string; scriptName?: string; key: number } | null>(null);
+  const [pineOpenRequest, setPineOpenRequest] = useState<{ code?: string; scriptName?: string; language?: ScriptLanguage; key: number } | null>(null);
   useEffect(() => {
     const openPineEditor = (e: Event) => {
       const detail = (e as CustomEvent).detail || {};
-      setPineOpenRequest({ code: detail.code, scriptName: detail.scriptName, key: Date.now() });
+      setPineOpenRequest({ code: detail.code, scriptName: detail.scriptName, language: detail.language, key: Date.now() });
       setShowPineEditor(true);
     };
     window.addEventListener("tv:open-pine-editor", openPineEditor);
@@ -961,6 +962,7 @@ function AppLayout() {
           onClose={closePineEditor}
           initialCode={pineOpenRequest?.code}
           initialScriptName={pineOpenRequest?.scriptName}
+          initialLanguage={pineOpenRequest?.language}
         />
       )}
 

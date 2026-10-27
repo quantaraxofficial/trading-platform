@@ -17,7 +17,7 @@ import time
 from urllib.parse import unquote
 
 from channels.db import database_sync_to_async
-from pycrdt import Doc, Text
+from pycrdt import Doc, Map, Text
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.utils import timezone
 
@@ -64,6 +64,7 @@ class RoomState:
         elif room.pine and room.pine.get('code'):
             with self.pine_doc.transaction():
                 self.pine_text.insert(0, room.pine['code'])
+                self.pine_doc.get('meta', type=Map)['language'] = room.pine.get('language') or 'pine'
         self.peers = {}        # channel name -> {id, uid, name, color, role, perms, voice, muted}
         self.trades = {}       # uid -> {symbol, lines, name, color}
         # The replay everyone follows: {driver (channel name or None), driver_uid, driver_name,

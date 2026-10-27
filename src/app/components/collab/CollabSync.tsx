@@ -330,7 +330,7 @@ const pineEvent = (pine: SharedPine | null) => window.dispatchEvent(new CustomEv
 // before joining comes back when they leave.
 export function CollabPineSync() {
   const active = useCollabChartActive();
-  const before = useRef<{ code: string; scriptName: string } | null | undefined>(undefined);
+  const before = useRef<{ code: string; scriptName: string; language?: SharedPine["language"] } | null | undefined>(undefined);
   const room = useRef<SharedPine | null>(null);
 
   useEffect(() => collab.onChart(e => {
@@ -349,7 +349,7 @@ export function CollabPineSync() {
     const b = before.current;
     before.current = undefined;
     room.current = null;
-    pineEvent(b ? { code: b.code, scriptName: b.scriptName, overrides: {}, colors: {}, capital: null } : null);
+    pineEvent(b ? { code: b.code, scriptName: b.scriptName, language: b.language, overrides: {}, colors: {}, capital: null } : null);
   }, [active]);
 
   useEffect(() => {
@@ -360,7 +360,7 @@ export function CollabPineSync() {
       const d = (e as CustomEvent).detail;
       if (!d?.code || d.remote || !collab.live) return;
       if (!collab.canEdit) { revert(); return; }
-      room.current = { code: d.code, scriptName: d.scriptName || "Script", overrides: {}, colors: {}, capital: null };
+      room.current = { code: d.code, scriptName: d.scriptName || "Script", language: d.language || "pine", overrides: {}, colors: {}, capital: null };
       collab.sendPine(room.current);
     };
     const onClear = (e: Event) => {

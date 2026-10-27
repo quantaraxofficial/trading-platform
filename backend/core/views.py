@@ -125,6 +125,9 @@ def delete_template(request, template_id):
     except DrawingTemplate.DoesNotExist:
         return Response({"error": "Template not found"}, status=status.HTTP_404_NOT_FOUND)
 
+SCRIPT_LANGUAGES = ('pine', 'python', 'mql5')
+
+
 @api_view(['GET', 'POST'])
 def manage_pinescripts(request, uid):
     profile, denied = require_session(request, uid)
@@ -137,6 +140,7 @@ def manage_pinescripts(request, uid):
             "id": s.id,
             "name": s.name,
             "script_type": s.script_type,
+            "language": s.language,
             "code": s.code,
             "versions": s.versions,
             "order": s.order,
@@ -146,6 +150,7 @@ def manage_pinescripts(request, uid):
     elif request.method == 'POST':
         data = request.data
         script_id = data.get('id')
+        language = data.get('language') if data.get('language') in SCRIPT_LANGUAGES else None
         if script_id:
             try:
                 script = PineScript.objects.get(id=script_id, owner=profile)
@@ -153,6 +158,7 @@ def manage_pinescripts(request, uid):
                 return Response({"error": "Script not found"}, status=status.HTTP_404_NOT_FOUND)
             script.name = data.get('name', script.name)
             script.script_type = data.get('script_type', script.script_type)
+            script.language = language or script.language
             script.code = data.get('code', script.code)
             script.versions = data.get('versions', script.versions)
             script.order = data.get('order', script.order)
@@ -163,6 +169,7 @@ def manage_pinescripts(request, uid):
                 name=data.get('name'),
                 defaults={
                     'script_type': data.get('script_type', 'indicator'),
+                    'language': language or 'pine',
                     'code': data.get('code', ''),
                     'versions': data.get('versions', []),
                     'order': data.get('order', 0),

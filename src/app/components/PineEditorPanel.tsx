@@ -7,13 +7,22 @@
 // bottom, create new, recently used, open), Add to chart / Update on chart, Save, Publish
 // script, and "…" (editor settings, new window / tab, profiler, Pine logs, command palette,
 // release notes, help). The editor is Monaco, as TradingView's, and runs on this app's Pine
-// engine against the chart's own bars; a console under it logs compiles and errors.
+// engine against the chart's own bars; a console under it logs compiles and errors. Beside the
+// title, a dropdown picks the language the script is written in: Pine Script, Python or MQL5
+// (in a collab, for everyone editing it).
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
-import { runPineScriptAsync, appIntervalToPineTf, type PineRunResult } from "../lib/pineScriptEngine";
+import { appIntervalToPineTf, type PineRunResult } from "../lib/pineScriptEngine";
+import {
+  runScriptAsync, detectScriptKind, declaredScriptTitle, templateFor, isUntouchedTemplate, asLanguage, languageLabel,
+  SCRIPT_LANGUAGES, LANGUAGE_DOCS, type ScriptLanguage, type ScriptKind,
+} from "../lib/scripting";
+import { pythonReady } from "../lib/scripting/pythonEngine";
+import { pineDoc, usePineDoc } from "../lib/collab/pineDoc";
+import { useCollabActive } from "../lib/collab/session";
 import { fetchPineTimeframeData } from "../lib/pineDataFetch";
 import { useEscapeClose } from "../lib/useEscapeClose";
 import type { PineEditorApi } from "./pine/PineMonaco";
@@ -38,14 +47,16 @@ interface PineEditorPanelProps {
   // script running on the chart rather than whatever the editor last had
   initialCode?: string;
   initialScriptName?: string;
+  initialLanguage?: ScriptLanguage;
 }
 
-type ScriptType = "indicator" | "strategy" | "library";
+type ScriptType = ScriptKind;
 interface SavedScript {
   id: string;
   name: string;
   code: string;
   type: ScriptType;
+  language: ScriptLanguage;
   updatedAt: number;
   order: number;
   versions: { code: string; savedAt: number }[];
@@ -54,13 +65,13 @@ interface SavedScript {
 const STORAGE_KEY = "tv-pine-scripts-v1";
 const SESSION_KEY = "tv:pineSession";
 function loadScripts(): SavedScript[] {
-  try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
+  try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw).map((s: SavedScript) => ({ ...s, language: asLanguage(s.language) })) : []; } catch { return []; }
 }
 function persistScripts(list: SavedScript[]) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch { /* ignore */ }
 }
 
-// TradingView's new-script templates
+// TradingView's new-script templates (Python's and MQL5's are in lib/scripting)
 const LICENSE = "// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/";
 const header = (user: string | null) => `${LICENSE}\n${user ? `// © ${user}` : ""}\n\n`;
 const TEMPLATES: Record<ScriptType, (user: string | null) => string> = {
@@ -69,8 +80,6 @@ const TEMPLATES: Record<ScriptType, (user: string | null) => string> = {
   library: (u) => `${header(u)}//@version=6\n// @description TODO: add library description here\nlibrary("MyLibrary")\n\n// @function TODO: add function description here\n// @param x TODO: add parameter x description here\n// @returns TODO: add what function returns\nexport fun(float x) =>\n    //TODO : add function body and return value here\n    x\n`,
 };
 
-const detectType = (code: string): ScriptType => /^\s*strategy\s*\(/m.test(code) ? "strategy" : /^\s*library\s*\(/m.test(code) ? "library" : "indicator";
-const declaredTitle = (code: string) => (code.match(/^\s*(?:indicator|strategy|library)\s*\(\s*(?:title\s*=\s*)?"([^"]*)"/m) || [])[1] || "";
 
 // What this editor put on the chart (kept across remounts): the script and the code added
 let onChartMemo: { key: string; code: string } | null = null;
@@ -214,7 +223,7 @@ function Switch({ on, p }: { on: boolean; p: PinePalette }) {
 }
 
 // --- The editor ---
-export default function PineEditorPanel({ theme, onClose, initialCode, initialScriptName }: PineEditorPanelProps) {
+export default function PineEditorPanel({ theme, onClose, initialCode, initialScriptName, initialLanguage }: PineEditorPanelProps) {
   const isDark = theme === "dark";
   const p = pinePalette(isDark);
   const { user } = useAuth();
@@ -226,19 +235,23 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
 
   // --- Script state ---
   const [scripts, setScripts] = useState<SavedScript[]>([]);
-  const session = useRef<{ scriptId: string | null; name: string; code: string } | null>(null);
+  const session = useRef<{ scriptId: string | null; name: string; code: string; language?: ScriptLanguage } | null>(null);
   if (session.current === null) {
     try { session.current = initialCode === undefined ? JSON.parse(localStorage.getItem(SESSION_KEY) || "null") : null; } catch { session.current = null; }
   }
   const [currentScriptId, setCurrentScriptId] = useState<string | null>(initialCode === undefined ? session.current?.scriptId ?? null : null);
   const [scriptName, setScriptName] = useState(initialScriptName || (initialCode === undefined ? session.current?.name : undefined) || "Untitled script");
   const [code, setCode] = useState<string>(initialCode ?? session.current?.code ?? TEMPLATES.indicator(author));
+  // The language the script is written in
+  const [language, setLanguage] = useState<ScriptLanguage>(asLanguage(initialCode !== undefined ? initialLanguage : session.current?.language));
+  const detectType = (c: string) => detectScriptKind(language, c);
+  const declaredTitle = (c: string) => declaredScriptTitle(language, c);
   const scriptType = detectType(code);
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
 
   // Signed-in users keep scripts on the server (so they follow them across devices); signed-out
   // users keep them in this browser
-  async function syncScriptToServer(partial: { id?: string; name?: string; script_type?: string; code?: string; versions?: { code: string; savedAt: number }[]; order?: number }) {
+  async function syncScriptToServer(partial: { id?: string; name?: string; script_type?: string; language?: ScriptLanguage; code?: string; versions?: { code: string; savedAt: number }[]; order?: number }) {
     if (!uid) return null;
     try {
       const res = await backendFetch(`http://localhost:8000/api/users/pinescripts/${uid}/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(partial) });
@@ -253,16 +266,16 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
     if (!uid) { setScripts(loadScripts()); return; }
     backendFetch(`http://localhost:8000/api/users/pinescripts/${uid}/`).then(r => r.json()).then((data) => {
       if (!Array.isArray(data)) return;
-      setScripts(data.map((s: any): SavedScript => ({ id: String(s.id), name: s.name, code: s.code, type: s.script_type as ScriptType, updatedAt: new Date(s.updated_at).getTime(), order: s.order, versions: s.versions || [] })));
+      setScripts(data.map((s: any): SavedScript => ({ id: String(s.id), name: s.name, code: s.code, type: s.script_type as ScriptType, language: asLanguage(s.language), updatedAt: new Date(s.updated_at).getTime(), order: s.order, versions: s.versions || [] })));
     }).catch(() => setScripts(loadScripts()));
   }, [uid]);
   const commitScripts = (next: SavedScript[]) => { setScripts(next); if (!uid) persistScripts(next); };
 
   // The editor's session survives closing the panel and reloading, as on TradingView
   useEffect(() => {
-    const t = setTimeout(() => { try { localStorage.setItem(SESSION_KEY, JSON.stringify({ scriptId: currentScriptId, name: scriptName, code })); } catch { /* ignore */ } }, 300);
+    const t = setTimeout(() => { try { localStorage.setItem(SESSION_KEY, JSON.stringify({ scriptId: currentScriptId, name: scriptName, code, language })); } catch { /* ignore */ } }, 300);
     return () => clearTimeout(t);
-  }, [currentScriptId, scriptName, code]);
+  }, [currentScriptId, scriptName, code, language]);
 
   const currentScript = scripts.find(s => s.id === currentScriptId) || null;
   const savedCode = currentScript?.code ?? null;
@@ -303,7 +316,8 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       const bars = (window as any).__chartFullData || [];
       const symbol = (window as any).__chartSymbol || "";
       const appInterval = (window as any).__chartInterval || "";
-      const result = await runPineScriptAsync(code, bars, { symbol, pineTf: appInterval ? appIntervalToPineTf(appInterval) : "", fetchTimeframe: fetchPineTimeframeData, profile: profilerMode });
+      if (language === "python" && !pythonReady()) log("Starting Python (the first run downloads it, about 10 MB; later runs are instant)…");
+      const result = await runScriptAsync(language, code, bars, { symbol, pineTf: appInterval ? appIntervalToPineTf(appInterval) : "", fetchTimeframe: fetchPineTimeframeData, profile: profilerMode });
       setRunResult(result);
       if (result.errors.length) {
         const model = code.split("\n");
@@ -319,7 +333,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       }
       result.warnings.forEach(w => log(w, "warning"));
       log("Compiled.");
-      window.dispatchEvent(new CustomEvent("tv:run-pine-script", { detail: { result, scriptName: result.meta.title || scriptName, code } }));
+      window.dispatchEvent(new CustomEvent("tv:run-pine-script", { detail: { result, scriptName: result.meta.title || scriptName, code, language } }));
       setOnChart({ key: scriptKey, code });
       log(wasOnChart ? "Updated on chart." : "Added to chart.");
       if (profilerMode && result.profile) log(`Profiler: ${result.execMs.toFixed(1)} ms over ${bars.length} bars`);
@@ -338,9 +352,9 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
     const id = "ps_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
     const order = scripts.reduce((m, s) => Math.max(m, s.order), 0) + 1;
     const versions = [{ code: codeToSave, savedAt: Date.now() }];
-    const entry: SavedScript = { id, name, code: codeToSave, type: detectType(codeToSave), updatedAt: Date.now(), order, versions };
+    const entry: SavedScript = { id, name, code: codeToSave, type: detectType(codeToSave), language, updatedAt: Date.now(), order, versions };
     commitScripts([...scripts, entry]);
-    if (uid) syncScriptToServer({ name, script_type: entry.type, code: codeToSave, versions, order }).then(res => {
+    if (uid) syncScriptToServer({ name, script_type: entry.type, language, code: codeToSave, versions, order }).then(res => {
       if (!res?.id) return;
       const serverId = String(res.id);
       setScripts(prev => prev.map(s => (s.id === id ? { ...s, id: serverId } : s)));
@@ -355,10 +369,10 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
   function saveScript() {
     if (!currentScriptId) { setDialog("save"); return; }
     const existing = scripts.find(s => s.id === currentScriptId);
-    if (existing && existing.code === code && existing.name === scriptName) return;
+    if (existing && existing.code === code && existing.name === scriptName && existing.language === language) return;
     const versions = [...(existing?.versions || []), { code, savedAt: Date.now() }].slice(-50);
-    commitScripts(scripts.map(s => (s.id === currentScriptId ? { ...s, code, name: scriptName, type: detectType(code), updatedAt: Date.now(), versions } : s)));
-    if (uid) syncScriptToServer({ id: currentScriptId, name: scriptName, code, versions, script_type: detectType(code) });
+    commitScripts(scripts.map(s => (s.id === currentScriptId ? { ...s, code, name: scriptName, type: detectType(code), language, updatedAt: Date.now(), versions } : s)));
+    if (uid) syncScriptToServer({ id: currentScriptId, name: scriptName, code, versions, script_type: detectType(code), language });
     log(`"${scriptName}" saved.`);
   }
   function rename(name: string) {
@@ -374,7 +388,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
   }
   // Opening something else with unsaved edits asks first (TradingView keeps one open script)
   function guardUnsaved(next: () => void) {
-    const untouchedTemplate = !currentScriptId && Object.values(TEMPLATES).some(t => t(author) === code);
+    const untouchedTemplate = !currentScriptId && isUntouchedTemplate(code, author);
     if (!dirty || untouchedTemplate) { next(); return; }
     setConfirm({
       title: "Unsaved changes",
@@ -385,10 +399,11 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       onConfirm: () => { setConfirm(null); if (currentScriptId) { saveScript(); next(); } else setDialog("save"); },
     });
   }
-  function load(id: string | null, name: string, nextCode: string) {
+  function load(id: string | null, name: string, nextCode: string, nextLanguage: ScriptLanguage = language) {
     setCurrentScriptId(id);
     setScriptName(name);
     setCode(nextCode);
+    setLanguage(nextLanguage);
     setRunResult(null);
     log(`"${name}" opened`);
   }
@@ -397,16 +412,53 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
     if (!s) return;
     setDialog(null);
     guardUnsaved(() => {
-      load(s.id, s.name, s.code);
+      load(s.id, s.name, s.code, s.language);
       const touched = scripts.map(x => (x.id === s.id ? { ...x, updatedAt: Date.now() } : x));
       commitScripts(touched);
     });
   }
-  function createNew(type: ScriptType) { guardUnsaved(() => load(null, "Untitled script", TEMPLATES[type](author))); }
+  function createNew(type: ScriptType) { guardUnsaved(() => load(null, "Untitled script", language === "pine" ? TEMPLATES[type](author) : templateFor(language, type, author))); }
+
+  // --- Language: Pine Script, Python or MQL5. Switching starts a new script in that language;
+  // in a collab it switches for everyone editing (the code too), so it asks first ---
+  const inCollab = useCollabActive();
+  const doc = usePineDoc();
+  const sharedDoc = inCollab && doc.ready;
+  useEffect(() => {
+    if (!sharedDoc) return;
+    // Someone switched the collab's script to another language (its code comes with the document)
+    const shared = asLanguage(doc.language ?? "pine");
+    if (shared === language) return;
+    setLanguage(shared);
+    setRunResult(null);
+    log(`The script is now ${languageLabel(shared)} (switched in the collab)`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharedDoc, doc.language]);
+  function chooseLanguage(next: ScriptLanguage) {
+    setMenu(null);
+    if (next === language) return;
+    const kind = scriptType === "library" ? "indicator" : scriptType;
+    const apply = () => {
+      if (sharedDoc) pineDoc.setLanguage(next);
+      load(null, "Untitled script", templateFor(next, kind, author), next);
+      log(`New ${kind === "strategy" && next === "mql5" ? "Expert Advisor" : kind} in ${languageLabel(next)}`);
+    };
+    if (sharedDoc) {
+      if (!doc.canEdit) { setToast("The owner hasn't let you edit this script, so you can't change its language"); return; }
+      setConfirm({
+        title: `Switch to ${languageLabel(next)}`,
+        text: <>Everyone in this collab gets a new {languageLabel(next)} script in place of the current code.</>,
+        confirm: "Switch",
+        onConfirm: () => { setConfirm(null); apply(); },
+      });
+      return;
+    }
+    guardUnsaved(apply);
+  }
   function openBuiltin(name: string) {
     const b = BUILTIN_SCRIPTS.find(x => x.name === name);
     setDialog(null);
-    if (b) guardUnsaved(() => load(null, "Untitled script", b.code));
+    if (b) guardUnsaved(() => load(null, "Untitled script", b.code, "pine"));
   }
   function deleteSaved(id: string) {
     const s = scripts.find(x => x.id === id);
@@ -471,21 +523,34 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
   }, [mode, visible]);
 
   // --- Menus ---
-  const [menu, setMenu] = useState<null | { which: "name" | "more" | "tab"; rect: DOMRect }>(null);
+  const [menu, setMenu] = useState<null | { which: "name" | "more" | "tab" | "lang"; rect: DOMRect }>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
-  const openMenu = (which: "name" | "more" | "tab", e: React.MouseEvent) => {
+  const openMenu = (which: "name" | "more" | "tab" | "lang", e: React.MouseEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setMenu(m => (m?.which === which ? null : { which, rect }));
   };
   const recentlyUsed = [...scripts].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5);
   const icon = (el: React.ReactNode) => el;
   const hasSaved = !!currentScriptId;
+  // Libraries and the built-in scripts are Pine's
   const createNewItems: MenuItem[] = [
     { label: "Indicator", icon: <Ic.IndicatorIcon />, shortcut: "Ctrl + K, Ctrl + I", onClick: () => createNew("indicator") },
-    { label: "Strategy", icon: <Ic.StrategyIcon />, shortcut: "Ctrl + K, Ctrl + S", onClick: () => createNew("strategy") },
-    { label: "Library", icon: <Ic.LibraryIcon />, onClick: () => createNew("library") },
-    { kind: "divider" },
-    { label: "Built-in…", icon: <Ic.BuiltInIcon />, onClick: () => setDialog("builtin") },
+    { label: language === "mql5" ? "Expert Advisor" : "Strategy", icon: <Ic.StrategyIcon />, shortcut: "Ctrl + K, Ctrl + S", onClick: () => createNew("strategy") },
+    ...(language === "pine" ? [
+      { label: "Library", icon: <Ic.LibraryIcon />, onClick: () => createNew("library") } as MenuItem,
+      { kind: "divider" } as MenuItem,
+      { label: "Built-in…", icon: <Ic.BuiltInIcon />, onClick: () => setDialog("builtin") } as MenuItem,
+    ] : []),
+  ];
+  const langLocked = sharedDoc && !doc.canEdit;
+  const langItems: MenuItem[] = [
+    { kind: "header", label: "Script language" },
+    ...SCRIPT_LANGUAGES.map((l): MenuItem => ({
+      label: l.label, hint: langLocked ? "The owner hasn't let you edit this script" : l.hint, testId: `pine-lang-${l.id}`, disabled: langLocked && l.id !== language,
+      icon: <span style={{ display: "flex", width: 28, justifyContent: "center", fontSize: 11, fontWeight: 700, letterSpacing: 0.3, color: p.muted }}>{l.id === "pine" ? "PINE" : l.id === "python" ? "PY" : "MQL5"}</span>,
+      right: l.id === language ? <span style={{ display: "flex", color: p.blue }}><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M4 9.5l3.2 3L14 5.5" stroke="currentColor" strokeWidth="1.6" /></svg></span> : undefined,
+      onClick: () => chooseLanguage(l.id),
+    })),
   ];
   const nameItems: MenuItem[] = [
     { label: "Save script", icon: icon(<Ic.SaveCloudIcon />), shortcut: "Ctrl + S", onClick: saveScript },
@@ -587,6 +652,16 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       </button>
     </Tip>
   );
+  const languageButton = (
+    <Tip text="Script language" placement="bottom">
+      <button type="button" aria-label={`Script language: ${languageLabel(language)}`} aria-haspopup="menu" aria-expanded={menu?.which === "lang"} data-name="pine-language" data-language={language}
+        className="pine-hover-btn" data-pine-menu-trigger onClick={e => openMenu("lang", e)}
+        style={{ ...btnBase, height: 28, padding: "0 4px 0 8px", gap: 2, fontSize: 14, border: `1px solid ${p.border}`, background: menu?.which === "lang" ? p.hover : "transparent", flexShrink: 0 }}>
+        <span style={{ whiteSpace: "nowrap" }}>{languageLabel(language)}</span>
+        <span style={{ display: "flex", transform: menu?.which === "lang" ? "rotate(180deg)" : undefined }}><Ic.ChevronDownIcon /></span>
+      </button>
+    </Tip>
+  );
   const nameButton = (
     <button type="button" aria-label="Script menu" aria-haspopup="menu" aria-expanded={menu?.which === "name"} className="pine-hover-btn" data-pine-menu-trigger onClick={e => openMenu("name", e)}
       style={{ ...btnBase, padding: "0 6px", gap: 4, background: menu?.which === "name" ? p.hover : "transparent", minWidth: 0, flexShrink: 1 }}>
@@ -600,6 +675,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
     <div style={{ position: "relative", flex: 1, minHeight: 0 }} data-testid="pine-editor">
       <PineMonaco
         value={code}
+        language={language}
         onChange={setCode}
         onCursor={(line, col) => setCursor({ line, col })}
         isDark={isDark}
@@ -631,12 +707,12 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
   const logsPanelEl = logsPanel && (
     <div data-testid="pine-logs" style={{ height: 160, flexShrink: 0, display: "flex", flexDirection: "column", borderTop: `1px solid ${p.border}` }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 32, padding: "0 4px 0 12px", fontSize: 14, fontWeight: 600 }}>
-        Pine Logs
+        {language === "pine" ? "Pine Logs" : "Logs"}
         <button type="button" aria-label="Close Pine Logs" className="pine-hover-btn" onClick={() => setLogsPanel(false)} style={{ ...btnBase, height: 28, minWidth: 28 }}><Ic.CloseIcon size={22} /></button>
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: "0 12px 8px", fontFamily: 'Menlo, "Ubuntu Mono", Consolas, source-code-pro, monospace', fontSize: 12, lineHeight: "20px" }}>
         {(runResult?.logs ?? []).map((l, i) => <div key={i}>{l}</div>)}
-        {!(runResult?.logs?.length) && <div style={{ color: p.faint }}>No logs yet. Messages from log.info(), log.warning() and log.error() show here after the script runs.</div>}
+        {!(runResult?.logs?.length) && <div style={{ color: p.faint }}>No logs yet. {language === "python" ? "What the script print()s" : language === "mql5" ? "What the program writes with Print(), PrintFormat() and Alert()" : "Messages from log.info(), log.warning() and log.error()"} show here after the script runs.</div>}
       </div>
     </div>
   );
@@ -652,7 +728,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       </Tip>
       <span style={{ flex: 1 }} />
       <button type="button" onClick={() => apiRef.current?.goToLine()} style={{ border: "none", background: "transparent", color: p.text, fontSize: 12, fontFamily: "inherit", cursor: "pointer", padding: "0 8px", height: 22 }}>Line {cursor.line}, Col {cursor.col}</button>
-      <a href="https://www.tradingview.com/pine-script-reference/v6/" target="_blank" rel="noopener noreferrer" title="Open Pine Reference" style={{ color: p.text, textDecoration: "none", padding: "0 8px", lineHeight: "22px" }}>Pine Script® v6</a>
+      <a href={LANGUAGE_DOCS[language].url} target="_blank" rel="noopener noreferrer" title={LANGUAGE_DOCS[language].title} data-name="pine-language-docs" style={{ color: p.text, textDecoration: "none", padding: "0 8px", lineHeight: "22px" }}>{LANGUAGE_DOCS[language].label}</a>
     </div>
   );
 
@@ -666,7 +742,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       )}
       {dialog === "open" && (
         <OpenScriptDialog p={p} onClose={() => setDialog(null)} onOpen={openSaved} onDelete={deleteSaved}
-          items={[...scripts].sort((a, b) => a.order - b.order).map(s => ({ id: s.id, name: s.name, type: s.type, versionLabel: `Version: ${Math.max(1, s.versions.length)}.0 (${formatStamp(s.updatedAt)})` }))} />
+          items={[...scripts].sort((a, b) => a.order - b.order).map(s => ({ id: s.id, name: s.name, type: s.type, versionLabel: `${s.language !== "pine" ? `${languageLabel(s.language)} · ` : ""}Version: ${Math.max(1, s.versions.length)}.0 (${formatStamp(s.updatedAt)})` }))} />
       )}
       {dialog === "builtin" && (
         <BuiltinScriptDialog p={p} onClose={() => setDialog(null)} onOpen={openBuiltin}
@@ -682,8 +758,9 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       {confirm && <ConfirmDialog p={p} title={confirm.title} text={confirm.text} confirm={confirm.confirm} extra={confirm.extra} onExtra={confirm.onExtra} onCancel={() => setConfirm(null)} onConfirm={confirm.onConfirm} />}
       {menu?.which === "name" && <Menu p={p} anchor={menu.rect} items={nameItems} onClose={closeMenu} width={340} />}
       {menu?.which === "tab" && <Menu p={p} anchor={menu.rect} items={tabItems} onClose={closeMenu} width={300} />}
+      {menu?.which === "lang" && <Menu p={p} anchor={menu.rect} items={langItems} onClose={closeMenu} width={300} />}
       {showCollab && (
-        <CollabDialog mode="pine" pine={{ code, scriptName }}
+        <CollabDialog mode="pine" pine={{ code, scriptName, language }}
           symbol={(typeof window !== "undefined" && (window as any).__chartSymbol) || ""}
           interval={(typeof window !== "undefined" && (window as any).__chartInterval) || ""}
           indicators={[]} onClose={() => setShowCollab(false)} />
@@ -724,6 +801,8 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
             <span style={{ whiteSpace: "nowrap" }}>{scriptName}</span>
             <span style={{ display: "flex", transform: menu?.which === "tab" ? "rotate(180deg)" : undefined }}><Ic.ChevronDownIcon /></span>
           </button>
+          <span style={{ width: 8 }} />
+          {languageButton}
           <span style={{ flex: 1 }} />
           <Tip text={dock.bottomExpanded ? "Collapse panel" : "Open panel"}>
             <button type="button" aria-label={dock.bottomExpanded ? "Collapse panel" : "Open panel"} className="pine-icon-btn" onClick={() => pineDock.set(d => ({ bottomExpanded: !d.bottomExpanded }))} style={{ width: 34, height: 34, color: p.text, transform: dock.bottomExpanded ? undefined : "rotate(180deg)" }}><Ic.CollapseIcon /></button>
@@ -767,7 +846,8 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
               <Ic.SplitViewIcon style={split ? { transform: "scaleX(-1)" } : undefined} />
             </button>
           </Tip>
-          <span style={{ fontSize: 14 }}>Pine Editor</span>
+          <span style={{ fontSize: 14, marginRight: 6 }}>Pine Editor</span>
+          {languageButton}
           <span style={{ flex: 1 }} />
           {split && (
             <Tip text={full ? "Restore panel" : "Maximize panel"} placement="bottom">

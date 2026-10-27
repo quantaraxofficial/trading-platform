@@ -52,7 +52,7 @@ export function Avatar({ name, color, size, online, speaking }: { name: string; 
 // mode "pine": opened from the Pine Editor, to share only the script being edited
 export default function CollabDialog({ symbol, interval, indicators, onClose, mode = "chart", pine }: {
   symbol: string; interval: string; indicators: any[]; onClose: () => void;
-  mode?: RoomKind; pine?: { code: string; scriptName: string };
+  mode?: RoomKind; pine?: { code: string; scriptName: string; language?: string };
 }) {
   const { user } = useAuth();
   const state = useCollab();
@@ -88,7 +88,7 @@ export default function CollabDialog({ symbol, interval, indicators, onClose, mo
 }
 
 function StartRoom({ uid, symbol, interval, indicators, onClose, mode, pine }: {
-  uid: string; symbol: string; interval: string; indicators: any[]; onClose: () => void; mode: RoomKind; pine?: { code: string; scriptName: string };
+  uid: string; symbol: string; interval: string; indicators: any[]; onClose: () => void; mode: RoomKind; pine?: { code: string; scriptName: string; language?: string };
 }) {
   const [name, setName] = useState(mode === "pine" ? (pine?.scriptName || "Pine script") : `${symbol} analysis`);
   const [access, setAccess] = useState<LinkAccess>("edit");

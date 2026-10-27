@@ -32,7 +32,7 @@ export interface Cursor { id: string; uid: string; symbol: string; time: number;
 export interface TradeLine { side: "buy" | "sell"; qty: number; price: number; kind: "position" | "limit" | "stop" }
 export interface TradeSnap { symbol: string; name: string; color: string; lines: TradeLine[] }
 // The Pine script on the shared chart: its code and the settings it runs with
-export interface SharedPine { code: string; scriptName: string; overrides: Record<string, any>; colors: Record<string, string>; capital: number | null }
+export interface SharedPine { code: string; scriptName: string; language?: "pine" | "python" | "mql5"; overrides: Record<string, any>; colors: Record<string, string>; capital: number | null }
 export interface SharedChart { symbol: string; interval: string; indicators: any[]; drawings: any[]; pine: SharedPine | null }
 // An alert shared with everyone in the collab (checked by every open chart; fires once for all)
 export interface SharedAlert {

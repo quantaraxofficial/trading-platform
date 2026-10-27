@@ -32,7 +32,8 @@ import CreateAlertModal from "./CreateAlertModal";
 import StrategyReportPanel from "./StrategyReportPanel";
 import { strategyDock } from "./strategy/strategyStore";
 import { fetchPineTimeframeData } from "../lib/pineDataFetch";
-import { runPineScriptAsync, appIntervalToPineTf, getPineInputsMeta, type PineInputMeta } from "../lib/pineScriptEngine";
+import { appIntervalToPineTf, type PineInputMeta } from "../lib/pineScriptEngine";
+import { runScriptAsync, getScriptInputsMeta, asLanguage, type ScriptLanguage } from "../lib/scripting";
 import PineSettingsModal from "./PineSettingsModal";
 import { useAuth } from "@/context/AuthContext";
 import { MultiSelectSubBar } from "./drawing/ui/MultiSelectSubBar";
@@ -1424,7 +1425,8 @@ export default function ChartContainer({
   // kept here (not just inside PineEditorPanel, which unmounts when closed)
   // so the strategy report's "Testing period" picker can re-run the exact
   // same script over a different bar range at any time, editor open or not.
-  const lastPineRunRef = useRef<{ code: string; symbol: string; pineTf: string; scriptName: string } | null>(null);
+  // The script on the chart (Pine Script, Python or MQL5), re-run for backtests, settings and new bars
+  const lastPineRunRef = useRef<{ code: string; symbol: string; pineTf: string; scriptName: string; language: ScriptLanguage } | null>(null);
   const [backtestRange, setBacktestRange] = useState<{ kind: "all" | "days" | "custom" | "history"; days?: number; from?: number; to?: number }>({ kind: "all" });
   const [backtestBusy, setBacktestBusy] = useState(false);
   const [capitalOverride, setCapitalOverride] = useState<number | null>(null);
@@ -1582,7 +1584,7 @@ export default function ChartContainer({
         backtestFrom = range.from;
         backtestTo = range.to;
       }
-      const result = await runPineScriptAsync(last.code, all, {
+      const result = await runScriptAsync(last.language, last.code, all, {
         symbol: last.symbol,
         pineTf: last.pineTf,
         fetchTimeframe: fetchPineTimeframeData,
@@ -1688,9 +1690,10 @@ export default function ChartContainer({
       if (lastPineRunRef.current) window.dispatchEvent(new CustomEvent("tv:clear-pine-script", { detail: { remote: true } }));
       return;
     }
-    lastPineRunRef.current = { code: p.code, symbol: symbolRef.current, pineTf: appIntervalToPineTf(intervalRef.current), scriptName: p.scriptName || "Script" };
-    (window as any).__pineScript = { code: p.code, scriptName: p.scriptName || "Script" };
-    setPineInputsMeta(getPineInputsMeta(p.code));
+    const language = asLanguage(p.language);
+    lastPineRunRef.current = { code: p.code, symbol: symbolRef.current, pineTf: appIntervalToPineTf(intervalRef.current), scriptName: p.scriptName || "Script", language };
+    (window as any).__pineScript = { code: p.code, scriptName: p.scriptName || "Script", language };
+    setPineInputsMeta(getScriptInputsMeta(language, p.code));
     plotColorsRef.current = p.colors || {};
     setPlotColorOverrides(p.colors || {});
     setBacktestRange({ kind: "all" });
@@ -1722,14 +1725,16 @@ export default function ChartContainer({
         });
       }
       if (e?.detail?.code) {
+        const language = asLanguage(e.detail.language);
         lastPineRunRef.current = {
           code: e.detail.code,
           symbol,
           pineTf: appIntervalToPineTf(interval),
           scriptName,
+          language,
         };
-        (window as any).__pineScript = { code: e.detail.code, scriptName };
-        setPineInputsMeta(getPineInputsMeta(e.detail.code));
+        (window as any).__pineScript = { code: e.detail.code, scriptName, language };
+        setPineInputsMeta(getScriptInputsMeta(language, e.detail.code));
       }
     }
     function handleClearPine() {
@@ -3908,7 +3913,7 @@ export default function ChartContainer({
             onToggleVisibility={togglePineVisible}
             onOpenSettings={() => setShowPineSettings(true)}
             onOpenCode={() => window.dispatchEvent(new CustomEvent("tv:open-pine-editor", {
-              detail: { code: lastPineRunRef.current?.code, scriptName: lastPineRunRef.current?.scriptName },
+              detail: { code: lastPineRunRef.current?.code, scriptName: lastPineRunRef.current?.scriptName, language: lastPineRunRef.current?.language },
             }))}
             onRemove={removePineScript}
           />
