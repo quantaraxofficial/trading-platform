@@ -326,6 +326,7 @@ import { computeEma, normalizeEma, savedEmaDefaults, emaVisibleOnInterval, emaIn
 import { BandFill } from "./chartPrimitives/BandFill";
 import { SessionBreaks } from "./chartPrimitives/SessionBreaks";
 import { chartSettings, themeCanvas, precisionFormat, type ChartSettings } from "../lib/chartSettings";
+import { chartBgImage, canvasBackgroundCss } from "../lib/chartBackgroundImage";
 import type { DateRangeSpan } from "./BottomPanel";
 import { detectPrecision, simulatedQuote } from "@/app/utils/pricePrecision";
 import { feedTimeToUnix } from "../utils/feedTime";
@@ -734,6 +735,13 @@ export default function ChartContainer({
   const [psAutoScale, setPsAutoScale] = useState(true);
   // Chart settings (the Settings dialog and this menu share them; see lib/chartSettings)
   const cs = chartSettings.useValue();
+  // Settings → Canvas → Background image: the canvas turns see-through and its area shows the
+  // background colour over the photo instead
+  const bgImageData = chartBgImage.useValue().data;
+  const bgImageOn = cs.bgImage && !!bgImageData;
+  const canvasBgStyle = useMemo(() => (bgImageOn
+    ? canvasBackgroundCss({ data: bgImageData, opacity: cs.bgImageOpacity, fit: cs.bgImageFit, type: cs.backgroundType, top: cs.background, bottom: cs.backgroundType === 'Gradient' ? cs.background2 : cs.background })
+    : undefined), [bgImageOn, bgImageData, cs.bgImageOpacity, cs.bgImageFit, cs.backgroundType, cs.background, cs.background2]);
   const symbolInfo = useSymbolInfo(symbol);
   const csRef = useRef(cs);
   csRef.current = cs;
@@ -983,7 +991,8 @@ export default function ChartContainer({
     const hair = { color: cs.crosshair.color, width: cs.crosshair.width as any, style: ls(cs.crosshair.style) };
     ch.applyOptions({
       layout: {
-        background: cs.backgroundType === 'Gradient' ? { type: ColorType.VerticalGradient, topColor: cs.background, bottomColor: cs.background2 } : { type: ColorType.Solid, color: cs.background },
+        background: bgImageOn ? { type: ColorType.Solid, color: 'transparent' }
+          : cs.backgroundType === 'Gradient' ? { type: ColorType.VerticalGradient, topColor: cs.background, bottomColor: cs.background2 } : { type: ColorType.Solid, color: cs.background },
         textColor: cs.text, fontSize: cs.fontSize,
       },
       grid: { vertLines: { visible: cs.vertGrid, color: cs.gridVert }, horzLines: { visible: cs.horzGrid, color: cs.gridHorz } },
@@ -992,7 +1001,7 @@ export default function ChartContainer({
       rightPriceScale: scale, leftPriceScale: scale,
     });
     notifyPriceScaleChanged();
-  }, [chart, cs.backgroundType, cs.background, cs.background2, cs.text, cs.fontSize, cs.vertGrid, cs.gridVert, cs.horzGrid, cs.gridHorz, cs.crosshair, cs.lines, cs.noOverlappingLabels, cs.marginTop, cs.marginBottom]);
+  }, [chart, bgImageOn, cs.backgroundType, cs.background, cs.background2, cs.text, cs.fontSize, cs.vertGrid, cs.gridVert, cs.horzGrid, cs.gridHorz, cs.crosshair, cs.lines, cs.noOverlappingLabels, cs.marginTop, cs.marginBottom]);
   // Margins → Right: the bars of space after the last one (applied when changed, not on load,
   // so it doesn't scroll a restored view)
   const marginRightSeen = useRef<number | null>(null);
@@ -4135,8 +4144,10 @@ export default function ChartContainer({
           position: "relative",
           width: "100%", 
           height: mode !== 'idle' ? "calc(100% - 38px)" : "100%", 
-          zIndex: 1 
+          zIndex: 1,
+          ...canvasBgStyle,
         }} 
+        data-bg-image={bgImageOn ? "on" : undefined}
       />
 
       {/* Settings → Scales: the currency label at the top of the price scale and the A (auto)
