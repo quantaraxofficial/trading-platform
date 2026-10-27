@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, collab
+from . import views, collab, github
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -18,6 +18,12 @@ urlpatterns = [
     path('agent/insights/<str:uid>/', views.get_agent_insights, name='get_agent_insights'),
     path('agent/strategy-note/<str:uid>/', views.submit_strategy_note, name='submit_strategy_note'),
     path('track-failure/', views.track_failure, name='track_failure'),
+    # GitHub: push / pull scripts (core/github.py)
+    path('github/<str:uid>/account/', github.github_account, name='github_account'),
+    path('github/<str:uid>/repos/', github.github_repos, name='github_repos'),
+    path('github/<str:uid>/branches/', github.github_branches, name='github_branches'),
+    path('github/<str:uid>/files/', github.github_files, name='github_files'),
+    path('github/<str:uid>/file/', github.github_file, name='github_file'),
     # Collab charts (the live part is the WebSocket in consumers.py)
     path('collab/<str:uid>/rooms/', collab.collab_rooms, name='collab_rooms'),
     path('collab/<str:uid>/people/', collab.collab_people, name='collab_people'),

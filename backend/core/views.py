@@ -144,6 +144,7 @@ def manage_pinescripts(request, uid):
             "code": s.code,
             "versions": s.versions,
             "order": s.order,
+            "github": s.github or None,
             "updated_at": s.updated_at.isoformat(),
         } for s in scripts])
 
@@ -162,6 +163,8 @@ def manage_pinescripts(request, uid):
             script.code = data.get('code', script.code)
             script.versions = data.get('versions', script.versions)
             script.order = data.get('order', script.order)
+            if 'github' in data:
+                script.github = clean_github_link(data.get('github'))
             script.save()
         else:
             script, created = PineScript.objects.update_or_create(
@@ -173,9 +176,17 @@ def manage_pinescripts(request, uid):
                     'code': data.get('code', ''),
                     'versions': data.get('versions', []),
                     'order': data.get('order', 0),
+                    'github': clean_github_link(data.get('github')),
                 }
             )
         return Response({"success": True, "id": script.id, "updated_at": script.updated_at.isoformat()})
+
+def clean_github_link(g):
+    """A script's GitHub link as stored: {repo, branch, path, sha}, or {} for none"""
+    if not isinstance(g, dict) or not all(isinstance(g.get(k), str) and g.get(k) for k in ('repo', 'branch', 'path')):
+        return {}
+    return {k: str(g.get(k) or '')[:400] for k in ('repo', 'branch', 'path', 'sha')}
+
 
 @api_view(['DELETE'])
 def delete_pinescript(request, script_id):

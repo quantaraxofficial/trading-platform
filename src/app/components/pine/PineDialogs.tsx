@@ -23,7 +23,7 @@ export function pinePalette(isDark: boolean) {
 
 export const typeIcon = (t: string, size = 18) => t === "strategy" ? <StrategyIcon size={size} /> : t === "library" ? <LibraryIcon size={size} /> : <IndicatorIcon size={size} />;
 
-function Frame({ p, title, onClose, width = 480, height, children, titleExtra, testId }: {
+export function Frame({ p, title, onClose, width = 480, height, children, titleExtra, testId }: {
   p: PinePalette; title: string; onClose: () => void; width?: number; height?: number; children: React.ReactNode; titleExtra?: React.ReactNode; testId?: string;
 }) {
   useEscapeClose(onClose);

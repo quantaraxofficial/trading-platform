@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, CollabRoom, CollabMember, CollabMessage
+from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, CollabRoom, CollabMember, CollabMessage, GitHubLink
 
 @admin.register(FailedRequest)
 class FailedRequestAdmin(admin.ModelAdmin):
@@ -74,3 +74,12 @@ class CollabMessageAdmin(admin.ModelAdmin):
     list_display = ("created_at", "room", "author", "kind", "text")
     list_filter = ("kind",)
     search_fields = ("text", "room__name", "author__name")
+
+
+@admin.register(GitHubLink)
+class GitHubLinkAdmin(admin.ModelAdmin):
+    """Connected GitHub accounts (the token is encrypted and not shown)"""
+    list_display = ("owner", "login", "created_at")
+    search_fields = ("owner__name", "owner__email", "login")
+    exclude = ("token",)
+    readonly_fields = ("owner", "login", "avatar_url", "created_at")

@@ -9,7 +9,9 @@
 // release notes, help). The editor is Monaco, as TradingView's, and runs on this app's Pine
 // engine against the chart's own bars; a console under it logs compiles and errors. Beside the
 // title, a dropdown picks the language the script is written in: Pine Script, Python or MQL5
-// (in a collab, for everyone editing it).
+// (in a collab, for everyone editing it). The GitHub button pushes the script to a repository
+// as a commit and pulls script files from one; a script pulled or pushed stays linked to its
+// file, for one-click push / pull.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -37,6 +39,8 @@ import { backendFetch } from "@/lib/backend";
 import PineLiveBadge from "./collab/PineLiveBadge";
 import CollabDialog from "./collab/CollabDialog";
 import { CollabIcon } from "./collab/icons";
+import GitHubDialog, { GitHubIcon } from "./pine/GitHubDialog";
+import { github, githubUrl, languageOfPath, scriptNameOfPath, shortLink, type GitHubAccount, type GitHubLink, type PulledFile, type PushResult } from "../lib/github";
 
 const PineMonaco = dynamic(() => import("./pine/PineMonaco"), { ssr: false, loading: () => null });
 
@@ -60,6 +64,8 @@ interface SavedScript {
   updatedAt: number;
   order: number;
   versions: { code: string; savedAt: number }[];
+  // The GitHub file it's linked to
+  github?: GitHubLink | null;
 }
 
 const STORAGE_KEY = "tv-pine-scripts-v1";
@@ -235,7 +241,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
 
   // --- Script state ---
   const [scripts, setScripts] = useState<SavedScript[]>([]);
-  const session = useRef<{ scriptId: string | null; name: string; code: string; language?: ScriptLanguage } | null>(null);
+  const session = useRef<{ scriptId: string | null; name: string; code: string; language?: ScriptLanguage; github?: GitHubLink | null } | null>(null);
   if (session.current === null) {
     try { session.current = initialCode === undefined ? JSON.parse(localStorage.getItem(SESSION_KEY) || "null") : null; } catch { session.current = null; }
   }
@@ -244,6 +250,8 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
   const [code, setCode] = useState<string>(initialCode ?? session.current?.code ?? TEMPLATES.indicator(author));
   // The language the script is written in
   const [language, setLanguage] = useState<ScriptLanguage>(asLanguage(initialCode !== undefined ? initialLanguage : session.current?.language));
+  // The GitHub file this script is linked to (pulled from or pushed to)
+  const [ghLink, setGhLink] = useState<GitHubLink | null>(initialCode === undefined ? session.current?.github ?? null : null);
   const detectType = (c: string) => detectScriptKind(language, c);
   const declaredTitle = (c: string) => declaredScriptTitle(language, c);
   const scriptType = detectType(code);
@@ -251,7 +259,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
 
   // Signed-in users keep scripts on the server (so they follow them across devices); signed-out
   // users keep them in this browser
-  async function syncScriptToServer(partial: { id?: string; name?: string; script_type?: string; language?: ScriptLanguage; code?: string; versions?: { code: string; savedAt: number }[]; order?: number }) {
+  async function syncScriptToServer(partial: { id?: string; name?: string; script_type?: string; language?: ScriptLanguage; code?: string; versions?: { code: string; savedAt: number }[]; order?: number; github?: GitHubLink | null }) {
     if (!uid) return null;
     try {
       const res = await backendFetch(`http://localhost:8000/api/users/pinescripts/${uid}/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(partial) });
@@ -266,16 +274,16 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
     if (!uid) { setScripts(loadScripts()); return; }
     backendFetch(`http://localhost:8000/api/users/pinescripts/${uid}/`).then(r => r.json()).then((data) => {
       if (!Array.isArray(data)) return;
-      setScripts(data.map((s: any): SavedScript => ({ id: String(s.id), name: s.name, code: s.code, type: s.script_type as ScriptType, language: asLanguage(s.language), updatedAt: new Date(s.updated_at).getTime(), order: s.order, versions: s.versions || [] })));
+      setScripts(data.map((s: any): SavedScript => ({ id: String(s.id), name: s.name, code: s.code, type: s.script_type as ScriptType, language: asLanguage(s.language), updatedAt: new Date(s.updated_at).getTime(), order: s.order, versions: s.versions || [], github: s.github || null })));
     }).catch(() => setScripts(loadScripts()));
   }, [uid]);
   const commitScripts = (next: SavedScript[]) => { setScripts(next); if (!uid) persistScripts(next); };
 
   // The editor's session survives closing the panel and reloading, as on TradingView
   useEffect(() => {
-    const t = setTimeout(() => { try { localStorage.setItem(SESSION_KEY, JSON.stringify({ scriptId: currentScriptId, name: scriptName, code, language })); } catch { /* ignore */ } }, 300);
+    const t = setTimeout(() => { try { localStorage.setItem(SESSION_KEY, JSON.stringify({ scriptId: currentScriptId, name: scriptName, code, language, github: ghLink })); } catch { /* ignore */ } }, 300);
     return () => clearTimeout(t);
-  }, [currentScriptId, scriptName, code, language]);
+  }, [currentScriptId, scriptName, code, language, ghLink]);
 
   const currentScript = scripts.find(s => s.id === currentScriptId) || null;
   const savedCode = currentScript?.code ?? null;
@@ -352,9 +360,9 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
     const id = "ps_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
     const order = scripts.reduce((m, s) => Math.max(m, s.order), 0) + 1;
     const versions = [{ code: codeToSave, savedAt: Date.now() }];
-    const entry: SavedScript = { id, name, code: codeToSave, type: detectType(codeToSave), language, updatedAt: Date.now(), order, versions };
+    const entry: SavedScript = { id, name, code: codeToSave, type: detectType(codeToSave), language, updatedAt: Date.now(), order, versions, github: ghLink };
     commitScripts([...scripts, entry]);
-    if (uid) syncScriptToServer({ name, script_type: entry.type, language, code: codeToSave, versions, order }).then(res => {
+    if (uid) syncScriptToServer({ name, script_type: entry.type, language, code: codeToSave, versions, order, github: ghLink }).then(res => {
       if (!res?.id) return;
       const serverId = String(res.id);
       setScripts(prev => prev.map(s => (s.id === id ? { ...s, id: serverId } : s)));
@@ -371,8 +379,8 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
     const existing = scripts.find(s => s.id === currentScriptId);
     if (existing && existing.code === code && existing.name === scriptName && existing.language === language) return;
     const versions = [...(existing?.versions || []), { code, savedAt: Date.now() }].slice(-50);
-    commitScripts(scripts.map(s => (s.id === currentScriptId ? { ...s, code, name: scriptName, type: detectType(code), language, updatedAt: Date.now(), versions } : s)));
-    if (uid) syncScriptToServer({ id: currentScriptId, name: scriptName, code, versions, script_type: detectType(code), language });
+    commitScripts(scripts.map(s => (s.id === currentScriptId ? { ...s, code, name: scriptName, type: detectType(code), language, updatedAt: Date.now(), versions, github: ghLink } : s)));
+    if (uid) syncScriptToServer({ id: currentScriptId, name: scriptName, code, versions, script_type: detectType(code), language, github: ghLink });
     log(`"${scriptName}" saved.`);
   }
   function rename(name: string) {
@@ -399,11 +407,12 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       onConfirm: () => { setConfirm(null); if (currentScriptId) { saveScript(); next(); } else setDialog("save"); },
     });
   }
-  function load(id: string | null, name: string, nextCode: string, nextLanguage: ScriptLanguage = language) {
+  function load(id: string | null, name: string, nextCode: string, nextLanguage: ScriptLanguage = language, link: GitHubLink | null = null) {
     setCurrentScriptId(id);
     setScriptName(name);
     setCode(nextCode);
     setLanguage(nextLanguage);
+    setGhLink(link);
     setRunResult(null);
     log(`"${name}" opened`);
   }
@@ -412,7 +421,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
     if (!s) return;
     setDialog(null);
     guardUnsaved(() => {
-      load(s.id, s.name, s.code, s.language);
+      load(s.id, s.name, s.code, s.language, s.github || null);
       const touched = scripts.map(x => (x.id === s.id ? { ...x, updatedAt: Date.now() } : x));
       commitScripts(touched);
     });
@@ -481,6 +490,92 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
     setToast("Publishing scripts isn't available yet");
   }
 
+  // --- GitHub: connect, pull a file into the editor, push the script as a commit ---
+  const [ghAccount, setGhAccount] = useState<GitHubAccount | null>(null);
+  const [ghDialog, setGhDialog] = useState<null | "connect" | "pull" | "push" | "push-new">(null);
+  const [ghBusy, setGhBusy] = useState(false);
+  useEffect(() => {
+    if (!uid) { setGhAccount(null); return; }
+    let alive = true;
+    github.account(uid).then(a => { if (alive) setGhAccount(a); }).catch(() => { if (alive) setGhAccount({ connected: false }); });
+    return () => { alive = false; };
+  }, [uid]);
+  // The link changed (pushed, pulled, unlinked): the saved script remembers it
+  function rememberLink(link: GitHubLink | null) {
+    setGhLink(link);
+    if (!currentScriptId) return;
+    commitScripts(scripts.map(s => (s.id === currentScriptId ? { ...s, github: link } : s)));
+    if (uid) syncScriptToServer({ id: currentScriptId, github: link });
+  }
+  // In a collab the code (and language) changes for everyone editing; viewers can't
+  function canReplaceCode(nextLanguage: ScriptLanguage) {
+    if (!sharedDoc) return true;
+    if (!doc.canEdit) { setToast("The owner hasn't let you edit this script"); return false; }
+    if (nextLanguage !== language) pineDoc.setLanguage(nextLanguage);
+    return true;
+  }
+  function onPulled(f: PulledFile) {
+    setGhDialog(null);
+    const link: GitHubLink = { repo: f.repo, branch: f.branch, path: f.path, sha: f.sha };
+    const lang = languageOfPath(f.path) ?? language;
+    // The file this script is linked to: its code is replaced, the script stays the same one
+    const same = ghLink && ghLink.repo === f.repo && ghLink.path === f.path && ghLink.branch === f.branch;
+    const apply = () => {
+      if (!canReplaceCode(lang)) return;
+      if (same) {
+        setCode(f.content);
+        setLanguage(lang);
+        rememberLink(link);
+      } else {
+        load(null, scriptNameOfPath(f.path), f.content, lang, link);
+      }
+      log(`Pulled ${shortLink(link)}`);
+    };
+    if (same && code !== f.content && dirty) {
+      setConfirm({
+        title: "Pull from GitHub", text: <>Replace the editor&apos;s code with the version on GitHub? Your unsaved changes will be lost.</>, confirm: "Pull",
+        onConfirm: () => { setConfirm(null); apply(); },
+      });
+    } else if (same) apply();
+    else guardUnsaved(apply);
+  }
+  function onPushed(r: PushResult) {
+    setGhDialog(null);
+    rememberLink({ repo: r.repo, branch: r.branch, path: r.path, sha: r.sha });
+    log(`Pushed to ${shortLink(r)} · commit ${r.commit.sha?.slice(0, 7)} “${r.commit.message}”`);
+    setToast(`Pushed to ${r.repo} (${r.commit.sha?.slice(0, 7)})`);
+  }
+  async function pullLatest() {
+    if (!uid || !ghLink || ghBusy) return;
+    setGhBusy(true);
+    try { onPulled(await github.pull(uid, ghLink)); }
+    catch (e: any) { log(`GitHub: ${e?.message || "Couldn't pull"}`, "error"); setToast(e?.message || "Couldn't pull from GitHub"); if (e?.reconnect) setGhAccount({ connected: false }); }
+    finally { setGhBusy(false); }
+  }
+  async function disconnectGitHub() {
+    if (!uid) return;
+    try { setGhAccount(await github.disconnect(uid)); log("GitHub disconnected"); } catch (e: any) { setToast(e?.message || "Couldn't disconnect"); }
+  }
+  const ghConnected = !!ghAccount?.connected;
+  const githubItems: MenuItem[] = !uid ? [
+    { label: "Sign in to use GitHub", disabled: true },
+  ] : !ghConnected ? [
+    { label: "Connect GitHub…", icon: <GitHubIcon size={18} />, onClick: () => setGhDialog("connect"), testId: "github-connect" },
+  ] : [
+    { kind: "header", label: `GitHub · ${ghAccount?.login}` },
+    ...(ghLink ? [
+      { label: "Pull latest", hint: `Replace the code with ${shortLink(ghLink)}`, disabled: ghBusy, onClick: pullLatest, testId: "github-pull-latest" } as MenuItem,
+      { label: "Commit & push…", hint: `To ${shortLink(ghLink)}`, onClick: () => setGhDialog("push"), testId: "github-push-linked" } as MenuItem,
+      { label: "Open on GitHub", right: <span style={{ color: p.muted, display: "flex" }}><Ic.ExternalIcon /></span>, onClick: () => window.open(githubUrl(ghLink), "_blank", "noopener") } as MenuItem,
+      { label: "Unlink from GitHub", onClick: () => { rememberLink(null); log("Unlinked from GitHub"); } } as MenuItem,
+      { kind: "divider" } as MenuItem,
+    ] : []),
+    { label: "Pull from GitHub…", onClick: () => setGhDialog("pull"), testId: "github-pull" },
+    { label: ghLink ? "Push to another file…" : "Push to GitHub…", onClick: () => setGhDialog(ghLink ? "push-new" : "push"), testId: "github-push" },
+    { kind: "divider" },
+    { label: "Disconnect GitHub", onClick: disconnectGitHub, testId: "github-disconnect" },
+  ];
+
   // Keyboard shortcuts while the panel has focus (the editor has its own for its text)
   const panelRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<PineEditorApi | null>(null);
@@ -523,9 +618,9 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
   }, [mode, visible]);
 
   // --- Menus ---
-  const [menu, setMenu] = useState<null | { which: "name" | "more" | "tab" | "lang"; rect: DOMRect }>(null);
+  const [menu, setMenu] = useState<null | { which: "name" | "more" | "tab" | "lang" | "github"; rect: DOMRect }>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
-  const openMenu = (which: "name" | "more" | "tab" | "lang", e: React.MouseEvent) => {
+  const openMenu = (which: "name" | "more" | "tab" | "lang" | "github", e: React.MouseEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setMenu(m => (m?.which === which ? null : { which, rect }));
   };
@@ -569,6 +664,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
     { label: "Rename…", icon: <Ic.RenameIcon />, onClick: () => setDialog(hasSaved ? "rename" : "save") },
     { label: "Version history…", icon: <Ic.VersionHistoryIcon />, disabled: !hasSaved || (currentScript?.versions.length ?? 0) === 0, onClick: () => setDialog("versions") },
     { label: "Move script to right", icon: <Ic.MoveRightIcon />, onClick: () => pineDock.set({ mode: "overlay" }) },
+    { label: "GitHub", icon: <GitHubIcon size={18} />, submenu: githubItems },
     { kind: "divider" },
     { label: isOnChart ? "Update on chart" : "Add to chart", icon: isOnChart ? <Ic.UpdateIcon /> : <Ic.AddToChartIcon />, shortcut: "Ctrl + ↵", disabled: upToDate || isRunning, onClick: runScript },
     { kind: "divider" },
@@ -649,6 +745,17 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
         style={{ ...btnBase, padding: wide ? "0 8px 0 2px" : 0, color: p.text }}>
         <CollabIcon size={24} />
         {wide && <span>Collaborate</span>}
+      </button>
+    </Tip>
+  );
+  const githubButton = (
+    <Tip text={ghLink ? `GitHub · ${shortLink(ghLink)}` : "GitHub: push and pull"}>
+      <button type="button" aria-label="GitHub" aria-haspopup="menu" aria-expanded={menu?.which === "github"} data-name="pine-github" data-pine-menu-trigger className="pine-hover-btn"
+        onClick={e => openMenu("github", e)}
+        style={{ ...btnBase, position: "relative", padding: wide ? "0 8px 0 6px" : 0, gap: 6, color: p.text, background: menu?.which === "github" ? p.hover : "transparent", flexShrink: 0 }}>
+        <GitHubIcon size={20} />
+        {wide && <span>GitHub</span>}
+        {ghLink && <span aria-label="Linked to GitHub" style={{ position: "absolute", top: 4, right: wide ? 2 : 4, width: 6, height: 6, borderRadius: "50%", background: p.blue }} />}
       </button>
     </Tip>
   );
@@ -759,6 +866,14 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       {menu?.which === "name" && <Menu p={p} anchor={menu.rect} items={nameItems} onClose={closeMenu} width={340} />}
       {menu?.which === "tab" && <Menu p={p} anchor={menu.rect} items={tabItems} onClose={closeMenu} width={300} />}
       {menu?.which === "lang" && <Menu p={p} anchor={menu.rect} items={langItems} onClose={closeMenu} width={300} />}
+      {menu?.which === "github" && <Menu p={p} anchor={menu.rect} items={githubItems} onClose={closeMenu} width={280} />}
+      {ghDialog && uid && (
+        <GitHubDialog p={p} uid={uid} mode={ghDialog === "push-new" ? "push" : ghDialog} account={ghAccount}
+          link={ghDialog === "push-new" ? null : ghLink} language={language} scriptName={scriptName} code={code}
+          onClose={() => setGhDialog(null)}
+          onConnected={a => { setGhAccount(a); setGhDialog(ghDialog === "connect" ? null : ghDialog); log(`GitHub connected as ${a.login}`); }}
+          onPulled={onPulled} onPushed={onPushed} />
+      )}
       {showCollab && (
         <CollabDialog mode="pine" pine={{ code, scriptName, language }}
           symbol={(typeof window !== "undefined" && (window as any).__chartSymbol) || ""}
@@ -869,6 +984,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
           {runButton}
           {saveButton}
           {collabButton}
+          {githubButton}
           <PineLiveBadge />
           <span style={{ flex: 1 }} />
           <Tip text="Share your script with community">

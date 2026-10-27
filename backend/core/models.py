@@ -37,6 +37,19 @@ class UserDrawing(models.Model):
     def __str__(self):
         return f"{self.symbol} - {self.owner.name}"
 
+class GitHubLink(models.Model):
+    """A user's connected GitHub account, for pushing and pulling scripts. The token (a personal
+    access token the user created) is encrypted (core/github.py) and never sent to the browser."""
+    owner = models.OneToOneField(TraderProfile, on_delete=models.CASCADE, related_name='github')
+    login = models.CharField(max_length=100)
+    avatar_url = models.CharField(max_length=300, blank=True)
+    token = models.TextField()
+    created_at = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.owner.name} as {self.login}"
+
+
 class PineScript(models.Model):
     owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='pine_scripts')
     name = models.CharField(max_length=100)
@@ -46,6 +59,8 @@ class PineScript(models.Model):
     code = models.TextField(blank=True)
     versions = models.JSONField(default=list, blank=True) # [{code, savedAt}]
     order = models.IntegerField(default=0)
+    # The GitHub file it's linked to, for one-click push / pull: {repo, branch, path, sha}
+    github = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
