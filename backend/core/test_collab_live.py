@@ -88,3 +88,38 @@ class CollabLiveTests(TransactionTestCase):
         self.assertTrue(upd["peer"]["muted"])
         await own.disconnect()
         await bob.disconnect()
+
+    async def test_private_messages_reach_only_their_two_people(self):
+        await sync_to_async(CollabMember.objects.create)(room=self.room, profile=await sync_to_async(TraderProfile.objects.get)(uid="eve"), role="viewer")
+        own = await self.connect("own")
+        bob = await self.connect("bob")
+        eve = await self.connect("eve")
+        await own.send_json_to({"type": "chat", "text": "just between us", "to": "bob", "client_id": "c1"})
+        got_own = await self.until(own, "chat")
+        got_bob = await self.until(bob, "chat")
+        self.assertEqual((got_own["message"]["to"], got_bob["message"]["to"]), ("bob", "bob"))
+        self.assertEqual(got_bob["message"]["text"], "just between us")
+        # Eve gets nothing of it
+        while not await eve.receive_nothing(timeout=0.4):
+            self.assertNotEqual((await eve.receive_json_from()).get("type"), "chat")
+        # Group messages still reach everyone
+        await bob.send_json_to({"type": "chat", "text": "hello all"})
+        self.assertIsNone((await self.until(eve, "chat"))["message"]["to"])
+        # Someone outside the collab can't be messaged
+        await own.send_json_to({"type": "chat", "text": "x", "to": "nobody"})
+        self.assertIn("only people in this collab", (await self.until(own, "error"))["error"])
+        # History: the private one only for its two people
+        for ws in (own, bob, eve):
+            await ws.disconnect()
+        eve2 = await self.connect_init("eve")
+        self.assertEqual([m["text"] for m in eve2["messages"]], ["hello all"])
+        bob2 = await self.connect_init("bob")
+        self.assertEqual([m["text"] for m in bob2["messages"]], ["just between us", "hello all"])
+
+    async def connect_init(self, uid):
+        ws = WebsocketCommunicator(URLRouter(websocket_urlpatterns), f"/ws/collab/tok/?uid={uid}&session_key=sk-{uid}")
+        ok, _ = await ws.connect()
+        self.assertTrue(ok)
+        init = await ws.receive_json_from()
+        await ws.disconnect()
+        return init

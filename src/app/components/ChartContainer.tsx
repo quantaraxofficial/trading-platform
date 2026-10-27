@@ -320,6 +320,7 @@ import { BandFill } from "./chartPrimitives/BandFill";
 import { SessionBreaks } from "./chartPrimitives/SessionBreaks";
 import { chartSettings, themeCanvas, precisionFormat, type ChartSettings } from "../lib/chartSettings";
 import { chartBgImage, canvasBackgroundCss } from "../lib/chartBackgroundImage";
+import { DEFAULT_FONT_STACK, FONTS, applySiteFont, type FontKey } from "../lib/fonts";
 import type { DateRangeSpan } from "./BottomPanel";
 import { detectPrecision, simulatedQuote } from "@/app/utils/pricePrecision";
 import { feedTimeToUnix } from "../utils/feedTime";
@@ -716,6 +717,8 @@ export default function ChartContainer({
   // background colour over the photo instead
   const bgImageData = chartBgImage.useValue().data;
   const bgImageOn = cs.bgImage && !!bgImageData;
+  // Settings → Canvas → Site font: every text on the site
+  useEffect(() => { applySiteFont(cs.siteFont); }, [cs.siteFont]);
   const canvasBgStyle = useMemo(() => (bgImageOn
     ? canvasBackgroundCss({ data: bgImageData, opacity: cs.bgImageOpacity, fit: cs.bgImageFit, type: cs.backgroundType, top: cs.background, bottom: cs.backgroundType === 'Gradient' ? cs.background2 : cs.background })
     : undefined), [bgImageOn, bgImageData, cs.bgImageOpacity, cs.bgImageFit, cs.backgroundType, cs.background, cs.background2]);
@@ -971,6 +974,8 @@ export default function ChartContainer({
         background: bgImageOn ? { type: ColorType.Solid, color: 'transparent' }
           : cs.backgroundType === 'Gradient' ? { type: ColorType.VerticalGradient, topColor: cs.background, bottomColor: cs.background2 } : { type: ColorType.Solid, color: cs.background },
         textColor: cs.text, fontSize: cs.fontSize,
+        // Settings → Canvas → Site font: the scales' labels too (they're drawn, not page text)
+        fontFamily: FONTS[cs.siteFont as FontKey]?.css || DEFAULT_FONT_STACK,
       },
       grid: { vertLines: { visible: cs.vertGrid, color: cs.gridVert }, horzLines: { visible: cs.horzGrid, color: cs.gridHorz } },
       crosshair: { vertLine: hair, horzLine: hair },
@@ -978,7 +983,7 @@ export default function ChartContainer({
       rightPriceScale: scale, leftPriceScale: scale,
     });
     notifyPriceScaleChanged();
-  }, [chart, bgImageOn, cs.backgroundType, cs.background, cs.background2, cs.text, cs.fontSize, cs.vertGrid, cs.gridVert, cs.horzGrid, cs.gridHorz, cs.crosshair, cs.lines, cs.noOverlappingLabels, cs.marginTop, cs.marginBottom]);
+  }, [chart, cs.siteFont, bgImageOn, cs.backgroundType, cs.background, cs.background2, cs.text, cs.fontSize, cs.vertGrid, cs.gridVert, cs.horzGrid, cs.gridHorz, cs.crosshair, cs.lines, cs.noOverlappingLabels, cs.marginTop, cs.marginBottom]);
   // Margins → Right: the bars of space after the last one (applied when changed, not on load,
   // so it doesn't scroll a restored view)
   const marginRightSeen = useRef<number | null>(null);

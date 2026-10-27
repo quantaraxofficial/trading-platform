@@ -50,6 +50,7 @@ import { backendFetch, sessionKey } from "@/lib/backend";
 import CollabController from "./components/collab/CollabController";
 import CollabDialog from "./components/collab/CollabDialog";
 import CollabPanel from "./components/collab/CollabPanel";
+import ChatsPanel, { type OpenChat } from "./components/collab/ChatsPanel";
 import CollabOverlay from "./components/collab/CollabOverlay";
 import { CollabAlertsSync, CollabChartSync, CollabDrawingSync, CollabPineSync, CollabPresenceSync, CollabReplaySync } from "./components/collab/CollabSync";
 import { useCollabActive } from "./lib/collab/session";
@@ -161,6 +162,21 @@ function AppLayout() {
     });
   };
   const [activeSidebarPanel, setActiveSidebarPanel] = useState("watchlist");
+  // The Chats panel's open conversation (a name clicked in a collab's group chat opens one)
+  const [openChat, setOpenChat] = useState<OpenChat | null>(null);
+  useEffect(() => {
+    const open = (e: Event) => {
+      const d = (e as CustomEvent).detail;
+      if (!d?.token || (!d?.uid && !d?.group)) return;
+      setOpenChat(d.group ? { token: d.token, group: true } : { token: d.token, uid: d.uid });
+      setPanelsHidden(false);
+      setActiveSidebarPanel("chats");
+      setRightPanel(true);
+    };
+    window.addEventListener("tv:open-dm", open);
+    return () => window.removeEventListener("tv:open-dm", open);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // The chart's right-click "Object tree" (and anything else) can open a right-panel page
   useEffect(() => {
     const open = (e: Event) => {
@@ -923,6 +939,8 @@ function AppLayout() {
             <ObjectTreePanel />
           ) : activeSidebarPanel === "collab" ? (
             <CollabPanel onShare={() => setShowCollabDialog(true)} />
+          ) : activeSidebarPanel === "chats" ? (
+            <ChatsPanel open={openChat} onOpen={setOpenChat} />
           ) : (
             <RightToolbar symbol={symbol} onSymbolChange={setSymbol} />
           )}

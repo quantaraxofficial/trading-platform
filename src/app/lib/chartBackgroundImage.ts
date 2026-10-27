@@ -16,9 +16,10 @@ export type BgImageFit = (typeof BG_IMAGE_FITS)[number];
 const MAX_CHARS = 1_600_000;
 const MAX_SIDE = 2560;
 
-// Reads a picked image file, shrunk to at most 2560px a side and re-encoded (JPEG; PNG when
-// it has transparency and stays small enough), as a data URL that fits in a setting
-export async function readImageFile(file: File): Promise<string> {
+// Reads a picked image file, shrunk to at most 2560px a side (or maxSide) and re-encoded (JPEG;
+// PNG when it has transparency and stays small enough), as a data URL that fits in a setting
+export async function readImageFile(file: File, opts?: { maxSide?: number; maxChars?: number }): Promise<string> {
+  const maxSide = opts?.maxSide ?? MAX_SIDE, maxChars = opts?.maxChars ?? MAX_CHARS;
   if (!file.type.startsWith("image/")) throw new Error("That file isn't an image");
   const url = URL.createObjectURL(file);
   try {
@@ -28,7 +29,7 @@ export async function readImageFile(file: File): Promise<string> {
       el.onerror = () => reject(new Error("Couldn't read that image"));
       el.src = url;
     });
-    let scale = Math.min(1, MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+    let scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
     for (let attempt = 0; attempt < 6; attempt++) {
       const w = Math.max(1, Math.round(img.naturalWidth * scale));
       const h = Math.max(1, Math.round(img.naturalHeight * scale));
@@ -40,11 +41,11 @@ export async function readImageFile(file: File): Promise<string> {
       ctx.drawImage(img, 0, 0, w, h);
       if (file.type === "image/png" || file.type === "image/webp" || file.type === "image/gif") {
         const png = canvas.toDataURL("image/png");
-        if (png.length <= MAX_CHARS) return png;
+        if (png.length <= maxChars) return png;
       }
       for (const q of [0.88, 0.8, 0.7]) {
         const jpg = canvas.toDataURL("image/jpeg", q);
-        if (jpg.length <= MAX_CHARS) return jpg;
+        if (jpg.length <= maxChars) return jpg;
       }
       scale *= 0.7;
     }

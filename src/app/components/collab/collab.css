@@ -208,3 +208,70 @@
 .tv-co-delete-row + .tv-co-delete-row { border-top: 1px solid var(--tv-co-border); }
 .tv-co-delete-row span { width: 130px; flex: none; color: var(--tv-co-muted); }
 .tv-co-delete-row b { font-weight: 500; flex: 1; min-width: 0; }
+
+/* Chat themes */
+.tv-co-chat { color: var(--tv-co-chat-text, var(--tv-co-text)); }
+.tv-co-theme-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; width: 230px; max-height: 380px; overflow-y: auto; padding: 6px; background: var(--tv-co-bg); border-radius: 8px; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22); }
+.tv-co-theme-row { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 6px; border-radius: 6px; cursor: pointer; font-size: 14px; color: var(--tv-co-text); }
+.tv-co-theme-row:hover { background: var(--tv-co-hover); }
+.tv-co-theme-row.on { box-shadow: inset 0 0 0 1.5px var(--tv-co-accent); }
+.tv-co-theme-swatch { width: 34px; height: 24px; border-radius: 5px; border: 1px solid var(--tv-co-border); display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 0 4px; box-sizing: border-box; flex: none; background-size: cover; }
+.tv-co-theme-swatch i { display: block; height: 5px; border-radius: 3px; width: 70%; }
+.tv-co-theme-swatch i + i { margin-left: auto; }
+.tv-co-theme-color { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 13px; cursor: pointer; }
+.tv-co-theme-color input[type="color"] { width: 34px; height: 26px; padding: 0; border: 1px solid var(--tv-co-field); border-radius: 5px; background: none; cursor: pointer; }
+.tv-co-theme-preview { border: 1px solid var(--tv-co-border); border-radius: 8px; padding: 4px 12px 14px; min-height: 180px; background: var(--tv-color-pane-bg); color: var(--tv-co-chat-text, var(--tv-co-text)); }
+
+/* Chats: private conversations */
+.tv-co-dmrow { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 8px 8px; border: none; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.tv-co-dmrow:hover { background: var(--tv-co-hover); }
+.tv-co-dmrow.small { padding: 6px 8px; margin-top: 2px; font-size: 14px; }
+.tv-co-dmrow-top { display: flex; align-items: baseline; gap: 8px; }
+.tv-co-dmrow-top b { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-co-dmrow-top span { font-size: 11px; color: var(--tv-co-muted); flex: none; }
+.tv-co-dmrow-last { font-size: 13px; line-height: 18px; color: var(--tv-co-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-co-dmrow-last.unread { color: inherit; font-weight: 600; }
+.tv-co-dmrow-badge { min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--tv-co-accent); color: #fff; font-size: 11px; line-height: 18px; text-align: center; font-weight: 600; flex: none; }
+.tv-co-dmpicker { padding: 10px 12px; border-bottom: 1px solid var(--tv-co-border); max-height: 50%; overflow-y: auto; flex: none; }
+.tv-co-theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.tv-co-theme-pick { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 4px; border: 1px solid var(--tv-co-border); border-radius: 8px; background: transparent; color: var(--tv-co-text); font: inherit; font-size: 12px; cursor: pointer; }
+.tv-co-theme-pick:hover { background: var(--tv-co-hover); }
+.tv-co-theme-pick.on { border-color: var(--tv-co-accent); box-shadow: inset 0 0 0 1px var(--tv-co-accent); }
+.tv-co-theme-pick .tv-co-theme-swatch { width: 56px; height: 34px; }
+.tv-co-theme-pick span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-co-chat .tv-co-sys, .tv-co-chat .tv-co-day, .tv-co-chat .tv-co-msg-meta span { color: var(--tv-co-chat-muted, var(--tv-co-muted)); }
+.tv-co-chat, .tv-co-theme-preview { font-family: var(--tv-co-chat-font, inherit); }
+.tv-co-chat .tv-co-msg-text, .tv-co-theme-preview .tv-co-msg-text { font-size: var(--tv-co-chat-size, 14px); line-height: 1.43; }
+/* Group chats: two members' initials as the group's picture */
+.tv-co-groupavatar { position: relative; flex: none; display: inline-block; }
+.tv-co-groupavatar span { position: absolute; width: 66%; height: 66%; border-radius: 50%; color: #fff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; text-transform: uppercase; box-shadow: 0 0 0 2px var(--tv-color-pane-bg); }
+
+/* Read receipts and typing */
+.tv-co-msg-status { display: flex; justify-content: flex-start; margin-top: 2px; font-size: 11px; line-height: 14px; color: var(--tv-co-chat-muted, var(--tv-co-muted)); }
+.tv-co-msg-status span { display: inline-flex; align-items: center; gap: 3px; }
+.tv-co-msg-status .seen { color: var(--tv-co-accent); }
+.tv-co-typing { display: flex; align-items: center; gap: 6px; padding: 4px 12px; font-size: 12px; font-style: italic; color: var(--tv-co-muted); flex: none; }
+.tv-co-typing-inline { font-style: italic; color: var(--tv-co-live); }
+.tv-co-typing-dots { display: inline-flex; gap: 2px; }
+.tv-co-typing-dots i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; animation: tv-co-dot 1.2s infinite ease-in-out; }
+.tv-co-typing-dots i:nth-child(2) { animation-delay: 0.15s; }
+.tv-co-typing-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes tv-co-dot { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .tv-co-typing-dots i { animation: none; } }
+
+/* Voice messages: recording in the message box, the player in a message */
+.tv-co-compose { position: relative; }
+.tv-co-compose.recording > :not(.tv-co-recording) { display: none; }
+.tv-co-recording { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 34px; }
+.tv-co-rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--tv-co-danger); animation: tv-co-rec 1s infinite ease-in-out; flex: none; }
+@keyframes tv-co-rec { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .tv-co-rec-dot { animation: none; } }
+.tv-co-rec-time { font-variant-numeric: tabular-nums; font-size: 14px; min-width: 38px; }
+.tv-co-rec-error { position: absolute; left: 8px; right: 8px; bottom: calc(100% + 2px); background: var(--tv-co-bg); padding: 4px 8px; border-radius: 6px; box-shadow: var(--tv-co-shadow); }
+.tv-co-voice-msg { display: flex; align-items: center; gap: 8px; width: 230px; max-width: 100%; box-sizing: border-box; padding: 6px 10px 6px 6px; border-radius: 2px 18px 18px 18px; background: var(--tv-co-bubble); }
+.tv-co-msg.mine .tv-co-voice-msg { background: var(--tv-co-bubble-mine); }
+.tv-co-voice-play { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--tv-co-accent); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; padding: 0; }
+.tv-co-voice-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--tv-co-field); cursor: pointer; position: relative; }
+.tv-co-voice-bar::before { content: ""; position: absolute; inset: -8px 0; }
+.tv-co-voice-bar i { display: block; height: 100%; border-radius: 2px; background: var(--tv-co-accent); }
+.tv-co-voice-time { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--tv-co-chat-muted, var(--tv-co-muted)); min-width: 32px; text-align: right; }

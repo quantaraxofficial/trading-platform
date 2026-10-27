@@ -36,7 +36,10 @@ DOCUMENT_TYPES = {
     '.rtf': 'application/rtf', '.zip': 'application/zip',
     '.pine': 'text/plain', '.py': 'text/plain', '.mq5': 'text/plain', '.mqh': 'text/plain', '.mq4': 'text/plain',
 }
-ALLOWED = {**IMAGE_TYPES, **DOCUMENT_TYPES}
+# Voice messages (recorded in the chat) and audio clips
+AUDIO_TYPES = {'.webm': 'audio/webm', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.wav': 'audio/wav'}
+ALLOWED = {**IMAGE_TYPES, **DOCUMENT_TYPES, **AUDIO_TYPES}
+MAX_VOICE_SECONDS = 600
 
 
 def storage():
@@ -69,6 +72,27 @@ def image_size(f):
         return None
 
 
+def audio_ok(f):
+    """The upload really is audio of the kind its name says (by its first bytes)"""
+    f.seek(0)
+    head = f.read(16)
+    f.seek(0)
+    return (head.startswith(b'\x1aE\xdf\xa3') or head.startswith(b'OggS') or head[4:8] == b'ftyp'
+            or head.startswith(b'ID3') or head[:2] in (b'\xff\xfb', b'\xff\xf3', b'\xff\xf2')
+            or (head.startswith(b'RIFF') and head[8:12] == b'WAVE'))
+
+
+def audio_fields(request, is_audio):
+    """A voice message's attachment fields: audio, and its length in seconds (from the recorder)"""
+    if not is_audio:
+        return {}
+    try:
+        seconds = max(0.0, min(float(request.data.get('duration') or 0), MAX_VOICE_SECONDS))
+    except (TypeError, ValueError):
+        seconds = 0.0
+    return {"audio": True, "duration": round(seconds, 1) or None}
+
+
 def _member(request, uid, token):
     me, denied = require_session(request, uid)
     if denied:
@@ -83,7 +107,8 @@ def _member(request, uid, token):
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
 def collab_upload(request, uid, token):
-    """multipart {file, text?}: shares an image or document in the group chat"""
+    """multipart {file, text?, to?}: shares an image or document in the group chat, or privately
+    with one person in the collab (to: their uid)"""
     room, member, denied = _member(request, uid, token)
     if denied:
         return denied
@@ -95,20 +120,31 @@ def collab_upload(request, uid, token):
     name = clean_name(f.name)
     ext = os.path.splitext(name)[1].lower()
     if ext not in ALLOWED:
-        return Response({"error": "That kind of file can't be shared here. Images (PNG, JPG, GIF, WebP) and documents (PDF, Word, Excel, PowerPoint, text, CSV, ZIP, scripts) can."},
+        return Response({"error": "That kind of file can't be shared here. Images (PNG, JPG, GIF, WebP), documents (PDF, Word, Excel, PowerPoint, text, CSV, ZIP, scripts) and voice messages can."},
                         status=status.HTTP_400_BAD_REQUEST)
     is_image = ext in IMAGE_TYPES
     size = image_size(f) if is_image else None
     if is_image and not size:
         return Response({"error": "That picture couldn't be read"}, status=status.HTTP_400_BAD_REQUEST)
+    is_audio = ext in AUDIO_TYPES
+    if is_audio and not audio_ok(f):
+        return Response({"error": "That recording couldn't be read"}, status=status.HTTP_400_BAD_REQUEST)
+    recipient = None
+    to = str(request.data.get('to') or '').strip()
+    if to:
+        target = CollabMember.objects.filter(room=room, profile__uid=to).select_related('profile').first()
+        if not target or target.profile_id == member.profile_id:
+            return Response({"error": "You can share privately only with people in this collab"}, status=status.HTTP_400_BAD_REQUEST)
+        recipient = target.profile
     path = storage().save(f"{room.id}/{secrets.token_hex(8)}_{name}", f)
     caption = str(request.data.get('text') or '').strip()[:MAX_CAPTION]
-    msg = CollabMessage.objects.create(room=room, author=member.profile, kind='file', text=caption, attachment={
+    msg = CollabMessage.objects.create(room=room, author=member.profile, recipient=recipient, kind='file', text=caption, attachment={
         "path": path, "name": name, "size": f.size, "type": ALLOWED[ext], "image": is_image,
-        "width": size[0] if size else None, "height": size[1] if size else None,
+        "width": size[0] if size else None, "height": size[1] if size else None, **audio_fields(request, is_audio),
     })
     CollabRoom.objects.filter(id=room.id).update(updated_at=timezone.now())
-    notify_room(room, {"type": "chat.saved", "message": message_json(msg), "exclude": None})
+    notify_room(room, {"type": "chat.saved", "message": message_json(msg), "exclude": None,
+                       "only": [member.profile.uid, recipient.uid] if recipient else None})
     return Response(message_json(msg), status=status.HTTP_201_CREATED)
 
 
@@ -119,11 +155,15 @@ def collab_file(request, uid, token, message_id):
     if denied:
         return denied
     msg = CollabMessage.objects.filter(id=message_id, room=room, kind='file').first()
+    # A privately shared file: only its two people
+    if msg and msg.recipient_id and member.profile_id not in (msg.author_id, msg.recipient_id):
+        msg = None
     a = msg and msg.attachment
     store = storage()
     if not a or not a.get('path') or not store.exists(a['path']):
         return Response({"error": "That file isn't here any more"}, status=status.HTTP_404_NOT_FOUND)
-    inline = bool(a.get('image')) and request.query_params.get('download') not in ('1', 'true')
+    # Pictures show and voice messages play in the page; documents download
+    inline = bool(a.get('image') or a.get('audio')) and request.query_params.get('download') not in ('1', 'true')
     resp = FileResponse(store.open(a['path'], 'rb'), content_type=a.get('type') or 'application/octet-stream',
                         as_attachment=not inline, filename=a.get('name') or 'file')
     resp['X-Content-Type-Options'] = 'nosniff'

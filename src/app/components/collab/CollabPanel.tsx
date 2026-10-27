@@ -3,14 +3,16 @@
 // The collab's group panel in the right column: who's here, the voice call, and the group chat
 // (text, and pictures / documents: attach, drop or paste them).
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useEscapeClose } from "../../lib/useEscapeClose";
 import "./collab.css";
 import { collab, useCollab, chatFileProblem, CHAT_FILE_ACCEPT, type ChatMessage, type Peer, type SharedAlert } from "../../lib/collab/session";
 import { useAlerts } from "@/context/AlertsContext";
 import { Avatar } from "./CollabDialog";
+import { VoicePlayer, VoiceRecorder } from "./VoiceMessage";
 import CollabList, { RoleBadge } from "./CollabList";
+import { chatAreaStyle, roomTheme, themeVars } from "../../lib/collab/chatTheme";
 import { collabRoleOf } from "../../lib/collab/roles";
 import { leaveCollab } from "./CollabController";
 import { AddPersonIcon, LeaveIcon, MicIcon, PhoneIcon, SendIcon } from "./icons";
@@ -32,11 +34,16 @@ function dayOf(ms: number) {
 
 export default function CollabPanel({ onShare }: { onShare: () => void }) {
   const state = useCollab();
-  const { room, peers, messages, voice, status, uid, you, replay, replayDetached, alerts } = state;
+  const { room, peers, voice, status, uid, you, replay, replayDetached, alerts } = state;
+  // The group's messages (private ones are in the Chats panel)
+  const messages = state.messages.filter(m => !m.to);
   const [alertsOpen, setAlertsOpen] = useState(true);
   const [showList, setShowList] = useState(false);
+  // The collab's chat theme (its admin or a controller sets it in its settings)
+  const theme = roomTheme(state.room, state.uid);
   const [sounds, setSounds] = useState(soundsOn);
   const [draft, setDraft] = useState("");
+  const [recordingVoice, setRecordingVoice] = useState(false);
   // Files picked, dropped or pasted, waiting for Send (with the message as the first one's caption)
   const [queued, setQueued] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -58,8 +65,14 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
   // Reading the chat clears the unread count on the toolbar button
   useEffect(() => {
     collab.setChatOpen(true);
-    return () => collab.setChatOpen(false);
+    return () => { collab.setChatOpen(false); collab.sendTyping(false); };
   }, []);
+  // On screen with something new: the others' "Seen by" (read receipts)
+  useEffect(() => { if (status === "live" && messages.length) collab.sendRead(); }, [messages.length, status]);
+  // "… is typing" fades a few seconds after the last word from them
+  const [, tick] = useState(0);
+  useEffect(() => { const t = setInterval(() => tick(n => n + 1), 2000); return () => clearInterval(t); }, []);
+  const typingNames = Object.entries(state.typing).filter(([u, t]) => u !== uid && Date.now() - t.at < 6000).map(([, t]) => t.name);
 
   // New messages scroll into view unless the user has scrolled up to read older ones
   useLayoutEffect(() => {
@@ -74,6 +87,7 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
   const speakingOf = (p: Peer) => (p.id === you ? voice.speaking.me : voice.speaking[p.id]);
   const send = () => {
     if (!draft.trim() && !queued.length) return;
+    collab.sendTyping(false);
     if (queued.length) {
       queued.forEach((f, i) => collab.sendFile(f, i === 0 ? draft : ""));
       setQueued([]);
@@ -95,21 +109,28 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
   }
 
   const canEdit = !!room.perms?.edit;
+  // "Seen by" under your latest message: who has read the chat since (read receipts on both sides)
+  const lastMine = [...messages].reverse().find(m => m.author === uid && m.kind !== "system");
+  const seenStatus = (m: ChatMessage) => {
+    if (m.pending || m.upload) return <span>Sending…</span>;
+    const by = room.members.filter(x => x.uid !== uid && x.chat_read_at && x.chat_read_at >= m.time);
+    return by.length
+      ? <span className="seen" title={by.map(x => x.name).join(", ")}><svg width="16" height="10" viewBox="0 0 16 10" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden><path d="M1 5.5 4 8.5 10 1.5M7 8.5l8-7" /></svg> Seen by {by.length === room.members.length - 1 ? "everyone" : by.map(x => x.name.split(" ")[0]).join(", ")}</span>
+      : <span><svg width="14" height="10" viewBox="0 0 14 10" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden><path d="M1 5.5 4 8.5 10 1.5" /></svg> Sent</span>;
+  };
   const canVoice = !!room.perms?.voice;
   const replayMine = !!replay && replay.driver === you;
   return (
-    <div className="tv-co-panel" data-name="collab-panel"
+    <div className="tv-co-panel" data-name="collab-panel" style={themeVars(theme)}
       onDragOver={e => { if (Array.from(e.dataTransfer.types).includes("Files")) { e.preventDefault(); setDragging(true); } }}
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false); }}
       onDrop={e => { if (e.dataTransfer.files.length) { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); } }}>
       {dragging && <div className="tv-co-drop" data-name="collab-drop">Drop pictures or documents to share them</div>}
       <div className="tv-co-panel-head">
         <div className="tv-co-panel-title">
-          <b title={room.name} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{room.name}</span>
-            <RoleBadge role={collabRoleOf(room.role, room.perms, room.kind)} small />
-          </b>
+          <b title={room.name}>{room.name}</b>
           <span>
+            <RoleBadge role={collabRoleOf(room.role, room.perms, room.kind)} small />
             <i className={`tv-co-dot${status === "live" ? "" : " off"}`} />
             {status === "live" ? `${people.length} here now` : status === "reconnecting" ? "Reconnecting…" : "Connecting…"}
             {room.kind === "pine" ? <>{" · Pine script"}{!room.perms?.pine && " · View only"}</> : !canEdit && " · View only"}
@@ -201,11 +222,19 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
 
       {state.error && status === "live" && <div className="tv-co-banner error">{state.error}</div>}
 
-      <div className="tv-co-chat" ref={chatRef} onScroll={e => { const el = e.currentTarget; atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40; }}>
+      <div className="tv-co-chat" ref={chatRef} style={chatAreaStyle(theme)} onScroll={e => { const el = e.currentTarget; atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40; }}>
         {messages.length === 0 && <div className="tv-co-empty">No messages yet. Say hi to the group.</div>}
-        {messages.map((m, i) => <Message key={m.id} m={m} prev={messages[i - 1]} mine={m.author === uid} color={room.members.find(x => x.uid === m.author)?.color || "#787b86"} onView={setViewing} />)}
+        {messages.map((m, i) => <Message key={m.id} m={m} prev={messages[i - 1]} mine={m.author === uid} color={room.members.find(x => x.uid === m.author)?.color || "#787b86"} onView={setViewing}
+          status={m.author === uid && m.id === lastMine?.id ? seenStatus(m) : undefined}
+          onAuthor={author => window.dispatchEvent(new CustomEvent("tv:open-dm", { detail: { token: room.token, uid: author } }))} />)}
       </div>
 
+      {typingNames.length > 0 && (
+        <div className="tv-co-typing" data-name="collab-typing">
+          <span className="tv-co-typing-dots"><i /><i /><i /></span>
+          {typingNames.length === 1 ? `${typingNames[0]} is typing…` : typingNames.length === 2 ? `${typingNames[0]} and ${typingNames[1]} are typing…` : `${typingNames.length} people are typing…`}
+        </div>
+      )}
       {(queued.length > 0 || fileError) && (
         <div className="tv-co-queued" data-name="collab-queued">
           {queued.map((f, i) => (
@@ -217,7 +246,7 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
           {fileError && <div className="tv-co-error" style={{ width: "100%" }}>{fileError}</div>}
         </div>
       )}
-      <div className="tv-co-compose">
+      <div className={`tv-co-compose${recordingVoice ? " recording" : ""}`}>
         <button className="tv-co-iconbtn" aria-label="Share a picture or document" title="Share a picture or document" data-name="collab-attach" onClick={() => fileInput.current?.click()}>
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden><path d="M15 8.5 9 14.5a3.9 3.9 0 0 1-5.5-5.5l6.4-6.4a2.6 2.6 0 0 1 3.7 3.7L7.2 12.7a1.3 1.3 0 0 1-1.8-1.8L11 5.3" /></svg>
         </button>
@@ -232,6 +261,7 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
           onPaste={e => { const files = Array.from(e.clipboardData.files || []); if (files.length) { e.preventDefault(); addFiles(files); } }}
           onChange={e => {
             setDraft(e.target.value);
+            collab.sendTyping(!!e.target.value.trim());
             const el = e.target;
             el.style.height = "auto";
             el.style.height = `${Math.min(120, el.scrollHeight + 2)}px`;
@@ -241,27 +271,48 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
             e.stopPropagation();   // typing here isn't a chart shortcut
           }}
         />
-        <button className="tv-co-iconbtn" aria-label="Send" title="Send" disabled={!draft.trim() && !queued.length} onClick={send}><SendIcon /></button>
+        {!draft.trim() && !queued.length
+          ? <VoiceRecorder onSend={(file, secs) => collab.sendFile(file, "", undefined, secs)} onRecording={setRecordingVoice} />
+          : <button className="tv-co-iconbtn" aria-label="Send" title="Send" onClick={send}><SendIcon /></button>}
       </div>
       {viewing && <ImageViewer m={viewing} onClose={() => setViewing(null)} />}
     </div>
   );
 }
 
-function Message({ m, prev, mine, color, onView }: { m: ChatMessage; prev?: ChatMessage; mine: boolean; color: string; onView: (m: ChatMessage) => void }) {
+// Where a message's file comes from, and what Retry / Remove do for one still uploading (the
+// group chat's by default; the Chats panel passes its own)
+export interface FileActions { url: (id: number | string, download?: boolean) => string; retry: (id: string) => void; drop: (id: string) => void }
+const groupFiles: FileActions = { url: (id, download) => collab.fileUrl(id, download), retry: id => collab.retryFile(id), drop: id => collab.dropFile(id) };
+
+export function Message({ m, prev, mine, color, onView, files = groupFiles, onAuthor, status }: {
+  m: ChatMessage; prev?: ChatMessage; mine: boolean; color: string; onView: (m: ChatMessage) => void; files?: FileActions;
+  // Clicking someone's name or picture (to message them privately)
+  onAuthor?: (uid: string, name: string) => void;
+  // Under your message: sent / seen
+  status?: ReactNode;
+}) {
   const newDay = !prev || dayOf(prev.time) !== dayOf(m.time);
   const day = newDay ? <div className="tv-co-day">{dayOf(m.time)}</div> : null;
   if (m.kind === "system") return <>{day}<div className="tv-co-sys">{m.text} · {timeOf(m.time)}</div></>;
-  const cont = !newDay && prev?.kind === "text" && prev.author === m.author && m.time - prev.time < GROUP_GAP_MS;
+  const cont = !newDay && prev?.kind !== "system" && prev?.author === m.author && m.time - (prev?.time || 0) < GROUP_GAP_MS;
   const name = mine ? "You" : m.author_name || "Someone";
+  const canDm = !mine && !!onAuthor && !!m.author;
+  const dm = () => { if (canDm) onAuthor!(m.author!, m.author_name || "them"); };
   return (
     <>
       {day}
       <div className={`tv-co-msg${cont ? " cont" : ""}${mine ? " mine" : ""}${m.pending ? " pending" : ""}`}>
-        <Avatar name={m.author_name || "?"} color={color} size="sm" />
+        <span onClick={dm} title={canDm ? `Message ${m.author_name} privately` : undefined} style={canDm ? { cursor: "pointer", display: "flex" } : { display: "flex" }}>
+          <Avatar name={m.author_name || "?"} color={color} size="sm" />
+        </span>
         <div className="tv-co-msg-body">
-          {!cont && <div className="tv-co-msg-meta"><b style={{ color }}>{name}</b><span>{timeOf(m.time)}</span></div>}
-          {m.attachment ? <Attachment m={m} onView={onView} /> : <div className="tv-co-msg-text">{m.text}</div>}
+          {!cont && <div className="tv-co-msg-meta">
+            <b style={{ color, cursor: canDm ? "pointer" : undefined }} onClick={dm} title={canDm ? `Message ${m.author_name} privately` : undefined} data-name={canDm ? "collab-author-dm" : undefined}>{name}</b>
+            <span>{timeOf(m.time)}</span>
+          </div>}
+          {m.attachment ? <Attachment m={m} onView={onView} files={files} /> : <div className="tv-co-msg-text">{m.text}</div>}
+          {status && <div className="tv-co-msg-status" data-name="msg-status">{status}</div>}
         </div>
       </div>
     </>
@@ -273,7 +324,7 @@ function fileSize(n: number) {
 }
 
 // A document's kind, as a small labelled page
-function FileGlyph({ name, size = 30 }: { name: string; size?: number }) {
+export function FileGlyph({ name, size = 30 }: { name: string; size?: number }) {
   const ext = (name.split(".").pop() || "").toLowerCase();
   const kind = ext === "pdf" ? ["PDF", "#f23645"] : ["doc", "docx", "odt", "rtf"].includes(ext) ? ["DOC", "#2962ff"]
     : ["xls", "xlsx", "ods", "csv"].includes(ext) ? ["XLS", "#089981"] : ["ppt", "pptx"].includes(ext) ? ["PPT", "#ff9800"]
@@ -290,15 +341,17 @@ function FileGlyph({ name, size = 30 }: { name: string; size?: number }) {
 
 // A shared picture (click to see it full size) or document (download), with its caption, and while
 // it's still uploading, its progress (or why it failed, with Retry)
-function Attachment({ m, onView }: { m: ChatMessage; onView: (m: ChatMessage) => void }) {
+function Attachment({ m, onView, files }: { m: ChatMessage; onView: (m: ChatMessage) => void; files: FileActions }) {
   const a = m.attachment!;
   const up = m.upload;
-  const src = up?.preview || (typeof m.id === "number" ? collab.fileUrl(m.id) : "");
+  const src = up?.preview || (typeof m.id === "number" ? files.url(m.id) : "");
   const ratio = a.width && a.height ? a.height / a.width : 0.66;
   const w = Math.min(240, a.width || 240);
   return (
     <div className="tv-co-file" data-name="collab-attachment" data-kind={a.image ? "image" : "document"}>
-      {a.image && src ? (
+      {a.audio && src ? (
+        <VoicePlayer src={src} duration={a.duration} />
+      ) : a.image && src ? (
         <button className="tv-co-file-img" onClick={() => !up && onView(m)} aria-label={`View ${a.name}`} disabled={!!up}
           style={{ width: w, height: Math.min(320, Math.round(w * ratio)) }}>
           <img src={src} alt={a.name} loading="lazy" />
@@ -311,7 +364,7 @@ function Attachment({ m, onView }: { m: ChatMessage; onView: (m: ChatMessage) =>
             <div className="tv-co-member-sub">{fileSize(a.size)}</div>
           </div>
           {!up && typeof m.id === "number" && (
-            <a className="tv-co-iconbtn small" href={collab.fileUrl(m.id, true)} download={a.name} aria-label={`Download ${a.name}`} title="Download" data-name="collab-file-download">
+            <a className="tv-co-iconbtn small" href={files.url(m.id, true)} download={a.name} aria-label={`Download ${a.name}`} title="Download" data-name="collab-file-download">
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden><path d="M9 2.5v9M5.5 8 9 11.5 12.5 8M3 13v2.5h12V13" /></svg>
             </a>
           )}
@@ -321,8 +374,8 @@ function Attachment({ m, onView }: { m: ChatMessage; onView: (m: ChatMessage) =>
       {up?.error && (
         <div className="tv-co-error" data-name="collab-upload-error">
           {up.error}{" "}
-          <button className="tv-co-link" onClick={() => collab.retryFile(String(m.id))}>Retry</button>
-          <button className="tv-co-link" onClick={() => collab.dropFile(String(m.id))}>Remove</button>
+          <button className="tv-co-link" onClick={() => files.retry(String(m.id))}>Retry</button>
+          <button className="tv-co-link" onClick={() => files.drop(String(m.id))}>Remove</button>
         </div>
       )}
       {m.text && <div className="tv-co-msg-text" style={{ marginTop: 4 }}>{m.text}</div>}
@@ -331,21 +384,21 @@ function Attachment({ m, onView }: { m: ChatMessage; onView: (m: ChatMessage) =>
 }
 
 // A shared picture, full size over the page (Escape or a click outside closes it)
-function ImageViewer({ m, onClose }: { m: ChatMessage; onClose: () => void }) {
+export function ImageViewer({ m, onClose, files = groupFiles }: { m: ChatMessage; onClose: () => void; files?: FileActions }) {
   useEscapeClose(onClose);
   const a = m.attachment!;
   return createPortal(
     <div className="tv-co-viewer" role="dialog" aria-label={a.name} data-name="collab-image-viewer" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="tv-co-viewer-bar">
         <span title={a.name}>{a.name} · {m.author_name}</span>
-        <a href={collab.fileUrl(m.id, true)} download={a.name} className="tv-co-iconbtn" aria-label="Download" title="Download">
+        <a href={files.url(m.id, true)} download={a.name} className="tv-co-iconbtn" aria-label="Download" title="Download">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden><path d="M9 2.5v9M5.5 8 9 11.5 12.5 8M3 13v2.5h12V13" /></svg>
         </a>
         <button className="tv-co-iconbtn" aria-label="Close" onClick={onClose}>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden><path stroke="currentColor" strokeWidth="1.2" d="m1.5 1.5 15 15m0-15-15 15" /></svg>
         </button>
       </div>
-      <img src={collab.fileUrl(m.id)} alt={a.name} />
+      <img src={files.url(m.id)} alt={a.name} />
     </div>,
     document.body,
   );

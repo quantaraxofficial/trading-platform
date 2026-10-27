@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, collab, collab_files, github
+from . import views, chat_groups, chat_presence, collab, collab_dms, collab_files, github
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -27,12 +27,30 @@ urlpatterns = [
     # Collab charts (the live part is the WebSocket in consumers.py)
     path('collab/<str:uid>/rooms/', collab.collab_rooms, name='collab_rooms'),
     path('collab/<str:uid>/people/', collab.collab_people, name='collab_people'),
+    # Private chats (the Chats panel)
+    path('collab/<str:uid>/dms/', collab_dms.dm_conversations, name='dm_conversations'),
+    path('collab/<str:uid>/dms/people/', collab_dms.dm_people, name='dm_people'),
+    path('collab/<str:uid>/dms/<str:token>/<str:partner_uid>/', collab_dms.dm_thread, name='dm_thread'),
+    # Read receipts, typing, last seen (and the privacy choices for them)
+    path('collab/<str:uid>/chat-privacy/', chat_presence.chat_privacy, name='chat_privacy'),
+    path('collab/<str:uid>/presence/', chat_presence.presence, name='chat_presence'),
+    # Group chats (the Chats panel)
+    path('collab/<str:uid>/groups/', chat_groups.groups, name='chat_groups'),
+    path('collab/<str:uid>/groups/contacts/', chat_groups.group_contacts, name='chat_group_contacts'),
+    path('collab/<str:uid>/groups/<str:token>/', chat_groups.group, name='chat_group'),
+    path('collab/<str:uid>/groups/<str:token>/members/', chat_groups.group_add, name='chat_group_add'),
+    path('collab/<str:uid>/groups/<str:token>/members/<str:member_uid>/', chat_groups.group_member, name='chat_group_member'),
+    path('collab/<str:uid>/groups/<str:token>/messages/', chat_groups.group_send, name='chat_group_send'),
+    path('collab/<str:uid>/groups/<str:token>/upload/', chat_groups.group_upload, name='chat_group_upload'),
+    path('collab/<str:uid>/groups/<str:token>/file/<int:message_id>/', chat_groups.group_file, name='chat_group_file'),
+    path('collab/<str:uid>/groups/<str:token>/theme-image/', chat_groups.group_theme_image, name='chat_group_theme_image'),
     path('collab/<str:uid>/room/<str:token>/', collab.collab_room, name='collab_room'),
     path('collab/<str:uid>/room/<str:token>/invite/', collab.collab_invite, name='collab_invite'),
     path('collab/<str:uid>/room/<str:token>/transfer/', collab.collab_transfer, name='collab_transfer'),
     path('collab/<str:uid>/room/<str:token>/member/<str:member_uid>/', collab.collab_member, name='collab_member'),
     path('collab/<str:uid>/room/<str:token>/members/', collab.collab_members, name='collab_members'),
     path('collab/<str:uid>/room/<str:token>/summary/', collab.collab_room_summary, name='collab_room_summary'),
+    path('collab/<str:uid>/room/<str:token>/theme-image/', collab.collab_theme_image, name='collab_theme_image'),
     path('collab/<str:uid>/room/<str:token>/upload/', collab_files.collab_upload, name='collab_upload'),
     path('collab/<str:uid>/room/<str:token>/file/<int:message_id>/', collab_files.collab_file, name='collab_file'),
     path('collab/<str:uid>/room/<str:token>/request/', collab.collab_request, name='collab_request'),

@@ -17,6 +17,7 @@ import { useEscapeClose } from "../lib/useEscapeClose";
 import { useAlerts } from "@/context/AlertsContext";
 import { useCollab } from "../lib/collab/session";
 import { CollabIcon } from "./collab/icons";
+import { useDms } from "../lib/collab/dms";
 
 // Trading Agent — a small chat-bubble-with-spark glyph (1px lines like the TradingView icons)
 function TVAgentIcon({ size = 28, ...props }: any) {
@@ -53,6 +54,7 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
   // While a collab chart is open, its group panel (chat + voice) gets a button, with unread
   // messages as a count and a green dot while anyone is in the voice call
   const collabState = useCollab();
+  const dms = useDms();
   const inCollab = !!collabState.room && collabState.status !== "idle" && collabState.status !== "ended" && collabState.status !== "error";
   const voiceLive = collabState.peers.some(p => p.voice);
   const productsRef = useRef<HTMLButtonElement>(null);
@@ -64,6 +66,8 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     { id: "object_tree", icon: <TVObjectTreeIcon size={28} />, tooltip: "Object tree" },
     // Always there: inside a collab, its chat and voice; otherwise the list of your collabs
     { id: "collab", icon: <CollabIcon size={28} />, tooltip: inCollab ? "Collab: group chat and voice" : "Collabs" },
+    // Private chats with people in your collabs
+    { id: "chats", icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width={28} height={28} fill="none" stroke="currentColor" aria-hidden><path d="M6.5 7.5h15a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4.5 3.5v-3.5h-2.5a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z" /><path d="M10 12h8M10 15h5" /></svg>, tooltip: "Chats" },
   ];
 
   const i18 = { size: 18, strokeWidth: 1.5 };
@@ -98,6 +102,9 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
               )}
               {p.id === "collab" && collabState.unread > 0 && (
                 <span data-testid="collab-badge" style={{ position: "absolute", top: 3, right: 3, minWidth: 16, height: 16, padding: "0 4px", boxSizing: "border-box", borderRadius: 8, background: "#f23645", color: "#fff", fontSize: 11, lineHeight: "16px", fontWeight: 600, pointerEvents: "none" }}>{collabState.unread > 99 ? "99+" : collabState.unread}</span>
+              )}
+              {p.id === "chats" && dms.unread > 0 && (
+                <span data-testid="chats-badge" style={{ position: "absolute", top: 3, right: 3, minWidth: 16, height: 16, padding: "0 4px", boxSizing: "border-box", borderRadius: 8, background: "#f23645", color: "#fff", fontSize: 11, lineHeight: "16px", fontWeight: 600, pointerEvents: "none" }}>{dms.unread > 99 ? "99+" : dms.unread}</span>
               )}
               {p.id === "collab" && voiceLive && (
                 <span aria-hidden style={{ position: "absolute", bottom: 5, right: 5, width: 8, height: 8, borderRadius: "50%", background: "#089981", boxShadow: "0 0 0 2px var(--tv-color-pane-bg)", pointerEvents: "none" }} />

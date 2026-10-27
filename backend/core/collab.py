@@ -6,11 +6,14 @@ Every endpoint takes the caller's user id in the path and needs one of their ses
 the rest of the per-user API.
 """
 import base64
+import hashlib
+import re
 import secrets
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.db.models import Q
+from django.http import HttpResponse
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -60,8 +63,13 @@ def defaults_for(role):
     return {"can_replay": role == 'editor', "can_invite": False, "can_voice": True, "can_alert": role == 'editor', "can_pine": role == 'editor'}
 
 
-def member_json(m):
-    return {
+def member_json(m, viewer=None):
+    from .chat_presence import receipts_between, seen_json
+    extra = {}
+    if viewer is not None and m.profile_id != viewer.id:
+        extra["seen"] = seen_json(viewer, m.profile)
+        extra["chat_read_at"] = int(m.chat_read_at.timestamp() * 1000) if m.chat_read_at and receipts_between(viewer, m.profile) else None
+    return {**extra,
         "uid": m.profile.uid, "name": m.profile.name or m.profile.email.split('@')[0], "email": m.profile.email,
         "role": m.role, "color": color_of(m.profile.uid), "pending": m.last_seen is None and m.role != 'owner',
         "perms": perms_of(m), "mic": m.role == 'owner' or m.can_voice,
@@ -85,9 +93,10 @@ def room_json(room, me=None):
         "owner": room.owner.uid, "symbol": room.symbol, "interval": room.interval,
         "created_at": room.created_at.isoformat(),
         "allow_requests": room.allow_requests, "allow_voice": room.allow_voice,
+        "chat_theme": chat_theme_json(room),
         "role": mine.role if mine else None,
         "perms": perms,
-        "members": [member_json(m) for m in members],
+        "members": [member_json(m, me) for m in members],
         "requests": [], "kicked": [],
     }
     # Who's asking to join, for those who can let them in; who was kicked out, for the owner
@@ -95,6 +104,45 @@ def room_json(room, me=None):
         out["requests"] = [request_json(r) for r in room.join_requests.filter(status='pending').select_related('profile')]
     if mine and mine.role == 'owner':
         out["kicked"] = [person_json(p) for p in room.kicked.all()]
+    return out
+
+
+COLOR_RE = re.compile(r'^#[0-9a-fA-F]{3,8}$')
+THEME_COLORS = ('background', 'text', 'bubble', 'bubbleMine', 'accent')
+CHAT_FONTS = ('default', 'modern', 'classic', 'wide', 'mono', 'casual')
+IMAGE_RE = re.compile(r'^data:(image/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)$')
+MAX_THEME_IMAGE_CHARS = 700_000
+
+
+def clean_chat_theme(t, keep_image=None):
+    """The group chat's theme as stored, or None (the app's own look): name, colours (#hex), a
+    font (one of CHAT_FONTS) and size, and a background photo (a PNG / JPEG / WebP / GIF data URL) dimmed by imageDim (0..90)"""
+    if not isinstance(t, dict):
+        return None
+    out = {"name": str(t.get('name') or 'Theme').strip()[:40] or 'Theme'}
+    for k in THEME_COLORS:
+        v = t.get(k)
+        out[k] = v if isinstance(v, str) and COLOR_RE.match(v) else ''
+    out['font'] = t.get('font') if t.get('font') in CHAT_FONTS else 'default'
+    size = t.get('fontSize')
+    out['fontSize'] = max(11, min(22, int(size))) if isinstance(size, (int, float)) and not isinstance(size, bool) else 14
+    dim = t.get('imageDim')
+    out['imageDim'] = max(0, min(90, int(dim))) if isinstance(dim, (int, float)) and not isinstance(dim, bool) else 0
+    image = t.get('image')
+    if isinstance(image, str) and len(image) <= MAX_THEME_IMAGE_CHARS and IMAGE_RE.match(image):
+        out['image'] = image
+    elif keep_image:
+        out['image'] = keep_image
+    return out
+
+
+def chat_theme_json(room):
+    """The theme for the browser: the photo is fetched from its own link (version: its hash)"""
+    t = room.chat_theme
+    if not t:
+        return None
+    out = {k: v for k, v in t.items() if k != 'image'}
+    out['image_v'] = hashlib.sha1(t['image'].encode()).hexdigest()[:12] if t.get('image') else None
     return out
 
 
@@ -115,10 +163,12 @@ def message_json(msg):
         "id": msg.id, "kind": msg.kind, "text": msg.text, "time": int(msg.created_at.timestamp() * 1000),
         "author": msg.author.uid if msg.author else None,
         "author_name": (msg.author.name or msg.author.email.split('@')[0]) if msg.author else None,
+        "to": msg.recipient.uid if msg.recipient_id else None,
     }
     if msg.attachment:
         a = msg.attachment
-        out["attachment"] = {k: a.get(k) for k in ('name', 'size', 'type', 'image', 'width', 'height')}
+        out["attachment"] = {**{k: a.get(k) for k in ('name', 'size', 'type', 'image', 'width', 'height')},
+                             **({"audio": True, "duration": a.get('duration')} if a.get('audio') else {})}
     return out
 
 
@@ -302,6 +352,16 @@ def collab_room(request, uid, token):
             notify_room(room, {"type": "access.changed"})
         return Response(room_json(room, me))
 
+    # The group chat's theme: the admin, or a controller (who may add people)
+    if 'chat_theme' in request.data:
+        if not member or not perms_of(member)['invite']:
+            return Response({"error": "Only the admin and controllers can change the chat's theme"}, status=status.HTTP_403_FORBIDDEN)
+        keep = (room.chat_theme or {}).get('image') if request.data.get('keep_image') else None
+        room.chat_theme = clean_chat_theme(request.data.get('chat_theme'), keep_image=keep)
+        room.save(update_fields=['chat_theme', 'updated_at'])
+        system_message(room, f"{display_name(me)} {'changed the chat theme to ' + room.chat_theme['name'] if room.chat_theme else 'reset the chat theme'}")
+        notify_room(room, {"type": "access.changed"})
+        return Response(room_json(room, me))
     if not member or member.role != 'owner':
         return Response({"error": "Only the owner can change this collab"}, status=status.HTTP_403_FORBIDDEN)
     if request.method == 'DELETE':
@@ -456,6 +516,24 @@ def collab_members(request, uid, token):
     if targets.update(**changes):
         notify_room(room, {"type": "access.changed"})
     return Response(room_json(room, me))
+
+
+@api_view(['GET'])
+def collab_theme_image(request, uid, token):
+    """The group chat theme's background photo, for people in the collab"""
+    me, denied = require_session(request, uid)
+    if denied:
+        return denied
+    room = CollabRoom.objects.filter(token=token, active=True).first()
+    if not room or not CollabMember.objects.filter(room=room, profile=me).exists():
+        return Response({"error": "You're not in this collab"}, status=status.HTTP_403_FORBIDDEN)
+    m = IMAGE_RE.match((room.chat_theme or {}).get('image') or '')
+    if not m:
+        return Response({"error": "No photo"}, status=status.HTTP_404_NOT_FOUND)
+    resp = HttpResponse(base64.b64decode(m.group(2)), content_type=m.group(1))
+    resp['X-Content-Type-Options'] = 'nosniff'
+    resp['Cache-Control'] = 'private, max-age=31536000'   # the link carries its version
+    return resp
 
 
 @api_view(['POST'])

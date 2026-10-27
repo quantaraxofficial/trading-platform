@@ -15,6 +15,8 @@ import { collab, collabApi, useCollab, type CollabNotice, type NoAccess, type Ro
 import { playCollabSound } from "../../lib/collab/sounds";
 import { useEscapeClose } from "../../lib/useEscapeClose";
 import { CloseIcon, CollabIcon, LockIcon } from "./icons";
+import { setDmUser, useDms } from "../../lib/collab/dms";
+import { setPresenceUser } from "../../lib/collab/presence";
 import { Avatar } from "./CollabDialog";
 
 const DISMISSED_KEY = "tv:collabDismissedInvites";
@@ -98,6 +100,45 @@ export default function CollabController() {
     drop("signin");
     open(token, user.uid);
   }, [user, loading, push, drop, open]);
+
+  // Private chats: who's signed in, and a chime and a notification for each new message (the
+  // Chats panel shows it; the open conversation itself doesn't need telling)
+  useEffect(() => { setDmUser(user?.uid ?? null); setPresenceUser(user?.uid ?? null); }, [user?.uid]);
+  const dms = useDms();
+  const seenUnread = useRef<Record<string, number> | null>(null);
+  useEffect(() => {
+    if (!dms.loaded) return;
+    const now: Record<string, number> = {};
+    dms.conversations.forEach(c => { now[`${c.token}:${c.partner.uid}`] = c.unread; });
+    dms.groups.forEach(g => { now[`g:${g.token}`] = g.unread; });
+    const before = seenUnread.current;
+    seenUnread.current = now;
+    if (!before) return;   // the first load isn't news
+    for (const c of dms.conversations) {
+      const key = `${c.token}:${c.partner.uid}`;
+      if (c.unread > (before[key] || 0) && c.last.author !== user?.uid) {
+        playCollabSound("request");
+        push({
+          id: `dm-${key}`, person: c.partner, ttl: 8000,
+          text: <><b>{c.partner.name}</b> · private<div className="tv-co-member-sub" style={{ whiteSpace: "normal" }}>{c.last.attachment ? `📎 ${c.last.attachment.name}` : c.last.text.slice(0, 120)}</div></>,
+          action: { label: "Reply", run: () => { drop(`dm-${key}`); window.dispatchEvent(new CustomEvent("tv:open-dm", { detail: { token: c.token, uid: c.partner.uid } })); } },
+        });
+      }
+    }
+    // Group chats: a new message from someone else (not the group's own notices)
+    for (const g of dms.groups) {
+      const key = `g:${g.token}`;
+      const last = g.last;
+      if (g.unread > (before[key] || 0) && last && last.kind !== "system" && last.author !== user?.uid) {
+        playCollabSound("request");
+        push({
+          id: `dm-${key}`, ttl: 8000,
+          text: <><b>{g.name}</b> · {last.author_name}<div className="tv-co-member-sub" style={{ whiteSpace: "normal" }}>{last.attachment ? `📎 ${last.attachment.name}` : last.text.slice(0, 120)}</div></>,
+          action: { label: "Reply", run: () => { drop(`dm-${key}`); window.dispatchEvent(new CustomEvent("tv:open-dm", { detail: { token: g.token, group: true } })); } },
+        });
+      }
+    }
+  }, [dms, user?.uid, push, drop]);
 
   // Sounds and notifications for what happens in the collab
   useEffect(() => {

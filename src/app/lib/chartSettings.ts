@@ -52,6 +52,8 @@ export interface ChartSettings {
   // A photo behind the candles (the picture is in lib/chartBackgroundImage): shown or not, how
   // strongly (100: as is; lower lets the background colour through) and how it's fitted
   bgImage: boolean; bgImageOpacity: number; bgImageFit: "Fill" | "Fit" | "Stretch" | "Center" | "Tile";
+  // The font of the whole site (lib/fonts): the chart's scales and every panel, menu and dialog
+  siteFont: string;
   vertGrid: boolean; gridVert: string;
   horzGrid: boolean; gridHorz: string;
   crosshair: ColorLine;
@@ -105,6 +107,7 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   dayOfWeek: true, dateFormat: "Mon 29 Sep '97", timeFormat: "24-hours", saveLeftEdge: false,
   backgroundType: "Solid", ...(() => { const c = themeCanvas(false); return { background: c.background, background2: c.background2, gridVert: c.gridVert, gridHorz: c.gridHorz, crosshair: c.crosshair, text: c.text, lines: c.lines, watermarkColor: c.watermarkColor }; })(),
   bgImage: false, bgImageOpacity: 70, bgImageFit: "Fill",
+  siteFont: "default",
   vertGrid: true, horzGrid: true,
   watermark: { ticker: false, interval: false, description: false, replay: true },
   fontSize: 12,

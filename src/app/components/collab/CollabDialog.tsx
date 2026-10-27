@@ -16,6 +16,9 @@ import { RoleBadge } from "./CollabList";
 import { collabRoleOf } from "../../lib/collab/roles";
 import TvMenu, { type TvMenuItem } from "../ui/TvMenu";
 import { displaySymbol } from "@/app/lib/symbolDisplay";
+import { ThemeEditor } from "./ChatThemeMenu";
+import { seenText } from "../../lib/collab/presence";
+import { PRESET_THEMES, chatAreaStyle, roomTheme, type ChatTheme } from "../../lib/collab/chatTheme";
 
 const ACCESS_LABEL: Record<LinkAccess, string> = {
   restricted: "Only people added",
@@ -348,6 +351,14 @@ function ManageRoom({ uid, room, onClose, setRoom, live = false, onLeft }: {
     catch (err: any) { setResult({ error: err?.message || "Couldn't let them back" }); }
   };
   const others = room.members.filter(m => m.role !== "owner");
+  // The group chat's theme (admin and controllers): a ready-made one, your own, or none; keepImage:
+  // the photo already set stays (the editor only has its link)
+  const [themeEditing, setThemeEditing] = useState<ChatTheme | null>(null);
+  const setChatTheme = async (t: ChatTheme | null, keepImage = false) => {
+    const body = t ? { chat_theme: { ...t, image: t.image?.startsWith("data:") ? t.image : undefined }, keep_image: keepImage } : { chat_theme: null };
+    try { setRoom(await collabApi<RoomInfo>(uid, `room/${room.token}/`, { method: "PATCH", body })); }
+    catch (err: any) { setResult({ error: err?.message || "Couldn't change the chat theme" }); }
+  };
   const pickedMembers = others.filter(m => picked.has(m.uid));
   const togglePick = (m: Member) => setPicked(prev => { const n = new Set(prev); if (n.has(m.uid)) n.delete(m.uid); else n.add(m.uid); return n; });
   const transfer = async (m: Member) => {
@@ -515,7 +526,8 @@ function ManageRoom({ uid, room, onClose, setRoom, live = false, onLeft }: {
                 <div className="tv-co-member-name" style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{m.name}{m.uid === uid ? " (you)" : ""}</span>
                   <RoleBadge role={collabRoleOf(m.role, m.perms, room.kind)} small />
-                  {online.has(m.uid) && <span className="tv-co-member-sub" style={{ display: "inline" }}>here now</span>}
+                  {online.has(m.uid) ? <span className="tv-co-member-sub" style={{ display: "inline" }}>here now</span>
+                    : m.uid !== uid && seenText(m.seen) && <span className="tv-co-member-sub" style={{ display: "inline" }} data-name="member-last-seen">{seenText(m.seen)}</span>}
                 </div>
                 <div className="tv-co-member-sub">{m.pending ? "Invited · hasn't opened it yet" : permsLine(m, room.kind)}</div>
               </div>
@@ -583,6 +595,42 @@ function ManageRoom({ uid, room, onClose, setRoom, live = false, onLeft }: {
               </div>
             )}
           </div>
+        )}
+
+        {room.perms?.invite && (
+          <div className="tv-co-section" data-name="collab-chat-theme">
+            <div className="tv-co-label">Chat theme</div>
+            <div className="tv-co-hint" style={{ marginTop: 0, marginBottom: 8 }}>How the group chat looks for everyone in this collab. Only the admin and controllers can change it.</div>
+            <div className="tv-co-theme-grid">
+              {PRESET_THEMES.map(p => {
+                const on = p.id === "default" ? !room.chat_theme : !!room.chat_theme && !room.chat_theme.image_v && room.chat_theme.name === p.name && room.chat_theme.background === p.background;
+                return (
+                  <button key={p.id} className={`tv-co-theme-pick${on ? " on" : ""}`} data-name="collab-theme-preset" title={p.name}
+                    onClick={() => setChatTheme(p.id === "default" ? null : p)}>
+                    <span className="tv-co-theme-swatch" style={{ ...chatAreaStyle(p), background: p.background || "var(--tv-color-pane-bg)" }}>
+                      <i style={{ background: p.bubble || "var(--tv-co-bubble)" }} /><i style={{ background: p.bubbleMine || "var(--tv-co-bubble-mine)" }} />
+                    </span>
+                    <span>{p.name}</span>
+                  </button>
+                );
+              })}
+              {(() => {
+                const custom = !!room.chat_theme && (!!room.chat_theme.image_v || !PRESET_THEMES.some(p => p.name === room.chat_theme!.name && p.background === room.chat_theme!.background));
+                const cur = roomTheme(room, uid);
+                return (
+                  <button className={`tv-co-theme-pick${custom ? " on" : ""}`} data-name="collab-theme-custom" title="Your own: colours and a background photo"
+                    onClick={() => setThemeEditing(custom ? cur : { id: "room", name: "Our desk", background: "#16213a", imageDim: 45, text: "#f2f4f8", bubble: "#24314f", bubbleMine: "#3554a0", accent: "#7aa7ff" })}>
+                    <span className="tv-co-theme-swatch" style={custom ? { ...chatAreaStyle(cur), background: cur.image ? undefined : cur.background } : { display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>{custom ? <><i style={{ background: cur.bubble }} /><i style={{ background: cur.bubbleMine }} /></> : "+"}</span>
+                    <span>{custom ? room.chat_theme!.name : "Custom…"}</span>
+                  </button>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+        {themeEditing && (
+          <ThemeEditor initial={themeEditing} isNew={false} title="Chat theme for this collab" onClose={() => setThemeEditing(null)}
+            onSave={t => setChatTheme(t, t.image && !t.image.startsWith("data:") ? true : false)} />
         )}
 
         {isOwner && (room.kicked || []).length > 0 && (

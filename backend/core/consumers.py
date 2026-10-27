@@ -17,12 +17,13 @@ import time
 from urllib.parse import unquote
 
 from channels.db import database_sync_to_async
+from django.db.models import Q
 from pycrdt import Doc, Map, Text
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.utils import timezone
 
 from .collab import clean_pine, color_of, display_name, group_name, message_json, perms_of, room_json
-from .models import CollabMember, CollabMessage, CollabRoom, UserSession
+from .models import CollabMember, CollabMessage, CollabRoom, TraderProfile, UserSession
 
 SAVE_DELAY = 1.5          # seconds after the last change before the room is written to the DB
 MAX_MESSAGE_BYTES = 512_000
@@ -215,6 +216,15 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
             text = str(msg.get('text') or '').strip()[:MAX_CHAT_CHARS]
             if not text:
                 return
+            to = msg.get('to') if isinstance(msg.get('to'), str) and msg.get('to') else None
+            if to:
+                # A private message: only to someone in this collab, and only they and the author get it
+                if to == self.uid or not await self._is_member(to):
+                    await self.send_json({"type": "error", "error": "You can message privately only people in this collab"})
+                    return
+                saved = await self._save_message(text, recipient_uid=to)
+                await self._send_to({self.uid, to}, {"type": "chat", "message": saved, "client_id": msg.get('client_id')})
+                return
             saved = await self._save_message(text)
             await self._broadcast({"type": "chat", "message": saved, "client_id": msg.get('client_id')})
         elif kind == 'voice':
@@ -242,7 +252,17 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
                 return
             if isinstance(to, str) and to in state.peers and isinstance(msg.get('data'), dict):
                 await self.channel_layer.send(to, {"type": "relay", "payload": {"type": "rtc", "from": self.channel_name, "data": msg['data']}})
+        elif kind == 'typing':
+            # "… is typing" in the group chat (unless they've turned that off)
+            if await self._shows_typing():
+                await self._broadcast({"type": "typing", "uid": self.uid, "name": self.peer['name'], "typing": bool(msg.get('typing'))}, exclude=self.channel_name)
+        elif kind == 'read':
+            # They've read the group chat up to now: "Seen by" for the others (read receipts on)
+            at = await self._mark_read()
+            if at:
+                await self._broadcast({"type": "read", "uid": self.uid, "at": at}, exclude=self.channel_name)
         elif kind == 'ping':
+            await self._touch()   # here: their last seen stays "online"
             await self.send_json({"type": "pong", "t": msg.get('t')})
 
     # ---- events from the channel layer
@@ -250,9 +270,16 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
     async def relay(self, event):
         if event.get('exclude') and event['exclude'] == self.channel_name:
             return
+        # Read receipts go both ways: with yours off, you don't get others'
+        if event.get('payload', {}).get('type') == 'read' and not await self._my_receipts():
+            return
         await self.send_json(event['payload'])
 
     async def chat_saved(self, event):
+        # A private one goes only to the two people in it
+        only = event.get('only')
+        if only and self.uid not in only:
+            return
         await self.send_json({"type": "chat", "message": event['message']})
 
     async def access_changed(self, event):
@@ -485,11 +512,50 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
 
     @database_sync_to_async
     def _recent_messages(self):
-        msgs = list(CollabMessage.objects.filter(room_id=self.room.id).select_related('author').order_by('-created_at')[:HISTORY_MESSAGES])
-        return [message_json(m) for m in reversed(msgs)]
+        """The group's recent messages, and this person's private ones"""
+        base = CollabMessage.objects.filter(room_id=self.room.id).select_related('author', 'recipient')
+        me = self.member.profile
+        group = list(base.filter(recipient__isnull=True).order_by('-created_at')[:HISTORY_MESSAGES])
+        private = list(base.filter(recipient__isnull=False).filter(Q(author=me) | Q(recipient=me)).order_by('-created_at')[:HISTORY_MESSAGES])
+        msgs = sorted(group + private, key=lambda m: (m.created_at, m.id))
+        return [message_json(m) for m in msgs]
 
     @database_sync_to_async
-    def _save_message(self, text, kind='text'):
-        msg = CollabMessage.objects.create(room_id=self.room.id, author=self.member.profile if kind == 'text' else None, kind=kind, text=text)
+    def _shows_typing(self):
+        from .chat_presence import prefs
+        return prefs(self.member.profile).show_typing
+
+    @database_sync_to_async
+    def _my_receipts(self):
+        from .chat_presence import prefs
+        return prefs(self.member.profile).read_receipts
+
+    @database_sync_to_async
+    def _mark_read(self):
+        from .chat_presence import prefs, touch
+        now = timezone.now()
+        CollabMember.objects.filter(room_id=self.room.id, profile=self.member.profile).update(chat_read_at=now)
+        touch(self.member.profile)
+        return int(now.timestamp() * 1000) if prefs(self.member.profile).read_receipts else None
+
+    @database_sync_to_async
+    def _touch(self):
+        from .chat_presence import touch
+        touch(self.member.profile)
+
+    @database_sync_to_async
+    def _is_member(self, uid):
+        return CollabMember.objects.filter(room_id=self.room.id, profile__uid=uid).exists()
+
+    async def _send_to(self, uids, payload):
+        """To every connection of these people in the room (each may have several tabs)"""
+        for channel, peer in list(self.state.peers.items()):
+            if peer.get('uid') in uids:
+                await self.channel_layer.send(channel, {"type": "relay", "payload": payload})
+
+    @database_sync_to_async
+    def _save_message(self, text, kind='text', recipient_uid=None):
+        recipient = TraderProfile.objects.filter(uid=recipient_uid).first() if recipient_uid else None
+        msg = CollabMessage.objects.create(room_id=self.room.id, author=self.member.profile if kind == 'text' else None, kind=kind, text=text, recipient=recipient)
         CollabRoom.objects.filter(id=self.room.id).update(updated_at=timezone.now())
         return message_json(msg)

@@ -25,6 +25,7 @@ import {
   VISIBILITY3, DATE_FORMATS, PRECISIONS, FONT_SIZES, type ChartSettings, type ColorLine, type ChartSettingsSnapshot,
 } from '../lib/chartSettings';
 import { chartBgImage, readImageFile, BG_IMAGE_FITS } from '../lib/chartBackgroundImage';
+import { FONTS, FONT_KEYS } from '../lib/fonts';
 import { downloadSettings, readSettingsFile, applySettingsFile, type SettingsFile } from '../lib/settingsTransfer';
 
 export interface CandleColors {
@@ -516,6 +517,11 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
       display={multiText(wmOpts.filter(o => (wm as any)[o.value]).map(o => o.label)).replace(/^Hidden$/, 'Hidden')}
       multi={{ checked: wm as any, toggle: k => set({ watermark: { ...wm, [k]: !(wm as any)[k] } }) }} />,
       <Swatch key="wmc" c={c} label="Watermark color" color={s.watermarkColor} onChange={col => set({ watermarkColor: col })} />)}
+    {section('Font')}
+    {row(173, 'Site font', <Dropdown key="sf" c={c} label="Site font" value={s.siteFont || 'default'} width={180}
+      options={FONT_KEYS.map(k => ({ value: k, label: FONTS[k].label }))} onChange={v => set({ siteFont: v })} />,
+      <span key="sfp" data-name="site-font-sample" style={{ fontFamily: FONTS[(s.siteFont || 'default') as keyof typeof FONTS]?.css || undefined, fontSize: 14, color: c.muted }}>Aa 123</span>)}
+    {desc('Changes the font of the whole site: the chart and its scales, panels, menus and dialogs (the Pine Editor\'s code keeps its own)')}
     {section('Scales')}
     {row(173, 'Text', <Swatch key="tc" c={c} label="Scales text color" color={s.text} onChange={col => set({ text: col })} />,
       <Dropdown key="fs" c={c} label="Scales font size" value={String(s.fontSize)} width={100} options={FONT_SIZES.map(String)} onChange={v => set({ fontSize: Number(v) })} />)}

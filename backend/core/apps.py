@@ -6,5 +6,5 @@ class CoreConfig(AppConfig):
 
     def ready(self):
         # Signal handlers that must run however the app is started (server, shell, admin):
-        # a collab chat message's shared file is removed with it
-        from . import collab_files  # noqa: F401
+        # a collab or group chat message's shared file is removed with it
+        from . import chat_groups, collab_files  # noqa: F401

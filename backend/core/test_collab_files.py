@@ -93,3 +93,66 @@ class CollabFileTests(TestCase):
         self.assertTrue(storage().exists(msg.attachment["path"]))
         msg.delete()
         self.assertFalse(storage().exists(msg.attachment["path"]))
+
+    def test_a_private_file_only_for_its_two_people(self):
+        CollabMember.objects.create(room=self.room, profile=TraderProfile.objects.get(uid="eve"), role="viewer")
+        f = SimpleUploadedFile("secret.pdf", b"%PDF-1.4 x", content_type="application/pdf")
+        r = self.c.post("/api/users/collab/own/room/tok/upload/?session_key=sk-own", {"file": f, "to": "bob"}, format="multipart")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()["to"], "bob")
+        mid = r.json()["id"]
+        self.assertEqual(self.fetch("bob", mid).status_code, 200)
+        self.assertEqual(self.fetch("own", mid).status_code, 200)
+        self.assertEqual(self.fetch("eve", mid).status_code, 404)   # in the collab, but not in this conversation
+        f2 = SimpleUploadedFile("x.pdf", b"%PDF-1.4 x", content_type="application/pdf")
+        self.assertEqual(self.c.post("/api/users/collab/own/room/tok/upload/?session_key=sk-own", {"file": f2, "to": "nobody"}, format="multipart").status_code, 400)
+
+
+class PrivateChatTests(CollabFileTests):
+    """The Chats panel: conversations, people you can message, a thread, reading it"""
+
+    def test_conversations_people_and_threads(self):
+        CollabMember.objects.create(room=self.room, profile=TraderProfile.objects.get(uid="eve"), role="viewer")
+        url = lambda uid, rest="": f"/api/users/collab/{uid}/dms/{rest}?session_key=sk-{uid}"
+        people = self.c.get(url("own", "people/")).json()["people"]
+        self.assertEqual([p["uid"] for p in people], ["bob", "eve"])
+        self.assertEqual(people[0]["collabs"][0]["token"], "tok")
+        self.assertEqual(self.c.post(url("own", "tok/bob/"), {"text": "hi bob"}, format="json").status_code, 201)
+        self.c.post(url("own", "tok/bob/"), {"text": "you there?"}, format="json")
+        bob = self.c.get(url("bob")).json()
+        self.assertEqual(bob["unread"], 2)
+        self.assertEqual(bob["conversations"][0]["partner"]["uid"], "own")
+        self.assertEqual(bob["conversations"][0]["last"]["text"], "you there?")
+        # Eve has no conversation and can't read theirs
+        self.assertEqual(self.c.get(url("eve")).json()["conversations"], [])
+        self.assertEqual([m["text"] for m in self.c.get(url("eve", "tok/bob/")).json()["messages"]], [])
+        # Reading marks it read
+        thread = self.c.get(url("bob", "tok/own/")).json()
+        self.assertEqual([m["text"] for m in thread["messages"]], ["hi bob", "you there?"])
+        self.assertEqual(self.c.get(url("bob")).json()["unread"], 0)
+        # Not with yourself, nor with someone outside the collab, nor in a collab you're not in
+        self.assertEqual(self.c.post(url("own", "tok/own/"), {"text": "x"}, format="json").status_code, 404)
+        self.assertEqual(self.c.post(url("own", "tok/nobody/"), {"text": "x"}, format="json").status_code, 404)
+        TraderProfile.objects.create(uid="zed", name="Zed", email="z@example.com")
+        UserSession.objects.create(user=TraderProfile.objects.get(uid="zed"), session_key="sk-zed")
+        self.assertEqual(self.c.get(url("zed", "tok/own/")).status_code, 403)
+        # Private messages stay out of the group's history
+        self.assertTrue(all(m.recipient_id for m in CollabMessage.objects.filter(text__in=["hi bob", "you there?"])))
+
+
+class VoiceMessageTests(CollabFileTests):
+    """Voice messages: audio accepted (and checked), its length kept, played in the page"""
+
+    def test_voice_message(self):
+        webm = b"\x1aE\xdf\xa3" + b"\x00" * 60
+        f = SimpleUploadedFile("voice-message-1.webm", webm, content_type="audio/webm")
+        r = self.c.post("/api/users/collab/own/room/tok/upload/?session_key=sk-own", {"file": f, "duration": "7.4"}, format="multipart")
+        self.assertEqual(r.status_code, 201, r.content)
+        a = r.json()["attachment"]
+        self.assertEqual((a["audio"], a["duration"], a["type"]), (True, 7.4, "audio/webm"))
+        got = self.fetch("bob", r.json()["id"])
+        self.assertEqual(got["Content-Type"], "audio/webm")
+        self.assertNotIn("attachment", got.get("Content-Disposition", ""))   # plays in the page
+        # Something that isn't audio, named as audio
+        f2 = SimpleUploadedFile("fake.webm", b"<html>no</html>", content_type="audio/webm")
+        self.assertEqual(self.c.post("/api/users/collab/own/room/tok/upload/?session_key=sk-own", {"file": f2}, format="multipart").status_code, 400)

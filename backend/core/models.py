@@ -199,6 +199,9 @@ class CollabRoom(models.Model):
     allow_requests = models.BooleanField(default=True)
     # Off: nobody but the owner can use their mic (each member's can_voice applies when on)
     allow_voice = models.BooleanField(default=True)
+    # The group chat's look, set by the admin or a controller (core/collab.py clean_chat_theme):
+    # colours, and a background photo (a data URL, served on its own)
+    chat_theme = models.JSONField(null=True, blank=True)
     # Kicked out: can't come back through the link or ask to, until added again
     kicked = models.ManyToManyField(TraderProfile, blank=True, related_name='+')
     active = models.BooleanField(default=True)
@@ -225,6 +228,8 @@ class CollabMember(models.Model):
     invited_by = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
     invited_at = models.DateTimeField(auto_now_add=True)
     last_seen = models.DateTimeField(null=True, blank=True)
+    # How far they've read the collab's group chat (for "Seen by")
+    chat_read_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         unique_together = ('room', 'profile')
@@ -259,6 +264,9 @@ class CollabMessage(models.Model):
     text = models.TextField(blank=True)
     # A shared file: {path (in the private collab-files folder), name, size, type, image, width, height}
     attachment = models.JSONField(null=True, blank=True)
+    # A private message to one person in the collab (only they and the author see it); empty: the group
+    recipient = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, null=True, blank=True, related_name='+')
+    read_at = models.DateTimeField(null=True, blank=True)   # when the recipient of a private one read it
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -266,3 +274,59 @@ class CollabMessage(models.Model):
 
     def __str__(self):
         return f"{self.room.name}: {self.text[:40]}"
+
+
+class ChatGroup(models.Model):
+    """A group chat made in the Chats panel: people from your collabs (or groups) talking together,
+    apart from any collab. Its admins name it, choose who's in it and set its theme."""
+    token = models.CharField(max_length=32, unique=True)
+    name = models.CharField(max_length=80)
+    created_by = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, related_name='+')
+    # Its look (same shape as a collab's chat_theme: colours, font, a background photo)
+    theme = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+
+class ChatGroupMember(models.Model):
+    ROLES = [('admin', 'Admin'), ('member', 'Member')]
+    group = models.ForeignKey(ChatGroup, on_delete=models.CASCADE, related_name='members')
+    profile = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='chat_groups')
+    role = models.CharField(max_length=10, choices=ROLES, default='member')
+    joined_at = models.DateTimeField(auto_now_add=True)
+    last_read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('group', 'profile')
+        ordering = ['joined_at']
+
+
+class ChatGroupMessage(models.Model):
+    """A message in a group chat: text, a shared picture / document (attachment, as in collab
+    chats), or a notice such as "Asha added Ravi"."""
+    group = models.ForeignKey(ChatGroup, on_delete=models.CASCADE, related_name='messages')
+    author = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    kind = models.CharField(max_length=10, choices=[('text', 'Text'), ('system', 'System'), ('file', 'File')], default='text')
+    text = models.TextField(blank=True)
+    attachment = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+
+class ChatPresence(models.Model):
+    """Someone's presence in chats: when they were last on the site, what they're typing in (a
+    conversation's key, for a few seconds), and their privacy choices: whether others see their
+    read receipts, that they're typing, and their last seen / online. Read receipts and last seen
+    work both ways: turned off, you don't see other people's either."""
+    profile = models.OneToOneField(TraderProfile, on_delete=models.CASCADE, related_name='presence')
+    last_seen = models.DateTimeField(null=True, blank=True)
+    typing_key = models.CharField(max_length=120, blank=True, default='')
+    typing_at = models.DateTimeField(null=True, blank=True)
+    read_receipts = models.BooleanField(default=True)
+    show_typing = models.BooleanField(default=True)
+    show_last_seen = models.BooleanField(default=True)

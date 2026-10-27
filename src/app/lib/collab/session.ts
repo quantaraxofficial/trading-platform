@@ -18,7 +18,11 @@ export type LinkAccess = "restricted" | "view" | "edit";
 // What someone may do besides watching and chatting (the owner sets these; the owner can do all)
 export interface Perms { edit: boolean; replay: boolean; invite: boolean; voice: boolean; alert: boolean; pine: boolean }
 // mic: whether the owner lets this person use their mic (perms.voice also needs everyone's mic on)
-export interface Member { uid: string; name: string; email: string; role: Role; color: string; pending: boolean; perms: Perms; mic: boolean }
+export interface Member {
+  uid: string; name: string; email: string; role: Role; color: string; pending: boolean; perms: Perms; mic: boolean;
+  // Their last seen (as their and your privacy allow) and how far they've read the group chat
+  seen?: { online: boolean | null; last_seen: number | null; hidden?: boolean }; chat_read_at?: number | null;
+}
 export interface Person { uid: string; name: string; email: string; color: string }
 // Someone without access who asked to be let in
 export interface JoinRequest extends Person { status: "pending" | "declined"; time: number }
@@ -29,6 +33,8 @@ export interface RoomInfo {
   symbol: string; interval: string; created_at: string; role: Role | null; perms: Perms | null; members: Member[];
   // The owner's settings: people without access may ask to join; everyone's mic on or off
   allow_requests: boolean; allow_voice: boolean;
+  // The group chat's look, set by the admin or a controller (its photo has its own link)
+  chat_theme?: { name: string; background: string; text: string; bubble: string; bubbleMine: string; accent: string; imageDim: number; image_v: string | null; font?: string; fontSize?: number } | null;
   // Waiting requests (for those who can let people in), people kicked out (for the owner)
   requests: JoinRequest[]; kicked: Person[];
 }
@@ -50,23 +56,61 @@ export interface Peer { id: string; uid: string; name: string; color: string; ro
 // The replay everyone follows: who drives it (a connection; null once they've left) and where it is
 export interface SharedReplay { driver: string | null; driver_uid: string; driver_name: string; time: number; playing: boolean; speed: number }
 // An image or document shared in the chat
-export interface ChatAttachment { name: string; size: number; type: string; image: boolean; width: number | null; height: number | null }
+// (a voice message: audio, with its length in seconds)
+export interface ChatAttachment { name: string; size: number; type: string; image: boolean; width: number | null; height: number | null; audio?: boolean; duration?: number | null }
 export interface ChatMessage {
   id: number | string; kind: "text" | "system" | "file"; text: string; time: number; author: string | null; author_name: string | null; pending?: boolean;
   attachment?: ChatAttachment;
   // A file still on its way up from here: how far (0..1), the picture to show meanwhile, or why it failed
   upload?: { progress: number; preview?: string; error?: string; file: File };
+  // A private message: to whom (empty: the group's chat)
+  to?: string | null;
+  // Yours, in a private chat: read by them (null: read receipts are off); in a group: who read it
+  read?: boolean | null;
+  read_by?: string[];
 }
 
 // What can be shared in the chat (the backend checks again): pictures, and documents
 export const CHAT_FILE_MAX_BYTES = 20 * 1024 * 1024;
 const CHAT_IMAGE_EXT = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
 const CHAT_DOC_EXT = [".pdf", ".txt", ".csv", ".json", ".md", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".rtf", ".zip", ".pine", ".py", ".mq5", ".mqh", ".mq4"];
-export const CHAT_FILE_ACCEPT = [...CHAT_IMAGE_EXT, ...CHAT_DOC_EXT].join(",");
+const CHAT_AUDIO_EXT = [".webm", ".ogg", ".m4a", ".mp3", ".wav"];
+export const CHAT_FILE_ACCEPT = [...CHAT_IMAGE_EXT, ...CHAT_DOC_EXT, ...CHAT_AUDIO_EXT].join(",");
+export const isChatAudio = (name: string) => CHAT_AUDIO_EXT.includes(extOf(name));
 const extOf = (name: string) => { const i = name.lastIndexOf("."); return i < 0 ? "" : name.slice(i).toLowerCase(); };
+// Where a shared file is fetched from (people in that collab, or that private conversation, only)
+export function chatFileUrl(uid: string, token: string, messageId: number | string, download = false, group = false): string {
+  return `${BACKEND}/api/users/collab/${encodeURIComponent(uid)}/${group ? "groups" : "room"}/${encodeURIComponent(token)}/file/${messageId}/?session_key=${encodeURIComponent(sessionKey())}${download ? "&download=1" : ""}`;
+}
+
+// Uploads a picture or document to a collab's chat (to: privately, to one person in it), or to a
+// group chat (group: its token, in place of the collab's)
+export function uploadChatFile(opts: { uid: string; token: string; file: File; caption?: string; to?: string | null; group?: boolean; duration?: number; onProgress?: (p: number) => void }): Promise<ChatMessage> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("file", opts.file, opts.file.name);
+    if (opts.caption?.trim()) form.append("text", opts.caption.trim());
+    if (opts.to) form.append("to", opts.to);
+    if (opts.duration) form.append("duration", String(opts.duration));
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${BACKEND}/api/users/collab/${encodeURIComponent(opts.uid)}/${opts.group ? "groups" : "room"}/${encodeURIComponent(opts.token)}/upload/?session_key=${encodeURIComponent(sessionKey())}`);
+    xhr.upload.onprogress = e => { if (e.lengthComputable) opts.onProgress?.(e.loaded / e.total); };
+    xhr.onload = () => {
+      let data: any = null;
+      try { data = JSON.parse(xhr.responseText); } catch { /* not JSON */ }
+      if (xhr.status >= 200 && xhr.status < 300 && data?.id) resolve(data);
+      else reject(new Error(data?.error || `Couldn't share ${opts.file.name}`));
+    };
+    xhr.onerror = () => reject(new Error(`Couldn't share ${opts.file.name}: no connection`));
+    xhr.send(form);
+  });
+}
+
+export function isChatImage(name: string) { return CHAT_IMAGE_EXT.includes(extOf(name)); }
+
 export function chatFileProblem(file: File): string | null {
   const ext = extOf(file.name);
-  if (!CHAT_IMAGE_EXT.includes(ext) && !CHAT_DOC_EXT.includes(ext)) return `${file.name}: that kind of file can't be shared here`;
+  if (!CHAT_IMAGE_EXT.includes(ext) && !CHAT_DOC_EXT.includes(ext) && !CHAT_AUDIO_EXT.includes(ext)) return `${file.name}: that kind of file can't be shared here`;
   if (file.size > CHAT_FILE_MAX_BYTES) return `${file.name} is over ${CHAT_FILE_MAX_BYTES / (1024 * 1024)} MB`;
   return null;
 }
@@ -106,12 +150,14 @@ export interface CollabState {
   // This person stepped out of the shared replay to replay on their own
   replayDetached: boolean;
   alerts: SharedAlert[];
+  // Who's typing in the group chat (their uid -> name and when they last said so)
+  typing: Record<string, { name: string; at: number }>;
 }
 
 const INITIAL: CollabState = {
   status: "idle", error: null, token: null, kind: null, room: null, you: null, uid: null, peers: [], messages: [], unread: 0,
   chatOpen: false, cursors: {}, trades: {}, voice: { joined: false, joining: false, muted: false, listenOnly: false, error: null, speaking: {} },
-  replay: null, replayDetached: false, alerts: [],
+  replay: null, replayDetached: false, alerts: [], typing: {},
 };
 
 // The live-edited Pine code: the room's document, others' edits and cursors (see pineDoc.ts)
@@ -306,6 +352,16 @@ class CollabSession {
         }
         break;
       }
+      case "typing": {
+        const typing = { ...this.state.typing };
+        if (msg.typing) typing[msg.uid] = { name: msg.name, at: Date.now() }; else delete typing[msg.uid];
+        this.set({ typing });
+        break;
+      }
+      case "read":
+        // Someone read the group chat up to `at` ("Seen by")
+        if (this.state.room) this.set({ room: { ...this.state.room, members: this.state.room.members.map(m => (m.uid === msg.uid ? { ...m, chat_read_at: msg.at } : m)) } });
+        break;
       case "join.request":
         if (this.state.room) this.notice({ kind: "request", request: msg.request, room: this.state.room.name, token: this.state.room.token });
         break;
@@ -346,7 +402,9 @@ class CollabSession {
         const messages = msg.client_id
           ? [...this.state.messages.filter(x => x.id !== msg.client_id), m]
           : [...this.state.messages.filter(x => x.id !== m.id && !sameUpload(x)), m];
-        this.set({ messages, unread: this.state.chatOpen || mine || m.kind === "system" ? this.state.unread : this.state.unread + 1 });
+        // Private ones belong to the Chats panel (not the group's unread count)
+        if (m.to) window.dispatchEvent(new CustomEvent("tv:collab-dm", { detail: { message: m, token: this.state.token } }));
+        this.set({ messages, unread: this.state.chatOpen || mine || m.kind === "system" || m.to ? this.state.unread : this.state.unread + 1 });
         break;
       }
       case "cursor":
@@ -460,18 +518,19 @@ class CollabSession {
   }
   // Shares a picture or document (with an optional caption): shown at once with its progress,
   // replaced by the real message when it's arrived
-  sendFile(file: File, caption = "", retryId?: string) {
+  sendFile(file: File, caption = "", retryId?: string, duration?: number) {
     const { uid, token } = this.state;
     if (!uid || !token) return;
     const id = retryId || `u${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
     const ext = extOf(file.name);
     const image = CHAT_IMAGE_EXT.includes(ext);
     const old = this.state.messages.find(x => x.id === id);
-    const preview = old?.upload?.preview || (image ? URL.createObjectURL(file) : undefined);
+    const audio = CHAT_AUDIO_EXT.includes(ext);
+    const preview = old?.upload?.preview || (image || audio ? URL.createObjectURL(file) : undefined);
     const me = this.state.room?.members.find(m => m.uid === uid);
     const pending: ChatMessage = {
       id, kind: "file", text: caption.trim(), time: Date.now(), author: uid, author_name: me?.name || "You", pending: true,
-      attachment: { name: file.name, size: file.size, type: file.type, image, width: null, height: null },
+      attachment: { name: file.name, size: file.size, type: file.type, image, width: null, height: null, audio, duration: duration ?? null },
       upload: { progress: 0, preview, file },
     };
     const problem = chatFileProblem(file);
@@ -480,30 +539,16 @@ class CollabSession {
     if (problem) return;
     const patch = (u: Partial<NonNullable<ChatMessage["upload"]>>) =>
       this.set({ messages: this.state.messages.map(x => (x.id === id && x.upload ? { ...x, upload: { ...x.upload, ...u } } : x)) });
-    const form = new FormData();
-    form.append("file", file, file.name);
-    if (caption.trim()) form.append("text", caption.trim());
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${BACKEND}/api/users/collab/${encodeURIComponent(uid)}/room/${encodeURIComponent(token)}/upload/?session_key=${encodeURIComponent(sessionKey())}`);
-    xhr.upload.onprogress = e => { if (e.lengthComputable) patch({ progress: e.loaded / e.total }); };
-    xhr.onload = () => {
-      let data: any = null;
-      try { data = JSON.parse(xhr.responseText); } catch { /* not JSON */ }
-      if (xhr.status >= 200 && xhr.status < 300 && data?.id) {
-        if (preview) URL.revokeObjectURL(preview);
-        const has = this.state.messages.some(x => x.id === data.id);
-        this.set({ messages: has ? this.state.messages.filter(x => x.id !== id) : this.state.messages.map(x => (x.id === id ? data : x)) });
-      } else {
-        patch({ error: data?.error || `Couldn't share ${file.name}` });
-      }
-    };
-    xhr.onerror = () => patch({ error: `Couldn't share ${file.name}: no connection` });
-    xhr.send(form);
+    uploadChatFile({ uid, token, file, caption, duration, onProgress: progress => patch({ progress }) }).then(data => {
+      if (preview) URL.revokeObjectURL(preview);
+      const has = this.state.messages.some(x => x.id === data.id);
+      this.set({ messages: has ? this.state.messages.filter(x => x.id !== id) : this.state.messages.map(x => (x.id === id ? data : x)) });
+    }, (err: Error) => patch({ error: err.message }));
   }
   // A file that failed: try again, or take it away
   retryFile(id: string) {
     const m = this.state.messages.find(x => x.id === id);
-    if (m?.upload) this.sendFile(m.upload.file, m.text, id);
+    if (m?.upload) this.sendFile(m.upload.file, m.text, id, m.attachment?.duration ?? undefined);
   }
   dropFile(id: string) {
     const m = this.state.messages.find(x => x.id === id);
@@ -513,10 +558,26 @@ class CollabSession {
   // Where a shared file is fetched from (people in the collab only)
   fileUrl(messageId: number | string, download = false): string {
     const { uid, token } = this.state;
-    if (!uid || !token) return "";
-    return `${BACKEND}/api/users/collab/${encodeURIComponent(uid)}/room/${encodeURIComponent(token)}/file/${messageId}/?session_key=${encodeURIComponent(sessionKey())}${download ? "&download=1" : ""}`;
+    return uid && token ? chatFileUrl(uid, token, messageId, download) : "";
   }
   setChatOpen(open: boolean) { this.set({ chatOpen: open, unread: open ? 0 : this.state.unread }); }
+  // Typing in the group chat (at most every 3 s, and once to stop)
+  private typingSentAt = 0;
+  sendTyping(typing: boolean) {
+    const now = Date.now();
+    if (typing && now - this.typingSentAt < 3000) return;
+    if (!typing && !this.typingSentAt) return;
+    this.typingSentAt = typing ? now : 0;
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: "typing", typing }));
+  }
+  // The group chat has been read up to now (sent when it's on screen and something new came)
+  private readSentAt = 0;
+  sendRead() {
+    const now = Date.now();
+    if (now - this.readSentAt < 2000 || typeof document === "undefined" || document.visibilityState !== "visible") return;
+    this.readSentAt = now;
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: "read" }));
+  }
   setRoom(room: RoomInfo) { this.set({ room }); }
 
   // ---- voice (a full mesh: each person in the call connects to each other one)

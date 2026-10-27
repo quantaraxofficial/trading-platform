@@ -283,3 +283,28 @@ class CollabAccessTests(TestCase):
         self.assertFalse(CollabRoom.objects.filter(token=self.token).exists())
         self.assertFalse(CollabMessage.objects.filter(text="hi").exists())
         self.assertEqual(self.call("own", "rooms/").json()["rooms"], [])
+
+    def test_chat_theme_by_admin_and_controllers_only(self):
+        import base64
+        from .models import CollabMember
+        bob, eve = TraderProfile.objects.get(uid="bob"), TraderProfile.objects.get(uid="eve")
+        CollabMember.objects.create(room=self.room, profile=bob, role="editor", can_invite=True)    # a controller
+        CollabMember.objects.create(room=self.room, profile=eve, role="editor", can_invite=False)   # an editor
+        png = "data:image/png;base64," + base64.b64encode(b"\x89PNG fake").decode()
+        theme = {"name": "Night desk", "background": "#101820", "text": "#eeeeee", "bubble": "red", "accent": "#7aa7ff", "imageDim": 40, "image": png,
+                 "font": "classic", "fontSize": 99}
+        self.assertEqual(self.call("eve", self.room_path(), "patch", {"chat_theme": theme}).status_code, 403)
+        r = self.call("bob", self.room_path(), "patch", {"chat_theme": theme})
+        self.assertEqual(r.status_code, 200)
+        t = r.json()["chat_theme"]
+        self.assertEqual((t["name"], t["background"], t["bubble"], t["imageDim"]), ("Night desk", "#101820", "", 40))   # bad colour dropped
+        self.assertEqual((t["font"], t["fontSize"]), ("classic", 22))   # size kept within limits
+        self.assertNotIn("image", t)
+        self.assertTrue(t["image_v"])
+        # Everyone in the collab gets the photo from its own link
+        got = self.c.get(f"/api/users/collab/eve/room/{self.token}/theme-image/?session_key=sk-eve")
+        self.assertEqual((got.status_code, got["Content-Type"], got.content), (200, "image/png", b"\x89PNG fake"))
+        # The admin changes colours, keeping the photo; then resets it
+        r = self.call("own", self.room_path(), "patch", {"chat_theme": {**theme, "image": None, "name": "Lighter"}, "keep_image": True})
+        self.assertEqual(r.json()["chat_theme"]["image_v"], t["image_v"])
+        self.assertIsNone(self.call("own", self.room_path(), "patch", {"chat_theme": None}).json()["chat_theme"])
