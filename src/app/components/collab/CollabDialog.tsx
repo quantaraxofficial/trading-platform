@@ -12,6 +12,8 @@ import { useEscapeClose } from "../../lib/useEscapeClose";
 import { collab, collabApi, collabLink, useCollab, type JoinRequest, type LinkAccess, type Member, type Person, type RoomInfo, type RoomKind } from "../../lib/collab/session";
 import { AddPersonIcon, CloseIcon, CollabIcon, CopyIcon, GlobeIcon, LinkIcon, LockIcon, MicIcon } from "./icons";
 import { openCollab } from "./CollabController";
+import { RoleBadge } from "./CollabList";
+import { collabRoleOf } from "../../lib/collab/roles";
 import TvMenu, { type TvMenuItem } from "../ui/TvMenu";
 import { cleanDrawings } from "../../lib/drawingData";
 import { displaySymbol } from "@/app/lib/symbolDisplay";
@@ -92,10 +94,55 @@ export default function CollabDialog({ symbol, interval, indicators, onClose, mo
             <div className="tv-co-footer"><span className="tv-co-spacer" /><button className="tv-co-btn primary" onClick={onClose}>Ok</button></div>
           </>
         ) : inRoom ? (
-          <ManageRoom uid={user.uid} room={state.room!} onClose={onClose} />
+          <ManageRoom uid={user.uid} room={state.room!} onClose={onClose} setRoom={r => collab.setRoom(r)} live />
         ) : (
           <StartRoom uid={user.uid} symbol={symbol} interval={interval} indicators={indicators} onClose={onClose} mode={mode} pine={pine} />
         )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// A collab's settings from the list of your collabs (its gear), open in this tab or not: who's in
+// it and what each may do, mics, requests, kicked people, link access, name; end it or leave it.
+export function CollabSettingsDialog({ token, onClose, onChanged }: { token: string; onClose: () => void; onChanged?: () => void }) {
+  const { user } = useAuth();
+  const state = useCollab();
+  const live = state.token === token && !!state.room && state.status !== "idle" && state.status !== "ended" && state.status !== "error";
+  const [room, setRoomState] = useState<RoomInfo | null>(live ? state.room : null);
+  const [error, setError] = useState<string | null>(null);
+  useEscapeClose(onClose);
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    collabApi<RoomInfo>(user.uid, `room/${encodeURIComponent(token)}/?peek=1`)
+      .then(r => { if (alive) setRoomState(r); })
+      .catch(e => { if (alive) setError(e?.message || "Couldn't load this collab"); });
+    return () => { alive = false; };
+  }, [user, token]);
+  // The open collab's changes from others arrive through its connection
+  useEffect(() => { if (live && state.room) setRoomState(state.room); }, [live, state.room]);
+  const setRoom = (r: RoomInfo) => {
+    setRoomState(r);
+    if (live) collab.setRoom(r);
+    onChanged?.();
+  };
+  const close = () => { onChanged?.(); onClose(); };
+  return createPortal(
+    <div className="tv-co-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}>
+      <div className="tv-co-dialog" role="dialog" aria-modal="true" aria-labelledby="tv-co-settings-title" data-name="collab-settings-dialog">
+        <div className="tv-co-header">
+          <div className="tv-co-title" id="tv-co-settings-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{room ? room.name : "Collab settings"}</span>
+            {room && <RoleBadge role={collabRoleOf(room.role, room.perms, room.kind)} />}
+          </div>
+          <button className="tv-co-iconbtn" aria-label="Close" onClick={close}><CloseIcon /></button>
+        </div>
+        {!user ? <div className="tv-co-content">Sign in to manage your collabs.</div>
+          : error ? <div className="tv-co-content"><div className="tv-co-error">{error}</div></div>
+          : !room ? <div className="tv-co-content"><div className="tv-co-hint">Loading…</div></div>
+          : <ManageRoom uid={user.uid} room={room} onClose={close} setRoom={setRoom} live={live} onLeft={onChanged} />}
       </div>
     </div>,
     document.body,
@@ -200,8 +247,12 @@ function StartRoom({ uid, symbol, interval, indicators, onClose, mode, pine }: {
   );
 }
 
-function ManageRoom({ uid, room, onClose }: { uid: string; room: RoomInfo; onClose: () => void }) {
-  const { peers } = useCollab();
+// live: the collab open in this tab (who's here now is known, and its changes reach the session)
+function ManageRoom({ uid, room, onClose, setRoom, live = false, onLeft }: {
+  uid: string; room: RoomInfo; onClose: () => void; setRoom: (r: RoomInfo) => void; live?: boolean; onLeft?: () => void;
+}) {
+  const { peers: livePeers } = useCollab();
+  const peers = live ? livePeers : [];
   const isOwner = room.role === "owner";
   const canInvite = !!room.perms?.invite;
   const [menuFor, setMenuFor] = useState<{ uid: string; x: number; y: number } | null>(null);
@@ -251,7 +302,7 @@ function ManageRoom({ uid, room, onClose }: { uid: string; room: RoomInfo; onClo
     setResult(null);
     try {
       const res = await collabApi<{ added: Member[]; errors: { query: string; error: string }[]; room: RoomInfo }>(uid, `room/${room.token}/invite/`, { method: "POST", body: { people, role: inviteRole } });
-      collab.setRoom(res.room);
+      setRoom(res.room);
       const failed = new Set(res.errors.map(e => e.query));
       setChips(people.filter(p => failed.has(p)));
       setQuery("");
@@ -264,16 +315,16 @@ function ManageRoom({ uid, room, onClose }: { uid: string; room: RoomInfo; onClo
   };
 
   const patchRoom = async (body: any) => {
-    try { collab.setRoom(await collabApi<RoomInfo>(uid, `room/${room.token}/`, { method: "PATCH", body })); }
+    try { setRoom(await collabApi<RoomInfo>(uid, `room/${room.token}/`, { method: "PATCH", body })); }
     catch (err: any) { setResult({ error: err?.message || "Couldn't change it" }); }
   };
   const memberUrl = (m: Member) => `room/${room.token}/member/${encodeURIComponent(m.uid)}/`;
   const updateMember = async (m: Member, body: Record<string, any>) => {
-    try { collab.setRoom(await collabApi<RoomInfo>(uid, memberUrl(m), { method: "PATCH", body })); }
+    try { setRoom(await collabApi<RoomInfo>(uid, memberUrl(m), { method: "PATCH", body })); }
     catch (err: any) { setResult({ error: err?.message || "Couldn't change their permissions" }); }
   };
   const removeMember = async (m: Member, kick = false) => {
-    try { collab.setRoom(await collabApi<RoomInfo>(uid, memberUrl(m) + (kick ? "?kick=1" : ""), { method: "DELETE" })); }
+    try { setRoom(await collabApi<RoomInfo>(uid, memberUrl(m) + (kick ? "?kick=1" : ""), { method: "DELETE" })); }
     catch (err: any) { setResult({ error: err?.message || "Couldn't remove them" }); }
   };
   const kick = async (list: Member[]) => {
@@ -284,17 +335,17 @@ function ManageRoom({ uid, room, onClose }: { uid: string; room: RoomInfo; onClo
   };
   // Several people at once ("all" or the ones picked)
   const updateMany = async (uids: string[] | "all", body: Record<string, any>) => {
-    try { collab.setRoom(await collabApi<RoomInfo>(uid, `room/${room.token}/members/`, { method: "PATCH", body: { uids, ...body } })); }
+    try { setRoom(await collabApi<RoomInfo>(uid, `room/${room.token}/members/`, { method: "PATCH", body: { uids, ...body } })); }
     catch (err: any) { setResult({ error: err?.message || "Couldn't change their permissions" }); }
   };
   const answerRequest = async (r: JoinRequest, action: "approve" | "decline" | "block") => {
     try {
       const body = action === "approve" ? { action, role: isOwner ? inviteRole : "viewer" } : { action };
-      collab.setRoom(await collabApi<RoomInfo>(uid, `room/${room.token}/requests/${encodeURIComponent(r.uid)}/`, { method: "POST", body }));
+      setRoom(await collabApi<RoomInfo>(uid, `room/${room.token}/requests/${encodeURIComponent(r.uid)}/`, { method: "POST", body }));
     } catch (err: any) { setResult({ error: err?.message || "Couldn't answer the request" }); }
   };
   const unkick = async (p: Person) => {
-    try { collab.setRoom(await collabApi<RoomInfo>(uid, `room/${room.token}/kicked/${encodeURIComponent(p.uid)}/`, { method: "DELETE" })); }
+    try { setRoom(await collabApi<RoomInfo>(uid, `room/${room.token}/kicked/${encodeURIComponent(p.uid)}/`, { method: "DELETE" })); }
     catch (err: any) { setResult({ error: err?.message || "Couldn't let them back" }); }
   };
   const others = room.members.filter(m => m.role !== "owner");
@@ -302,7 +353,7 @@ function ManageRoom({ uid, room, onClose }: { uid: string; room: RoomInfo; onClo
   const togglePick = (m: Member) => setPicked(prev => { const n = new Set(prev); if (n.has(m.uid)) n.delete(m.uid); else n.add(m.uid); return n; });
   const transfer = async (m: Member) => {
     try {
-      collab.setRoom(await collabApi<RoomInfo>(uid, `room/${room.token}/transfer/`, { method: "POST", body: { uid: m.uid } }));
+      setRoom(await collabApi<RoomInfo>(uid, `room/${room.token}/transfer/`, { method: "POST", body: { uid: m.uid } }));
       setTransferTo(null);
       setResult({ ok: `${m.name} is now the owner.` });
     } catch (err: any) { setResult({ error: err?.message || "Couldn't hand the collab over" }); }
@@ -462,7 +513,11 @@ function ManageRoom({ uid, room, onClose }: { uid: string; room: RoomInfo; onClo
               )}
               <Avatar name={m.name} color={m.color} online={online.has(m.uid)} />
               <div className="tv-co-member-info">
-                <div className="tv-co-member-name">{m.name}{m.uid === uid ? " (you)" : ""}{online.has(m.uid) && <span className="tv-co-member-sub" style={{ display: "inline" }}> · here now</span>}</div>
+                <div className="tv-co-member-name" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{m.name}{m.uid === uid ? " (you)" : ""}</span>
+                  <RoleBadge role={collabRoleOf(m.role, m.perms, room.kind)} small />
+                  {online.has(m.uid) && <span className="tv-co-member-sub" style={{ display: "inline" }}>here now</span>}
+                </div>
                 <div className="tv-co-member-sub">{m.pending ? "Invited · hasn't opened it yet" : permsLine(m, room.kind)}</div>
               </div>
               {isOwner && m.role !== "owner" && (
@@ -515,6 +570,11 @@ function ManageRoom({ uid, room, onClose }: { uid: string; room: RoomInfo; onClo
         {isOwner && (
           <div className="tv-co-section" data-name="collab-settings">
             <div className="tv-co-label">Settings</div>
+            <div className="tv-co-field plain" style={{ marginBottom: 6 }}>
+              <input aria-label="Collab name" defaultValue={room.name} key={room.name} maxLength={120} data-name="collab-rename"
+                onKeyDown={e => { e.stopPropagation(); if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                onBlur={e => { const v = e.target.value.trim(); if (v && v !== room.name) patchRoom({ name: v }); else e.target.value = room.name; }} />
+            </div>
             <Switch label="Everyone can use their mic" hint={room.allow_voice ? "Turn off to mute everyone but you at once; the mic button by each name turns one person's off" : "Only you can talk; the others can listen"} checked={room.allow_voice} onChange={v => patchRoom({ allow_voice: v })} testId="allow-voice" />
             <Switch label="Let people without access ask to join" hint="Someone who opens the link without access can send you a request" checked={room.allow_requests} onChange={v => patchRoom({ allow_requests: v })} testId="allow-requests" />
             {others.length > 0 && (
@@ -555,6 +615,16 @@ function ManageRoom({ uid, room, onClose }: { uid: string; room: RoomInfo; onClo
       <div className="tv-co-footer">
         <button className="tv-co-btn secondary" onClick={copy}>{copied ? <><CopyIcon />Copied</> : <><LinkIcon />Copy link</>}</button>
         {isOwner && <button className="tv-co-btn danger" onClick={endCollab}>End collab</button>}
+        {!isOwner && room.role && (
+          <button className="tv-co-btn danger" data-name="collab-leave" onClick={async () => {
+            try {
+              await collabApi(uid, `room/${room.token}/member/${encodeURIComponent(uid)}/`, { method: "DELETE" });
+              if (live) collab.leave();
+              onLeft?.();
+              onClose();
+            } catch (err: any) { setResult({ error: err?.message || "Couldn't leave" }); }
+          }}>Leave collab</button>
+        )}
         <span className="tv-co-spacer" />
         <button className="tv-co-btn primary" onClick={onClose}>Done</button>
       </div>

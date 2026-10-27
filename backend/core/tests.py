@@ -181,3 +181,34 @@ class CollabAccessTests(TestCase):
         self.assertEqual({m["uid"]: m["role"] for m in r.json()["members"]}, {"own": "owner", "bob": "viewer", "eve": "viewer"})
         # Only the owner
         self.assertEqual(self.call("bob", self.room_path("members/"), "patch", {"uids": "all", "can_voice": True}).status_code, 403)
+
+
+    def test_peek_reads_without_opening(self):
+        from .models import CollabMember, CollabMessage
+        bob = TraderProfile.objects.get(uid="bob")
+        CollabMember.objects.create(room=self.room, profile=bob, role="viewer")
+        before = CollabMessage.objects.count()
+        r = self.call("bob", self.room_path() + "?peek=1")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["role"], "viewer")
+        self.assertIsNone(CollabMember.objects.get(room=self.room, profile=bob).last_seen)   # still an unopened invite
+        self.assertEqual(CollabMessage.objects.count(), before)                            # nobody told "Bob joined"
+        self.assertEqual(self.call("eve", self.room_path() + "?peek=1").status_code, 403)
+
+    def test_owner_deletes_with_a_summary_first(self):
+        from .models import CollabMember, CollabMessage, CollabRoom
+        self.room.drawings = {"AAPL": [{"id": "d1"}, {"id": "d2"}], "MSFT": [{"id": "d3"}]}
+        self.room.indicators = [{"name": "EMA"}]
+        self.room.alerts = [{"id": "a1"}]
+        self.room.save()
+        CollabMember.objects.create(room=self.room, profile=TraderProfile.objects.get(uid="bob"), role="editor")
+        CollabMessage.objects.create(room=self.room, kind="text", text="hi")
+        self.assertEqual(self.call("bob", self.room_path("summary/")).status_code, 403)
+        s = self.call("own", self.room_path("summary/")).json()
+        self.assertEqual((s["drawings"], s["drawing_symbols"], s["indicators"], s["alerts"], s["messages"], s["members"]), (3, 2, 1, 1, 1, 1))
+        self.assertEqual(self.call("bob", self.room_path(), "delete").status_code, 403)   # only the owner
+        r = self.call("own", self.room_path(), "delete")
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(CollabRoom.objects.filter(token=self.token).exists())
+        self.assertFalse(CollabMessage.objects.filter(text="hi").exists())
+        self.assertEqual(self.call("own", "rooms/").json()["rooms"], [])

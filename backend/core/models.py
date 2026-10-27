@@ -264,11 +264,14 @@ class CollabJoinRequest(models.Model):
 
 
 class CollabMessage(models.Model):
-    """A group-chat message in a collab chart, or a notice such as "Asha joined"."""
+    """A group-chat message in a collab chart (text, or a shared image / document with an optional
+    caption), or a notice such as "Asha joined"."""
     room = models.ForeignKey(CollabRoom, on_delete=models.CASCADE, related_name='messages')
     author = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
-    kind = models.CharField(max_length=10, choices=[('text', 'Text'), ('system', 'System')], default='text')
-    text = models.TextField()
+    kind = models.CharField(max_length=10, choices=[('text', 'Text'), ('system', 'System'), ('file', 'File')], default='text')
+    text = models.TextField(blank=True)
+    # A shared file: {path (in the private collab-files folder), name, size, type, image, width, height}
+    attachment = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

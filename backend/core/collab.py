@@ -111,11 +111,15 @@ def system_message(room, text):
 
 
 def message_json(msg):
-    return {
+    out = {
         "id": msg.id, "kind": msg.kind, "text": msg.text, "time": int(msg.created_at.timestamp() * 1000),
         "author": msg.author.uid if msg.author else None,
         "author_name": (msg.author.name or msg.author.email.split('@')[0]) if msg.author else None,
     }
+    if msg.attachment:
+        a = msg.attachment
+        out["attachment"] = {k: a.get(k) for k in ('name', 'size', 'type', 'image', 'width', 'height')}
+    return out
 
 
 def display_name(profile):
@@ -143,7 +147,8 @@ def clean_pine(p):
 
 @api_view(['GET', 'POST'])
 def collab_rooms(request, uid):
-    """GET: the collab charts this user owns or was added to, and the invites they haven't opened.
+    """GET: the collab charts this user owns or was added to (with what they may do in each), and
+    the invites they haven't opened.
     POST {name?, symbol, interval, indicators, drawings, pine?}: starts a collab from the user's chart.
     POST {kind: "pine", name?, pine: {code, scriptName}}: shares only a Pine script, to edit together."""
     me, denied = require_session(request, uid)
@@ -154,7 +159,8 @@ def collab_rooms(request, uid):
         memberships = CollabMember.objects.filter(profile=me, room__active=True).select_related('room', 'room__owner').order_by('-room__updated_at')
         return Response({
             "rooms": [{"token": m.room.token, "name": m.room.name, "kind": m.room.kind, "role": m.role, "owner_name": display_name(m.room.owner),
-                       "symbol": m.room.symbol, "pending": m.last_seen is None and m.role != 'owner',
+                       "symbol": m.room.symbol, "interval": m.room.interval, "pending": m.last_seen is None and m.role != 'owner',
+                       "perms": perms_of(m), "members": m.room.members.count(), "updated_at": m.room.updated_at.isoformat(),
                        "requests": m.room.join_requests.filter(status='pending').count() if perms_of(m)["invite"] else 0}
                       for m in memberships],
         })
@@ -211,10 +217,53 @@ def _create_pine_room(me, data):
     return Response(room_json(room, me), status=status.HTTP_201_CREATED)
 
 
-@api_view(['GET', 'PATCH'])
+def room_summary(room):
+    """Everything a collab keeps, counted (shown before it's deleted)"""
+    drawings = room.drawings if isinstance(room.drawings, dict) else {}
+    drawing_count = sum(len(v) for v in drawings.values() if isinstance(v, list))
+    files = list(room.messages.filter(kind='file').values_list('attachment', flat=True))
+    pine_text = ''
+    if room.pine_doc:
+        try:
+            d = Doc()
+            d.apply_update(base64.b64decode(room.pine_doc))
+            pine_text = str(d.get('code', type=Text))
+        except Exception:
+            pine_text = ''
+    pine_lines = len(pine_text.splitlines()) if pine_text.strip() else (len((room.pine or {}).get('code', '').splitlines()) if room.pine else 0)
+    return {
+        "name": room.name, "kind": room.kind, "symbol": room.symbol,
+        "drawings": drawing_count, "drawing_symbols": len([k for k, v in drawings.items() if isinstance(v, list) and v]),
+        "indicators": len(room.indicators or []),
+        "pine_lines": pine_lines,
+        "alerts": len(room.alerts or []),
+        "messages": room.messages.filter(kind='text').count(),
+        "files": len(files), "file_bytes": sum((a or {}).get('size') or 0 for a in files),
+        "images": sum(1 for a in files if (a or {}).get('image')),
+        "members": room.members.exclude(role='owner').count(),
+        "requests": room.join_requests.count(), "kicked": room.kicked.count(),
+        "created_at": room.created_at.isoformat(),
+    }
+
+
+@api_view(['GET'])
+def collab_room_summary(request, uid, token):
+    """For the owner, before deleting: what the collab holds"""
+    me, denied = require_session(request, uid)
+    if denied:
+        return denied
+    room = CollabRoom.objects.filter(token=token).first()
+    if not room or room.owner_id != me.id:
+        return Response({"error": "Only the owner can delete this collab"}, status=status.HTTP_403_FORBIDDEN)
+    return Response(room_summary(room))
+
+
+@api_view(['GET', 'PATCH', 'DELETE'])
 def collab_room(request, uid, token):
-    """GET: opens a collab chart (joining it through the link when its access allows).
-    PATCH {name?, link_access?, active?}: the owner changes it; active=false ends the collab."""
+    """GET: opens a collab chart (joining it through the link when its access allows); ?peek=1 only
+    reads it.
+    PATCH {name?, link_access?, active?}: the owner changes it; active=false ends the collab.
+    DELETE: the owner deletes it for good, with everything in it (whoever is in it is told it ended)."""
     me, denied = require_session(request, uid)
     if denied:
         return denied
@@ -224,6 +273,12 @@ def collab_room(request, uid, token):
     member = CollabMember.objects.filter(room=room, profile=me).first()
 
     if request.method == 'GET':
+        # ?peek=1: just its details, for its settings in the list of your collabs (not opening it:
+        # an invite stays unopened and nobody is told you joined)
+        if request.query_params.get('peek') in ('1', 'true'):
+            if member is None:
+                return Response(no_access_json(room, me, room.kicked.filter(id=me.id).exists()), status=status.HTTP_403_FORBIDDEN)
+            return Response(room_json(room, me))
         if member is None:
             role = ROLE_OF_LINK.get(room.link_access)
             kicked = room.kicked.filter(id=me.id).exists()
@@ -241,6 +296,11 @@ def collab_room(request, uid, token):
 
     if not member or member.role != 'owner':
         return Response({"error": "Only the owner can change this collab"}, status=status.HTTP_403_FORBIDDEN)
+    if request.method == 'DELETE':
+        summary = room_summary(room)
+        notify_room(room, {"type": "room.ended"})
+        room.delete()   # its members, messages (and their files) and requests go with it
+        return Response({"deleted": True, "summary": summary})
     data = request.data
     if 'name' in data:
         name = str(data.get('name') or '').strip()[:120]

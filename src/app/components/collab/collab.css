@@ -151,3 +151,60 @@
 .tv-co-pulse { animation: tv-co-pulse 1.6s ease-in-out infinite; }
 @keyframes tv-co-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(41, 98, 255, 0.35); } 50% { box-shadow: 0 0 0 6px rgba(41, 98, 255, 0); } }
 @media (prefers-reduced-motion: reduce) { .tv-co-toast, .tv-co-pulse { animation: none; } }
+
+/* Pictures and documents in the chat */
+.tv-co-panel { position: relative; }
+.tv-co-drop { position: absolute; inset: 6px; z-index: 5; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px;
+  border: 2px dashed var(--tv-co-accent); border-radius: 8px; background: color-mix(in srgb, var(--tv-color-pane-bg) 88%, transparent); color: var(--tv-co-accent); font-size: 14px; pointer-events: none; }
+.tv-co-file { display: inline-flex; flex-direction: column; max-width: 100%; }
+.tv-co-file-img { display: block; padding: 0; border: 1px solid var(--tv-co-border); border-radius: 2px 8px 8px 8px; overflow: hidden; background: var(--tv-co-bubble); cursor: zoom-in; max-width: 100%; }
+.tv-co-file-img:disabled { cursor: default; opacity: 0.75; }
+.tv-co-file-img img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.tv-co-file-doc { display: flex; align-items: center; gap: 10px; width: 240px; max-width: 100%; box-sizing: border-box; padding: 8px 6px 8px 10px; border-radius: 2px 8px 8px 8px; background: var(--tv-co-bubble); }
+.tv-co-msg.mine .tv-co-file-doc { background: var(--tv-co-bubble-mine); }
+.tv-co-file-doc a.tv-co-iconbtn { color: var(--tv-co-text); }
+.tv-co-progress { height: 3px; border-radius: 2px; background: var(--tv-co-border); margin-top: 4px; overflow: hidden; }
+.tv-co-progress i { display: block; height: 100%; background: var(--tv-co-accent); transition: width 0.15s; }
+.tv-co-queued { display: flex; flex-wrap: wrap; gap: 0 4px; padding: 8px 8px 0; border-top: 1px solid var(--tv-co-border); flex: none; }
+.tv-co-queued .tv-co-chip { gap: 6px; max-width: 220px; }
+.tv-co-viewer { position: fixed; inset: 0; z-index: 10002; background: rgba(0, 0, 0, 0.82); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 56px 24px 24px; box-sizing: border-box; }
+.tv-co-viewer img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5); }
+.tv-co-viewer-bar { position: absolute; top: 8px; left: 16px; right: 8px; display: flex; align-items: center; gap: 4px; color: #fff; font-size: 14px; }
+.tv-co-viewer-bar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-co-viewer-bar .tv-co-iconbtn { color: #fff; }
+.tv-co-viewer-bar .tv-co-iconbtn:hover { background: rgba(255, 255, 255, 0.12); }
+
+/* Your collabs: each marked with the colour of what you are in it */
+.tv-co-rolebadge { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border: 1px solid; border-radius: 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.2px; flex: none; white-space: nowrap; }
+.tv-co-rolebadge.small { height: 18px; padding: 0 6px; font-size: 10.5px; }
+.tv-co-rolefilters { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--tv-co-border); flex: none; }
+.tv-co-rolefilter { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border: 1px solid var(--tv-co-field); border-radius: 13px; background: transparent; color: var(--tv-co-text); font: inherit; font-size: 12px; cursor: pointer; }
+.tv-co-rolefilter i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.tv-co-rolefilter:hover:not(:disabled) { background: var(--tv-co-hover); }
+.tv-co-rolefilter.on { background: var(--tv-co-primary); border-color: var(--tv-co-primary); color: var(--tv-co-primary-text); }
+.tv-co-rolefilter.on i { box-shadow: 0 0 0 1.5px #fff; }
+.tv-co-rolefilter:disabled { opacity: 0.4; cursor: default; }
+.tv-co-roomcard { display: block; width: 100%; text-align: left; margin: 6px 0 0; padding: 10px 12px 10px 12px; border: 1px solid var(--tv-co-border); border-left: 4px solid; border-radius: 6px; color: var(--tv-co-text); font: inherit; cursor: pointer; box-sizing: border-box; }
+.tv-co-roomcard:hover { border-top-color: var(--tv-co-field); border-right-color: var(--tv-co-field); border-bottom-color: var(--tv-co-field); filter: brightness(0.98); }
+.tv-co-roomcard.here { box-shadow: inset 0 0 0 1px var(--tv-co-live); }
+.tv-co-roomcard.busy { opacity: 0.7; cursor: progress; }
+.tv-co-roomcard:focus-visible { outline: 2px solid var(--tv-co-accent); outline-offset: 1px; }
+/* The gear for a collab's settings: shows on hover (and keyboard focus) */
+.tv-co-roomcard-gear { width: 24px; height: 24px; margin: -3px -4px -3px 0; color: var(--tv-co-muted); opacity: 0; transition: opacity 0.12s; }
+.tv-co-roomcard:hover .tv-co-roomcard-gear, .tv-co-roomcard:focus-within .tv-co-roomcard-gear { opacity: 1; }
+.tv-co-roomcard-gear:hover { color: var(--tv-co-text); background: var(--tv-co-hover); }
+@media (hover: none) { .tv-co-roomcard-gear { opacity: 1; } }
+.tv-co-roomcard-top { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.tv-co-roomcard-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-co-roomcard-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.tv-co-tag { font-size: 11px; line-height: 18px; padding: 0 6px; border-radius: 4px; background: var(--tv-co-hover); color: var(--tv-co-muted); }
+.tv-co-tag.live { background: rgba(8, 153, 129, 0.12); color: var(--tv-co-live); }
+.tv-co-tag.warn { background: rgba(255, 152, 0, 0.14); color: #e08a00; }
+.tv-co-roomcard-gear + .tv-co-roomcard-gear { margin-left: 2px; }
+.tv-co-roomcard-gear.bin:hover { color: var(--tv-co-danger); background: rgba(242, 54, 69, 0.1); }
+/* What deleting a collab takes with it */
+.tv-co-delete-list { border: 1px solid var(--tv-co-border); border-radius: 6px; overflow: hidden; }
+.tv-co-delete-row { display: flex; gap: 12px; padding: 8px 12px; font-size: 13px; line-height: 18px; }
+.tv-co-delete-row + .tv-co-delete-row { border-top: 1px solid var(--tv-co-border); }
+.tv-co-delete-row span { width: 130px; flex: none; color: var(--tv-co-muted); }
+.tv-co-delete-row b { font-weight: 500; flex: 1; min-width: 0; }

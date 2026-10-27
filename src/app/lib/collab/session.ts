@@ -49,7 +49,27 @@ export type CollabNotice =
 export interface Peer { id: string; uid: string; name: string; color: string; role: Role; perms: Perms; voice: boolean; muted: boolean }
 // The replay everyone follows: who drives it (a connection; null once they've left) and where it is
 export interface SharedReplay { driver: string | null; driver_uid: string; driver_name: string; time: number; playing: boolean; speed: number }
-export interface ChatMessage { id: number | string; kind: "text" | "system"; text: string; time: number; author: string | null; author_name: string | null; pending?: boolean }
+// An image or document shared in the chat
+export interface ChatAttachment { name: string; size: number; type: string; image: boolean; width: number | null; height: number | null }
+export interface ChatMessage {
+  id: number | string; kind: "text" | "system" | "file"; text: string; time: number; author: string | null; author_name: string | null; pending?: boolean;
+  attachment?: ChatAttachment;
+  // A file still on its way up from here: how far (0..1), the picture to show meanwhile, or why it failed
+  upload?: { progress: number; preview?: string; error?: string; file: File };
+}
+
+// What can be shared in the chat (the backend checks again): pictures, and documents
+export const CHAT_FILE_MAX_BYTES = 20 * 1024 * 1024;
+const CHAT_IMAGE_EXT = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
+const CHAT_DOC_EXT = [".pdf", ".txt", ".csv", ".json", ".md", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".rtf", ".zip", ".pine", ".py", ".mq5", ".mqh", ".mq4"];
+export const CHAT_FILE_ACCEPT = [...CHAT_IMAGE_EXT, ...CHAT_DOC_EXT].join(",");
+const extOf = (name: string) => { const i = name.lastIndexOf("."); return i < 0 ? "" : name.slice(i).toLowerCase(); };
+export function chatFileProblem(file: File): string | null {
+  const ext = extOf(file.name);
+  if (!CHAT_IMAGE_EXT.includes(ext) && !CHAT_DOC_EXT.includes(ext)) return `${file.name}: that kind of file can't be shared here`;
+  if (file.size > CHAT_FILE_MAX_BYTES) return `${file.name} is over ${CHAT_FILE_MAX_BYTES / (1024 * 1024)} MB`;
+  return null;
+}
 export interface Cursor { id: string; uid: string; symbol: string; time: number; price: number; at: number }
 export interface TradeLine { side: "buy" | "sell"; qty: number; price: number; kind: "position" | "limit" | "stop" }
 export interface TradeSnap { symbol: string; name: string; color: string; lines: TradeLine[] }
@@ -320,9 +340,12 @@ class CollabSession {
       case "chat": {
         const m: ChatMessage = msg.message;
         const mine = m.author === this.state.uid;
+        // A file of mine that's arrived: it replaces its uploading copy
+        const sameUpload = (x: ChatMessage) => mine && m.kind === "file" && !!x.upload && !x.upload.error
+          && x.attachment?.name === m.attachment?.name && x.attachment?.size === m.attachment?.size;
         const messages = msg.client_id
           ? [...this.state.messages.filter(x => x.id !== msg.client_id), m]
-          : [...this.state.messages.filter(x => x.id !== m.id), m];
+          : [...this.state.messages.filter(x => x.id !== m.id && !sameUpload(x)), m];
         this.set({ messages, unread: this.state.chatOpen || mine || m.kind === "system" ? this.state.unread : this.state.unread + 1 });
         break;
       }
@@ -434,6 +457,64 @@ class CollabSession {
     const me = this.state.room?.members.find(m => m.uid === this.state.uid);
     this.set({ messages: [...this.state.messages, { id: clientId, kind: "text", text: t, time: Date.now(), author: this.state.uid, author_name: me?.name || "You", pending: true }] });
     this.send({ type: "chat", text: t, client_id: clientId });
+  }
+  // Shares a picture or document (with an optional caption): shown at once with its progress,
+  // replaced by the real message when it's arrived
+  sendFile(file: File, caption = "", retryId?: string) {
+    const { uid, token } = this.state;
+    if (!uid || !token) return;
+    const id = retryId || `u${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
+    const ext = extOf(file.name);
+    const image = CHAT_IMAGE_EXT.includes(ext);
+    const old = this.state.messages.find(x => x.id === id);
+    const preview = old?.upload?.preview || (image ? URL.createObjectURL(file) : undefined);
+    const me = this.state.room?.members.find(m => m.uid === uid);
+    const pending: ChatMessage = {
+      id, kind: "file", text: caption.trim(), time: Date.now(), author: uid, author_name: me?.name || "You", pending: true,
+      attachment: { name: file.name, size: file.size, type: file.type, image, width: null, height: null },
+      upload: { progress: 0, preview, file },
+    };
+    const problem = chatFileProblem(file);
+    if (problem) pending.upload!.error = problem;
+    this.set({ messages: retryId ? this.state.messages.map(x => (x.id === id ? pending : x)) : [...this.state.messages, pending] });
+    if (problem) return;
+    const patch = (u: Partial<NonNullable<ChatMessage["upload"]>>) =>
+      this.set({ messages: this.state.messages.map(x => (x.id === id && x.upload ? { ...x, upload: { ...x.upload, ...u } } : x)) });
+    const form = new FormData();
+    form.append("file", file, file.name);
+    if (caption.trim()) form.append("text", caption.trim());
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${BACKEND}/api/users/collab/${encodeURIComponent(uid)}/room/${encodeURIComponent(token)}/upload/?session_key=${encodeURIComponent(sessionKey())}`);
+    xhr.upload.onprogress = e => { if (e.lengthComputable) patch({ progress: e.loaded / e.total }); };
+    xhr.onload = () => {
+      let data: any = null;
+      try { data = JSON.parse(xhr.responseText); } catch { /* not JSON */ }
+      if (xhr.status >= 200 && xhr.status < 300 && data?.id) {
+        if (preview) URL.revokeObjectURL(preview);
+        const has = this.state.messages.some(x => x.id === data.id);
+        this.set({ messages: has ? this.state.messages.filter(x => x.id !== id) : this.state.messages.map(x => (x.id === id ? data : x)) });
+      } else {
+        patch({ error: data?.error || `Couldn't share ${file.name}` });
+      }
+    };
+    xhr.onerror = () => patch({ error: `Couldn't share ${file.name}: no connection` });
+    xhr.send(form);
+  }
+  // A file that failed: try again, or take it away
+  retryFile(id: string) {
+    const m = this.state.messages.find(x => x.id === id);
+    if (m?.upload) this.sendFile(m.upload.file, m.text, id);
+  }
+  dropFile(id: string) {
+    const m = this.state.messages.find(x => x.id === id);
+    if (m?.upload?.preview) URL.revokeObjectURL(m.upload.preview);
+    this.set({ messages: this.state.messages.filter(x => x.id !== id) });
+  }
+  // Where a shared file is fetched from (people in the collab only)
+  fileUrl(messageId: number | string, download = false): string {
+    const { uid, token } = this.state;
+    if (!uid || !token) return "";
+    return `${BACKEND}/api/users/collab/${encodeURIComponent(uid)}/room/${encodeURIComponent(token)}/file/${messageId}/?session_key=${encodeURIComponent(sessionKey())}${download ? "&download=1" : ""}`;
   }
   setChatOpen(open: boolean) { this.set({ chatOpen: open, unread: open ? 0 : this.state.unread }); }
   setRoom(room: RoomInfo) { this.set({ room }); }
