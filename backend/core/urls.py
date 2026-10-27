@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, collab, github
+from . import views, collab, collab_files, github
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -32,6 +32,9 @@ urlpatterns = [
     path('collab/<str:uid>/room/<str:token>/transfer/', collab.collab_transfer, name='collab_transfer'),
     path('collab/<str:uid>/room/<str:token>/member/<str:member_uid>/', collab.collab_member, name='collab_member'),
     path('collab/<str:uid>/room/<str:token>/members/', collab.collab_members, name='collab_members'),
+    path('collab/<str:uid>/room/<str:token>/summary/', collab.collab_room_summary, name='collab_room_summary'),
+    path('collab/<str:uid>/room/<str:token>/upload/', collab_files.collab_upload, name='collab_upload'),
+    path('collab/<str:uid>/room/<str:token>/file/<int:message_id>/', collab_files.collab_file, name='collab_file'),
     path('collab/<str:uid>/room/<str:token>/request/', collab.collab_request, name='collab_request'),
     path('collab/<str:uid>/room/<str:token>/requests/<str:member_uid>/', collab.collab_request_answer, name='collab_request_answer'),
     path('collab/<str:uid>/room/<str:token>/kicked/<str:member_uid>/', collab.collab_unkick, name='collab_unkick'),

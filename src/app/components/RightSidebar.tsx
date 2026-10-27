@@ -62,7 +62,8 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     { id: "watchlist", icon: <TVWatchlistIcon size={28} />, tooltip: "Watchlist, details and news" },
     { id: "alerts", icon: <TVAlertsIcon size={28} />, tooltip: "Alerts" },
     { id: "object_tree", icon: <TVObjectTreeIcon size={28} />, tooltip: "Object tree" },
-    ...(inCollab ? [{ id: "collab", icon: <CollabIcon size={28} />, tooltip: "Collab: group chat and voice" }] : []),
+    // Always there: inside a collab, its chat and voice; otherwise the list of your collabs
+    { id: "collab", icon: <CollabIcon size={28} />, tooltip: inCollab ? "Collab: group chat and voice" : "Collabs" },
   ];
 
   const i18 = { size: 18, strokeWidth: 1.5 };

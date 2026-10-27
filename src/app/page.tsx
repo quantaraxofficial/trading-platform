@@ -161,10 +161,6 @@ function AppLayout() {
     });
   };
   const [activeSidebarPanel, setActiveSidebarPanel] = useState("watchlist");
-  // The group panel goes with the collab
-  useEffect(() => {
-    if (!inCollab) setActiveSidebarPanel(p => (p === "collab" ? "watchlist" : p));
-  }, [inCollab]);
   // The chart's right-click "Object tree" (and anything else) can open a right-panel page
   useEffect(() => {
     const open = (e: Event) => {
@@ -925,7 +921,7 @@ function AppLayout() {
             <AlertsSidebar />
           ) : activeSidebarPanel === "object_tree" ? (
             <ObjectTreePanel />
-          ) : activeSidebarPanel === "collab" && inCollab ? (
+          ) : activeSidebarPanel === "collab" ? (
             <CollabPanel onShare={() => setShowCollabDialog(true)} />
           ) : (
             <RightToolbar symbol={symbol} onSymbolChange={setSymbol} />

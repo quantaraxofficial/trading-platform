@@ -33,3 +33,5 @@ Thumbs.db
 
 # Chart snapshot images uploaded via the Snapshot menu
 .snapshots/
+backend/media/
+backend/private_uploads/

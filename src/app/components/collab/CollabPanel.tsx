@@ -1,12 +1,17 @@
 "use client";
 
-// The collab's group panel in the right column: who's here, the voice call, and the group chat.
+// The collab's group panel in the right column: who's here, the voice call, and the group chat
+// (text, and pictures / documents: attach, drop or paste them).
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useEscapeClose } from "../../lib/useEscapeClose";
 import "./collab.css";
-import { collab, useCollab, type ChatMessage, type Peer, type SharedAlert } from "../../lib/collab/session";
+import { collab, useCollab, chatFileProblem, CHAT_FILE_ACCEPT, type ChatMessage, type Peer, type SharedAlert } from "../../lib/collab/session";
 import { useAlerts } from "@/context/AlertsContext";
 import { Avatar } from "./CollabDialog";
+import CollabList, { RoleBadge } from "./CollabList";
+import { collabRoleOf } from "../../lib/collab/roles";
 import { leaveCollab } from "./CollabController";
 import { AddPersonIcon, LeaveIcon, MicIcon, PhoneIcon, SendIcon } from "./icons";
 import { playCollabSound, setSoundsOn, soundsOn } from "../../lib/collab/sounds";
@@ -29,8 +34,23 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
   const state = useCollab();
   const { room, peers, messages, voice, status, uid, you, replay, replayDetached, alerts } = state;
   const [alertsOpen, setAlertsOpen] = useState(true);
+  const [showList, setShowList] = useState(false);
   const [sounds, setSounds] = useState(soundsOn);
   const [draft, setDraft] = useState("");
+  // Files picked, dropped or pasted, waiting for Send (with the message as the first one's caption)
+  const [queued, setQueued] = useState<File[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [viewing, setViewing] = useState<ChatMessage | null>(null);
+  const addFiles = (list: FileList | File[] | null) => {
+    const files = Array.from(list || []);
+    if (!files.length) return;
+    const bad = files.map(chatFileProblem).filter(Boolean) as string[];
+    setFileError(bad.length ? bad.join(" · ") : null);
+    setQueued(q => [...q, ...files.filter(f => !chatFileProblem(f))].slice(0, 10));
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
   const chatRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -53,29 +73,42 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
   const inCall = peers.filter(p => p.voice);
   const speakingOf = (p: Peer) => (p.id === you ? voice.speaking.me : voice.speaking[p.id]);
   const send = () => {
-    if (!draft.trim()) return;
-    collab.sendChat(draft);
+    if (!draft.trim() && !queued.length) return;
+    if (queued.length) {
+      queued.forEach((f, i) => collab.sendFile(f, i === 0 ? draft : ""));
+      setQueued([]);
+      setFileError(null);
+    } else {
+      collab.sendChat(draft);
+    }
     setDraft("");
     atBottom.current = true;
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
-  if (!room) {
-    return (
-      <div className="tv-co-panel">
-        <div className="tv-co-empty">{status === "connecting" ? "Connecting to the collab…" : "Not in a collab. Right-click the chart and choose Collaborate… to start one."}</div>
-      </div>
-    );
+  // No collab open: the list of yours (also from inside one, with "Your collabs")
+  if (!room && status === "connecting") {
+    return <div className="tv-co-panel"><div className="tv-co-empty">Connecting to the collab…</div></div>;
+  }
+  if (!room || showList) {
+    return <CollabList currentToken={room ? state.token : null} onNew={onShare} onBack={room ? () => setShowList(false) : undefined} />;
   }
 
   const canEdit = !!room.perms?.edit;
   const canVoice = !!room.perms?.voice;
   const replayMine = !!replay && replay.driver === you;
   return (
-    <div className="tv-co-panel" data-name="collab-panel">
+    <div className="tv-co-panel" data-name="collab-panel"
+      onDragOver={e => { if (Array.from(e.dataTransfer.types).includes("Files")) { e.preventDefault(); setDragging(true); } }}
+      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false); }}
+      onDrop={e => { if (e.dataTransfer.files.length) { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); } }}>
+      {dragging && <div className="tv-co-drop" data-name="collab-drop">Drop pictures or documents to share them</div>}
       <div className="tv-co-panel-head">
         <div className="tv-co-panel-title">
-          <b title={room.name}>{room.name}</b>
+          <b title={room.name} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{room.name}</span>
+            <RoleBadge role={collabRoleOf(room.role, room.perms, room.kind)} small />
+          </b>
           <span>
             <i className={`tv-co-dot${status === "live" ? "" : " off"}`} />
             {status === "live" ? `${people.length} here now` : status === "reconnecting" ? "Reconnecting…" : "Connecting…"}
@@ -97,6 +130,9 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
             <path d="M3 7h2.5L9 4v10l-3.5-3H3V7Z" />
             {sounds ? <path d="M11.5 6.5a3.5 3.5 0 0 1 0 5M13.5 4.5a6.4 6.4 0 0 1 0 9" /> : <path d="m11.5 7 4 4m0-4-4 4" />}
           </svg>
+        </button>
+        <button className="tv-co-iconbtn small" title="Your collabs" aria-label="Your collabs" data-name="collab-show-list" onClick={() => setShowList(true)}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden><path d="M6.5 4.5h9M6.5 9h9M6.5 13.5h9" /><circle cx="3.2" cy="4.5" r=".9" /><circle cx="3.2" cy="9" r=".9" /><circle cx="3.2" cy="13.5" r=".9" /></svg>
         </button>
         <button className="tv-co-iconbtn small" title="Share and add people" aria-label="Share and add people" onClick={onShare}><AddPersonIcon /></button>
         <button className="tv-co-iconbtn small" title="Leave collab" aria-label="Leave collab" onClick={leaveCollab}><LeaveIcon /></button>
@@ -167,16 +203,33 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
 
       <div className="tv-co-chat" ref={chatRef} onScroll={e => { const el = e.currentTarget; atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40; }}>
         {messages.length === 0 && <div className="tv-co-empty">No messages yet. Say hi to the group.</div>}
-        {messages.map((m, i) => <Message key={m.id} m={m} prev={messages[i - 1]} mine={m.author === uid} color={room.members.find(x => x.uid === m.author)?.color || "#787b86"} />)}
+        {messages.map((m, i) => <Message key={m.id} m={m} prev={messages[i - 1]} mine={m.author === uid} color={room.members.find(x => x.uid === m.author)?.color || "#787b86"} onView={setViewing} />)}
       </div>
 
+      {(queued.length > 0 || fileError) && (
+        <div className="tv-co-queued" data-name="collab-queued">
+          {queued.map((f, i) => (
+            <span key={`${f.name}${i}`} className="tv-co-chip" title={f.name}>
+              <FileGlyph name={f.name} size={14} /><span>{f.name}</span>
+              <button aria-label={`Remove ${f.name}`} onClick={() => setQueued(q => q.filter((_, j) => j !== i))}>×</button>
+            </span>
+          ))}
+          {fileError && <div className="tv-co-error" style={{ width: "100%" }}>{fileError}</div>}
+        </div>
+      )}
       <div className="tv-co-compose">
+        <button className="tv-co-iconbtn" aria-label="Share a picture or document" title="Share a picture or document" data-name="collab-attach" onClick={() => fileInput.current?.click()}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden><path d="M15 8.5 9 14.5a3.9 3.9 0 0 1-5.5-5.5l6.4-6.4a2.6 2.6 0 0 1 3.7 3.7L7.2 12.7a1.3 1.3 0 0 1-1.8-1.8L11 5.3" /></svg>
+        </button>
+        <input ref={fileInput} type="file" multiple accept={CHAT_FILE_ACCEPT} style={{ display: "none" }} aria-label="Files to share" data-name="collab-file-input"
+          onChange={e => { addFiles(e.target.files); e.target.value = ""; }} />
         <textarea
           ref={inputRef}
           rows={1}
           value={draft}
           maxLength={2000}
-          placeholder="Message the group"
+          placeholder={queued.length ? "Add a caption (optional)" : "Message the group"}
+          onPaste={e => { const files = Array.from(e.clipboardData.files || []); if (files.length) { e.preventDefault(); addFiles(files); } }}
           onChange={e => {
             setDraft(e.target.value);
             const el = e.target;
@@ -188,13 +241,14 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
             e.stopPropagation();   // typing here isn't a chart shortcut
           }}
         />
-        <button className="tv-co-iconbtn" aria-label="Send" title="Send" disabled={!draft.trim()} onClick={send}><SendIcon /></button>
+        <button className="tv-co-iconbtn" aria-label="Send" title="Send" disabled={!draft.trim() && !queued.length} onClick={send}><SendIcon /></button>
       </div>
+      {viewing && <ImageViewer m={viewing} onClose={() => setViewing(null)} />}
     </div>
   );
 }
 
-function Message({ m, prev, mine, color }: { m: ChatMessage; prev?: ChatMessage; mine: boolean; color: string }) {
+function Message({ m, prev, mine, color, onView }: { m: ChatMessage; prev?: ChatMessage; mine: boolean; color: string; onView: (m: ChatMessage) => void }) {
   const newDay = !prev || dayOf(prev.time) !== dayOf(m.time);
   const day = newDay ? <div className="tv-co-day">{dayOf(m.time)}</div> : null;
   if (m.kind === "system") return <>{day}<div className="tv-co-sys">{m.text} · {timeOf(m.time)}</div></>;
@@ -207,10 +261,93 @@ function Message({ m, prev, mine, color }: { m: ChatMessage; prev?: ChatMessage;
         <Avatar name={m.author_name || "?"} color={color} size="sm" />
         <div className="tv-co-msg-body">
           {!cont && <div className="tv-co-msg-meta"><b style={{ color }}>{name}</b><span>{timeOf(m.time)}</span></div>}
-          <div className="tv-co-msg-text">{m.text}</div>
+          {m.attachment ? <Attachment m={m} onView={onView} /> : <div className="tv-co-msg-text">{m.text}</div>}
         </div>
       </div>
     </>
+  );
+}
+
+function fileSize(n: number) {
+  return n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(n < 10 * 1024 ? 1 : 0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// A document's kind, as a small labelled page
+function FileGlyph({ name, size = 30 }: { name: string; size?: number }) {
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  const kind = ext === "pdf" ? ["PDF", "#f23645"] : ["doc", "docx", "odt", "rtf"].includes(ext) ? ["DOC", "#2962ff"]
+    : ["xls", "xlsx", "ods", "csv"].includes(ext) ? ["XLS", "#089981"] : ["ppt", "pptx"].includes(ext) ? ["PPT", "#ff9800"]
+      : ext === "zip" ? ["ZIP", "#787b86"] : ["png", "jpg", "jpeg", "gif", "webp"].includes(ext) ? ["IMG", "#9c27b0"] : [ext.slice(0, 4).toUpperCase() || "FILE", "#787b86"];
+  return (
+    <svg width={size} height={size * 1.2} viewBox="0 0 30 36" aria-hidden style={{ flex: "none" }}>
+      <path d="M3 1h17l7 7v26a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1Z" fill="var(--tv-co-bg)" stroke="var(--tv-co-field)" />
+      <path d="M20 1v7h7" fill="none" stroke="var(--tv-co-field)" />
+      <rect x="0" y="19" width="24" height="11" rx="2" fill={kind[1]} />
+      <text x="12" y="27.5" textAnchor="middle" fontSize="7.5" fontWeight="700" fill="#fff" fontFamily="sans-serif">{kind[0]}</text>
+    </svg>
+  );
+}
+
+// A shared picture (click to see it full size) or document (download), with its caption, and while
+// it's still uploading, its progress (or why it failed, with Retry)
+function Attachment({ m, onView }: { m: ChatMessage; onView: (m: ChatMessage) => void }) {
+  const a = m.attachment!;
+  const up = m.upload;
+  const src = up?.preview || (typeof m.id === "number" ? collab.fileUrl(m.id) : "");
+  const ratio = a.width && a.height ? a.height / a.width : 0.66;
+  const w = Math.min(240, a.width || 240);
+  return (
+    <div className="tv-co-file" data-name="collab-attachment" data-kind={a.image ? "image" : "document"}>
+      {a.image && src ? (
+        <button className="tv-co-file-img" onClick={() => !up && onView(m)} aria-label={`View ${a.name}`} disabled={!!up}
+          style={{ width: w, height: Math.min(320, Math.round(w * ratio)) }}>
+          <img src={src} alt={a.name} loading="lazy" />
+        </button>
+      ) : (
+        <div className="tv-co-file-doc">
+          <FileGlyph name={a.name} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="tv-co-member-name" title={a.name}>{a.name}</div>
+            <div className="tv-co-member-sub">{fileSize(a.size)}</div>
+          </div>
+          {!up && typeof m.id === "number" && (
+            <a className="tv-co-iconbtn small" href={collab.fileUrl(m.id, true)} download={a.name} aria-label={`Download ${a.name}`} title="Download" data-name="collab-file-download">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden><path d="M9 2.5v9M5.5 8 9 11.5 12.5 8M3 13v2.5h12V13" /></svg>
+            </a>
+          )}
+        </div>
+      )}
+      {up && !up.error && <div className="tv-co-progress" role="progressbar" aria-valuenow={Math.round(up.progress * 100)}><i style={{ width: `${Math.max(4, up.progress * 100)}%` }} /></div>}
+      {up?.error && (
+        <div className="tv-co-error" data-name="collab-upload-error">
+          {up.error}{" "}
+          <button className="tv-co-link" onClick={() => collab.retryFile(String(m.id))}>Retry</button>
+          <button className="tv-co-link" onClick={() => collab.dropFile(String(m.id))}>Remove</button>
+        </div>
+      )}
+      {m.text && <div className="tv-co-msg-text" style={{ marginTop: 4 }}>{m.text}</div>}
+    </div>
+  );
+}
+
+// A shared picture, full size over the page (Escape or a click outside closes it)
+function ImageViewer({ m, onClose }: { m: ChatMessage; onClose: () => void }) {
+  useEscapeClose(onClose);
+  const a = m.attachment!;
+  return createPortal(
+    <div className="tv-co-viewer" role="dialog" aria-label={a.name} data-name="collab-image-viewer" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="tv-co-viewer-bar">
+        <span title={a.name}>{a.name} · {m.author_name}</span>
+        <a href={collab.fileUrl(m.id, true)} download={a.name} className="tv-co-iconbtn" aria-label="Download" title="Download">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden><path d="M9 2.5v9M5.5 8 9 11.5 12.5 8M3 13v2.5h12V13" /></svg>
+        </a>
+        <button className="tv-co-iconbtn" aria-label="Close" onClick={onClose}>
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden><path stroke="currentColor" strokeWidth="1.2" d="m1.5 1.5 15 15m0-15-15 15" /></svg>
+        </button>
+      </div>
+      <img src={collab.fileUrl(m.id)} alt={a.name} />
+    </div>,
+    document.body,
   );
 }
 
