@@ -17,6 +17,7 @@ import { useTradingSettings, TradingSettings, PnlMode } from "./settings";
 import { formatPrice, formatQty, formatSignedMoney, roundToTick } from "./instruments";
 import { C, Tip, Popover, MenuItem, MenuDivider } from "./ui";
 import { paneGeometry } from "../lib/priceScaleSide";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 const BUY = "#2962ff";
 const SELL = "#f23645";
@@ -577,7 +578,7 @@ function PlusButton({ chart, series, symbol, paneW, paneH, prec, connected, left
       )}
       <Popover anchor={btnRef.current} open={menuPrice !== null} onClose={close} align="right" width={360}>
         <MenuItem icon={<AlarmIcon />} right={<Kbd>Alt + A</Kbd>} onClick={() => { close(); window.dispatchEvent(new CustomEvent("tv:create-alert", { detail: { price: p } })); }}>
-          Add alert on {symbol} at {fp}
+          Add alert on {displaySymbol(symbol)} at {fp}
         </MenuItem>
         <MenuDivider />
         <MenuItem icon={<UpChevron />} right={<Kbd>Alt + Shift + B</Kbd>} onClick={() => { close(); if (p !== null) projectChartOrder(symbol, "buy", buyType, p); }}>

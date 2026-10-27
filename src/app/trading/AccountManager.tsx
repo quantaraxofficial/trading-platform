@@ -19,6 +19,7 @@ import {
 } from "./ui";
 import { Checkbox } from "./OrderTicket";
 import { tradingSettings } from "./settings";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 type Tab = "positions" | "orders" | "orderHistory" | "balanceHistory" | "activity" | "tradeHistory" | "analytics";
 const TABS: { id: Tab; label: string }[] = [
@@ -292,7 +293,7 @@ function SymbolCell({ symbol }: { symbol: string }) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
       <SymbolAvatar symbol={symbol} size={20} />
-      <span style={{ background: C.buy, color: "#fff", borderRadius: 4, padding: "2px 6px", fontSize: 12, fontWeight: 600 }}>{symbol}</span>
+      <span style={{ background: C.buy, color: "#fff", borderRadius: 4, padding: "2px 6px", fontSize: 12, fontWeight: 600 }}>{displaySymbol(symbol)}</span>
     </span>
   );
 }
@@ -557,7 +558,7 @@ function PerformanceChart({ trades, showCum, showRun }: { trades: Trade[]; showC
       </svg>
       {hover !== null && (
         <div style={{ position: "absolute", top: 8, left: `${(x(hover) / W) * 100}%`, transform: "translateX(-50%)", background: "var(--tv-trade-tooltip-bg)", color: "#fff", fontSize: 12, borderRadius: 6, padding: "6px 10px", pointerEvents: "none", whiteSpace: "nowrap" }}>
-          Trade #{hover + 1} · {trades[hover].symbol}<br />
+          Trade #{hover + 1} · {displaySymbol(trades[hover].symbol)}<br />
           Net PnL {formatSignedMoney(trades[hover].pnl!)} USD · Cumulative {formatSignedMoney(cum[hover])} USD<br />
           Run-up {formatSignedMoney(trades[hover].runUp)} · Drawdown {formatSignedMoney(trades[hover].drawdown)}
         </div>

@@ -15,6 +15,7 @@ import { TicketCtx, defaultExitTicks } from "./ticketMath";
 import { useEscapeClose } from "../lib/useEscapeClose";
 import { C, BrandLogo, SymbolAvatar, CloseIcon } from "./ui";
 import { DialogBtn, ExitRow, ExitDraft, Field, inputStyle, secondaryStyle, AddLevelLink, ExitLevelsView, Checkbox, LevelDraft, levelsRiskReward } from "./OrderTicket";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 export default function TradingDialogs() {
   const ui = useTradingUi();
@@ -126,7 +127,7 @@ function PositionLine({ symbol }: { symbol: string }) {
   if (!pos) return null;
   return (
     <span style={{ fontSize: 14 }}>
-      {symbol} <span style={{ color: C.muted }}>•</span> {pos.side === "buy" ? "Long" : "Short"} {formatQty(pos.qty)} @ {formatPrice(pos.avgPrice, precisionOf(state, symbol))}
+      {displaySymbol(symbol)} <span style={{ color: C.muted }}>•</span> {pos.side === "buy" ? "Long" : "Short"} {formatQty(pos.qty)} @ {formatPrice(pos.avgPrice, precisionOf(state, symbol))}
     </span>
   );
 }
@@ -178,12 +179,12 @@ function ReverseDialog({ symbol, onClose }: { symbol: string; onClose: () => voi
   return (
     <Modal onClose={onClose} label="Reverse position">
       <div style={{ display: "flex", alignItems: "flex-start", padding: "24px 16px 0 40px" }}>
-        <span style={{ fontSize: 20, fontWeight: 600, flex: 1, marginTop: 16 }}>Reverse {symbol} position?</span>
+        <span style={{ fontSize: 20, fontWeight: 600, flex: 1, marginTop: 16 }}>Reverse {displaySymbol(symbol)} position?</span>
         <button type="button" aria-label="Close" onClick={onClose} style={{ width: 32, height: 32, border: "none", borderRadius: 6, background: "transparent", color: C.text, cursor: "pointer" }}>
           <CloseIcon size={22} />
         </button>
       </div>
-      <p style={{ margin: "12px 40px 0", fontSize: 15, lineHeight: "22px" }}>Are you sure you want to reverse {symbol} position?</p>
+      <p style={{ margin: "12px 40px 0", fontSize: 15, lineHeight: "22px" }}>Are you sure you want to reverse {displaySymbol(symbol)} position?</p>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, padding: "24px 40px 32px" }}>
         <DialogBtn onClick={onClose}>Cancel</DialogBtn>
         <DialogBtn primary onClick={() => { engine.reversePosition(symbol); onClose(); }}>Reverse position</DialogBtn>
@@ -277,7 +278,7 @@ function PositionDialog({ symbol, onClose }: { symbol: string; onClose: () => vo
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 12px 8px 16px" }}>
             <BrandLogo size={24} />
-            <span style={{ fontWeight: 600, fontSize: 14, flex: 1 }}>{symbol}</span>
+            <span style={{ fontWeight: 600, fontSize: 14, flex: 1 }}>{displaySymbol(symbol)}</span>
             <button type="button" aria-label="Close" onClick={onClose} style={{ width: 32, height: 32, border: "none", borderRadius: 6, background: "transparent", color: C.text, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <CloseIcon size={20} />
             </button>

@@ -3,9 +3,9 @@
 // TradingView's chart Settings dialog: Symbol, Status line, Scales and lines, Canvas, Trading,
 // Alerts and Events. Every change shows on the chart at once; Cancel (or Escape / ✕) puts
 // everything back as it was when the dialog opened; Ok keeps it. Template: Apply defaults,
-// Save as…, and the saved templates (each with a trash can on hover). Beside it, Download
-// settings saves all of the account's settings to a file, and Import loads such a file (e.g. on
-// another computer) and reloads with them. Canvas → Background image puts a photo behind the
+// Save as…, and the saved templates (each with rename and trash buttons on hover). Beside it,
+// Download settings saves all of the account's settings to a file, and Import loads such a file
+// (e.g. on another computer) and reloads with them; the imported settings also become a template. Canvas → Background image puts a photo behind the
 // candles.
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -21,7 +21,7 @@ import { useChartType, chartTypeInfo, DRAWN_TYPES } from '../lib/chartType';
 import { PRICE_SOURCES, BOX_METHODS } from '../lib/seriesStyles';
 import { styleOf } from './chartPrimitives/ChartStyles';
 import {
-  chartSettings, takeSnapshot, applySnapshot, defaultSnapshot, chartTemplates, saveTemplate, removeTemplate, syncTemplatesFromAccount, applyTemplate,
+  chartSettings, takeSnapshot, applySnapshot, defaultSnapshot, chartTemplates, saveTemplate, removeTemplate, renameTemplate, syncTemplatesFromAccount, applyTemplate,
   VISIBILITY3, DATE_FORMATS, PRECISIONS, FONT_SIZES, type ChartSettings, type ColorLine, type ChartSettingsSnapshot,
 } from '../lib/chartSettings';
 import { chartBgImage, readImageFile, BG_IMAGE_FITS } from '../lib/chartBackgroundImage';
@@ -620,7 +620,7 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderTop: `1px solid ${c.border}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <TemplateMenu c={c} isDark={isDark} uid={user?.uid} onDialog={setSubDialog} />
-            <SettingsFileButtons c={c} account={user ? { name: user.displayName, email: user.email } : undefined} signedIn={!!user} onDialog={setSubDialog} />
+            <SettingsFileButtons c={c} account={user ? { name: user.displayName, email: user.email } : undefined} uid={user?.uid} onDialog={setSubDialog} />
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
             <button type="button" onClick={cancel} style={{ height: 34, padding: '0 12px', borderRadius: 6, border: `1px solid ${c.text}`, background: 'transparent', color: c.text, fontSize: 15, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
@@ -634,7 +634,8 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
 
 // Download settings: every setting that follows the account, as a JSON file. Import: reads such a
 // file (asks first), puts its settings in place for this account, and reloads with them.
-function SettingsFileButtons({ c, account, signedIn, onDialog }: { c: Colors; account?: { name?: string | null; email?: string | null }; signedIn: boolean; onDialog: (open: boolean) => void }) {
+function SettingsFileButtons({ c, account, uid, onDialog }: { c: Colors; account?: { name?: string | null; email?: string | null }; uid?: string | null; onDialog: (open: boolean) => void }) {
+  const signedIn = !!uid;
   const input = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<SettingsFile | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -643,8 +644,8 @@ function SettingsFileButtons({ c, account, signedIn, onDialog }: { c: Colors; ac
   useEffect(() => { onDialog(!!pending || !!error); }, [pending, error]); // eslint-disable-line react-hooks/exhaustive-deps
   const close = () => { if (!busy) { setPending(null); setError(null); } };
   const btn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 10px', borderRadius: 6, border: `1px solid ${c.border}`, background: 'transparent', color: c.text, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' };
-  const download = () => {
-    downloadSettings(account);
+  const download = async () => {
+    await downloadSettings(account, uid);
     setSaved(true);
     setTimeout(() => setSaved(false), 1800);
   };
@@ -657,10 +658,11 @@ function SettingsFileButtons({ c, account, signedIn, onDialog }: { c: Colors; ac
   const apply = async () => {
     if (!pending) return;
     setBusy(true);
-    try { await applySettingsFile(pending); }
+    try { await applySettingsFile(pending, uid); }
     catch (e: any) { setBusy(false); setPending(null); setError(e?.message || "Couldn't import the settings"); }
   };
   const count = pending ? Object.keys(pending.settings).length : 0;
+  const toolCount = pending ? new Set((pending.drawing_templates || []).map(t => t.tool_type)).size : 0;
   const from = pending?.account?.name || pending?.account?.email;
   return (
     <>
@@ -689,7 +691,8 @@ function SettingsFileButtons({ c, account, signedIn, onDialog }: { c: Colors; ac
           <div style={{ fontSize: 14, lineHeight: '21px' }} data-name="settings-import-summary">
             {count} setting{count === 1 ? '' : 's'}{from ? <> from <b>{from}</b></> : ''}{pending?.exported_at ? `, saved ${new Date(pending.exported_at).toLocaleString()}` : ''}:
             layouts, watchlists, chart settings and templates, favorites and the rest replace the ones here{signedIn ? ' and in the account you\'re signed in to' : ' (in this browser; sign in to keep them in an account)'}.
-            The page reloads to apply them.
+            {toolCount > 0 && <> Also the styles and templates of {toolCount} drawing tool{toolCount === 1 ? '' : 's'}{signedIn ? '' : " (sign in to bring these: they're kept in the account)"}.</>}
+            {' '}Each part is also added to its Template menu, marked Imported, to apply again on its own or rename: the chart settings under Template here, each drawing tool&apos;s style in that tool&apos;s Template menu, indicator templates among Indicator templates. The page reloads to apply them.
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
             <button type="button" onClick={close} disabled={busy} style={{ height: 34, padding: '0 12px', borderRadius: 6, border: `1px solid ${c.text}`, background: 'transparent', color: c.text, fontSize: 15, cursor: 'pointer' }}>Cancel</button>
@@ -720,6 +723,7 @@ function TemplateMenu({ c, isDark, uid, onDialog }: { c: Colors; isDark: boolean
   const [open, setOpen] = useState(false);
   const [up, setUp] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [renaming, setRenaming] = useState<string | null>(null);
   const list = chartTemplates.useValue().list;
   const ref = useRef<HTMLDivElement>(null);
   useEscapeClose(() => setOpen(false), open);
@@ -729,11 +733,11 @@ function TemplateMenu({ c, isDark, uid, onDialog }: { c: Colors; isDark: boolean
     document.addEventListener('mousedown', onDown);
     return () => { document.removeEventListener('mousedown', onDown); };
   }, [open]);
-  useEffect(() => { onDialog(saving); }, [saving]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { onDialog(saving || !!renaming); }, [saving, renaming]); // eslint-disable-line react-hooks/exhaustive-deps
   const item = (key: string, label: React.ReactNode, onClick: () => void, extra?: React.ReactNode) => (
     <div key={key} role="menuitem" tabIndex={-1} onClick={onClick} className="tv-tmpl-item"
-      onMouseEnter={e => { e.currentTarget.style.background = c.hover; const t = e.currentTarget.querySelector<HTMLElement>('[data-trash]'); if (t) t.style.visibility = 'visible'; }}
-      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; const t = e.currentTarget.querySelector<HTMLElement>('[data-trash]'); if (t) t.style.visibility = 'hidden'; }}
+      onMouseEnter={e => { e.currentTarget.style.background = c.hover; e.currentTarget.querySelectorAll<HTMLElement>('[data-trash]').forEach(t => { t.style.visibility = 'visible'; }); }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.querySelectorAll<HTMLElement>('[data-trash]').forEach(t => { t.style.visibility = 'hidden'; }); }}
       style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 32, padding: '0 8px 0 14px', margin: '0 4px', borderRadius: 6, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 14 }}>
       <span style={{ flex: 1 }}>{label}</span>{extra}
     </div>
@@ -754,35 +758,51 @@ function TemplateMenu({ c, isDark, uid, onDialog }: { c: Colors; isDark: boolean
           {item('defaults', 'Apply defaults', () => { applySnapshot(defaultSnapshot(isDark)); setOpen(false); })}
           {item('saveas', 'Save as…', () => { setOpen(false); setSaving(true); })}
           {list.length > 0 && <div style={{ height: 1, background: c.border, margin: '4px 6px' }} />}
-          {list.map(t => item(`t:${t.name}`, t.name, () => { applyTemplate(t); setOpen(false); },
-            <button type="button" data-trash aria-label={`Remove ${t.name}`} onClick={e => { e.stopPropagation(); removeTemplate(t.name, uid); }}
-              style={{ visibility: 'hidden', border: 'none', background: 'transparent', color: c.muted, cursor: 'pointer', display: 'flex', padding: 4 }}>
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.2"><path d="M4 5.5h10M7.5 5.5V4h3v1.5M5.5 5.5l.7 9h5.6l.7-9" /></svg>
-            </button>))}
+          {list.map(t => item(`t:${t.name}`,
+            t.settings?.imported
+              ? <span style={{ display: 'flex', flexDirection: 'column', padding: '4px 0' }} data-name="template-imported">
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{t.name}
+                    <span style={{ fontSize: 11, lineHeight: '16px', padding: '0 6px', borderRadius: 4, background: c.hover, color: c.muted, border: `1px solid ${c.border}` }}>Imported</span></span>
+                  <span style={{ fontSize: 12, color: c.muted }}>{t.settings.imported.from}{t.settings.imported.at ? ` · ${new Date(t.settings.imported.at).toLocaleDateString()}` : ''}</span>
+                </span>
+              : t.name,
+            () => { applyTemplate(t); setOpen(false); },
+            <span style={{ display: 'flex' }}>
+              <button type="button" data-trash aria-label={`Rename ${t.name}`} title="Rename" onClick={e => { e.stopPropagation(); setOpen(false); setRenaming(t.name); }}
+                style={{ visibility: 'hidden', border: 'none', background: 'transparent', color: c.muted, cursor: 'pointer', display: 'flex', padding: 4 }}>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.2"><path d="M11.5 3.5l3 3L6 15H3v-3l8.5-8.5zM10 5l3 3" /></svg>
+              </button>
+              <button type="button" data-trash aria-label={`Remove ${t.name}`} title="Remove" onClick={e => { e.stopPropagation(); removeTemplate(t.name, uid); }}
+                style={{ visibility: 'hidden', border: 'none', background: 'transparent', color: c.muted, cursor: 'pointer', display: 'flex', padding: 4 }}>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.2"><path d="M4 5.5h10M7.5 5.5V4h3v1.5M5.5 5.5l.7 9h5.6l.7-9" /></svg>
+              </button>
+            </span>))}
         </div>
       )}
       {saving && <SaveTemplateDialog c={c} names={list.map(t => t.name)} onClose={() => setSaving(false)} onSave={name => { saveTemplate(name, uid); setSaving(false); }} />}
+      {renaming && <SaveTemplateDialog c={c} title="Rename template" initial={renaming} names={list.map(t => t.name).filter(n => n !== renaming)} onClose={() => setRenaming(null)}
+        onSave={name => { if (name !== renaming) renameTemplate(renaming, name, uid); setRenaming(null); }} />}
     </div>
   );
 }
 
-function SaveTemplateDialog({ c, names, onClose, onSave }: { c: Colors; names: string[]; onClose: () => void; onSave: (name: string) => void }) {
-  const [name, setName] = useState('');
+function SaveTemplateDialog({ c, names, onClose, onSave, title = 'Save template as', initial = '' }: { c: Colors; names: string[]; onClose: () => void; onSave: (name: string) => void; title?: string; initial?: string }) {
+  const [name, setName] = useState(initial);
   const [listOpen, setListOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   useEscapeClose(onClose);
-  useEffect(() => { const t = setTimeout(() => inputRef.current?.focus(), 30); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 30); return () => clearTimeout(t); }, []);
   const trimmed = name.trim();
   const submit = () => { if (!trimmed) return; if (names.includes(trimmed) && !confirm) { setConfirm(true); return; } onSave(trimmed); };
   return createPortal(
     <div onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }} style={{ position: 'fixed', inset: 0, zIndex: 100003, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div role="dialog" aria-label="Save template as" style={{ position: 'relative', width: 480, maxWidth: 'calc(100vw - 32px)', background: c.panel, color: c.text, borderRadius: 8, boxShadow: '0 2px 24px rgba(0,0,0,0.35)', padding: '30px 40px 28px',
+      <div role="dialog" aria-label={title} style={{ position: 'relative', width: 480, maxWidth: 'calc(100vw - 32px)', background: c.panel, color: c.text, borderRadius: 8, boxShadow: '0 2px 24px rgba(0,0,0,0.35)', padding: '30px 40px 28px',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif' }}>
         <button type="button" aria-label="close" onClick={onClose} style={{ position: 'absolute', top: 14, right: 14, width: 34, height: 34, border: 'none', background: 'transparent', color: c.text, cursor: 'pointer' }}>
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M3 3l12 12M15 3L3 15" /></svg>
         </button>
-        <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 18 }}>Save template as</div>
+        <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 18 }}>{title}</div>
         <div style={{ fontSize: 14, color: c.muted, marginBottom: 6 }}>Template name:</div>
         <div style={{ position: 'relative' }}>
           <input ref={inputRef} aria-label="Template name" value={name} onChange={e => { setName(e.target.value); setConfirm(false); }} onKeyDown={e => { if (e.key === 'Enter') submit(); }}
@@ -805,7 +825,7 @@ function SaveTemplateDialog({ c, names, onClose, onSave }: { c: Colors; names: s
         {confirm && <div style={{ fontSize: 13, color: c.muted, marginTop: 10 }}>Template "{trimmed}" already exists. Do you really want to replace it?</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
           <button type="button" onClick={onClose} style={{ height: 34, padding: '0 12px', borderRadius: 6, border: `1px solid ${c.text}`, background: 'transparent', color: c.text, fontSize: 15, cursor: 'pointer' }}>Cancel</button>
-          <button type="button" disabled={!trimmed} onClick={submit} style={{ height: 34, padding: '0 14px', borderRadius: 6, border: 'none', background: trimmed ? c.text : c.disabledBg, color: trimmed ? c.panel : c.muted, fontSize: 15, cursor: trimmed ? 'pointer' : 'default' }}>{confirm ? 'Replace' : 'Save'}</button>
+          <button type="button" disabled={!trimmed} onClick={submit} style={{ height: 34, padding: '0 14px', borderRadius: 6, border: 'none', background: trimmed ? c.text : c.disabledBg, color: trimmed ? c.panel : c.muted, fontSize: 15, cursor: trimmed ? 'pointer' : 'default' }}>{confirm ? 'Replace' : title === 'Rename template' ? 'Rename' : 'Save'}</button>
         </div>
       </div>
     </div>, document.body);

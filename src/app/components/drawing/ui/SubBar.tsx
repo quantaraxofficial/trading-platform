@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Trash2, Move, Square, Palette, Lock, Unlock, MoreHorizontal, RotateCcw, RotateCw, Settings } from 'lucide-react';
 import { TVSettingsIcon } from '../../icons/TVIcons';
 import { useDrawing } from '../core/DrawingContext';
+import { isImported, renameDrawingTemplate } from './drawingTemplates';
 import { TrendlineSettingsModal } from './TrendlineSettingsModal';
 import { HorizontalRaySettingsModal } from './HorizontalRaySettingsModal';
 import { BrushSettingsModal } from './BrushSettingsModal';
@@ -498,7 +499,8 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         return;
       }
       const data = await res.json();
-      setTemplates(Array.isArray(data) ? data : []);
+      // "default" is the tool's own default style, not a template to pick
+      setTemplates(Array.isArray(data) ? data.filter((t: any) => t.name !== 'default') : []);
     } catch (err) {
       console.error("Error fetching templates:", err);
     }
@@ -592,6 +594,15 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
     setShowTemplateDropdown(false);
   };
 
+  // Renaming a template in place (the imported ones especially)
+  const [renamingId, setRenamingId] = useState<string | number | null>(null);
+  const commitRename = async (tmpl: any, name: string) => {
+    setRenamingId(null);
+    if (!user || !name.trim() || name.trim() === tmpl.name) return;
+    try { await renameDrawingTemplate(user.uid, tmpl, name); } catch (err) { console.error("Error renaming template:", err); }
+    fetchTemplates();
+  };
+
   const deleteTemplate = async (id) => {
     try {
       const res = await backendFetch(`http://localhost:8000/api/users/templates/delete/${id}/`, {
@@ -656,14 +667,32 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             <>
               <div style={{ height: '1px', backgroundColor: 'var(--tv-sub-hover)', margin: '4px 0' }} />
               {templates.map(tmp => (
-                <div key={tmp.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '8px' }}>
-                  <button 
+                <div key={tmp.id} data-name="drawing-template-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '8px' }}>
+                  {renamingId === tmp.id ? (
+                  <input autoFocus defaultValue={tmp.name} aria-label="Template name" data-name="template-rename-input"
+                    onKeyDown={e => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') commitRename(tmp, (e.target as HTMLInputElement).value);
+                      else if (e.key === 'Escape') { e.preventDefault(); setRenamingId(null); }
+                    }}
+                    onBlur={e => commitRename(tmp, e.target.value)}
+                    style={{ flex: 1, margin: '4px 8px 4px 12px', height: 30, padding: '0 8px', fontSize: 14, borderRadius: 4, border: '1px solid #2962ff', outline: 'none', background: 'transparent', color: 'var(--tv-sub-text)' }} />
+                ) : (
+                  <button
                     onClick={() => applyTemplate(tmp)}
-                    style={{ flex: 1, padding: '10px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '14px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}
+                    style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', textAlign: 'left', background: 'transparent', border: 'none', fontSize: '14px', color: 'var(--tv-sub-text)', cursor: 'pointer', minWidth: 0 }}
                     onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'}
                     onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
-                    {tmp.name}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tmp.name}</span>
+                    {isImported(tmp) && <span style={{ fontSize: 11, lineHeight: '16px', padding: '0 6px', borderRadius: 4, border: '1px solid var(--tv-sub-border)', color: 'var(--tv-sub-muted, #787b86)', flexShrink: 0 }}>Imported</span>}
+                  </button>)}
+                  <button
+                    onClick={e => { e.stopPropagation(); setRenamingId(tmp.id); }}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--tv-sub-muted)', padding: '4px', display: 'flex' }}
+                    title="Rename template" aria-label={`Rename ${tmp.name}`}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M11.5 3.5l3 3L6 15H3v-3l8.5-8.5zM10 5l3 3" /></svg>
                   </button>
                   <button 
                     onClick={() => deleteTemplate(tmp.id)}

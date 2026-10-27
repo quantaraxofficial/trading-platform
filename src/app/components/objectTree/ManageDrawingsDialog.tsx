@@ -12,6 +12,7 @@ import { layoutStore } from "../../lib/layoutStore";
 import { readDrawingIndex, writeDrawingIndex, type IndexedDrawing } from "../../lib/drawingIndex";
 import { DrawingIcon, drawingTreeName, formatModified, TrashIcon, Chevron } from "./treeIcons";
 import { backendFetch } from "@/lib/backend";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 type Filter = "global" | "layout" | "none";
 
@@ -88,7 +89,7 @@ export default function ManageDrawingsDialog({ onClose }: { onClose: () => void 
                   style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 20px", cursor: "pointer", background: hovered === g.symbol ? "var(--tv-color-item-hover)" : "transparent" }}>
                   <span style={{ color: "var(--tv-color-text-muted)", display: "inline-flex" }}><Chevron open={isOpen} /></span>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14 }}>{g.symbol}</div>
+                    <div style={{ fontSize: 14 }}>{displaySymbol(g.symbol)}</div>
                     <div style={{ fontSize: 12, color: "var(--tv-color-text-muted)" }}>{g.list.length} {g.list.length === 1 ? "drawing" : "drawings"}</div>
                   </span>
                   <span role="button" aria-label="Remove all drawings for this symbol" title="Remove all drawings for this symbol"

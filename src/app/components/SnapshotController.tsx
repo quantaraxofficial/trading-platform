@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   captureChartSnapshot, snapshotFileName, downloadBlob, copyImageToClipboard, uploadSnapshot,
 } from "../lib/chartSnapshot";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 export type SnapshotAction = "download" | "copy-image" | "copy-link" | "open-tab" | "tweet";
 
@@ -64,7 +65,7 @@ export function useChartSnapshot({ symbol, intervalLabel, theme }: Options) {
         }
         case "tweet": {
           const url = await uploadSnapshot(blob, { ...meta, author });
-          const text = `${symbol}, ${intervalLabel}`;
+          const text = `${displaySymbol(symbol)}, ${intervalLabel}`;
           const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
           if (popup) popup.location.href = intent; else window.open(intent, "_blank");
           break;

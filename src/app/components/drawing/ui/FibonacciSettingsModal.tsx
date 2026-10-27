@@ -4,6 +4,7 @@ import { useDrawing, useSettingsSession } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
 import { useAuth } from '@/context/AuthContext';
 import SaveTemplateModal from '../../SaveTemplateModal';
+import { isImported, renameDrawingTemplate } from './drawingTemplates';
 import { ColorPickerPopup, stopAll } from './ColorPickerPopup';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
 import { PaletteInput } from "./PaletteInput";
@@ -268,6 +269,21 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
       updateDrawing(drawing.id, t.settings);
     }
     setShowTemplateDropdown(false);
+  };
+  // Renaming a template in place (the imported ones especially)
+  const [renamingId, setRenamingId] = useState<string | number | null>(null);
+  const reloadTemplates = () => {
+    if (!user || !drawing) return;
+    backendFetch(`http://localhost:8000/api/users/templates/${user.uid}/?tool_type=${drawing.type}`)
+      .then(res => res.json())
+      .then(data => { if (Array.isArray(data)) setTemplates(data.filter((t: any) => t.name !== 'default')); })
+      .catch(() => {});
+  };
+  const commitRename = async (t: any, name: string) => {
+    setRenamingId(null);
+    if (!user || !name.trim() || name.trim() === t.name) return;
+    try { await renameDrawingTemplate(user.uid, t, name); } catch (e) { console.error("Failed to rename template:", e); }
+    reloadTemplates();
   };
 
   const [visibility, setVisibility] = useState(drawing?.visibility || {
@@ -653,7 +669,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
             <div style={{
               position: 'absolute', bottom: '100%', left: 0, marginBottom: '4px',
               backgroundColor: 'var(--tv-sub-bg)', border: `1px solid var(--tv-sub-border)`, borderRadius: '6px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: '180px', overflow: 'hidden',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: '240px', overflow: 'hidden',
               display: 'flex', flexDirection: 'column', zIndex: 100001
             }}>
               <button onClick={() => { setShowTemplateDropdown(false); setShowSaveModal(true); }} style={{ padding: '10px 16px', background: 'transparent', border: 'none', color: 'var(--tv-sub-text)', cursor: 'pointer', textAlign: 'left', fontSize: '14px' }} onMouseEnter={(e) => e.currentTarget.style.background = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
@@ -661,9 +677,26 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
               </button>
               {templates.length > 0 && <div style={{ height: '1px', backgroundColor: 'var(--tv-sub-border)', margin: '4px 0' }} />}
               {templates.map(t => (
-                <button key={t.id} onClick={() => applyTemplate(t)} style={{ padding: '10px 16px', background: 'transparent', border: 'none', color: 'var(--tv-sub-text)', cursor: 'pointer', textAlign: 'left', fontSize: '14px' }} onMouseEnter={(e) => e.currentTarget.style.background = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-                  {t.name}
-                </button>
+                <div key={t.id} data-name="drawing-template-row" style={{ display: 'flex', alignItems: 'center', paddingRight: 6 }}>
+                  {renamingId === t.id ? (
+                  <input autoFocus defaultValue={t.name} aria-label="Template name" data-name="template-rename-input"
+                    onKeyDown={e => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') commitRename(t, (e.target as HTMLInputElement).value);
+                      else if (e.key === 'Escape') { e.preventDefault(); setRenamingId(null); }
+                    }}
+                    onBlur={e => commitRename(t, e.target.value)}
+                    style={{ flex: 1, margin: '4px 8px 4px 12px', height: 30, padding: '0 8px', fontSize: 14, borderRadius: 4, border: '1px solid #2962ff', outline: 'none', background: 'transparent', color: 'var(--tv-sub-text)' }} />
+                ) : (
+                  <button onClick={() => applyTemplate(t)} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: 'transparent', border: 'none', color: 'var(--tv-sub-text)', cursor: 'pointer', textAlign: 'left', fontSize: '14px', minWidth: 0 }} onMouseEnter={(e) => e.currentTarget.style.background = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+                    {isImported(t) && <span style={{ fontSize: 11, lineHeight: '16px', padding: '0 6px', borderRadius: 4, border: '1px solid var(--tv-sub-border)', color: 'var(--tv-sub-muted, #787b86)', flexShrink: 0 }}>Imported</span>}
+                  </button>)}
+                  <button onClick={e => { e.stopPropagation(); setRenamingId(t.id); }} title="Rename template" aria-label={`Rename ${t.name}`}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--tv-sub-muted)', padding: 4, display: 'flex' }}>
+                    <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M11.5 3.5l3 3L6 15H3v-3l8.5-8.5zM10 5l3 3" /></svg>
+                  </button>
+                </div>
               ))}
             </div>
           )}

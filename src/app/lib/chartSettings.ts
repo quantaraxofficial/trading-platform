@@ -121,7 +121,11 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
 export const chartSettings = makeStore<ChartSettings>("tv:chartSettings", DEFAULT_CHART_SETTINGS);
 
 // Everything the dialog covers, for Cancel and for templates
-export type ChartSettingsSnapshot = { chart: ChartSettings; status: StatusLineSettings; trading: Partial<TradingSettings> };
+export type ChartSettingsSnapshot = {
+  chart: ChartSettings; status: StatusLineSettings; trading: Partial<TradingSettings>;
+  // Set on a template made from an imported settings file: whose settings, and when they were saved
+  imported?: { from: string; at: string };
+};
 const TRADING_KEYS: (keyof TradingSettings)[] = ["buySellButtons", "oneClickTrading", "executionSound", "executionSoundVolume", "executionSoundName", "onlyRejectionNotifications",
   "positionsAndOrders", "reversePositionButton", "projectOrderForMarket", "pnlValue", "pnlPositions", "pnlPositionsMode", "pnlBrackets", "pnlBracketsMode",
   "executionMarks", "executionLabels", "extendedPriceLines", "alignment", "tradesInSnapshots"] as any;
@@ -151,21 +155,65 @@ export type ChartTemplate = { name: string; settings: ChartSettingsSnapshot; id?
 const TEMPLATES_KEY = "tv:chartSettingsTemplates";
 export const chartTemplates = makeStore<{ list: ChartTemplate[] }>(TEMPLATES_KEY, { list: [] });
 const API = "http://localhost:8000/api/users/templates";
+const byName = (list: ChartTemplate[]) => [...list].sort((a, b) => a.name.localeCompare(b.name));
+// Saves a template to the account and remembers the id the account gave it (for rename / delete)
+async function uploadTemplate(name: string, settings: ChartSettingsSnapshot, uid?: string | null) {
+  if (!uid) return;
+  try {
+    const res = await backendFetch(`${API}/${uid}/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, tool_type: "chart_settings", settings }) });
+    const id = res.ok ? (await res.json())?.id : undefined;
+    if (id !== undefined) chartTemplates.set(p => ({ list: p.list.map(t => (t.name === name ? { ...t, id } : t)) }));
+  } catch { /* offline: it's kept in this browser */ }
+}
+// The account's id for a template (fetched when this browser doesn't know it yet)
+async function accountIdOf(t: ChartTemplate | undefined, uid: string): Promise<string | number | undefined> {
+  if (!t) return undefined;
+  if (t.id !== undefined) return t.id;
+  try {
+    const res = await backendFetch(`${API}/${uid}/?tool_type=chart_settings`);
+    const data = res.ok ? await res.json() : [];
+    return Array.isArray(data) ? data.find((d: any) => d?.name === t.name)?.id : undefined;
+  } catch { return undefined; }
+}
+async function deleteFromAccount(t: ChartTemplate | undefined, uid?: string | null) {
+  if (!uid) return;
+  const id = await accountIdOf(t, uid);
+  if (id !== undefined) backendFetch(`${API}/delete/${id}/`, { method: "DELETE" }).catch(() => {});
+}
 export function saveTemplate(name: string, uid?: string | null) {
   const settings = takeSnapshot();
-  chartTemplates.set(p => ({ list: [...p.list.filter(t => t.name !== name), { name, settings }].sort((a, b) => a.name.localeCompare(b.name)) }));
-  if (uid) backendFetch(`${API}/${uid}/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, tool_type: "chart_settings", settings }) }).catch(() => {});
+  chartTemplates.set(p => ({ list: byName([...p.list.filter(t => t.name !== name), { name, settings }]) }));
+  uploadTemplate(name, settings, uid);
 }
 export function removeTemplate(name: string, uid?: string | null) {
   const t = chartTemplates.get().list.find(x => x.name === name);
   chartTemplates.set(p => ({ list: p.list.filter(x => x.name !== name) }));
-  if (uid && t?.id !== undefined) backendFetch(`${API}/${uid}/${t.id}/`, { method: "DELETE" }).catch(() => {});
+  deleteFromAccount(t, uid);
+}
+// Renames a template (replacing one already called that, if any), here and in the account
+export async function renameTemplate(oldName: string, newName: string, uid?: string | null) {
+  const list = chartTemplates.get().list;
+  const t = list.find(x => x.name === oldName);
+  if (!t || !newName || newName === oldName) return;
+  const replaced = list.find(x => x.name === newName);
+  chartTemplates.set(p => ({ list: byName([...p.list.filter(x => x.name !== oldName && x.name !== newName), { name: newName, settings: t.settings }]) }));
+  if (!uid) return;
+  await deleteFromAccount(t, uid);
+  if (replaced) await deleteFromAccount(replaced, uid);
+  await uploadTemplate(newName, t.settings, uid);
+}
+// A template holding the chart settings of an imported settings file, named after whose they are
+export function importedTemplateName(from: string | null | undefined, existing: string[]): string {
+  const base = `Imported · ${(from || "settings file").trim().slice(0, 60)}`;
+  let name = base;
+  for (let i = 2; existing.includes(name); i++) name = `${base} (${i})`;
+  return name;
 }
 // Merges the account's templates in (older ones only held candle / canvas colours)
 export function syncTemplatesFromAccount(uid: string) {
   backendFetch(`${API}/${uid}/?tool_type=chart_settings`).then(r => (r.ok ? r.json() : [])).then((data: any[]) => {
     if (!Array.isArray(data)) return;
-    const fromAccount: ChartTemplate[] = data.filter(d => d && d.name && d.name !== "default").map(d => ({ id: d.id, name: d.name, settings: upgradeTemplate(d.settings) }));
+    const fromAccount: ChartTemplate[] = data.filter(d => d && d.name && d.name !== "default" && d.settings).map(d => ({ id: d.id, name: d.name, settings: upgradeTemplate(d.settings) }));
     chartTemplates.set(p => {
       const byName = new Map(p.list.map(t => [t.name, t]));
       fromAccount.forEach(t => byName.set(t.name, { ...byName.get(t.name), ...t }));

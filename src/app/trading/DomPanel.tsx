@@ -14,6 +14,7 @@ import { useTicketPrefs, ticketPrefs, useTradingSettings } from "./settings";
 import { formatPrice, formatQty, formatSignedMoney, roundQty, qtyStepOf } from "./instruments";
 import { C, Tip, Popover, MenuItem, MenuDivider, BrandLogo, MoreIcon, CloseIcon, HexSettingsIcon, ChevronDown, ChevronUp } from "./ui";
 import { DockTabs, HeaderBtn, Checkbox, SelectBox, inputStyle } from "./OrderTicket";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 const ROW_H = 20;
 const TIFS: TimeInForce[] = ["Day", "Week", "Month", "GTD"];
@@ -152,7 +153,7 @@ export default function DomPanel() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 12px 8px 16px" }}>
         <BrandLogo size={24} />
-        <span style={{ fontWeight: 600, fontSize: 14, flex: 1 }}>{symbol}</span>
+        <span style={{ fontWeight: 600, fontSize: 14, flex: 1 }}>{displaySymbol(symbol)}</span>
         <HeaderBtn btnRef={moreRef} active={menu} onClick={() => setMenu(m => !m)} label="DOM settings"><MoreIcon /></HeaderBtn>
         <HeaderBtn onClick={closeDock} label="Close"><CloseIcon size={20} /></HeaderBtn>
       </div>
@@ -174,7 +175,7 @@ export default function DomPanel() {
         role="grid"
         aria-label="Depth of market"
       >
-        {!q && <div style={{ padding: 24, textAlign: "center", color: C.muted }}>No quotes for {symbol} yet</div>}
+        {!q && <div style={{ padding: 24, textAlign: "center", color: C.muted }}>No quotes for {displaySymbol(symbol)} yet</div>}
         {rows.map(i => {
           const price = priceOf(i);
           const buys = working.filter(o => o.side === "buy" && idx(orderPrice(o)!) === i);
