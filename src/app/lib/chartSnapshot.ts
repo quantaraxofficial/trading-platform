@@ -34,6 +34,8 @@ function isVisibleCanvas(c: HTMLCanvasElement): boolean {
 
 import { tradingSettings } from '@/app/trading/settings';
 import { paneGeometry } from './priceScaleSide';
+import { chartSettings } from './chartSettings';
+import { chartBgImage, paintCanvasBackground } from './chartBackgroundImage';
 
 export async function captureChartSnapshot(meta: SnapshotMeta): Promise<Blob> {
   const root = findChartRoot();
@@ -50,6 +52,16 @@ export async function captureChartSnapshot(meta: SnapshotMeta): Promise<Blob> {
   const dark = meta.theme === 'dark';
   ctx.fillStyle = dark ? '#131722' : '#ffffff';
   ctx.fillRect(0, 0, out.width, out.height);
+  // Settings → Canvas → Background image: the photo under the see-through chart canvases
+  const bgEl = (root.matches('[data-bg-image="on"]') ? root : root.querySelector('[data-bg-image="on"]')) as HTMLElement | null;
+  if (bgEl) {
+    const cs = chartSettings.get();
+    const b = bgEl.getBoundingClientRect();
+    await paintCanvasBackground(ctx, (b.left - rect.left) * dpr, (b.top - rect.top) * dpr, b.width * dpr, b.height * dpr, {
+      data: chartBgImage.get().data, opacity: cs.bgImageOpacity, fit: cs.bgImageFit, type: cs.backgroundType,
+      top: cs.background, bottom: cs.background2,
+    });
+  }
 
   // Settings → Trading → "Orders, executions, and positions in chart snapshots": off hides the
   // execution marks for the capture, on draws the position/order lines into it

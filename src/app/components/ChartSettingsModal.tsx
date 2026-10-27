@@ -3,7 +3,10 @@
 // TradingView's chart Settings dialog: Symbol, Status line, Scales and lines, Canvas, Trading,
 // Alerts and Events. Every change shows on the chart at once; Cancel (or Escape / ✕) puts
 // everything back as it was when the dialog opened; Ok keeps it. Template: Apply defaults,
-// Save as…, and the saved templates (each with a trash can on hover).
+// Save as…, and the saved templates (each with a trash can on hover). Beside it, Download
+// settings saves all of the account's settings to a file, and Import loads such a file (e.g. on
+// another computer) and reloads with them. Canvas → Background image puts a photo behind the
+// candles.
 
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -21,6 +24,8 @@ import {
   chartSettings, takeSnapshot, applySnapshot, defaultSnapshot, chartTemplates, saveTemplate, removeTemplate, syncTemplatesFromAccount, applyTemplate,
   VISIBILITY3, DATE_FORMATS, PRECISIONS, FONT_SIZES, type ChartSettings, type ColorLine, type ChartSettingsSnapshot,
 } from '../lib/chartSettings';
+import { chartBgImage, readImageFile, BG_IMAGE_FITS } from '../lib/chartBackgroundImage';
+import { downloadSettings, readSettingsFile, applySettingsFile, type SettingsFile } from '../lib/settingsTransfer';
 
 export interface CandleColors {
   upColor: string; downColor: string; borderUpColor: string; borderDownColor: string; wickUpColor: string; wickDownColor: string;
@@ -216,9 +221,14 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
   const setTr = (patch: Partial<TradingSettings>) => tradingSettings.set(patch);
 
   // What Cancel restores
-  const snapRef = useRef<{ snap: ChartSettingsSnapshot; tz: string } | null>(null);
-  if (!snapRef.current) snapRef.current = { snap: takeSnapshot(), tz: timezone };
-  const cancel = () => { applySnapshot(snapRef.current!.snap); onTimezone(snapRef.current!.tz); onClose(); };
+  const snapRef = useRef<{ snap: ChartSettingsSnapshot; tz: string; bg: { data: string; name: string } } | null>(null);
+  if (!snapRef.current) snapRef.current = { snap: takeSnapshot(), tz: timezone, bg: chartBgImage.get() };
+  const cancel = () => {
+    applySnapshot(snapRef.current!.snap);
+    onTimezone(snapRef.current!.tz);
+    if (chartBgImage.get().data !== snapRef.current!.bg.data) chartBgImage.set(snapRef.current!.bg);
+    onClose();
+  };
   const ok = () => { onCommit?.(); onClose(); };
   const [subDialog, setSubDialog] = useState(false);
   useEscapeClose(cancel, !subDialog);
@@ -446,6 +456,49 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
     {line(<Check c={c} label="Save chart left edge position when changing interval" checked={s.saveLeftEdge} onChange={v => set({ saveLeftEdge: v })} />)}
   </>);
 
+  // Background image: pick a photo (shrunk to fit a setting), how strongly it shows, how it's fitted
+  const bgImg = chartBgImage.useValue();
+  const imgInput = useRef<HTMLInputElement>(null);
+  const [imgBusy, setImgBusy] = useState(false);
+  const [imgError, setImgError] = useState<string | null>(null);
+  const pickImage = () => { setImgError(null); imgInput.current?.click(); };
+  const onImageFile = async (file: File | undefined) => {
+    if (!file) return;
+    setImgBusy(true);
+    setImgError(null);
+    try {
+      chartBgImage.set({ data: await readImageFile(file), name: file.name });
+      set({ bgImage: true });
+    } catch (e: any) {
+      setImgError(e?.message || "Couldn't use that image");
+    } finally {
+      setImgBusy(false);
+      if (imgInput.current) imgInput.current.value = '';
+    }
+  };
+  const smallBtn: React.CSSProperties = { height: 34, padding: '0 12px', borderRadius: 6, border: `1px solid ${c.border}`, background: 'transparent', color: c.text, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' };
+  const bgImageRows = (<>
+    {line(<>
+      <div style={{ width: 165 }}><Check c={c} label="Background image" checked={s.bgImage && !!bgImg.data} onChange={v => (v && !bgImg.data ? pickImage() : set({ bgImage: v }))} /></div>
+      {bgImg.data && (
+        <span title={bgImg.name} data-name="bg-image-preview" style={{ width: 52, height: 34, borderRadius: 6, border: `1px solid ${c.border}`, flexShrink: 0, opacity: s.bgImage ? 1 : 0.5,
+          backgroundImage: `url("${bgImg.data}")`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+      )}
+      <button type="button" style={smallBtn} onClick={pickImage} disabled={imgBusy} data-name="bg-image-choose">{imgBusy ? 'Loading…' : bgImg.data ? 'Change…' : 'Choose image…'}</button>
+      {bgImg.data && <button type="button" style={smallBtn} onClick={() => { chartBgImage.set({ data: '', name: '' }); set({ bgImage: false }); }} data-name="bg-image-remove">Remove</button>}
+      <input ref={imgInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" style={{ display: 'none' }} aria-label="Background image file"
+        onChange={e => onImageFile(e.target.files?.[0])} />
+    </>)}
+    {imgError && <div role="alert" style={{ fontSize: 13, color: '#f23645', margin: '-10px 0 10px' }}>{imgError}</div>}
+    {s.bgImage && bgImg.data && <>
+      {row(173, 'Image strength', <input key="op" type="range" min={5} max={100} aria-label="Background image strength" value={s.bgImageOpacity}
+        onChange={e => set({ bgImageOpacity: Number(e.target.value) })} style={{ width: 150, accentColor: '#2962ff' }} />,
+        <span key="opv" style={{ fontSize: 14, width: 40 }}>{s.bgImageOpacity}%</span>)}
+      {desc('Lower lets more of the background color through, so candles stand out')}
+      {row(173, 'Image fit', <Dropdown key="fit" c={c} label="Background image fit" value={s.bgImageFit} width={110} options={BG_IMAGE_FITS} onChange={v => set({ bgImageFit: v as any })} />)}
+    </>}
+  </>);
+
   const wm = s.watermark;
   const wmOpts = [{ value: 'ticker', label: 'Ticker' }, { value: 'interval', label: 'Interval' }, { value: 'description', label: 'Description' }, { value: 'replay', label: 'Replay mode' }];
   const canvasTab = (<>
@@ -453,6 +506,7 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
     {row(173, 'Background', <Dropdown key="bt" c={c} label="Background" value={s.backgroundType} options={['Solid', 'Gradient']} onChange={v => set({ backgroundType: v as any })} />,
       <Swatch key="bg1" c={c} label="Background color" color={s.background} onChange={col => set({ background: col })} />,
       s.backgroundType === 'Gradient' ? <Swatch key="bg2" c={c} label="Background bottom color" color={s.background2} onChange={col => set({ background2: col })} /> : null)}
+    {bgImageRows}
     {line(<><div style={{ width: 165 }}><Check c={c} label="Vertical grid lines" checked={s.vertGrid} onChange={v => set({ vertGrid: v })} /></div>
       <Swatch c={c} wide label="Vertical grid lines color" disabled={!s.vertGrid} color={s.gridVert} onChange={col => set({ gridVert: col })} /></>)}
     {line(<><div style={{ width: 165 }}><Check c={c} label="Horizontal grid lines" checked={s.horzGrid} onChange={v => set({ horzGrid: v })} /></div>
@@ -564,7 +618,10 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
           <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '14px 20px 24px 20px' }}>{content[tab]}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderTop: `1px solid ${c.border}` }}>
-          <TemplateMenu c={c} isDark={isDark} uid={user?.uid} onDialog={setSubDialog} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <TemplateMenu c={c} isDark={isDark} uid={user?.uid} onDialog={setSubDialog} />
+            <SettingsFileButtons c={c} account={user ? { name: user.displayName, email: user.email } : undefined} signedIn={!!user} onDialog={setSubDialog} />
+          </div>
           <div style={{ display: 'flex', gap: 12 }}>
             <button type="button" onClick={cancel} style={{ height: 34, padding: '0 12px', borderRadius: 6, border: `1px solid ${c.text}`, background: 'transparent', color: c.text, fontSize: 15, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
             <button type="button" onClick={ok} style={{ height: 34, padding: '0 12px', minWidth: 44, borderRadius: 6, border: 'none', background: c.text, color: c.panel, fontSize: 15, cursor: 'pointer', fontFamily: 'inherit' }}>Ok</button>
@@ -573,6 +630,89 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
       </div>
     </div>
   );
+}
+
+// Download settings: every setting that follows the account, as a JSON file. Import: reads such a
+// file (asks first), puts its settings in place for this account, and reloads with them.
+function SettingsFileButtons({ c, account, signedIn, onDialog }: { c: Colors; account?: { name?: string | null; email?: string | null }; signedIn: boolean; onDialog: (open: boolean) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [pending, setPending] = useState<SettingsFile | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { onDialog(!!pending || !!error); }, [pending, error]); // eslint-disable-line react-hooks/exhaustive-deps
+  const close = () => { if (!busy) { setPending(null); setError(null); } };
+  const btn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 10px', borderRadius: 6, border: `1px solid ${c.border}`, background: 'transparent', color: c.text, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' };
+  const download = () => {
+    downloadSettings(account);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1800);
+  };
+  const onFile = async (file: File | undefined) => {
+    if (input.current) input.current.value = '';
+    if (!file) return;
+    try { setPending(await readSettingsFile(file)); }
+    catch (e: any) { setError(e?.message || "Couldn't read that file"); }
+  };
+  const apply = async () => {
+    if (!pending) return;
+    setBusy(true);
+    try { await applySettingsFile(pending); }
+    catch (e: any) { setBusy(false); setPending(null); setError(e?.message || "Couldn't import the settings"); }
+  };
+  const count = pending ? Object.keys(pending.settings).length : 0;
+  const from = pending?.account?.name || pending?.account?.email;
+  return (
+    <>
+      <Tip text="Download all your settings as a file, to import them on another computer" placement="top" maxWidth={260}>
+        <button type="button" style={btn} onClick={download} aria-label="Download settings" data-name="settings-download">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden><path d="M9 2.5v9M5.5 8 9 11.5 12.5 8M3 13v2.5h12V13" /></svg>
+          {saved ? 'Downloaded' : 'Download settings'}
+        </button>
+      </Tip>
+      <Tip text="Import a settings file downloaded from this site" placement="top" maxWidth={260}>
+        <button type="button" style={btn} onClick={() => input.current?.click()} aria-label="Import settings" data-name="settings-import">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden><path d="M9 11.5v-9M5.5 6 9 2.5 12.5 6M3 13v2.5h12V13" /></svg>
+          Import
+        </button>
+      </Tip>
+      <input ref={input} type="file" accept=".json,application/json" style={{ display: 'none' }} aria-label="Settings file" onChange={e => onFile(e.target.files?.[0])} />
+      {(pending || error) && <ImportDialog c={c} onClose={close}>
+        {error ? <>
+          <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 14 }}>Couldn&apos;t import</div>
+          <div style={{ fontSize: 14, lineHeight: '21px' }}>{error}</div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
+            <button type="button" onClick={close} style={{ height: 34, padding: '0 14px', borderRadius: 6, border: 'none', background: c.text, color: c.panel, fontSize: 15, cursor: 'pointer' }}>Ok</button>
+          </div>
+        </> : <>
+          <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 14 }}>Import settings</div>
+          <div style={{ fontSize: 14, lineHeight: '21px' }} data-name="settings-import-summary">
+            {count} setting{count === 1 ? '' : 's'}{from ? <> from <b>{from}</b></> : ''}{pending?.exported_at ? `, saved ${new Date(pending.exported_at).toLocaleString()}` : ''}:
+            layouts, watchlists, chart settings and templates, favorites and the rest replace the ones here{signedIn ? ' and in the account you\'re signed in to' : ' (in this browser; sign in to keep them in an account)'}.
+            The page reloads to apply them.
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
+            <button type="button" onClick={close} disabled={busy} style={{ height: 34, padding: '0 12px', borderRadius: 6, border: `1px solid ${c.text}`, background: 'transparent', color: c.text, fontSize: 15, cursor: 'pointer' }}>Cancel</button>
+            <button type="button" onClick={apply} disabled={busy} data-name="settings-import-apply" style={{ height: 34, padding: '0 14px', borderRadius: 6, border: 'none', background: c.text, color: c.panel, fontSize: 15, cursor: busy ? 'default' : 'pointer' }}>{busy ? 'Importing…' : 'Import and reload'}</button>
+          </div>
+        </>}
+      </ImportDialog>}
+    </>
+  );
+}
+
+function ImportDialog({ c, onClose, children }: { c: Colors; onClose: () => void; children: React.ReactNode }) {
+  useEscapeClose(onClose);
+  return createPortal(
+    <div onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }} style={{ position: 'fixed', inset: 0, zIndex: 100003, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.25)' }}>
+      <div role="dialog" aria-label="Import settings" data-name="settings-import-dialog" style={{ position: 'relative', width: 460, maxWidth: 'calc(100vw - 32px)', background: c.panel, color: c.text, borderRadius: 8, boxShadow: '0 2px 24px rgba(0,0,0,0.35)', padding: '28px 32px 24px',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif' }}>
+        <button type="button" aria-label="close" onClick={onClose} style={{ position: 'absolute', top: 14, right: 14, width: 34, height: 34, border: 'none', background: 'transparent', color: c.text, cursor: 'pointer' }}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M3 3l12 12M15 3L3 15" /></svg>
+        </button>
+        {children}
+      </div>
+    </div>, document.body);
 }
 
 // Template ▾ : Apply defaults, Save as…, then the saved templates (trash can on hover)

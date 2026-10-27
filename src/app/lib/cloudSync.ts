@@ -15,7 +15,7 @@ export const SYNCED_KEYS = [
   "tv:layouts", "tv:watchlists", "tv:chartSettings", "tv:chartSettingsTemplates", "tv:chartType", "tv:statusLine",
   "tv:tradingSettings", "tv:indicatorTemplates", "tv:emaDefaults", "tv:favoriteIndicators", "tv:favoriteIntervals",
   "tv_favorite_tools", "tv:customColors", "tv:savedReplays", "tv:theme", "tv:chartTimezone", "tv:pineEditorSettings",
-  "tv:alert-notify", "tv:indicators",
+  "tv:alert-notify", "tv:indicators", "tv:chartBgImage",
 ];
 const SYNCED = new Set(SYNCED_KEYS);
 const META_KEY = "tv:syncMeta"; // key -> time of its last change here (ms)
@@ -105,6 +105,12 @@ async function push() {
     reportFailure({ path: `${API}${encodeURIComponent(uid || "")}/`, method: "POST", status_code: 0, reason_code: "cloud_sync_failed", reason_message: `settings upload threw: ${String(err?.message || err)}` });
     retryLater(keys); // offline or the server busy
   }
+}
+
+// Uploads what's waiting now (e.g. before a reload), instead of after the usual pause
+export async function flushCloudSync() {
+  if (timer) { clearTimeout(timer); timer = null; }
+  await push();
 }
 
 // Fetches the server's copies; newer ones replace this browser's, and keys this browser changed
