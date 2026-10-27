@@ -10,6 +10,7 @@ import type { AlertFiredDetail } from "@/context/AlertsContext";
 import { DEFAULT_NOTIFY } from "@/context/AlertsContext";
 import { playAlertSound, playAlertSoundRepeating } from "../../lib/alertSounds";
 import { chartSettings } from "../../lib/chartSettings";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 interface Toast { key: string; detail: AlertFiredDetail }
 
@@ -24,7 +25,7 @@ export function AlarmIcon({ size = 28 }: { size?: number }) {
 }
 
 export function SymbolChip({ symbol, dark }: { symbol: string; dark: boolean }) {
-  const name = symbol.split(":").pop() || symbol;
+  const name = displaySymbol(symbol.split(":").pop() || symbol);
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, height: 22, boxSizing: "border-box", padding: "2px 7px 2px 2px", borderRadius: 30, background: dark ? "#2a2e39" : "#f0f3fa", fontSize: 14, lineHeight: "18px", fontWeight: 400, color: dark ? "#d1d4dc" : "#131722", verticalAlign: "middle", maxWidth: 160 }}>
       <span aria-hidden style={{ width: 18, height: 18, borderRadius: "50%", background: "#2962ff", color: "#fff", fontSize: 10, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none" }}>{name.charAt(0)}</span>
@@ -75,7 +76,7 @@ export default function AlertToasts({ theme }: { theme?: string }) {
   return (
     <div style={{ position: "fixed", left: 64, bottom: 12, zIndex: 10010, display: "flex", flexDirection: "column-reverse", gap: 8, pointerEvents: "none" }}>
       {toasts.map(({ key, detail }) => (
-        <div key={key} role="status" aria-label={`Alert on ${detail.alert.symbol}`}
+        <div key={key} role="status" aria-label={`Alert on ${displaySymbol(detail.alert.symbol)}`}
           style={{ pointerEvents: "auto", width: 400, boxSizing: "border-box", display: "flex", background: c.bg, color: c.text, border: `1px solid ${c.border}`, borderRadius: 12, padding: "3px 0 3px 3px", boxShadow: "0 2px 4px rgba(0, 0, 0, 0.4)", fontFamily: "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif", fontSize: 14, lineHeight: "18px" }}>
           <div style={{ width: 46, flex: "none", borderRadius: "8px 0 0 8px", background: c.strip, color: c.icon, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <AlarmIcon />
@@ -86,7 +87,7 @@ export default function AlertToasts({ theme }: { theme?: string }) {
                 <div style={{ paddingTop: 5, fontSize: 16, lineHeight: "24px", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
                   Alert on <SymbolChip symbol={detail.alert.symbol} dark={dark} />
                 </div>
-                <div style={{ marginTop: 7, fontSize: 14, lineHeight: "18px", wordBreak: "break-word" }}>{detail.alert.message || `${detail.alert.symbol} ${detail.alert.condition} ${detail.alert.value}`}</div>
+                <div style={{ marginTop: 7, fontSize: 14, lineHeight: "18px", wordBreak: "break-word" }}>{detail.alert.message || `${displaySymbol(detail.alert.symbol)} ${detail.alert.condition} ${detail.alert.value}`}</div>
               </div>
               <button type="button" aria-label="Close" onClick={() => close(key)}
                 style={{ width: 20, height: 20, marginTop: 2, marginRight: -4, padding: 0, border: "none", background: "transparent", color: c.text, cursor: "pointer", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center" }}>

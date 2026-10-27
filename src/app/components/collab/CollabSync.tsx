@@ -16,6 +16,7 @@ import { cleanDrawings } from "../../lib/drawingData";
 import { engine } from "../../trading/store";
 import { activeBook } from "../../trading/engine";
 import { chartPane, logicalToTime } from "../../lib/collab/chartGeometry";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 const syncable = (d: BaseDrawing) => d.type !== "measure";
 
@@ -444,8 +445,8 @@ export function CollabAlertsSync() {
       if (!a) return;
       let notify: AlertNotify = DEFAULT_NOTIFY;
       try { notify = { ...DEFAULT_NOTIFY, ...JSON.parse(localStorage.getItem("tv:alert-notify") || "{}"), webhook: false }; } catch { /* the defaults */ }
-      const message = a.message || `${a.symbol} ${a.condition} ${a.value}`;
-      if (notify.app) desktopNotify(`Collab alert on ${a.symbol}`, `${message} (set by ${a.created_by_name})`);
+      const message = a.message || `${displaySymbol(a.symbol)} ${a.condition} ${a.value}`;
+      if (notify.app) desktopNotify(`Collab alert on ${displaySymbol(a.symbol)}`, `${message} (set by ${a.created_by_name})`);
       window.dispatchEvent(new CustomEvent("tv:alert-fired", {
         detail: {
           alert: { id: a.id, symbol: a.symbol, condition: a.condition, value: a.value, trigger: a.trigger, expiration: a.expiration || 0, message, createdAt: a.created_at, status: a.status, notify },

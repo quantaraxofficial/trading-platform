@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Search, X } from "lucide-react";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 interface SymbolItem {
   symbol: string;
@@ -211,7 +212,7 @@ export default function SymbolSearch({ onClose, onSelect, initialSearch = "" }: 
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <span style={{ fontWeight: 700, fontSize: "15px", color: "var(--tv-color-text)" }}>{s.symbol}</span>
+                  <span style={{ fontWeight: 700, fontSize: "15px", color: "var(--tv-color-text)" }}>{displaySymbol(s.symbol)}</span>
                   <span style={{ fontSize: "14px", color: "var(--tv-color-text)", opacity: 0.8 }}>{s.name}</span>
                 </div>
               </div>

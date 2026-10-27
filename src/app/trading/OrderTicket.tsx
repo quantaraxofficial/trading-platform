@@ -24,6 +24,7 @@ import {
   C, Toggle, Tip, Popover, MenuItem, MenuDivider, BrandLogo, SwapIcon, ChevronDown, ChevronUp, ChevronLeft, CloseIcon,
   InfoIcon, HelpIcon, MoreIcon, PresetsIcon, PinIcon, HexSettingsIcon, CloudUpIcon, TrashIcon, PlusIcon, CheckIcon, UfoIllustration,
 } from "./ui";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 const QTY_MODES: QtyMode[] = ["units", "usdMargin", "pctBalance", "riskUsd", "riskPct"];
 const EXIT_MODES: ExitMode[] = ["price", "ticks", "pctPrice", "money", "pctBalance"];
@@ -350,7 +351,7 @@ function TicketBody({ placement }: { placement: "floating" | "docked" }) {
           {/* Header */}
           <div onMouseDown={startDrag} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 12px 8px 16px", cursor: placement === "floating" ? "move" : "default", userSelect: "none" }}>
             <BrandLogo size={24} />
-            <span style={{ fontWeight: 600, fontSize: 14 }}>{symbol}</span>
+            <span style={{ fontWeight: 600, fontSize: 14 }}>{displaySymbol(symbol)}</span>
             {modifying && <span style={{ color: C.muted, fontSize: 13 }}>· Modify order {modifying.id}</span>}
             <span style={{ flex: 1 }} />
             {!modifying && (
@@ -594,7 +595,7 @@ function TicketBody({ placement }: { placement: "floating" | "docked" }) {
             <SubmitButton
               color={side} disabled={!canSubmit}
               title={modifying ? "Modify" : side === "buy" ? "Buy" : "Sell"}
-              subtitle={`${formatQty(qty)} ${symbol}${type !== "market" && isFinite(entry) ? ` @ ${formatP(entry)}` : ""} ${type.toUpperCase()}`}
+              subtitle={`${formatQty(qty)} ${displaySymbol(symbol)}${type !== "market" && isFinite(entry) ? ` @ ${formatP(entry)}` : ""} ${type.toUpperCase()}`}
               onClick={submit}
               sideColor={sideColor}
             />
@@ -1142,7 +1143,7 @@ export function ExitLevelsView({ symbol, side, typeLabel, qty, entry, prec, ctx,
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <BrandLogo size={36} />
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>{symbol}</div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{displaySymbol(symbol)}</div>
             <div style={{ color: C.muted, fontSize: 13 }}>{side === "buy" ? "Buy" : "Sell"} {typeLabel} {formatQty(qty)} @ {isFinite(entry) ? formatPrice(entry, prec) : "—"}</div>
           </div>
         </div>

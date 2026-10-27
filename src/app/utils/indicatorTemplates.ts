@@ -19,6 +19,8 @@ export interface IndicatorTemplate {
   volumeConfig?: any;
   symbol?: string;
   interval?: string;
+  // Came from an imported settings file: whose, and when they were saved
+  imported?: { from: string; at: string };
 }
 
 export function loadIndicatorTemplates(): IndicatorTemplate[] {
@@ -53,6 +55,18 @@ export function saveIndicatorTemplate(template: Omit<IndicatorTemplate, "id" | "
     createdAt: Date.now(),
   };
   const next = same ? existing.map(t => (t.id === same.id ? saved : t)) : [...existing, saved];
+  persist(next);
+  return next;
+}
+
+// Renames a template; another one already called that is replaced
+export function renameIndicatorTemplate(id: string, name: string): IndicatorTemplate[] {
+  const clean = name.trim();
+  const existing = loadIndicatorTemplates();
+  if (!clean) return existing;
+  const next = existing
+    .filter(t => t.id === id || t.name.trim().toLowerCase() !== clean.toLowerCase())
+    .map(t => (t.id === id ? { ...t, name: clean } : t));
   persist(next);
   return next;
 }

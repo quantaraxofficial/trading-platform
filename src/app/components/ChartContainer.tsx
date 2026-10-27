@@ -55,6 +55,7 @@ import { createSeriesMarkers } from "lightweight-charts";
 import { PineChartView } from "./pine/PineChartView";
 import { usePineIndicators, isPineIndicator } from "./pine/usePineIndicators";
 import { precomputeAllTimeframes, getAggCachedData, setAggCachedData, AGGREGATABLE_INTERVALS } from "@/app/utils/aggregateCandles";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 // The full "UTC" timezone selector list — city groups exactly as shown in the reference dropdown.
 export const TIMEZONES: { label: string; tz: string }[] = [
@@ -2402,7 +2403,7 @@ export default function ChartContainer({
       const changePercent = (change / prevPrice) * 100;
       const sign = change >= 0 ? '▲' : '▼';
       const prefix = change >= 0 ? '+' : '';
-      document.title = `${symbol} ${formattedPrice} ${sign} ${prefix}${changePercent.toFixed(2)}% | TradePilot`;
+      document.title = `${displaySymbol(symbol)} ${formattedPrice} ${sign} ${prefix}${changePercent.toFixed(2)}% | TradePilot`;
       
       // The last loaded bar is a quote for paper trading (a newer live quote wins)
       if (mode === 'idle') {
@@ -2417,7 +2418,7 @@ export default function ChartContainer({
         window.dispatchEvent(new CustomEvent('tv:chart-price', { detail: { symbol, price } }));
       }
     } else {
-      document.title = `${symbol} | TradePilot`;
+      document.title = `${displaySymbol(symbol)} | TradePilot`;
     }
   }, [symbol, lastPriceData, checkAlerts, mode]);
 
@@ -3916,8 +3917,8 @@ export default function ChartContainer({
         })() : null;
 
         const description = symbolInfo.description;
-        const main = sl.titleMode === "Ticker" || !description ? symbol
-          : sl.titleMode === "Ticker and description" ? `${symbol} · ${description}` : description;
+        const main = sl.titleMode === "Ticker" || !description ? displaySymbol(symbol)
+          : sl.titleMode === "Ticker and description" ? `${displaySymbol(symbol)} · ${description}` : description;
         const titleText = [main, legendIntervalLabel(interval), symbolInfo.exchange].filter(Boolean).join(" · ");
         const marketOpen = marketOpenNow(symbolInfo);
         // TradingView's status-line background is the chart's own background colour (so it only
@@ -5052,9 +5053,9 @@ function SeriesContextMenu({ pos, price, precision = 3, symbol, theme, onClose, 
   const lists = wlStore.useValue().lists;
   const ic = { size: 18, strokeWidth: 1.25 } as const;
   const items: TvMenuItem[] = [
-    { label: `Add alert on ${symbol} at ${p}…`, icon: <MenuAlertIcon />, shortcut: 'Alt + A', onClick: onAddAlert },
-    { label: `Add order on ${symbol} at ${p}…`, icon: <MenuAddOrderIcon />, shortcut: 'Shift + T', onClick: onAddOrder },
-    { label: `Add indicator/strategy on ${symbol}…`, icon: <Activity {...ic} />, onClick: onAddIndicator },
+    { label: `Add alert on ${displaySymbol(symbol)} at ${p}…`, icon: <MenuAlertIcon />, shortcut: 'Alt + A', onClick: onAddAlert },
+    { label: `Add order on ${displaySymbol(symbol)} at ${p}…`, icon: <MenuAddOrderIcon />, shortcut: 'Shift + T', onClick: onAddOrder },
+    { label: `Add indicator/strategy on ${displaySymbol(symbol)}…`, icon: <Activity {...ic} />, onClick: onAddIndicator },
     { kind: 'divider' },
     { label: 'Symbol info…', icon: <Info {...ic} />, onClick: onSymbolInfo },
     { kind: 'divider' },
@@ -5064,10 +5065,10 @@ function SeriesContextMenu({ pos, price, precision = 3, symbol, theme, onClose, 
     { label: 'Table view', onClick: onTableView },
     { kind: 'divider' },
     {
-      label: `Add ${symbol} to watchlist`, icon: <ListPlus {...ic} />,
+      label: `Add ${displaySymbol(symbol)} to watchlist`, icon: <ListPlus {...ic} />,
       submenu: lists.map(l => ({ label: l.name, onClick: () => { wlActions.addSymbol(symbol, l.id); onClose(); } })),
     },
-    { label: `Add text note for ${symbol}`, icon: <FilePenLine {...ic} />, shortcut: 'Alt + N', onClick: onAddNote },
+    { label: `Add text note for ${displaySymbol(symbol)}`, icon: <FilePenLine {...ic} />, shortcut: 'Alt + N', onClick: onAddNote },
     { kind: 'divider' },
     { label: 'Collaborate…', icon: <CollabIcon size={28} />, onClick: () => { window.dispatchEvent(new CustomEvent('tv:open-collab')); onClose(); }, testId: 'series-menu-collaborate' },
     { kind: 'divider' },
@@ -5078,8 +5079,8 @@ function SeriesContextMenu({ pos, price, precision = 3, symbol, theme, onClose, 
 function ChartContextMenu({ pos, price, precision = 3, symbol, theme, onClose, viewChanged, onReset, drawingCount, indicatorCount, onRemoveDrawings, onRemoveIndicators, onSettings, onAddAlert, onCopyPrice, onPaste, canPaste, onQuickOrder, onAddOrder, quickQty, buyType, sellType, cursorLocked, onToggleCursorLock, onTableView, onObjectTree, onCollaborate }: any) {
   const p = price !== null ? price.toFixed(precision) : "0";
   // The limit order comes first, with its shortcut (a buy below the market, a sell above it)
-  const buy: TvMenuItem = { label: `Buy ${quickQty} ${symbol} @ ${p} ${buyType}`, icon: <MenuBuyIcon />, shortcut: buyType === 'limit' ? "Alt + Shift + B" : undefined, onClick: () => onQuickOrder('buy', buyType) };
-  const sell: TvMenuItem = { label: `Sell ${quickQty} ${symbol} @ ${p} ${sellType}`, icon: <MenuSellIcon />, shortcut: sellType === 'limit' ? "Alt + Shift + S" : undefined, onClick: () => onQuickOrder('sell', sellType) };
+  const buy: TvMenuItem = { label: `Buy ${quickQty} ${displaySymbol(symbol)} @ ${p} ${buyType}`, icon: <MenuBuyIcon />, shortcut: buyType === 'limit' ? "Alt + Shift + B" : undefined, onClick: () => onQuickOrder('buy', buyType) };
+  const sell: TvMenuItem = { label: `Sell ${quickQty} ${displaySymbol(symbol)} @ ${p} ${sellType}`, icon: <MenuSellIcon />, shortcut: sellType === 'limit' ? "Alt + Shift + S" : undefined, onClick: () => onQuickOrder('sell', sellType) };
   const removals: TvMenuItem[] = [
     ...(drawingCount > 0 ? [{ label: "Remove drawings", onClick: onRemoveDrawings } as TvMenuItem] : []),
     ...(indicatorCount > 0 ? [{ label: `Remove ${indicatorCount} indicator${indicatorCount === 1 ? "" : "s"}`, onClick: onRemoveIndicators } as TvMenuItem] : []),
@@ -5089,9 +5090,9 @@ function ChartContextMenu({ pos, price, precision = 3, symbol, theme, onClose, v
     { label: `Copy price ${p}`, onClick: () => onCopyPrice(p) },
     { label: "Paste", shortcut: "Ctrl + V", disabled: !canPaste, onClick: onPaste },
     { kind: "divider" },
-    { label: `Add alert on ${symbol} at ${p}…`, icon: <MenuAlertIcon />, shortcut: "Alt + A", onClick: onAddAlert },
+    { label: `Add alert on ${displaySymbol(symbol)} at ${p}…`, icon: <MenuAlertIcon />, shortcut: "Alt + A", onClick: onAddAlert },
     ...(buyType === 'limit' ? [buy, sell] : [sell, buy]),
-    { label: `Add order on ${symbol} at ${p}…`, icon: <MenuAddOrderIcon />, shortcut: "Shift + T", onClick: onAddOrder },
+    { label: `Add order on ${displaySymbol(symbol)} at ${p}…`, icon: <MenuAddOrderIcon />, shortcut: "Shift + T", onClick: onAddOrder },
     { kind: "divider" },
     { label: cursorLocked ? "Unlock vertical cursor line" : "Lock vertical cursor line by time", onClick: onToggleCursorLock },
     { kind: "divider" },

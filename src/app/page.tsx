@@ -52,6 +52,7 @@ import CollabPanel from "./components/collab/CollabPanel";
 import CollabOverlay from "./components/collab/CollabOverlay";
 import { CollabAlertsSync, CollabChartSync, CollabDrawingSync, CollabPineSync, CollabPresenceSync, CollabReplaySync } from "./components/collab/CollabSync";
 import { useCollabActive } from "./lib/collab/session";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 const DRAWINGS_PANEL_KEY = "tv:drawingsPanelVisible";
 const RIGHT_PANEL_KEY = "tv:rightPanelOpen";
@@ -309,7 +310,7 @@ function AppLayout() {
   }, []);
 
   useEffect(() => {
-    document.title = `${symbol} | TradePilot`;
+    document.title = `${displaySymbol(symbol)} | TradePilot`;
   }, [symbol]);
 
   // Paper trading follows the chart's symbol; the account manager can switch it

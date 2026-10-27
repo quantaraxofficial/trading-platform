@@ -14,6 +14,7 @@ import { AddPersonIcon, CloseIcon, CollabIcon, CopyIcon, GlobeIcon, LinkIcon, Lo
 import { openCollab } from "./CollabController";
 import TvMenu, { type TvMenuItem } from "../ui/TvMenu";
 import { cleanDrawings } from "../../lib/drawingData";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 const ACCESS_LABEL: Record<LinkAccess, string> = {
   restricted: "Only people added",
@@ -104,7 +105,7 @@ export default function CollabDialog({ symbol, interval, indicators, onClose, mo
 function StartRoom({ uid, symbol, interval, indicators, onClose, mode, pine }: {
   uid: string; symbol: string; interval: string; indicators: any[]; onClose: () => void; mode: RoomKind; pine?: { code: string; scriptName: string };
 }) {
-  const [name, setName] = useState(mode === "pine" ? (pine?.scriptName || "Pine script") : `${symbol} analysis`);
+  const [name, setName] = useState(mode === "pine" ? (pine?.scriptName || "Pine script") : `${displaySymbol(symbol)} analysis`);
   const [access, setAccess] = useState<LinkAccess>("edit");
   const [allowRequests, setAllowRequests] = useState(true);
   const [allowVoice, setAllowVoice] = useState(true);

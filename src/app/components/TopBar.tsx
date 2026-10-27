@@ -29,6 +29,7 @@ import AccountMenu from "./AccountMenu";
 import TradeButton from "../trading/TradeButton";
 import { IntervalMenu, DownChevron } from "./IntervalMenu";
 import { intervalName, intervalShort, sortIntervals, removeCustomInterval } from "../lib/intervals";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 interface TopBarProps {
   theme: string;
@@ -187,7 +188,7 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
             className="tv-hdr-sym"
             onClick={() => { setInternalSearchInitial(""); setShowSymbolSearchInternal(true); }}
           >
-            {symbol}
+            {displaySymbol(symbol)}
           </button>
         </Tip>
 

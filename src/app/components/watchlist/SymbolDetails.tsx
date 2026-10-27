@@ -11,6 +11,7 @@ import { watchlists, wl, assetKind, type DetailsSection } from "./store";
 import { useDetailsAnalytics, type Quote } from "./data";
 import type { SeasonalYear, TechnicalRating } from "./analytics";
 import { fmtPrice, fmtVolume, priceDecimals, CheckRow, MenuHeading } from "./Watchlist";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 const BULL = "var(--tv-color-bull, #089981)", BEAR = "var(--tv-color-bear, #f23645)";
 const SECTIONS: [DetailsSection, string][] = [
@@ -71,7 +72,7 @@ export default function SymbolDetails({ symbol, quote }: { symbol: string; quote
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, height: 44, padding: "0 6px 0 12px" }}>
         <SymbolAvatar symbol={symbol} size={24} />
-        <span style={{ fontSize: 16, fontWeight: 700, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{symbol}</span>
+        <span style={{ fontSize: 16, fontWeight: 700, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displaySymbol(symbol)}</span>
         <Tip text="Add note" placement="bottom">
           <button type="button" className="tv-bb-btn" aria-label="Add note" style={{ width: 32, padding: 0 }}
             onClick={() => { wl.setDetails({ notes: true }); setFocusNote(n => n + 1); }}>

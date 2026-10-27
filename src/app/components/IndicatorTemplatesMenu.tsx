@@ -10,7 +10,9 @@ import {
   loadIndicatorTemplates,
   saveIndicatorTemplate,
   deleteIndicatorTemplate,
+  renameIndicatorTemplate,
 } from "@/app/utils/indicatorTemplates";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 interface ActiveIndicator { id: string; name: string; visible?: boolean }
 
@@ -199,7 +201,7 @@ function SaveIndicatorTemplateDialog({ activeIndicators, symbol, interval, inter
             }}
           />
           <div style={{ display: "flex", flexDirection: "column", gap: "10px", margin: "16px 0 4px" }}>
-            {checkbox(rememberSymbol, setRememberSymbol, `Remember symbol (${symbol})`)}
+            {checkbox(rememberSymbol, setRememberSymbol, `Remember symbol (${displaySymbol(symbol)})`)}
             {checkbox(rememberInterval, setRememberInterval, `Remember interval (${intervalLabel})`)}
           </div>
           <div style={{ fontSize: "12px", color: "var(--tv-color-text-muted)", margin: "14px 0 0", lineHeight: 1.5 }}>
@@ -238,6 +240,12 @@ function OpenIndicatorTemplateDialog({ onApply, onClose }: { onApply: (t: Indica
   const [templates, setTemplates] = useState<IndicatorTemplate[]>(() => loadIndicatorTemplates());
   const [query, setQuery] = useState("");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  // Renaming one in place (the imported ones especially)
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const commitRename = (id: string, name: string) => {
+    setRenamingId(null);
+    if (name.trim()) setTemplates(renameIndicatorTemplate(id, name));
+  };
 
   const q = query.trim().toLowerCase();
   const shown = templates
@@ -277,11 +285,44 @@ function OpenIndicatorTemplateDialog({ onApply, onClose }: { onApply: (t: Indica
               }}
             >
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: "14px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</div>
+                {renamingId === t.id ? (
+                  <input
+                    autoFocus
+                    defaultValue={t.name}
+                    aria-label="Template name"
+                    data-name="indicator-template-rename-input"
+                    onClick={e => e.stopPropagation()}
+                    onKeyDown={e => {
+                      e.stopPropagation();
+                      if (e.key === "Enter") commitRename(t.id, (e.target as HTMLInputElement).value);
+                      else if (e.key === "Escape") { e.preventDefault(); setRenamingId(null); }
+                    }}
+                    onBlur={e => commitRename(t.id, e.target.value)}
+                    style={{ width: "100%", boxSizing: "border-box", height: 28, padding: "0 8px", fontSize: 14, borderRadius: 4, border: "1px solid #2962ff", outline: "none", background: "transparent", color: "var(--tv-color-text)" }}
+                  />
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "14px", minWidth: 0 }}>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</span>
+                    {t.imported && (
+                      <span data-name="indicator-template-imported" style={{ fontSize: 11, lineHeight: "16px", padding: "0 6px", borderRadius: 4, border: "1px solid var(--tv-color-border)", color: "var(--tv-color-text-muted)", flexShrink: 0 }}>Imported</span>
+                    )}
+                  </div>
+                )}
                 <div style={{ fontSize: "12px", color: "var(--tv-color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {describe(t)}{t.symbol ? ` · ${t.symbol}` : ""}{t.interval ? ` · ${shortInterval(t.interval)}` : ""}
+                  {describe(t)}{t.symbol ? ` · ${displaySymbol(t.symbol)}` : ""}{t.interval ? ` · ${shortInterval(t.interval)}` : ""}{t.imported ? ` · from ${t.imported.from}` : ""}
                 </div>
               </div>
+              <button
+                title="Rename template"
+                aria-label={`Rename ${t.name}`}
+                onClick={e => { e.stopPropagation(); setRenamingId(t.id); }}
+                style={{
+                  visibility: hoveredId === t.id ? "visible" : "hidden", background: "none", border: "none",
+                  color: "var(--tv-color-text-muted)", cursor: "pointer", display: "flex", padding: "4px",
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M11.5 3.5l3 3L6 15H3v-3l8.5-8.5zM10 5l3 3" /></svg>
+              </button>
               <button
                 title="Remove template"
                 onClick={e => { e.stopPropagation(); setTemplates(deleteIndicatorTemplate(t.id)); }}

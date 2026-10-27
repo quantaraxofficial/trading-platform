@@ -8,6 +8,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Plus, Play, Square, Settings, Trash2, CheckCheck, Brush } from "lucide-react";
 import { useAlerts, Alert } from "@/context/AlertsContext";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -119,7 +120,7 @@ export default function AlertsSidebar() {
       {hover && (
         <div role="tooltip" style={{ position: "fixed", zIndex: 10002, pointerEvents: "none", right: (typeof window !== "undefined" && rootRef.current ? window.innerWidth - rootRef.current.getBoundingClientRect().left + 4 : 0), top: (rootRef.current?.getBoundingClientRect().top ?? 0) + hover.top, background: "#131722", color: "#d1d4dc", borderRadius: 6, padding: "8px 12px", fontSize: 13, lineHeight: "20px", boxShadow: "0 2px 6px rgba(0,0,0,0.4)", whiteSpace: "nowrap" }}>
           <div>{shortSymbol(hover.alert.symbol)} <span style={{ color: "#ff9800" }}>{hover.alert.condition}</span> {hover.alert.value}</div>
-          <div>{hover.alert.symbol} • <span style={{ color: statusColor(hover.alert) }}>{alertStatusText(hover.alert)}</span></div>
+          <div>{displaySymbol(hover.alert.symbol)} • <span style={{ color: statusColor(hover.alert) }}>{alertStatusText(hover.alert)}</span></div>
           <div>Created: {stamp(hover.alert.createdAt)}</div>
           {hover.alert.lastTriggeredAt && <div>Last triggered: {stamp(hover.alert.lastTriggeredAt)}</div>}
           {hover.alert.status === "active" && hover.alert.expiration > 0 && <div>Expires: {stamp(hover.alert.expiration)}</div>}

@@ -15,6 +15,7 @@ import ReplayAlertDialog from "./alerts/ReplayAlertDialog";
 import { SymbolChip } from "./alerts/AlertToasts";
 import { SOUND_GROUPS, SOUND_REPEATS, soundName, playAlertSound } from "../lib/alertSounds";
 import { collab, useCollabChartActive } from "../lib/collab/session";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 interface CreateAlertModalProps {
   onClose: () => void;
@@ -114,7 +115,7 @@ function AlertDialog({ onClose, theme, symbol: chartSymbol = 'XAUUSD', initialPr
   return (
     <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10005, backgroundColor: 'rgba(0,0,0,0.4)' }}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div role="dialog" aria-label={page === 'notifications' ? 'Notifications' : `${editing ? 'Edit' : 'Create'} alert on ${symbol}`}
+      <div role="dialog" aria-label={page === 'notifications' ? 'Notifications' : `${editing ? 'Edit' : 'Create'} alert on ${displaySymbol(symbol)}`}
         style={{ background: c.bg, color: c.text, borderRadius: 6, width: 480, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 32px)', boxShadow: '0 2px 4px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', fontFamily: "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif" }}>
 
         {/* Header */}

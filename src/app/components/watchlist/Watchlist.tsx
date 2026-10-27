@@ -14,6 +14,7 @@ import {
   type FlagColor, type WlItem, type SortCol,
 } from "./store";
 import type { Quote } from "./data";
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 // Prices in the symbol's own precision: forex to 5 decimals (3 for yen pairs), the rest to 2
 export function priceDecimals(sym: string, v: number) { return sym.includes("/") && !/^(BTC|ETH|XAU|XAG|SOL)/.test(sym) ? (v >= 20 ? 3 : 5) : 2; }
@@ -232,7 +233,7 @@ export default function Watchlist({ symbol, onSymbolChange, quotes }: { symbol: 
           {ctx.symbol ? (
             <>
               <div style={{ padding: "4px 12px 2px 44px", display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 14 }}>
-                <span>Flag/Unflag {ctx.symbol}</span><span style={{ fontSize: 12, opacity: 0.6 }}>Alt + ↵</span>
+                <span>Flag/Unflag {displaySymbol(ctx.symbol)}</span><span style={{ fontSize: 12, opacity: 0.6 }}>Alt + ↵</span>
               </div>
               <div role="group" aria-label="Flag colour" style={{ display: "flex", gap: 10, padding: "8px 12px 8px 44px" }}>
                 {FLAG_COLORS.map(f => {
@@ -247,13 +248,13 @@ export default function Watchlist({ symbol, onSymbolChange, quotes }: { symbol: 
               <MenuItem onClick={() => { wl.unflagAll(); closeCtx(); }}>Unflag all symbols</MenuItem>
               <MenuDivider />
               {state.lists.length > 1 && (
-                <SubMenu label={`Add ${ctx.symbol} to watchlist`} icon={<NewListIcon />}>
+                <SubMenu label={`Add ${displaySymbol(ctx.symbol)} to watchlist`} icon={<NewListIcon />}>
                   {state.lists.filter(l => l.id !== list.id).map(l => (
                     <MenuItem key={l.id} onClick={() => { wl.addSymbol(ctx.symbol!, l.id); closeCtx(); }}>{l.name}</MenuItem>
                   ))}
                 </SubMenu>
               )}
-              <MenuItem icon={<PencilIcon />} onClick={() => { const s = ctx.symbol!; closeCtx(); onSymbolChange?.(s); wl.setDetails({ notes: true }); window.dispatchEvent(new CustomEvent("tv:edit-note", { detail: s })); }}>Add note for {ctx.symbol}</MenuItem>
+              <MenuItem icon={<PencilIcon />} onClick={() => { const s = ctx.symbol!; closeCtx(); onSymbolChange?.(s); wl.setDetails({ notes: true }); window.dispatchEvent(new CustomEvent("tv:edit-note", { detail: s })); }}>Add note for {displaySymbol(ctx.symbol)}</MenuItem>
               <MenuDivider />
               <MenuItem icon={<SectionIcon />} onClick={() => { const id = wl.addSection(ctx.index); closeCtx(); setRenamingSection(id); }}>Add section</MenuItem>
               <MenuItem icon={<PlusIcon />} onClick={() => { closeCtx(); setShowSearch(true); }}>Add symbol</MenuItem>
@@ -308,7 +309,7 @@ function SymbolRow({ sym, quote, grid, cols, display, flag, active, selected, dr
   const up = (quote?.change ?? 0) >= 0;
   const color = quote ? (up ? "var(--tv-color-bull, #089981)" : "var(--tv-color-bear, #f23645)") : undefined;
   const flagHex = flag ? FLAG_COLORS.find(f => f.id === flag)?.hex : undefined;
-  const label = display.label === "name" && quote?.name ? quote.name : sym;
+  const label = display.label === "name" && quote?.name ? quote.name : displaySymbol(sym);
   const last = quote ? fmtPrice(sym, quote.close) : "…";
   const decimals = quote ? priceDecimals(sym, quote.close) : 2;
   return (
