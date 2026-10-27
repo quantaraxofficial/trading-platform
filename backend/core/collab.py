@@ -118,7 +118,8 @@ def message_json(msg):
     }
     if msg.attachment:
         a = msg.attachment
-        out["attachment"] = {k: a.get(k) for k in ('name', 'size', 'type', 'image', 'width', 'height')}
+        out["attachment"] = {**{k: a.get(k) for k in ('name', 'size', 'type', 'image', 'width', 'height')},
+                             **({"audio": True, "duration": a.get('duration')} if a.get('audio') else {})}
     return out
 
 

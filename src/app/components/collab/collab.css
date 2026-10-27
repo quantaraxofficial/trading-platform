@@ -208,3 +208,20 @@
 .tv-co-delete-row + .tv-co-delete-row { border-top: 1px solid var(--tv-co-border); }
 .tv-co-delete-row span { width: 130px; flex: none; color: var(--tv-co-muted); }
 .tv-co-delete-row b { font-weight: 500; flex: 1; min-width: 0; }
+
+/* Voice messages: recording in the message box, the player in a message */
+.tv-co-compose { position: relative; }
+.tv-co-compose.recording > :not(.tv-co-recording) { display: none; }
+.tv-co-recording { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 34px; }
+.tv-co-rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--tv-co-danger); animation: tv-co-rec 1s infinite ease-in-out; flex: none; }
+@keyframes tv-co-rec { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .tv-co-rec-dot { animation: none; } }
+.tv-co-rec-time { font-variant-numeric: tabular-nums; font-size: 14px; min-width: 38px; }
+.tv-co-rec-error { position: absolute; left: 8px; right: 8px; bottom: calc(100% + 2px); background: var(--tv-co-bg); padding: 4px 8px; border-radius: 6px; box-shadow: var(--tv-co-shadow); }
+.tv-co-voice-msg { display: flex; align-items: center; gap: 8px; width: 230px; max-width: 100%; box-sizing: border-box; padding: 6px 10px 6px 6px; border-radius: 2px 18px 18px 18px; background: var(--tv-co-bubble); }
+.tv-co-msg.mine .tv-co-voice-msg { background: var(--tv-co-bubble-mine); }
+.tv-co-voice-play { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--tv-co-accent); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; padding: 0; }
+.tv-co-voice-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--tv-co-field); cursor: pointer; position: relative; }
+.tv-co-voice-bar::before { content: ""; position: absolute; inset: -8px 0; }
+.tv-co-voice-bar i { display: block; height: 100%; border-radius: 2px; background: var(--tv-co-accent); }
+.tv-co-voice-time { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--tv-co-chat-muted, var(--tv-co-muted)); min-width: 32px; text-align: right; }

@@ -93,3 +93,21 @@ class CollabFileTests(TestCase):
         self.assertTrue(storage().exists(msg.attachment["path"]))
         msg.delete()
         self.assertFalse(storage().exists(msg.attachment["path"]))
+
+
+class VoiceMessageTests(CollabFileTests):
+    """Voice messages: audio accepted (and checked), its length kept, played in the page"""
+
+    def test_voice_message(self):
+        webm = b"\x1aE\xdf\xa3" + b"\x00" * 60
+        f = SimpleUploadedFile("voice-message-1.webm", webm, content_type="audio/webm")
+        r = self.c.post("/api/users/collab/own/room/tok/upload/?session_key=sk-own", {"file": f, "duration": "7.4"}, format="multipart")
+        self.assertEqual(r.status_code, 201, r.content)
+        a = r.json()["attachment"]
+        self.assertEqual((a["audio"], a["duration"], a["type"]), (True, 7.4, "audio/webm"))
+        got = self.fetch("bob", r.json()["id"])
+        self.assertEqual(got["Content-Type"], "audio/webm")
+        self.assertNotIn("attachment", got.get("Content-Disposition", ""))   # plays in the page
+        # Something that isn't audio, named as audio
+        f2 = SimpleUploadedFile("fake.webm", b"<html>no</html>", content_type="audio/webm")
+        self.assertEqual(self.c.post("/api/users/collab/own/room/tok/upload/?session_key=sk-own", {"file": f2}, format="multipart").status_code, 400)

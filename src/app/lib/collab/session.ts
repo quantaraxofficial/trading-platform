@@ -50,7 +50,8 @@ export interface Peer { id: string; uid: string; name: string; color: string; ro
 // The replay everyone follows: who drives it (a connection; null once they've left) and where it is
 export interface SharedReplay { driver: string | null; driver_uid: string; driver_name: string; time: number; playing: boolean; speed: number }
 // An image or document shared in the chat
-export interface ChatAttachment { name: string; size: number; type: string; image: boolean; width: number | null; height: number | null }
+// (a voice message: audio, with its length in seconds)
+export interface ChatAttachment { name: string; size: number; type: string; image: boolean; width: number | null; height: number | null; audio?: boolean; duration?: number | null }
 export interface ChatMessage {
   id: number | string; kind: "text" | "system" | "file"; text: string; time: number; author: string | null; author_name: string | null; pending?: boolean;
   attachment?: ChatAttachment;
@@ -62,11 +63,13 @@ export interface ChatMessage {
 export const CHAT_FILE_MAX_BYTES = 20 * 1024 * 1024;
 const CHAT_IMAGE_EXT = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
 const CHAT_DOC_EXT = [".pdf", ".txt", ".csv", ".json", ".md", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".rtf", ".zip", ".pine", ".py", ".mq5", ".mqh", ".mq4"];
-export const CHAT_FILE_ACCEPT = [...CHAT_IMAGE_EXT, ...CHAT_DOC_EXT].join(",");
+const CHAT_AUDIO_EXT = [".webm", ".ogg", ".m4a", ".mp3", ".wav"];
+export const CHAT_FILE_ACCEPT = [...CHAT_IMAGE_EXT, ...CHAT_DOC_EXT, ...CHAT_AUDIO_EXT].join(",");
+export const isChatAudio = (name: string) => CHAT_AUDIO_EXT.includes(extOf(name));
 const extOf = (name: string) => { const i = name.lastIndexOf("."); return i < 0 ? "" : name.slice(i).toLowerCase(); };
 export function chatFileProblem(file: File): string | null {
   const ext = extOf(file.name);
-  if (!CHAT_IMAGE_EXT.includes(ext) && !CHAT_DOC_EXT.includes(ext)) return `${file.name}: that kind of file can't be shared here`;
+  if (!CHAT_IMAGE_EXT.includes(ext) && !CHAT_DOC_EXT.includes(ext) && !CHAT_AUDIO_EXT.includes(ext)) return `${file.name}: that kind of file can't be shared here`;
   if (file.size > CHAT_FILE_MAX_BYTES) return `${file.name} is over ${CHAT_FILE_MAX_BYTES / (1024 * 1024)} MB`;
   return null;
 }
@@ -460,18 +463,19 @@ class CollabSession {
   }
   // Shares a picture or document (with an optional caption): shown at once with its progress,
   // replaced by the real message when it's arrived
-  sendFile(file: File, caption = "", retryId?: string) {
+  sendFile(file: File, caption = "", retryId?: string, duration?: number) {
     const { uid, token } = this.state;
     if (!uid || !token) return;
     const id = retryId || `u${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
     const ext = extOf(file.name);
     const image = CHAT_IMAGE_EXT.includes(ext);
     const old = this.state.messages.find(x => x.id === id);
-    const preview = old?.upload?.preview || (image ? URL.createObjectURL(file) : undefined);
+    const audio = CHAT_AUDIO_EXT.includes(ext);
+    const preview = old?.upload?.preview || (image || audio ? URL.createObjectURL(file) : undefined);
     const me = this.state.room?.members.find(m => m.uid === uid);
     const pending: ChatMessage = {
       id, kind: "file", text: caption.trim(), time: Date.now(), author: uid, author_name: me?.name || "You", pending: true,
-      attachment: { name: file.name, size: file.size, type: file.type, image, width: null, height: null },
+      attachment: { name: file.name, size: file.size, type: file.type, image, width: null, height: null, audio, duration: duration ?? null },
       upload: { progress: 0, preview, file },
     };
     const problem = chatFileProblem(file);
@@ -483,6 +487,7 @@ class CollabSession {
     const form = new FormData();
     form.append("file", file, file.name);
     if (caption.trim()) form.append("text", caption.trim());
+    if (duration) form.append("duration", String(duration));
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${BACKEND}/api/users/collab/${encodeURIComponent(uid)}/room/${encodeURIComponent(token)}/upload/?session_key=${encodeURIComponent(sessionKey())}`);
     xhr.upload.onprogress = e => { if (e.lengthComputable) patch({ progress: e.loaded / e.total }); };
@@ -503,7 +508,7 @@ class CollabSession {
   // A file that failed: try again, or take it away
   retryFile(id: string) {
     const m = this.state.messages.find(x => x.id === id);
-    if (m?.upload) this.sendFile(m.upload.file, m.text, id);
+    if (m?.upload) this.sendFile(m.upload.file, m.text, id, m.attachment?.duration ?? undefined);
   }
   dropFile(id: string) {
     const m = this.state.messages.find(x => x.id === id);

@@ -10,6 +10,7 @@ import "./collab.css";
 import { collab, useCollab, chatFileProblem, CHAT_FILE_ACCEPT, type ChatMessage, type Peer, type SharedAlert } from "../../lib/collab/session";
 import { useAlerts } from "@/context/AlertsContext";
 import { Avatar } from "./CollabDialog";
+import { VoicePlayer, VoiceRecorder } from "./VoiceMessage";
 import CollabList, { RoleBadge } from "./CollabList";
 import { collabRoleOf } from "../../lib/collab/roles";
 import { leaveCollab } from "./CollabController";
@@ -37,6 +38,7 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
   const [showList, setShowList] = useState(false);
   const [sounds, setSounds] = useState(soundsOn);
   const [draft, setDraft] = useState("");
+  const [recordingVoice, setRecordingVoice] = useState(false);
   // Files picked, dropped or pasted, waiting for Send (with the message as the first one's caption)
   const [queued, setQueued] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -217,7 +219,7 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
           {fileError && <div className="tv-co-error" style={{ width: "100%" }}>{fileError}</div>}
         </div>
       )}
-      <div className="tv-co-compose">
+      <div className={`tv-co-compose${recordingVoice ? " recording" : ""}`}>
         <button className="tv-co-iconbtn" aria-label="Share a picture or document" title="Share a picture or document" data-name="collab-attach" onClick={() => fileInput.current?.click()}>
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden><path d="M15 8.5 9 14.5a3.9 3.9 0 0 1-5.5-5.5l6.4-6.4a2.6 2.6 0 0 1 3.7 3.7L7.2 12.7a1.3 1.3 0 0 1-1.8-1.8L11 5.3" /></svg>
         </button>
@@ -241,7 +243,9 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
             e.stopPropagation();   // typing here isn't a chart shortcut
           }}
         />
-        <button className="tv-co-iconbtn" aria-label="Send" title="Send" disabled={!draft.trim() && !queued.length} onClick={send}><SendIcon /></button>
+        {!draft.trim() && !queued.length
+          ? <VoiceRecorder onSend={(file, secs) => collab.sendFile(file, "", undefined, secs)} onRecording={setRecordingVoice} />
+          : <button className="tv-co-iconbtn" aria-label="Send" title="Send" onClick={send}><SendIcon /></button>}
       </div>
       {viewing && <ImageViewer m={viewing} onClose={() => setViewing(null)} />}
     </div>
@@ -298,7 +302,9 @@ function Attachment({ m, onView }: { m: ChatMessage; onView: (m: ChatMessage) =>
   const w = Math.min(240, a.width || 240);
   return (
     <div className="tv-co-file" data-name="collab-attachment" data-kind={a.image ? "image" : "document"}>
-      {a.image && src ? (
+      {a.audio && src ? (
+        <VoicePlayer src={src} duration={a.duration} />
+      ) : a.image && src ? (
         <button className="tv-co-file-img" onClick={() => !up && onView(m)} aria-label={`View ${a.name}`} disabled={!!up}
           style={{ width: w, height: Math.min(320, Math.round(w * ratio)) }}>
           <img src={src} alt={a.name} loading="lazy" />
