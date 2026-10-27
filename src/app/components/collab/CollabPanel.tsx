@@ -9,6 +9,7 @@ import { useAlerts } from "@/context/AlertsContext";
 import { Avatar } from "./CollabDialog";
 import { leaveCollab } from "./CollabController";
 import { AddPersonIcon, LeaveIcon, MicIcon, PhoneIcon, SendIcon } from "./icons";
+import { playCollabSound, setSoundsOn, soundsOn } from "../../lib/collab/sounds";
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 
@@ -28,6 +29,7 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
   const state = useCollab();
   const { room, peers, messages, voice, status, uid, you, replay, replayDetached, alerts } = state;
   const [alertsOpen, setAlertsOpen] = useState(true);
+  const [sounds, setSounds] = useState(soundsOn);
   const [draft, setDraft] = useState("");
   const chatRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
@@ -83,6 +85,19 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
         <div className="tv-co-stack" aria-label="People here">
           {people.slice(0, 4).map(p => <Avatar key={p.uid} name={p.name} color={p.color} size="sm" />)}
         </div>
+        <button
+          className="tv-co-iconbtn small"
+          title={sounds ? "Turn collab sounds off" : "Turn collab sounds on"}
+          aria-label={sounds ? "Turn collab sounds off" : "Turn collab sounds on"}
+          aria-pressed={!sounds}
+          data-name="collab-sounds"
+          onClick={() => { setSoundsOn(!sounds); setSounds(!sounds); if (!sounds) playCollabSound("notice"); }}
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" aria-hidden>
+            <path d="M3 7h2.5L9 4v10l-3.5-3H3V7Z" />
+            {sounds ? <path d="M11.5 6.5a3.5 3.5 0 0 1 0 5M13.5 4.5a6.4 6.4 0 0 1 0 9" /> : <path d="m11.5 7 4 4m0-4-4 4" />}
+          </svg>
+        </button>
         <button className="tv-co-iconbtn small" title="Share and add people" aria-label="Share and add people" onClick={onShare}><AddPersonIcon /></button>
         <button className="tv-co-iconbtn small" title="Leave collab" aria-label="Leave collab" onClick={leaveCollab}><LeaveIcon /></button>
       </div>
@@ -91,16 +106,21 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
         <div className="tv-co-voice-row">
           {voice.joined ? (
             <>
-              <button className={`tv-co-iconbtn${voice.muted ? " on" : ""}`} title={voice.muted ? "Unmute" : "Mute"} aria-label={voice.muted ? "Unmute" : "Mute"} aria-pressed={voice.muted} onClick={() => collab.toggleMute()}>
-                <MicIcon off={voice.muted} />
+              <button
+                className={`tv-co-iconbtn${voice.muted ? " on" : ""}`}
+                disabled={!canVoice}
+                title={!canVoice ? "The owner has turned your mic off" : voice.muted ? "Unmute" : "Mute"}
+                aria-label={voice.muted ? "Unmute" : "Mute"} aria-pressed={voice.muted} onClick={() => collab.toggleMute()}
+              >
+                <MicIcon off={voice.muted || !canVoice} />
               </button>
-              <span style={{ flex: 1, fontSize: 13, color: "var(--tv-co-muted)" }}>In voice{voice.muted ? " · muted" : ""}</span>
+              <span style={{ flex: 1, fontSize: 13, color: "var(--tv-co-muted)" }}>In voice{!canVoice ? " · listening (mic off by the owner)" : voice.muted ? " · muted" : ""}</span>
               <button className="tv-co-btn danger" onClick={() => collab.leaveVoice()}><PhoneIcon hangup />Leave</button>
             </>
           ) : (
             <>
-              <span style={{ flex: 1, fontSize: 13, color: "var(--tv-co-muted)" }}>{inCall.length ? `${inCall.length} in voice` : "Voice is quiet"}{!canVoice && " · you can listen in chat only"}</span>
-              <button className="tv-co-btn live" disabled={voice.joining || status !== "live" || !canVoice} title={canVoice ? undefined : "The owner hasn't let you talk in the voice call"} onClick={() => collab.joinVoice()}><PhoneIcon />{voice.joining ? "Joining…" : "Join voice"}</button>
+              <span style={{ flex: 1, fontSize: 13, color: "var(--tv-co-muted)" }}>{inCall.length ? `${inCall.length} in voice` : "Voice is quiet"}{!canVoice && " · your mic is off"}</span>
+              <button className="tv-co-btn live" disabled={voice.joining || status !== "live"} title={canVoice ? undefined : "The owner has turned your mic off: you'll join to listen"} onClick={() => collab.joinVoice()}><PhoneIcon />{voice.joining ? "Joining…" : canVoice ? "Join voice" : "Listen in"}</button>
             </>
           )}
         </div>
@@ -111,7 +131,7 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
               <span key={p.id} className="tv-co-voice-person">
                 <Avatar name={p.name} color={p.color} size="sm" speaking={!!speakingOf(p) && !p.muted} />
                 {p.id === you ? "You" : p.name}
-                {p.muted && <em><MicIcon size={14} off /></em>}
+                {(p.muted || !p.perms.voice) && <em title={p.perms.voice ? "Muted" : "Mic off by the owner"}><MicIcon size={14} off /></em>}
               </span>
             ))}
           </div>

@@ -17,13 +17,35 @@ export type LinkAccess = "restricted" | "view" | "edit";
 
 // What someone may do besides watching and chatting (the owner sets these; the owner can do all)
 export interface Perms { edit: boolean; replay: boolean; invite: boolean; voice: boolean; alert: boolean; pine: boolean }
-export interface Member { uid: string; name: string; email: string; role: Role; color: string; pending: boolean; perms: Perms }
+// mic: whether the owner lets this person use their mic (perms.voice also needs everyone's mic on)
+export interface Member { uid: string; name: string; email: string; role: Role; color: string; pending: boolean; perms: Perms; mic: boolean }
+export interface Person { uid: string; name: string; email: string; color: string }
+// Someone without access who asked to be let in
+export interface JoinRequest extends Person { status: "pending" | "declined"; time: number }
 // "chart": the whole chart is shared; "pine": only a Pine script, edited together
 export type RoomKind = "chart" | "pine";
 export interface RoomInfo {
   token: string; name: string; kind: RoomKind; link_access: LinkAccess; active: boolean; owner: string;
   symbol: string; interval: string; created_at: string; role: Role | null; perms: Perms | null; members: Member[];
+  // The owner's settings: people without access may ask to join; everyone's mic on or off
+  allow_requests: boolean; allow_voice: boolean;
+  // Waiting requests (for those who can let people in), people kicked out (for the owner)
+  requests: JoinRequest[]; kicked: Person[];
 }
+// What someone who opened a link without access is told
+export interface NoAccess {
+  error: string; room_name: string; owner_name: string; can_request: boolean;
+  request: "pending" | "declined" | null; kicked?: boolean; not_invited?: boolean;
+}
+// Something worth a sound and a notification: people coming and going (you too), requests to
+// join, and your access changing
+export type CollabNotice =
+  | { kind: "self-joined" | "self-left"; room: string }
+  | { kind: "joined" | "left"; name: string; color: string }
+  | { kind: "request"; request: JoinRequest; room: string; token: string }
+  | { kind: "removed"; kicked: boolean }
+  | { kind: "ended" }
+  | { kind: "mic-off" | "mic-on" | "edit-on" | "edit-off" };
 export interface Peer { id: string; uid: string; name: string; color: string; role: Role; perms: Perms; voice: boolean; muted: boolean }
 // The replay everyone follows: who drives it (a connection; null once they've left) and where it is
 export interface SharedReplay { driver: string | null; driver_uid: string; driver_name: string; time: number; playing: boolean; speed: number }
@@ -58,7 +80,8 @@ export interface CollabState {
   chatOpen: boolean;
   cursors: Record<string, Cursor>;
   trades: Record<string, TradeSnap>;
-  voice: { joined: boolean; joining: boolean; muted: boolean; error: string | null; speaking: Record<string, boolean> };
+  // listenOnly: in the call without a mic (the owner hasn't let them talk)
+  voice: { joined: boolean; joining: boolean; muted: boolean; listenOnly: boolean; error: string | null; speaking: Record<string, boolean> };
   replay: SharedReplay | null;
   // This person stepped out of the shared replay to replay on their own
   replayDetached: boolean;
@@ -67,7 +90,7 @@ export interface CollabState {
 
 const INITIAL: CollabState = {
   status: "idle", error: null, token: null, kind: null, room: null, you: null, uid: null, peers: [], messages: [], unread: 0,
-  chatOpen: false, cursors: {}, trades: {}, voice: { joined: false, joining: false, muted: false, error: null, speaking: {} },
+  chatOpen: false, cursors: {}, trades: {}, voice: { joined: false, joining: false, muted: false, listenOnly: false, error: null, speaking: {} },
   replay: null, replayDetached: false, alerts: [],
 };
 
@@ -124,6 +147,9 @@ class CollabSession {
   private subs = new Set<() => void>();
   private chartSubs = new Set<(e: ChartEvent) => void>();
   private pineDocSubs = new Set<(e: PineDocEvent) => void>();
+  private noticeSubs = new Set<(n: CollabNotice) => void>();
+  // "You joined" is said once per join, not again after a reconnect
+  private announced = false;
   private ws: WebSocket | null = null;
   private retry = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -143,6 +169,8 @@ class CollabSession {
   onChart(f: (e: ChartEvent) => void) { this.chartSubs.add(f); return () => { this.chartSubs.delete(f); }; }
   onPineDoc(f: (e: PineDocEvent) => void) { this.pineDocSubs.add(f); return () => { this.pineDocSubs.delete(f); }; }
   private emitPineDoc(e: PineDocEvent) { this.pineDocSubs.forEach(f => f(e)); }
+  onNotice(f: (n: CollabNotice) => void) { this.noticeSubs.add(f); return () => { this.noticeSubs.delete(f); }; }
+  private notice(n: CollabNotice) { this.noticeSubs.forEach(f => f(n)); }
 
   private set(patch: Partial<CollabState>) {
     this.state = { ...this.state, ...patch };
@@ -172,11 +200,14 @@ class CollabSession {
     this.leave();
     this.wanted = true;
     this.retry = 0;
+    this.announced = false;
     this.set({ ...INITIAL, status: "connecting", token, uid, kind });
     this.connect();
   }
 
   leave() {
+    const { status, room } = this.state;
+    if (room && (status === "live" || status === "reconnecting")) this.notice({ kind: "self-left", room: room.name });
     this.wanted = false;
     this.leaveVoice();
     if (this.retryTimer) clearTimeout(this.retryTimer);
@@ -202,7 +233,12 @@ class CollabSession {
       if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
       // The voice call can't survive the socket that signals it
       this.leaveVoice();
-      if (e.code === 4403) { this.wanted = false; this.set({ status: "error", error: "You don't have access to this collab any more." }); return; }
+      if (e.code === 4403) {
+        this.wanted = false;
+        // "removed" already said why
+        if (this.state.status !== "error") this.set({ status: "error", error: "You don't have access to this collab any more." });
+        return;
+      }
       if (e.code === 4410) { this.wanted = false; this.set({ status: "ended", error: "The owner ended this collab." }); return; }
       if (!this.wanted) return;
       this.set({ status: "reconnecting" });
@@ -232,15 +268,40 @@ class CollabSession {
         pending.forEach(m => this.send(m));
         if (this.pingTimer) clearInterval(this.pingTimer);
         this.pingTimer = setInterval(() => this.send({ type: "ping", t: Date.now() }), 25000);
+        if (!this.announced && msg.room) {
+          this.announced = true;
+          this.notice({ kind: "self-joined", room: msg.room.name });
+        }
         break;
       }
-      case "room":
+      case "room": {
+        const before = this.state.room?.perms;
+        const after: Perms | null = msg.room?.perms || null;
         this.set({ room: msg.room, peers: msg.peers || this.state.peers });
+        this.applyPeerMutes();
+        if (before && after && msg.room.role !== "owner") {
+          if (before.voice !== after.voice) this.notice({ kind: after.voice ? "mic-on" : "mic-off" });
+          const editKey = msg.room.kind === "pine" ? "pine" : "edit";
+          if (before[editKey] !== after[editKey]) this.notice({ kind: after[editKey] ? "edit-on" : "edit-off" });
+        }
         break;
-      case "peer.joined":
-        this.set({ peers: [...this.state.peers.filter(p => p.id !== msg.peer.id), msg.peer] });
+      }
+      case "join.request":
+        if (this.state.room) this.notice({ kind: "request", request: msg.request, room: this.state.room.name, token: this.state.room.token });
         break;
+      case "peer.joined": {
+        const p: Peer = msg.peer;
+        // Someone's second tab isn't a new arrival, nor is this person's own
+        const fresh = p.uid !== this.state.uid && !this.state.peers.some(x => x.uid === p.uid);
+        this.set({ peers: [...this.state.peers.filter(x => x.id !== p.id), p] });
+        if (fresh) this.notice({ kind: "joined", name: p.name, color: p.color });
+        break;
+      }
       case "peer.left": {
+        const gone = this.state.peers.find(p => p.id === msg.id);
+        if (gone && gone.uid !== this.state.uid && !this.state.peers.some(p => p.id !== msg.id && p.uid === gone.uid)) {
+          this.notice({ kind: "left", name: gone.name, color: gone.color });
+        }
         const cursors = { ...this.state.cursors };
         delete cursors[msg.id];
         const peers = this.state.peers.filter(p => p.id !== msg.id);
@@ -254,6 +315,7 @@ class CollabSession {
       case "peer.updated":
         this.set({ peers: this.state.peers.map(p => (p.id === msg.peer.id ? msg.peer : p)) });
         if (!msg.peer.voice) this.dropPeerAudio(msg.peer.id);
+        this.applyPeerMutes();
         break;
       case "chat": {
         const m: ChatMessage = msg.message;
@@ -296,15 +358,19 @@ class CollabSession {
         this.emitPineDoc({ type: "denied", state: msg.state, error: msg.error });
         break;
       case "voice.revoked":
-        this.leaveVoice();
-        this.set({ voice: { ...this.state.voice, error: msg.error || "Voice was turned off for you" } });
+        // The owner turned this person's mic off: they stay in the call, listening
+        this.localStream?.getAudioTracks().forEach(t => { t.enabled = false; });
+        if (this.state.voice.joined) this.patchSelf({ muted: true });
+        this.set({ voice: { ...this.state.voice, muted: this.state.voice.joined, error: msg.error || "Your mic was turned off" } });
         break;
       case "removed":
         this.wanted = false;
-        this.set({ status: "error", error: "You were removed from this collab." });
+        this.notice({ kind: "removed", kicked: !!msg.kicked });
+        this.set({ status: "error", error: msg.kicked ? "The owner kicked you out of this collab." : "You were removed from this collab." });
         break;
       case "ended":
         this.wanted = false;
+        this.notice({ kind: "ended" });
         this.set({ status: "ended", error: "The owner ended this collab." });
         break;
       case "error":
@@ -374,21 +440,24 @@ class CollabSession {
 
   // ---- voice (a full mesh: each person in the call connects to each other one)
 
+  // Without mic permission this joins to listen only
   async joinVoice() {
     if (this.state.voice.joined || this.state.voice.joining || !this.live) return;
-    if (!this.canVoice) { this.set({ voice: { ...this.state.voice, error: "The owner hasn't let you talk in the voice call" } }); return; }
+    const listenOnly = !this.canVoice;
     this.set({ voice: { ...this.state.voice, joining: true, error: null } });
-    try {
-      this.localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-    } catch (err: any) {
-      const denied = err?.name === "NotAllowedError" || err?.name === "SecurityError";
-      this.set({ voice: { ...this.state.voice, joining: false, error: denied ? "Microphone access was blocked. Allow it in the browser's site settings." : "No microphone was found." } });
-      return;
+    if (!listenOnly) {
+      try {
+        this.localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      } catch (err: any) {
+        const denied = err?.name === "NotAllowedError" || err?.name === "SecurityError";
+        this.set({ voice: { ...this.state.voice, joining: false, error: denied ? "Microphone access was blocked. Allow it in the browser's site settings." : "No microphone was found." } });
+        return;
+      }
     }
-    this.set({ voice: { ...this.state.voice, joined: true, joining: false, muted: false, error: null } });
-    this.patchSelf({ voice: true, muted: false });
-    this.addMeter("me", this.localStream);
-    this.send({ type: "voice", voice: true, muted: false });
+    this.set({ voice: { ...this.state.voice, joined: true, joining: false, muted: listenOnly, listenOnly, error: null } });
+    this.patchSelf({ voice: true, muted: listenOnly });
+    if (this.localStream) this.addMeter("me", this.localStream);
+    this.send({ type: "voice", voice: true, muted: listenOnly });
     // The one who joins calls everyone already in the call (they answer), so two people never
     // call each other at the same time
     for (const p of this.state.peers) {
@@ -409,15 +478,23 @@ class CollabSession {
     this.audioCtx?.close().catch(() => {});
     this.audioCtx = null;
     if (wasIn || this.state.voice.joining) {
-      this.set({ voice: { joined: false, joining: false, muted: false, error: null, speaking: {} } });
+      this.set({ voice: { joined: false, joining: false, muted: false, listenOnly: false, error: null, speaking: {} } });
       this.patchSelf({ voice: false, muted: false });
       this.send({ type: "voice", voice: false, muted: false });
     }
   }
 
   toggleMute() {
-    if (!this.localStream) return;
     const muted = !this.state.voice.muted;
+    if (!muted && !this.canVoice) {
+      this.set({ voice: { ...this.state.voice, error: "The owner has turned your mic off" } });
+      return;
+    }
+    // Listening without a mic, and now allowed to talk: rejoin with the mic
+    if (!this.localStream) {
+      if (this.state.voice.joined) { this.leaveVoice(); this.joinVoice(); }
+      return;
+    }
     this.localStream.getAudioTracks().forEach(t => { t.enabled = !muted; });
     this.set({ voice: { ...this.state.voice, muted } });
     this.patchSelf({ muted });
@@ -429,7 +506,8 @@ class CollabSession {
     if (pc) return pc;
     pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     this.pcs.set(peerId, pc);
-    this.localStream?.getTracks().forEach(t => pc!.addTrack(t, this.localStream!));
+    if (this.localStream) this.localStream.getTracks().forEach(t => pc!.addTrack(t, this.localStream!));
+    else pc.addTransceiver("audio", { direction: "recvonly" });   // listening only
     pc.onicecandidate = (e) => { if (e.candidate) this.send({ type: "rtc", to: peerId, data: { candidate: e.candidate.toJSON() } }); };
     pc.ontrack = (e) => {
       const stream = e.streams[0] || new MediaStream([e.track]);
@@ -444,6 +522,7 @@ class CollabSession {
       audio.srcObject = stream;
       audio.play().catch(() => {});
       this.addMeter(peerId, stream);
+      this.applyPeerMutes();
     };
     pc.onconnectionstatechange = () => {
       if (pc!.connectionState === "failed" || pc!.connectionState === "closed") this.dropPeerAudio(peerId);
@@ -458,8 +537,16 @@ class CollabSession {
     this.send({ type: "rtc", to: peerId, data: { sdp: pc.localDescription } });
   }
 
+  // Whoever the owner hasn't let talk isn't played here, even if their browser keeps sending
+  private applyPeerMutes() {
+    this.audios.forEach((audio, id) => {
+      const p = this.peerById(id);
+      audio.muted = !!p && !p.perms.voice;
+    });
+  }
+
   private async onSignal(from: string, data: any) {
-    if (!this.state.voice.joined || !this.localStream) return;
+    if (!this.state.voice.joined) return;
     try {
       const pc = this.peerConnection(from);
       if (data.sdp) {

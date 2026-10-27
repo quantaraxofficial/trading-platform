@@ -31,4 +31,8 @@ urlpatterns = [
     path('collab/<str:uid>/room/<str:token>/invite/', collab.collab_invite, name='collab_invite'),
     path('collab/<str:uid>/room/<str:token>/transfer/', collab.collab_transfer, name='collab_transfer'),
     path('collab/<str:uid>/room/<str:token>/member/<str:member_uid>/', collab.collab_member, name='collab_member'),
+    path('collab/<str:uid>/room/<str:token>/members/', collab.collab_members, name='collab_members'),
+    path('collab/<str:uid>/room/<str:token>/request/', collab.collab_request, name='collab_request'),
+    path('collab/<str:uid>/room/<str:token>/requests/<str:member_uid>/', collab.collab_request_answer, name='collab_request_answer'),
+    path('collab/<str:uid>/room/<str:token>/kicked/<str:member_uid>/', collab.collab_unkick, name='collab_unkick'),
 ]
