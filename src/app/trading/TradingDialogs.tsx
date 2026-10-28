@@ -1,9 +1,13 @@
 "use client";
 
-// Trading dialogs: pick a broker, connect Paper Trading, close / reverse a position,
+// Trading dialogs: pick a broker, connect Paper Trading or link a MetaTrader 5 account, close /
+// reverse a position,
 // protect a position (TP/SL and exit levels), create a paper account and account settings.
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { linkMt5, setBrokerUser, setMt5Active, unlinkMt5, useBroker } from "./broker";
+import { Mt5Badge, Mt5OrderDialog } from "./Mt5Panel";
 import { createPortal } from "react-dom";
 import { engine, useEngineState, useTradingUi, tradingUi, openTicket, lastQtyFor } from "./store";
 import {
@@ -19,12 +23,17 @@ import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 export default function TradingDialogs() {
   const ui = useTradingUi();
+  // The signed-in user's linked broker account (MetaTrader 5)
+  const { user } = useAuth();
+  useEffect(() => { setBrokerUser(user?.uid ?? null); }, [user?.uid]);
   const d = ui.dialog;
   const close = () => tradingUi.set({ dialog: null });
   if (!d) return null;
   switch (d.kind) {
     case "broker": return <BrokerDialog then={d.then} onClose={close} />;
     case "connect": return <ConnectDialog then={d.then} onClose={close} />;
+    case "mt5": return <Mt5Dialog onClose={close} />;
+    case "mt5order": return <Mt5OrderDialog side={d.side} symbol={d.symbol} type={d.type} price={d.price} onClose={close} />;
     case "close": return <ClosePositionDialog symbol={d.symbol} onClose={close} />;
     case "reverse": return <ReverseDialog symbol={d.symbol} onClose={close} />;
     case "position": return <PositionDialog symbol={d.symbol} onClose={close} />;
@@ -68,27 +77,110 @@ const Footer = ({ children }: { children: React.ReactNode }) => (
 
 // ---------- broker & connect ----------
 
-function BrokerDialog({ then, onClose }: { then?: { side: "buy" | "sell"; symbol: string }; onClose: () => void }) {
+function BrokerCard({ onClick, logo, name, sub, testId }: { onClick: () => void; logo: React.ReactNode; name: string; sub: React.ReactNode; testId?: string }) {
   const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      data-name={testId}
+      style={{
+        width: 164, height: 150, borderRadius: 8, border: `1px solid ${hover ? C.faint : C.border}`, background: C.panel, color: C.text,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, cursor: "pointer",
+        boxShadow: hover ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
+      }}
+    >
+      {logo}
+      <span style={{ fontSize: 14 }}>{name}</span>
+      <span style={{ fontSize: 11, color: C.muted, lineHeight: "14px", textAlign: "center" }}>{sub}</span>
+    </button>
+  );
+}
+
+function BrokerDialog({ then, onClose }: { then?: { side: "buy" | "sell"; symbol: string }; onClose: () => void }) {
+  const { linked } = useBroker();
   return (
     <Modal onClose={onClose} width={720} label="Trade with your broker">
       <ModalHeader title="Trade with your broker" onClose={onClose} border={false} />
-      <div style={{ padding: "8px 20px 28px" }}>
-        <button
-          type="button"
-          onClick={() => tradingUi.set({ dialog: { kind: "connect", then } })}
-          onMouseEnter={() => setHover(true)}
-          onMouseLeave={() => setHover(false)}
-          style={{
-            width: 164, height: 150, borderRadius: 8, border: `1px solid ${hover ? C.faint : C.border}`, background: C.panel, color: C.text,
-            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, cursor: "pointer",
-            boxShadow: hover ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
-          }}
-        >
-          <BrandLogo size={48} />
-          <span style={{ fontSize: 14 }}>Paper Trading</span>
-          <span style={{ fontSize: 11, color: C.muted, lineHeight: "14px", textAlign: "center" }}>Brokerage simulator by<br />TradingView</span>
-        </button>
+      <div style={{ padding: "8px 20px 28px", display: "flex", gap: 16, flexWrap: "wrap" }}>
+        <BrokerCard onClick={() => tradingUi.set({ dialog: { kind: "connect", then } })} logo={<BrandLogo size={48} />} name="Paper Trading"
+          sub={<>Brokerage simulator by<br />TradingView</>} />
+        <BrokerCard onClick={() => tradingUi.set({ dialog: { kind: "mt5" } })} logo={<Mt5Badge size={48} />} name="MetaTrader 5" testId="broker-mt5"
+          sub={linked ? <>Linked · {linked.login}<br />{linked.server}</> : <>Your broker&apos;s MT5 account<br />(demo or live)</>} />
+      </div>
+    </Modal>
+  );
+}
+
+// MetaTrader 5: link an account (number, password, server, as in MT5's login window), or with one
+// linked, connect to it / unlink it
+function Mt5Dialog({ onClose }: { onClose: () => void }) {
+  const { linked, uid } = useBroker();
+  const [login, setLogin] = useState("");
+  const [password, setPassword] = useState("");
+  const [server, setServer] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const connect = () => {
+    engine.setConnected(false);   // one broker at a time
+    setMt5Active(true);
+    onClose();
+    window.dispatchEvent(new CustomEvent("tv:open-trading-panel"));
+  };
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try { await linkMt5(login.trim(), password, server.trim()); setPassword(""); connect(); }
+    catch (e: any) { setError(e?.message || "Couldn't link the account"); }
+    finally { setBusy(false); }
+  };
+  const label: React.CSSProperties = { display: "block", fontSize: 13, color: C.muted, margin: "14px 0 6px" };
+  return (
+    <Modal onClose={onClose} width={480} label="MetaTrader 5">
+      <ModalHeader title="MetaTrader 5" icon={<Mt5Badge size={40} />} onClose={onClose} border={false} />
+      <div style={{ padding: "4px 32px 28px" }} data-name="mt5-dialog">
+        {!uid ? (
+          <p style={{ fontSize: 14, lineHeight: "20px", margin: 0 }}>Sign in to link your MetaTrader 5 account.</p>
+        ) : linked ? (
+          <>
+            <div style={{ padding: 14, borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14, lineHeight: "21px" }} data-name="mt5-linked">
+              <b>{linked.login}</b> · {linked.server}<br />
+              <span style={{ color: C.muted }}>{linked.name}{linked.company ? ` · ${linked.company}` : ""} · {linked.mode === "real" ? "Real account" : linked.mode === "contest" ? "Contest account" : "Demo account"}</span>
+            </div>
+            <button type="button" onClick={connect} autoFocus data-name="mt5-connect" style={{
+              width: "100%", height: 46, marginTop: 16, borderRadius: 8, border: "none", background: "var(--tv-trade-dark-btn)", color: "var(--tv-trade-dark-btn-text)",
+              fontSize: 15, fontWeight: 600, cursor: "pointer",
+            }}>Connect</button>
+            <button type="button" onClick={async () => { try { await unlinkMt5(); } catch (e: any) { setError(e?.message || "Couldn't unlink"); } }} data-name="mt5-unlink"
+              style={{ width: "100%", height: 38, marginTop: 10, borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.text, fontSize: 14, cursor: "pointer" }}>
+              Unlink this account
+            </button>
+            <p style={{ fontSize: 12, color: C.muted, margin: "12px 0 0", lineHeight: "17px" }}>Unlinking makes the site forget the account and its password.</p>
+          </>
+        ) : (
+          <form onSubmit={e => { e.preventDefault(); if (!busy) submit(); }}>
+            <p style={{ fontSize: 14, lineHeight: "20px", margin: "0 0 4px" }}>Link the MetaTrader 5 account your broker gave you, with the same details as MT5&apos;s login window.</p>
+            <label style={label} htmlFor="mt5-login">Account number</label>
+            <input id="mt5-login" inputMode="numeric" autoFocus value={login} onChange={e => setLogin(e.target.value.replace(/[^0-9]/g, ""))} placeholder="e.g. 51234567"
+              style={inputStyle} data-name="mt5-login-input" onKeyDown={e => e.stopPropagation()} />
+            <label style={label} htmlFor="mt5-password">Password</label>
+            <input id="mt5-password" type="password" autoComplete="off" value={password} onChange={e => setPassword(e.target.value)}
+              style={inputStyle} data-name="mt5-password-input" onKeyDown={e => e.stopPropagation()} />
+            <label style={label} htmlFor="mt5-server">Server</label>
+            <input id="mt5-server" value={server} onChange={e => setServer(e.target.value)} placeholder="e.g. Exness-MT5Real8, ICMarketsSC-Demo"
+              style={inputStyle} data-name="mt5-server-input" onKeyDown={e => e.stopPropagation()} />
+            <p style={{ fontSize: 12, color: C.muted, margin: "8px 0 0", lineHeight: "17px" }}>
+              With the investor (read-only) password the site can show the account but not trade on it. The password is stored encrypted and never shown again.
+            </p>
+            {error && <div role="alert" style={{ marginTop: 10, color: C.sell, fontSize: 13 }} data-name="mt5-error">{error}</div>}
+            <button type="submit" disabled={busy || !login || !password || !server.trim()} data-name="mt5-link" style={{
+              width: "100%", height: 46, marginTop: 18, borderRadius: 8, border: "none", background: "var(--tv-trade-dark-btn)", color: "var(--tv-trade-dark-btn-text)",
+              fontSize: 15, fontWeight: 600, cursor: busy ? "progress" : "pointer", opacity: !login || !password || !server.trim() ? 0.5 : 1,
+            }}>{busy ? "Connecting to the broker…" : "Link and connect"}</button>
+          </form>
+        )}
       </div>
     </Modal>
   );
@@ -96,6 +188,7 @@ function BrokerDialog({ then, onClose }: { then?: { side: "buy" | "sell"; symbol
 
 function ConnectDialog({ then, onClose }: { then?: { side: "buy" | "sell"; symbol: string }; onClose: () => void }) {
   const connect = () => {
+    setMt5Active(false);   // one broker at a time
     engine.setConnected(true);
     onClose();
     if (then) openTicket({ symbol: then.symbol, side: then.side, type: "market" });

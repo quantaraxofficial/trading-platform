@@ -7,6 +7,8 @@
 
 import React, { useRef, useState } from "react";
 import AccountManager from "./AccountManager";
+import Mt5Panel, { Mt5Badge } from "./Mt5Panel";
+import { setMt5Active, useBroker } from "./broker";
 import { BrokerMenu } from "./TradeButton";
 import { Tip, MinimizeIcon, MaximizeIcon, RestoreIcon, BrandMark } from "./ui";
 
@@ -18,6 +20,9 @@ export default function TradingPanel({ open, maximized, onToggleOpen, onToggleMa
   const chevronRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hoverTab, setHoverTab] = useState(false);
+  // MetaTrader 5 as the connected broker: its tab and account instead of Paper Trading's
+  const broker = useBroker();
+  const mt5 = broker.active && !!broker.linked;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, background: "var(--tv-color-bg)", color: "var(--tv-hdr-text)" }}>
@@ -39,7 +44,7 @@ export default function TradingPanel({ open, maximized, onToggleOpen, onToggleMa
           <Tip text={open ? "" : "Open account manager"}>
             <button
               type="button"
-              aria-label="Paper Trading"
+              aria-label={mt5 ? "MetaTrader 5" : "Paper Trading"}
               aria-expanded={open}
               onClick={onToggleOpen}
               onMouseEnter={() => setHoverTab(true)}
@@ -49,10 +54,10 @@ export default function TradingPanel({ open, maximized, onToggleOpen, onToggleMa
               }}
             >
               <span style={{ position: "relative", display: "inline-flex" }}>
-                <BrandMark />
+                {mt5 ? <Mt5Badge size={18} /> : <BrandMark />}
                 <span aria-hidden style={{ position: "absolute", right: -6, top: -3, width: 4, height: 4, borderRadius: "50%", background: "var(--tv-color-live)" }} />
               </span>
-              <span style={{ marginLeft: 15, whiteSpace: "nowrap" }}>Paper Trading</span>
+              <span style={{ marginLeft: 15, whiteSpace: "nowrap" }}>{mt5 ? `MetaTrader 5 · ${broker.linked!.login}` : "Paper Trading"}</span>
             </button>
           </Tip>
           <Tip text="Open context menu">
@@ -70,7 +75,7 @@ export default function TradingPanel({ open, maximized, onToggleOpen, onToggleMa
             </button>
           </Tip>
         </div>
-        <BrokerMenu anchor={chevronRef.current} open={menuOpen} onClose={() => setMenuOpen(false)} />
+        <BrokerMenu anchor={chevronRef.current} open={menuOpen} onClose={() => setMenuOpen(false)} onLogOut={mt5 ? () => setMt5Active(false) : undefined} />
 
         <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
           <Tip text={open ? "Collapse panel" : "Open panel"}>
@@ -88,7 +93,7 @@ export default function TradingPanel({ open, maximized, onToggleOpen, onToggleMa
 
       {open && (
         <div style={{ flex: 1, minHeight: 0 }}>
-          <AccountManager />
+          {mt5 ? <Mt5Panel /> : <AccountManager />}
         </div>
       )}
     </div>

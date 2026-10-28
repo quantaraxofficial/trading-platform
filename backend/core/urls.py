@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, chat_groups, chat_presence, collab, collab_dms, collab_files, github
+from . import views, broker_algo, broker_mt5, chat_groups, chat_presence, collab, collab_dms, collab_files, github
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -18,6 +18,16 @@ urlpatterns = [
     path('agent/insights/<str:uid>/', views.get_agent_insights, name='get_agent_insights'),
     path('agent/strategy-note/<str:uid>/', views.submit_strategy_note, name='submit_strategy_note'),
     path('track-failure/', views.track_failure, name='track_failure'),
+    # Broker accounts: MetaTrader 5 (core/broker_mt5.py)
+    path('broker/<str:uid>/mt5/', broker_mt5.mt5_account, name='broker_mt5_account'),
+    path('broker/<str:uid>/mt5/live/', broker_mt5.mt5_live, name='broker_mt5_live'),
+    path('broker/<str:uid>/mt5/order/', broker_mt5.mt5_order, name='broker_mt5_order'),
+    path('broker/<str:uid>/mt5/symbol/', broker_mt5.mt5_symbol, name='broker_mt5_symbol'),
+    path('broker/<str:uid>/mt5/position/<int:ticket>/', broker_mt5.mt5_position, name='broker_mt5_position'),
+    path('broker/<str:uid>/mt5/pending/<int:ticket>/', broker_mt5.mt5_pending, name='broker_mt5_pending'),
+    path('broker/<str:uid>/mt5/algo/', broker_algo.algo_strategies, name='broker_mt5_algo'),
+    path('broker/<str:uid>/mt5/algo/sync/', broker_algo.algo_sync, name='broker_mt5_algo_sync'),
+    path('broker/<str:uid>/mt5/algo/<int:sid>/', broker_algo.algo_strategy, name='broker_mt5_algo_strategy'),
     # GitHub: push / pull scripts (core/github.py)
     path('github/<str:uid>/account/', github.github_account, name='github_account'),
     path('github/<str:uid>/repos/', github.github_repos, name='github_repos'),

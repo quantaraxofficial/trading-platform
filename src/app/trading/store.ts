@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 import { PaperTradingEngine, EngineState, Side, OrderType, TimeInForce, quoteOf, activeBook, createInitialState } from "./engine";
 import { tradingSettings, ticketPrefs } from "./settings";
 import { defaultQtyOf } from "./instruments";
+import { getBroker } from "./broker";
 
 export const engine = new PaperTradingEngine();
 
@@ -56,6 +57,8 @@ export interface PendingEdit {
 export type TradingDialog =
   | { kind: "broker"; then?: { side: Side; symbol: string } }
   | { kind: "connect"; then?: { side: Side; symbol: string } }
+  | { kind: "mt5" }
+  | { kind: "mt5order"; side: Side; symbol: string; type?: "market" | "limit" | "stop"; price?: number }
   | { kind: "close"; symbol: string }
   | { kind: "reverse"; symbol: string }
   | { kind: "position"; symbol: string }
@@ -165,6 +168,11 @@ export function lastQtyFor(symbol: string): number {
 // The chart's Buy/Sell buttons, Shift+B/S: needs a connected broker; with one-click trading a
 // market order goes straight out at the last ticket quantity, otherwise the ticket opens
 export function requestTrade(side: Side, symbol: string) {
+  const b = getBroker();
+  if (b.active && b.linked) {   // MetaTrader 5 is the broker: its order form
+    tradingUi.set({ dialog: { kind: "mt5order", side, symbol, type: "market" } });
+    return;
+  }
   const s = engine.getState();
   if (!s.connected) {
     tradingUi.set({ dialog: { kind: "broker", then: { side, symbol } } });
@@ -180,6 +188,11 @@ export function requestTrade(side: Side, symbol: string) {
 // "Buy 1 AAPL @ 180.00 limit" from the chart menus: a projected order on the chart to send
 // with its Buy/Sell button (placed straight away with one-click trading)
 export function projectChartOrder(symbol: string, side: Side, type: "limit" | "stop", price: number) {
+  const b = getBroker();
+  if (b.active && b.linked) {
+    tradingUi.set({ dialog: { kind: "mt5order", side, symbol, type, price } });
+    return;
+  }
   const s = engine.getState();
   if (!s.connected) {
     tradingUi.set({ dialog: { kind: "broker", then: { side, symbol } } });

@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
 import GoToModal from "./GoToModal";
 import TradingPanel, { PANEL_ROW_HEIGHT } from "../trading/TradingPanel";
+import { getBroker, useBroker } from "../trading/broker";
 import { engine, tradingUi, useEngineState } from "../trading/store";
 import { Tip, TipKey } from "../trading/ui";
 import { TVGoToDateIcon } from "./icons/TVIcons";
@@ -92,7 +93,10 @@ export default function BottomPanel({ interval }: { theme?: string; interval?: s
   };
 
   // --- Trading panel: only while a broker is connected (logging out removes it, as on TradingView)
-  const connected = useEngineState().connected;
+  const paperConnected = useEngineState().connected;
+  // A linked MetaTrader 5 account in use counts as a connected broker too
+  const broker = useBroker();
+  const connected = paperConnected || (broker.active && !!broker.linked);
   const [panel, setPanel] = useState<PanelState>({ open: false, height: DEFAULT_PANEL_HEIGHT });
   const [maximized, setMaximized] = useState(false);
   useEffect(() => { setPanel(loadPanelState()); }, []);
@@ -122,7 +126,8 @@ export default function BottomPanel({ interval }: { theme?: string; interval?: s
   // broker connected that means picking one first
   useEffect(() => {
     const open = () => {
-      if (!engine.getState().connected) { tradingUi.set({ dialog: { kind: "broker" } }); return; }
+      const b = getBroker();
+      if (!engine.getState().connected && !(b.active && b.linked)) { tradingUi.set({ dialog: { kind: "broker" } }); return; }
       setPanel(p => ({ ...p, open: true }));
     };
     window.addEventListener('tv:open-trading-panel', open);

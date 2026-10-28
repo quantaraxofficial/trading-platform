@@ -48,7 +48,8 @@ export default function TradeButton({ height }: { height: string }) {
 
 // The connected broker's menu, shared by the header's Trade button and the bottom panel's
 // "Paper Trading" tab: Trading settings…, Connect another broker… and Log out
-export function BrokerMenu({ anchor, open, onClose, align = "left" }: { anchor: HTMLElement | null; open: boolean; onClose: () => void; align?: "left" | "right" }) {
+// onLogOut: in place of logging out of Paper Trading (MetaTrader 5's)
+export function BrokerMenu({ anchor, open, onClose, align = "left", onLogOut }: { anchor: HTMLElement | null; open: boolean; onClose: () => void; align?: "left" | "right"; onLogOut?: () => void }) {
   return (
     <Popover anchor={anchor} open={open} onClose={onClose} align={align} width={240}>
       <MenuItem icon={<HexSettingsIcon />} onClick={() => { onClose(); window.dispatchEvent(new CustomEvent("tv:open-chart-settings", { detail: { tab: "trading" } })); }}>
@@ -59,7 +60,7 @@ export function BrokerMenu({ anchor, open, onClose, align = "left" }: { anchor: 
         Connect another broker…
       </MenuItem>
       <MenuDivider />
-      <MenuItem danger icon={<LogOutIcon />} onClick={() => { onClose(); logOutBroker(); }}>
+      <MenuItem danger icon={<LogOutIcon />} onClick={() => { onClose(); (onLogOut || logOutBroker)(); }}>
         Log out
       </MenuItem>
     </Popover>

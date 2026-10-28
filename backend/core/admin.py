@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, CollabRoom, CollabMember, CollabMessage, CollabJoinRequest, GitHubLink
+from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, CollabRoom, CollabMember, CollabMessage, CollabJoinRequest, GitHubLink, BrokerAccount, AlgoStrategy, AlgoLog
 
 @admin.register(FailedRequest)
 class FailedRequestAdmin(admin.ModelAdmin):
@@ -93,3 +93,27 @@ class GitHubLinkAdmin(admin.ModelAdmin):
     search_fields = ("owner__name", "owner__email", "login")
     exclude = ("token",)
     readonly_fields = ("owner", "login", "avatar_url", "created_at")
+
+
+@admin.register(BrokerAccount)
+class BrokerAccountAdmin(admin.ModelAdmin):
+    """Linked broker accounts (the password is encrypted and not shown)"""
+    list_display = ("owner", "platform", "login", "server", "mode", "currency", "last_connected_at")
+    list_filter = ("platform", "mode")
+    search_fields = ("owner__name", "owner__email", "login", "server")
+    exclude = ("password",)
+    readonly_fields = ("owner", "platform", "login", "server", "name", "company", "currency", "leverage", "mode", "created_at", "last_connected_at")
+
+
+@admin.register(AlgoStrategy)
+class AlgoStrategyAdmin(admin.ModelAdmin):
+    """Chart strategies auto-trading linked MT5 accounts"""
+    list_display = ("owner", "name", "symbol", "timeframe", "lots", "enabled", "last_key", "updated_at")
+    list_filter = ("enabled",)
+    search_fields = ("owner__name", "name", "symbol")
+
+
+@admin.register(AlgoLog)
+class AlgoLogAdmin(admin.ModelAdmin):
+    list_display = ("strategy", "at", "action", "ok", "message")
+    list_filter = ("action", "ok")

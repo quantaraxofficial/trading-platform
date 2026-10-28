@@ -330,3 +330,66 @@ class ChatPresence(models.Model):
     read_receipts = models.BooleanField(default=True)
     show_typing = models.BooleanField(default=True)
     show_last_seen = models.BooleanField(default=True)
+
+
+class BrokerAccount(models.Model):
+    """A broker account linked to the site to trade on (core/broker_mt5.py): for MetaTrader 5 the
+    account number, its server and its password (encrypted; never sent to the browser), and
+    what the broker said about it when it was last reached."""
+    PLATFORMS = [('mt5', 'MetaTrader 5')]
+    owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='broker_accounts')
+    platform = models.CharField(max_length=10, choices=PLATFORMS, default='mt5')
+    login = models.BigIntegerField()
+    server = models.CharField(max_length=100)
+    password = models.TextField()
+    name = models.CharField(max_length=100, blank=True)
+    company = models.CharField(max_length=100, blank=True)
+    currency = models.CharField(max_length=10, blank=True)
+    leverage = models.IntegerField(default=0)
+    mode = models.CharField(max_length=10, default='real')   # demo / contest / real
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_connected_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('owner', 'platform')
+
+    def __str__(self):
+        return f"{self.owner.name}: {self.get_platform_display()} {self.login} @ {self.server}"
+
+
+class AlgoStrategy(models.Model):
+    """A chart strategy (Pine / Python / MQL5) that trades your linked MT5 account
+    (core/broker_algo.py): its identity on the chart (script, symbol, timeframe), the lots it
+    trades, whether it's on, and the strategy position it last acted on — so the same signal is
+    never traded twice, however many times the chart reports it."""
+    owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='algo_strategies')
+    key = models.CharField(max_length=200)   # "<script>|<symbol>|<timeframe>"
+    name = models.CharField(max_length=100)
+    symbol = models.CharField(max_length=40)
+    timeframe = models.CharField(max_length=20)
+    lots = models.FloatField(default=0.01)
+    enabled = models.BooleanField(default=False)
+    real_confirmed = models.BooleanField(default=False)   # "I understand this trades real money"
+    last_key = models.CharField(max_length=80, blank=True)   # "long@<entry time>", "short@…" or "flat"
+    failed_key = models.CharField(max_length=80, blank=True)
+    failed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('owner', 'key')
+
+    def __str__(self):
+        return f"{self.owner.name}: {self.name} on {self.symbol} {self.timeframe}"
+
+
+class AlgoLog(models.Model):
+    """What an auto-traded strategy did on the broker: switched on/off, opened, closed, skipped, failed"""
+    strategy = models.ForeignKey(AlgoStrategy, on_delete=models.CASCADE, related_name='log')
+    at = models.DateTimeField(auto_now_add=True)
+    action = models.CharField(max_length=20)
+    message = models.CharField(max_length=300)
+    ok = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['-at', '-id']

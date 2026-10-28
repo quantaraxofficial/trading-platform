@@ -27,6 +27,7 @@ import {
 import { PerformanceChart, CategoryBarChart, Donut, ChartLegend, type PerfVisibility, type PerfChartHandle } from "./strategy/charts";
 import { strategyDock, strategyPresence, STRATEGY_HOST_ID, TRADE_COLUMNS, DEFAULT_COLUMNS, type TradeColumn } from "./strategy/strategyStore";
 import { PANEL_ROW_HEIGHT } from "../trading/TradingPanel";
+import { AutoTradePill } from "../trading/AutoTrade";
 
 export type BacktestRange = { kind: "all" | "days" | "custom" | "history"; days?: number; from?: number; to?: number };
 
@@ -47,6 +48,7 @@ interface StrategyReportPanelProps {
   onRemove: () => void;
   fullRangeStart?: number;
   fullRangeEnd?: number;
+  algoChartId?: string;   // the chart's strategy for auto-trading on MT5 (trading/algo.ts)
 }
 
 const CURRENCY = "USD";
@@ -257,6 +259,8 @@ function Toolbar({ p, view, setView }: { p: StrategyReportPanelProps; view: "met
           <Tip text="Metrics"><button type="button" role="tab" aria-selected={view === "metrics"} aria-label="Metrics" className={`st-lighttab${view === "metrics" ? " selected" : ""}`} onClick={() => setView("metrics")}><StMetricsIcon /></button></Tip>
           <Tip text="Trades"><button type="button" role="tab" aria-selected={view === "trades"} aria-label="Trades" className={`st-lighttab${view === "trades" ? " selected" : ""}`} onClick={() => setView("trades")}><StTradesIcon /></button></Tip>
         </div>
+        {/* (outside the scrolling pills, so it's always in view) */}
+        <AutoTradePill chartId={p.algoChartId} />
         <div className="st-scroll" style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, overflowX: "auto", overflowY: "hidden" }}>
           <ToolbarPill label={`${fmtDate(winFrom, p.tz)} — ${fmtDate(winTo, p.tz)}`} btnRef={rangeRef} open={menu === "range"} onClick={() => toggle("range")} tip="Testing period" icon={<StCalendarIcon />} disabled={p.busy}>
             <span style={{ marginLeft: 4 }}>{fmtDate(winFrom, p.tz)} {"—"} {fmtDate(winTo, p.tz)}</span><Caret open={menu === "range"} />

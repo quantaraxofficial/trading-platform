@@ -49,6 +49,7 @@ import { useTradingSettings } from "@/app/trading/settings";
 import { formatQty } from "@/app/trading/instruments";
 import TradingOverlay from "@/app/trading/TradingOverlay";
 import { Tip, TipKey as Kbd, SymbolAvatar, Popover, MenuItem, MenuDivider } from "@/app/trading/ui";
+import { reportStrategy, strategyKey } from "@/app/trading/algo";
 import { statusLine, type StatusLineSettings } from "../lib/statusLine";
 import { loadFavoriteIndicators, saveFavoriteIndicators } from "@/app/utils/favoriteIndicators";
 import { rememberExchangeTimezone, toChartTime, exchangeTimezoneOf } from "@/app/utils/exchangeTime";
@@ -1443,6 +1444,8 @@ export default function ChartContainer({
   // The script on the chart (Pine Script, Python or MQL5), re-run for backtests, settings and new bars
   const lastPineRunRef = useRef<{ code: string; symbol: string; pineTf: string; scriptName: string; language: ScriptLanguage } | null>(null);
   const [backtestRange, setBacktestRange] = useState<{ kind: "all" | "days" | "custom" | "history"; days?: number; from?: number; to?: number }>({ kind: "all" });
+  const backtestRangeRef = useRef(backtestRange);
+  backtestRangeRef.current = backtestRange;
   const [backtestBusy, setBacktestBusy] = useState(false);
   const [capitalOverride, setCapitalOverride] = useState<number | null>(null);
   const [inputOverrides, setInputOverrides] = useState<Record<string, any>>({});
@@ -1478,6 +1481,28 @@ export default function ChartContainer({
     pineViewRef.current?.clear();
   }
 
+  // The strategy's position as of its latest run, for auto-trading it on the linked MT5 account
+  // (trading/algo.ts). "live": the chart is on real-time bars — not a replay, a testing period
+  // that ended in the past, or a market that's been closed for a while.
+  const algoChartId = useRef(`chart-${Math.random().toString(36).slice(2)}`).current;
+  const replayModeRef = useRef(mode);
+  replayModeRef.current = mode;
+  function publishStrategyPosition(report: any, name: string) {
+    if (!report) { reportStrategy(algoChartId, null); return; }
+    const barSeconds = Math.max(60, Math.round(getIntervalMs(intervalRef.current) / 1000));
+    const bars = fullDataRef.current;
+    const lastTime = bars.length ? (bars[bars.length - 1].time as number) : 0;
+    const now = Date.now() / 1000;
+    const r = backtestRangeRef.current;
+    const live = replayModeRef.current === 'idle' && now - lastTime < 2 * barSeconds + 300 && !(r.kind === "custom" && r.to && r.to < now - barSeconds);
+    const t = report.openTrade;
+    reportStrategy(algoChartId, {
+      key: strategyKey(name, symbolRef.current, intervalRef.current), name, symbol: symbolRef.current, timeframe: intervalRef.current,
+      barSeconds, live, position: t ? { dir: t.type === "Long" ? 1 : -1, entryTime: t.entryTime } : null,
+    });
+  }
+  useEffect(() => () => reportStrategy(algoChartId, null), [algoChartId]);
+
   // Renders a completed PineRunResult onto the chart (series/markers/tables/
   // legend/report) — shared by the initial run (tv:run-pine-script) and by
   // re-running the same script over a different backtest date range.
@@ -1492,6 +1517,7 @@ export default function ChartContainer({
     const report = result?.strategyReport;
     setStrategyReport(report || null);
     setStrategyScriptName(report ? (scriptName || "Strategy") : "");
+    publishStrategyPosition(report, scriptName || "Strategy");
     setPineLegend({
       // The legend uses the script's short title ("RSI"), as TradingView's does
       name: result?.meta?.shortTitle || scriptName || (report ? "Strategy" : "Script"),
@@ -1578,6 +1604,7 @@ export default function ChartContainer({
       setBacktestBusy(true);
     }
     setBacktestRange(range);
+    backtestRangeRef.current = range;
     setCapitalOverride(capital);
     if (overrides) setInputOverrides(overrides);
     try {
@@ -1759,6 +1786,7 @@ export default function ChartContainer({
       applyAllMarkers();
       setPineTables([]);
       setStrategyReport(null);
+      reportStrategy(algoChartId, null);
       setPineLegend(null);
       setPineInputsMeta([]);
       setShowPineSettings(false);
@@ -2454,12 +2482,14 @@ export default function ChartContainer({
       const last = bars[bars.length - 1];
       const t = toChartTime(d.symbol, d.time);
       let bar: any;
+      let opened = false;
       if (t >= last.time && t < last.time + step) {
         bar = { ...last, high: Math.max(last.high, d.price), low: Math.min(last.low, d.price), close: d.price };
         bars[bars.length - 1] = bar;
       } else if (step < 86400 && t >= last.time + step && t < last.time + 2 * step) {
         bar = { time: last.time + step, open: last.close, high: Math.max(last.close, d.price), low: Math.min(last.close, d.price), close: d.price };
         bars.push(bar);
+        opened = true;
       } else return;
       if (brickTypeRef.current) {
         fullDataRef.current = bars.slice();
@@ -2473,10 +2503,12 @@ export default function ChartContainer({
       setLastPriceData({ price: d.price, prevPrice: bars.length > 1 ? bars[bars.length - 2].close : d.price });
       // Script execution "On realtime bar tick": the strategy recalculates on each real-time update
       // (at most every 1.5 s, one run at a time)
-      if (strategyDock.get().onRealtimeTick && Date.now() - realtimeRerunRef.current.last > 1500) realtimeRerunRef.current.run();
+      // (and, whatever that setting, on each bar's close: the new bar opening closes the last one)
+      if (opened || (strategyDock.get().onRealtimeTick && Date.now() - realtimeRerunRef.current.last > 1500)) realtimeRerunRef.current.run();
     };
     window.addEventListener('tv:live-price', onLive);
-    return () => window.removeEventListener('tv:live-price', onLive);
+    window.addEventListener('tv:broker-price', onLive);
+    return () => { window.removeEventListener('tv:live-price', onLive); window.removeEventListener('tv:broker-price', onLive); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
@@ -4286,6 +4318,7 @@ export default function ChartContainer({
           onOpenSettings={() => setShowPineSettings(true)}
           onAddAlert={() => setShowAlertModal(true)}
           onRemove={removePineScript}
+          algoChartId={algoChartId}
           fullRangeStart={fullDataRef.current[0]?.time}
           fullRangeEnd={fullDataRef.current[fullDataRef.current.length - 1]?.time}
         />
