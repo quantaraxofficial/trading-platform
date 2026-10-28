@@ -21,6 +21,7 @@ from pycrdt import Doc, Text
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.utils import timezone
 
+from .access import is_locked
 from .collab import clean_pine, color_of, display_name, group_name, message_json, perms_of, room_json
 from .models import CollabMember, CollabMessage, CollabRoom, UserSession
 
@@ -105,6 +106,9 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
         qs = dict(p.split('=', 1) for p in self.scope.get('query_string', b'').decode().split('&') if '=' in p)
         uid, key = unquote(qs.get('uid', '')), unquote(qs.get('session_key', ''))
         found = await self._load_member(uid, key)
+        if found == 'locked':
+            await self.close(code=4402)   # their subscription has ended (collab is locked)
+            return
         if not found:
             await self.close(code=4403)
             return
@@ -461,6 +465,8 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
         session = UserSession.objects.filter(session_key=key, user__uid=uid).select_related('user').first()
         if not session:
             return None
+        if is_locked(session.user, 'collab'):
+            return 'locked'
         room = CollabRoom.objects.filter(token=self.token, active=True).select_related('owner').first()
         if not room:
             return None

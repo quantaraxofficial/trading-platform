@@ -279,3 +279,46 @@ class CollabMessage(models.Model):
 
     def __str__(self):
         return f"{self.room.name}: {self.text[:40]}"
+
+
+class Subscription(models.Model):
+    """A paid period of access (core/access.py), entered in Django admin when someone pays: from,
+    to, how many months / days, what they paid, a note. Someone's access runs to the latest end."""
+    profile = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='subscriptions')
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField()
+    months = models.IntegerField(default=0)
+    days = models.IntegerField(default=0)
+    amount = models.CharField(max_length=40, blank=True)   # what they paid, as you note it (e.g. "₹1,500 UPI")
+    note = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-ends_at']
+
+    def __str__(self):
+        return f"{self.profile.name}: until {self.ends_at:%d %b %Y}"
+
+
+class LockedFeature(models.Model):
+    """A part of the site only someone with an active subscription may use (when `locked` is on).
+    The site checks these keys: collab, replay."""
+    key = models.CharField(max_length=40, unique=True)
+    label = models.CharField(max_length=100)
+    locked = models.BooleanField(default=True)
+    description = models.CharField(max_length=300, blank=True)
+
+    def __str__(self):
+        return f"{self.label} ({'locked' if self.locked else 'open'} without a subscription)"
+
+
+class PlanSettings(models.Model):
+    """One row: what someone whose subscription ended is told (how to renew)"""
+    renew_message = models.TextField(default="Your subscription has ended. Contact us to renew it.")
+
+    class Meta:
+        verbose_name = "Plan settings"
+        verbose_name_plural = "Plan settings"
+
+    def __str__(self):
+        return "Plan settings"

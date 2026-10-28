@@ -1,6 +1,7 @@
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from .access import access_of
 from .models import TraderProfile, DrawingTemplate, UserDrawing, UserSession, PineScript, UserStrategyNote, UserSetting, FailedRequest, FeedbackMessage
 from django.utils import timezone
 from django.conf import settings
@@ -83,6 +84,8 @@ def get_user_data(request, uid):
             "email": profile.email,
             "phone": profile.phone,
             "tier": profile.tier,
+            # the subscription: active, until when, and what's locked without it (core/access.py)
+            "access": access_of(profile),
             "created_at": profile.created_at.isoformat() if profile.created_at else None,
             "last_login": profile.last_login.isoformat() if profile.last_login else None
         })

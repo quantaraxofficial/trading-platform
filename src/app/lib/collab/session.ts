@@ -8,6 +8,7 @@
 
 import { useSyncExternalStore } from "react";
 import { sessionKey } from "@/lib/backend";
+import { onLockedResponse, requireFeature } from "@/lib/access";
 
 export const BACKEND = (process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000").replace(/\/$/, "");
 const WS_BASE = BACKEND.replace(/^http/, "ws");
@@ -152,6 +153,7 @@ export async function collabApi<T = any>(uid: string, path: string, init?: { met
     body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 402) onLockedResponse(data);   // their subscription has ended
   if (!res.ok) throw Object.assign(new Error(data?.error || `Request failed (${res.status})`), { status: res.status, data });
   return data as T;
 }
@@ -260,6 +262,12 @@ class CollabSession {
         this.wanted = false;
         // "removed" already said why
         if (this.state.status !== "error") this.set({ status: "error", error: "You don't have access to this collab any more." });
+        return;
+      }
+      if (e.code === 4402) {
+        this.wanted = false;
+        this.set({ status: "error", error: "Collab needs an active subscription." });
+        requireFeature("collab");
         return;
       }
       if (e.code === 4410) { this.wanted = false; this.set({ status: "ended", error: "The owner ended this collab." }); return; }

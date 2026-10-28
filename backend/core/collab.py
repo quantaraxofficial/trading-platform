@@ -19,6 +19,7 @@ from rest_framework.decorators import api_view
 from pycrdt import Doc, Text
 from rest_framework.response import Response
 
+from .access import locked_response
 from .auth import require_session
 from .models import CollabJoinRequest, CollabMember, CollabMessage, CollabRoom, TraderProfile
 
@@ -155,6 +156,8 @@ def collab_rooms(request, uid):
     me, denied = require_session(request, uid)
     if denied:
         return denied
+    if request.method == 'POST' and (locked := locked_response(me, 'collab')):
+        return locked   # (a subscription that's ended: no new collabs)
 
     if request.method == 'GET':
         memberships = CollabMember.objects.filter(profile=me, room__active=True).select_related('room', 'room__owner').order_by('-room__updated_at')
@@ -268,6 +271,8 @@ def collab_room(request, uid, token):
     me, denied = require_session(request, uid)
     if denied:
         return denied
+    if request.method == 'GET' and not request.query_params.get('peek') and (locked := locked_response(me, 'collab')):
+        return locked   # (opening or joining one needs an active subscription)
     room = CollabRoom.objects.filter(token=token).select_related('owner').first()
     if not room or not room.active:
         return Response({"error": "This collab has ended or the link is wrong"}, status=status.HTTP_404_NOT_FOUND)
@@ -340,6 +345,8 @@ def collab_request(request, uid, token):
     me, denied = require_session(request, uid)
     if denied:
         return denied
+    if request.method == 'POST' and (locked := locked_response(me, 'collab')):
+        return locked
     room = CollabRoom.objects.filter(token=token, active=True).select_related('owner').first()
     if not room:
         return Response({"error": "This collab has ended or the link is wrong"}, status=status.HTTP_404_NOT_FOUND)

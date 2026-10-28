@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 };
 
 import { AuthProvider } from "@/context/AuthContext";
+import LockedFeatureDialog from "./components/LockedFeatureDialog";
 import { AlertsProvider } from "@/context/AlertsContext";
 import { PaperTradingProvider } from "@/context/PaperTradingContext";
 import CloudSync from "./components/CloudSync";
@@ -28,6 +29,7 @@ export default function RootLayout({
       <body>
         <AuthProvider>
           <CloudSync />
+          <LockedFeatureDialog />
           <PaperTradingProvider>
             <AlertsProvider>
               {children}

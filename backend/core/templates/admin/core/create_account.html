@@ -1,0 +1,42 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Create account | {{ site_title }}{% endblock %}
+{% block breadcrumbs %}
+<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> › <a href="{% url 'admin:core_traderprofile_changelist' %}">Trader profiles</a> › Create account</div>
+{% endblock %}
+{% block content %}
+<div id="content-main">
+  {% if created %}
+    <h1>Account created</h1>
+    <p>Send these to the buyer. The password isn't saved anywhere: copy it now (they can change it, or you can send them a reset email later).</p>
+    <table style="font-size:15px;margin:12px 0 20px">
+      <tr><th style="text-align:left;padding:6px 16px 6px 0">Name</th><td>{{ created.name }}</td></tr>
+      <tr><th style="text-align:left;padding:6px 16px 6px 0">Email</th><td><code>{{ created.email }}</code></td></tr>
+      <tr><th style="text-align:left;padding:6px 16px 6px 0">Password</th><td><code id="pw" style="font-size:17px">{{ created.password }}</code></td></tr>
+      <tr><th style="text-align:left;padding:6px 16px 6px 0">Access until</th><td>{{ created.until|date:"j M Y, H:i" }}</td></tr>
+    </table>
+    <p><textarea readonly rows="5" cols="60" style="font-family:monospace">Your TradePilot account
+Email: {{ created.email }}
+Password: {{ created.password }}
+Valid until: {{ created.until|date:"j M Y" }}</textarea></p>
+    <p><a class="button" href="{% url 'admin:core_traderprofile_change' created.profile_id %}">Open the profile</a>
+       <a class="button" href="{% url 'admin:core_traderprofile_create_account' %}">Create another</a></p>
+  {% else %}
+    <h1>Create account</h1>
+    <p>After someone pays: their sign-in (email and a generated password) and their subscription.</p>
+    {% if error %}<p class="errornote">{{ error }}</p>{% endif %}
+    {% for e in form.non_field_errors %}<p class="errornote">{{ e }}</p>{% endfor %}
+    <form method="post">{% csrf_token %}
+      <fieldset class="module aligned">
+        {% for field in form %}
+          <div class="form-row">
+            {{ field.errors }}
+            <div><label class="required" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+              {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}</div>
+          </div>
+        {% endfor %}
+      </fieldset>
+      <div class="submit-row"><input type="submit" class="default" value="Create account"></div>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

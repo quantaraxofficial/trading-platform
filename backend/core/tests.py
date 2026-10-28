@@ -1,6 +1,7 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from .access import extend
 from .models import TraderProfile, UserSession, UserSetting
 
 
@@ -110,6 +111,7 @@ class CollabAccessTests(TestCase):
         for u in ("own", "bob", "eve"):
             p = TraderProfile.objects.create(uid=u, name=u.title(), email=f"{u}@example.com")
             UserSession.objects.create(user=p, session_key=f"sk-{u}")
+            extend(p, months=1)   # subscribers: collab needs an active plan
         r = self.call("own", "rooms/", "post", {"name": "R", "symbol": "AAPL", "interval": "1D", "link_access": "restricted", "allow_requests": True})
         self.assertEqual(r.status_code, 201)
         self.token = r.json()["token"]

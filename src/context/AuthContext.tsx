@@ -12,6 +12,7 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
 import { backendFetch } from "@/lib/backend";
+import { setAccess, refreshAccess, accessAge } from "@/lib/access";
 
 interface AuthContextType {
   user: User | null;
@@ -137,17 +138,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           const profileRes = await backendFetch(`http://localhost:8000/api/users/user/${activeUser.uid}/`);
           const profileData = await profileRes.json();
           setUserData(profileData);
+          setAccess(profileData?.access ?? null);
         } catch (error) {
           console.error("Error syncing with Django", error);
         }
       } else {
         setUserData(null);
+        setAccess(null);
       }
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, [sessionKey]);
+
+  // The subscription is read again when they come back to the tab (a renewal made in admin
+  // meanwhile unlocks things without a reload)
+  useEffect(() => {
+    if (!user?.uid) return;
+    const uid = user.uid;
+    const onBack = () => { if (document.visibilityState === 'visible' && accessAge() > 60_000) refreshAccess(uid); };
+    window.addEventListener('focus', onBack);
+    document.addEventListener('visibilitychange', onBack);
+    return () => { window.removeEventListener('focus', onBack); document.removeEventListener('visibilitychange', onBack); };
+  }, [user?.uid]);
 
   const signInWithGoogle = async () => {
     try {
@@ -205,7 +219,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signUp, signIn, logout }}>
+    <AuthContext.Provider value={{ user, userData, loading, signInWithGoogle, signUp, signIn, logout }}>
       {children}
     </AuthContext.Provider>
   );

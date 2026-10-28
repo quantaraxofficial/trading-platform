@@ -184,5 +184,8 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 # Sign-in (api/users/sync/) checks the Firebase ID token against this project
 FIREBASE_PROJECT_ID = env('FIREBASE_PROJECT_ID', default='quantarax')
+# The web app's Firebase apiKey (public, as in src/lib/firebase.ts): admin's "Create account" makes
+# sign-in accounts with it (core/access.py)
+FIREBASE_WEB_API_KEY = env('FIREBASE_WEB_API_KEY', default='')
 # Development only: let sync/ open sessions without a Firebase token (local test accounts)
 ALLOW_UNVERIFIED_SIGNIN = env.bool('ALLOW_UNVERIFIED_SIGNIN', default=False)

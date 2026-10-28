@@ -7,6 +7,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { useAccess } from "@/lib/access";
 import { useEscapeClose } from "../lib/useEscapeClose";
 import { placeBelow, useCloseOnAnchorScroll } from "../lib/anchoredPopup";
 import { Tip } from "../trading/ui";
@@ -24,7 +25,8 @@ export default function AccountMenu({ isDark, onToggleTheme, height, drawingsPan
   isDark: boolean; onToggleTheme: () => void; height: string;
   drawingsPanelVisible?: boolean; onToggleDrawingsPanel?: () => void;
 }) {
-  const { user, userData, logout } = useAuth();
+  const { user, logout } = useAuth();
+  const { access, active } = useAccess();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [subOpen, setSubOpen] = useState(false);
@@ -44,8 +46,14 @@ export default function AccountMenu({ isDark, onToggleTheme, height, drawingsPan
   const name = user?.displayName?.trim() || user?.email?.split("@")[0] || "";
   const letter = (name[0] || "T").toUpperCase();
   const color = getAvatarColor(user?.uid || user?.email || "guest");
-  // The account's plan: none is sold through the app yet, so everyone is on the free one
-  const plan: string = (userData && (userData.plan || userData.subscription_plan)) || "Basic";
+  // The account's subscription (sold by hand, made in admin): how long it has left, or that it ended
+  const plan: string = user && active ? "Subscribed" : user && access?.until ? "Plan ended" : "Basic";
+  const fmtDate = (ms: number) => new Date(ms).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  const lockedNames = Object.values(access?.features || {}).join(", ");
+  const planStatus: React.ReactNode = !user || !access ? null
+    : active ? <span style={{ color: access.days_left <= 7 ? "#b26a00" : undefined }}>{access.days_left} day{access.days_left === 1 ? "" : "s"} left · until {fmtDate(access.until!)}</span>
+    : access.until ? <span style={{ color: "var(--tv-color-bear, #f23645)" }}>Ended on {fmtDate(access.until)}{lockedNames ? ` · ${lockedNames} locked` : ""}</span>
+    : lockedNames ? <span>No subscription · {lockedNames} locked</span> : null;
   const go = (path: string) => { close(); router.push(path); };
 
   const showSub = () => { clearTimeout(subTimer.current); setSubOpen(true); };
@@ -96,9 +104,12 @@ export default function AccountMenu({ isDark, onToggleTheme, height, drawingsPan
         }}>
           {/* The plan */}
           <button type="button" aria-label={`${plan} plan`}
-            style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", height: 44, padding: "0 12px", border: "none", background: "transparent", color: "inherit", cursor: "default", fontFamily: "inherit" }}>
+            style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", minHeight: 44, padding: "4px 12px", border: "none", background: "transparent", color: "inherit", cursor: "default", fontFamily: "inherit", textAlign: "left" }}>
             <BrandMark />
-            <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.3px" }}>{plan}</span>
+            <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+              <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.3px" }}>{plan}</span>
+              {planStatus && <span style={{ fontSize: 12, lineHeight: "16px", color: "var(--tv-legend-args, #787b86)" }}>{planStatus}</span>}
+            </span>
           </button>
           {divider}
 

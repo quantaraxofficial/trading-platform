@@ -8,6 +8,7 @@ from django.test import TestCase, override_settings
 from PIL import Image
 from rest_framework.test import APIClient
 
+from .access import extend
 from .models import CollabMember, CollabMessage, CollabRoom, TraderProfile, UserSession
 
 TMP = tempfile.mkdtemp(prefix="collab-files-test-")
@@ -31,6 +32,7 @@ class CollabFileTests(TestCase):
         for u in ("own", "bob", "eve"):
             p = TraderProfile.objects.create(uid=u, name=u.title(), email=f"{u}@example.com")
             UserSession.objects.create(user=p, session_key=f"sk-{u}")
+            extend(p, months=1)   # subscribers: collab needs an active plan
         own = TraderProfile.objects.get(uid="own")
         self.room = CollabRoom.objects.create(token="tok", owner=own, name="R", symbol="AAPL", interval="1D")
         CollabMember.objects.create(room=self.room, profile=own, role="owner")

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from "react";
+import { requireFeature } from "@/lib/access";
 
 export interface CandleData {
   time: number;
@@ -148,6 +149,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
   const cancelSelectRef = useRef<() => void>(() => {});
 
   const startReplayAt = useCallback((index: number, data: CandleData[], series: any, chart: any) => {
+    if (!requireFeature('replay')) return;   // (a saved replay or a collab's replay starts here directly)
     stopInterval();
     seriesRef.current = series;
     chartRef.current = chart;
@@ -200,6 +202,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
 
   const enterSelectMode = useCallback(() => {
     if (mode !== 'idle') { stopReplay(); return; }
+    if (!requireFeature('replay')) return;   // (a subscription that's ended)
     setMode('selecting');
   }, [mode, stopReplay]);
 

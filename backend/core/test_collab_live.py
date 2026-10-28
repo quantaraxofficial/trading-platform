@@ -6,6 +6,7 @@ from channels.testing import WebsocketCommunicator
 from django.test import TransactionTestCase
 from rest_framework.test import APIClient
 
+from .access import extend
 from .models import CollabMember, CollabRoom, TraderProfile, UserSession
 from .routing import websocket_urlpatterns
 
@@ -15,6 +16,7 @@ class CollabLiveTests(TransactionTestCase):
         for u in ("own", "bob", "eve"):
             p = TraderProfile.objects.create(uid=u, name=u.title(), email=f"{u}@example.com")
             UserSession.objects.create(user=p, session_key=f"sk-{u}")
+            extend(p, months=1)   # subscribers: collab needs an active plan
         self.room = CollabRoom.objects.create(token="tok", owner=TraderProfile.objects.get(uid="own"), name="R",
                                               symbol="AAPL", interval="1D", link_access="restricted")
         CollabMember.objects.create(room=self.room, profile=TraderProfile.objects.get(uid="own"), role="owner")

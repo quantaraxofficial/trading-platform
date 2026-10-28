@@ -332,6 +332,7 @@ import type { DateRangeSpan } from "./BottomPanel";
 import { detectPrecision, simulatedQuote } from "@/app/utils/pricePrecision";
 import { feedTimeToUnix } from "../utils/feedTime";
 import { backendFetch } from "@/lib/backend";
+import { featureLocked, requireFeature } from "@/lib/access";
 import { CollabIcon } from "./collab/icons";
 import { useCollabAlerts } from "../lib/collab/session";
 export { getCacheKey, getCachedData, setCachedData } from "../lib/stockDataCache";
@@ -3047,6 +3048,7 @@ export default function ChartContainer({
     // the provider has, or a random bar anywhere in the history. The chart is cut just before the
     // chosen bar, so it's the first one Play reveals; history outside the loaded range is fetched.
     const replayFrom = async (detail: { kind: 'date' | 'first' | 'random' | 'saved'; date?: string; time?: string; at?: number }) => {
+      if (!requireFeature('replay')) return;   // (a subscription that's ended)
       const iv = intervalRef.current;
       const daily = /day|week|month/.test(iv);
       const barMs = getIntervalMs(iv);
@@ -3478,7 +3480,9 @@ export default function ChartContainer({
                   }
                 }
               }
-              startReplayAt(closestIdx, stockData, candleSeriesRef.current, chartRef.current);
+              // (the subscription ran out during the replay: it ends, with the full chart back)
+              if (featureLocked('replay')) { stopReplay(stockData); requireFeature('replay'); }
+              else startReplayAt(closestIdx, stockData, candleSeriesRef.current, chartRef.current);
             } else {
               stopReplay(stockData);
             }
