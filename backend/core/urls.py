@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, analytics, broker_algo, broker_mt5, copy_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github
+from . import views, analytics, broker_algo, broker_mt5, copy_api, copy_share, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -46,6 +46,10 @@ urlpatterns = [
     path('copy/<str:uid>/channels/<int:cid>/', copy_api.channel, name='copy_channel'),
     path('copy/<str:uid>/channels/<int:cid>/signals/', copy_api.send_signal, name='copy_send_signal'),
     path('copy/<str:uid>/channels/<int:cid>/signals/<int:sid>/', copy_api.signal_results, name='copy_signal_results'),
+    path('copy/<str:uid>/channels/<int:cid>/connections/', copy_share.connections, name='copy_connections'),
+    path('copy/<str:uid>/channels/<int:cid>/connections/<int:xid>/', copy_share.connection, name='copy_connection'),
+    path('copy/<str:uid>/channels/<int:cid>/connections/<int:xid>/test/', copy_share.connection_test, name='copy_connection_test'),
+    path('copy/<str:uid>/share-targets/', copy_share.share_targets, name='copy_share_targets'),
     path('copy/<str:uid>/join/', copy_api.join, name='copy_join'),
     path('copy/<str:uid>/subscriptions/<int:sid>/', copy_api.subscription, name='copy_subscription'),
     path('copy/<str:uid>/subscriptions/<int:sid>/log/', copy_api.subscription_log, name='copy_subscription_log'),

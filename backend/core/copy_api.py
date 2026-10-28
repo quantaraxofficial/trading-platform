@@ -18,6 +18,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from . import copy_share
 from .auth import require_session
 from .models import BrokerAccount, CopierHeartbeat, CopyChannel, CopyExecution, CopySignal, CopySubscription
 
@@ -56,17 +57,21 @@ def _channel_json(c, full=False):
          "created_at": int(c.created_at.timestamp() * 1000)}
     if full:
         d["signals"] = [_signal_json(s) for s in c.signals.order_by("-id")[:100].annotate(
-            filled=Count("executions", filter=Q(executions__status__in=["filled", "modified", "closed"])),
-            skipped=Count("executions", filter=Q(executions__status="skipped")),
-            failed=Count("executions", filter=Q(executions__status="failed")))]
+            filled=Count("executions", filter=Q(executions__status__in=["filled", "modified", "closed"]), distinct=True),
+            skipped=Count("executions", filter=Q(executions__status="skipped"), distinct=True),
+            failed=Count("executions", filter=Q(executions__status="failed"), distinct=True),
+            posted=Count("posts", filter=Q(posts__ok=True), distinct=True),
+            post_failed=Count("posts", filter=Q(posts__ok=False), distinct=True))]
         d["followers"] = [_sub_json(s, owner_view=True) for s in c.subscriptions.select_related("subscriber")]
+        # Where its signals are posted as well (Telegram, Discord, WhatsApp, chats here: copy_share.py)
+        d["connections"] = [copy_share.connection_json(x) for x in c.connections.all()]
     return d
 
 
 def _signal_json(s):
     return {"id": s.id, "kind": s.kind, "ref": s.ref, "source": s.source, "symbol": s.symbol, "side": s.side, "entry": s.entry, "sl": s.sl,
             "tp": s.tp, "risk_percent": s.risk_percent, "fraction": s.fraction, "created_at": int(s.created_at.timestamp() * 1000),
-            **({"filled": s.filled, "skipped": s.skipped, "failed": s.failed} if hasattr(s, "filled") else {})}
+            **({"filled": s.filled, "skipped": s.skipped, "failed": s.failed, "posted": s.posted, "post_failed": s.post_failed} if hasattr(s, "filled") else {})}
 
 
 def _sub_json(s, owner_view=False):
@@ -199,6 +204,7 @@ def send_signal(request, uid, cid):
             return Response({"error": "kind is open, modify or close"}, status=status.HTTP_400_BAD_REQUEST)
     except (TypeError, ValueError) as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    copy_share.broadcast(s)   # posted to Telegram / Discord / WhatsApp / chats, in the background
     return Response({"signal": _signal_json(s), "copier": _copier_status()}, status=status.HTTP_201_CREATED)
 
 

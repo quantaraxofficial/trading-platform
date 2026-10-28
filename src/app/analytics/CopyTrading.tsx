@@ -10,6 +10,7 @@ import {
   updateChannel, updateSubscription, type Channel, type CopierStatus, type Execution, type Signal, type Subscription,
 } from "./copy";
 import { Card, Empty, Kpi, Label, Pills } from "./ui";
+import CopyConnections from "./CopyConnections";
 
 const field = "w-full bg-gray-900/50 border border-purple-700/50 rounded-lg px-3 py-2 text-sm text-white placeholder-purple-500/70 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20";
 const btn = "px-3 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white disabled:opacity-60";
@@ -22,7 +23,9 @@ const STATUS: Record<string, string> = {
 const num = (v: string) => (v.trim() === "" ? null : Number(v));
 
 export default function CopyTrading({ uid }: { uid: string }) {
-  const [tab, setTab] = useState<"channels" | "following">("channels");
+  // (?tab=following: from a signal card's "set up copying" in a chat)
+  const [tab, setTab] = useState<"channels" | "following">(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "following" ? "following" : "channels");
   const [data, setData] = useState<{ channels: Channel[]; following: Subscription[]; copier: CopierStatus; mt5_linked: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const reload = useCallback(() => copyOverview(uid).then(d => { setData(d); setError(null); }, e => setError(e.message)), [uid]);
@@ -125,6 +128,7 @@ function ChannelDetail({ uid, id, mt5Linked, onChange, onDeleted }: { uid: strin
   };
   if (!c) return <Card><Empty>{err || "Loading…"}</Empty></Card>;
   const open = openSiteTrades(c.signals || []);
+  const posting = (c.connections || []).length > 0 || (c.signals || []).some(s => (s.posted || 0) + (s.post_failed || 0) > 0);
   return (
     <div className="space-y-5" data-testid="channel-detail">
       <Card title={c.name} subtitle={c.description || "Share the code; followers switch copying on with their own limits"}
@@ -149,6 +153,8 @@ function ChannelDetail({ uid, id, mt5Linked, onChange, onDeleted }: { uid: strin
         </div>
         <p className="text-xs text-purple-300/60 mt-3">Each follower's lot size is the risk % of their own equity at the stop distance on their broker. A copy that would fill more than the slippage (a % of the stop distance) past your entry is skipped.</p>
       </Card>
+
+      <CopyConnections uid={uid} channelId={c.id} connections={c.connections || []} onChange={load} />
 
       <Card title={<span className="flex items-center gap-2"><Send size={16} className="text-purple-400" />Send a signal</span>} subtitle="Opens at the market on every follower's broker account">
         <div className="grid sm:grid-cols-6 gap-2 items-end" onKeyDown={e => e.stopPropagation()}>
@@ -178,7 +184,7 @@ function ChannelDetail({ uid, id, mt5Linked, onChange, onDeleted }: { uid: strin
         <Card title="Signals" subtitle="Click one to see what it did on each follower's account" pad={false}>
           {(c.signals || []).length === 0 ? <Empty>No signals yet</Empty> : (
             <div className="overflow-x-auto"><table className="w-full text-sm" data-testid="signals">
-              <thead><tr className="text-[11px] uppercase tracking-wider text-purple-300/60">{["Time", "Kind", "Symbol", "Entry", "SL", "TP", "Risk", "Results"].map(h => <th key={h} className="text-left font-semibold px-4 py-2">{h}</th>)}</tr></thead>
+              <thead><tr className="text-[11px] uppercase tracking-wider text-purple-300/60">{["Time", "Kind", "Symbol", "Entry", "SL", "TP", "Risk", "Results", ...(posting ? ["Posted"] : [])].map(h => <th key={h} className="text-left font-semibold px-4 py-2">{h}</th>)}</tr></thead>
               <tbody>{(c.signals || []).map(s => (
                 <tr key={s.id} onClick={() => signalResults(uid, id, s.id).then(setResults)} className="border-t border-purple-800/20 hover:bg-purple-800/15 cursor-pointer" data-signal={s.id}>
                   <td className="px-4 py-2 text-purple-300/80 whitespace-nowrap">{when(s.created_at)}</td>
@@ -191,6 +197,8 @@ function ChannelDetail({ uid, id, mt5Linked, onChange, onDeleted }: { uid: strin
                   <td className="px-4 py-2 tabular-nums">{s.tp ?? "—"}</td>
                   <td className="px-4 py-2 tabular-nums">{s.risk_percent != null ? `${s.risk_percent}%` : "—"}</td>
                   <td className="px-4 py-2 whitespace-nowrap"><span className="text-emerald-400">{s.filled}</span> / <span className="text-amber-300">{s.skipped}</span> / <span className="text-rose-400">{s.failed}</span></td>
+                  {posting && <td className="px-4 py-2 whitespace-nowrap" data-testid="sig-posted" title="Posted to your connections / failed (hover a connection's status for why)">
+                    <span className="text-sky-300">{s.posted ?? 0}</span>{s.post_failed ? <> / <span className="text-rose-400">{s.post_failed} failed</span></> : null}</td>}
                 </tr>))}</tbody>
             </table></div>
           )}

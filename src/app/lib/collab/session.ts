@@ -58,9 +58,15 @@ export interface SharedReplay { driver: string | null; driver_uid: string; drive
 // An image or document shared in the chat
 // (a voice message: audio, with its length in seconds)
 export interface ChatAttachment { name: string; size: number; type: string; image: boolean; width: number | null; height: number | null; audio?: boolean; duration?: number | null }
+// A copy channel's signal posted in the chat (backend copy_share.py)
+export interface ChatSignal {
+  signal: number; kind: "open" | "modify" | "close"; ref: string; symbol: string; side: string; entry: number | null; sl: number | null;
+  tp: number | null; risk: number | null; fraction: number | null; channel: { id: number; name: string; code: string; owner: string }; test?: boolean;
+}
 export interface ChatMessage {
-  id: number | string; kind: "text" | "system" | "file"; text: string; time: number; author: string | null; author_name: string | null; pending?: boolean;
+  id: number | string; kind: "text" | "system" | "file" | "signal"; text: string; time: number; author: string | null; author_name: string | null; pending?: boolean;
   attachment?: ChatAttachment;
+  signal?: ChatSignal;
   // A file still on its way up from here: how far (0..1), the picture to show meanwhile, or why it failed
   upload?: { progress: number; preview?: string; error?: string; file: File };
   // A private message: to whom (empty: the group's chat)

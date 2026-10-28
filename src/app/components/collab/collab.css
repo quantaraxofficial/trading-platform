@@ -275,3 +275,21 @@
 .tv-co-voice-bar::before { content: ""; position: absolute; inset: -8px 0; }
 .tv-co-voice-bar i { display: block; height: 100%; border-radius: 2px; background: var(--tv-co-accent); }
 .tv-co-voice-time { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--tv-co-chat-muted, var(--tv-co-muted)); min-width: 32px; text-align: right; }
+
+/* A copy channel's signal in a chat (SignalCard.tsx) */
+.tv-co-signal { margin-top: 2px; border: 1px solid var(--tv-co-border); border-radius: 8px; padding: 10px 12px; background: var(--tv-co-bg); min-width: 220px; max-width: 320px; font-size: 13px; }
+.tv-co-signal-head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.tv-co-signal-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--tv-co-muted); }
+.tv-co-signal-dot.buy { background: var(--tv-co-live); }
+.tv-co-signal-dot.sell { background: var(--tv-co-danger); }
+.tv-co-signal-dot.modify { background: var(--tv-co-accent); }
+.tv-co-signal-test { margin-left: auto; font-size: 11px; color: var(--tv-co-muted); border: 1px solid var(--tv-co-field); border-radius: 4px; padding: 0 5px; }
+.tv-co-signal-grid { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; margin-top: 8px; }
+.tv-co-signal-grid span { color: var(--tv-co-muted); }
+.tv-co-signal-grid b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tv-co-signal-foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--tv-co-border); color: var(--tv-co-muted); font-size: 12px; }
+.tv-co-signal-foot > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-co-signal-foot .tv-co-btn { height: 28px; font-size: 12px; padding: 0 10px; }
+.tv-co-signal-note { font-size: 12px; color: var(--tv-co-muted); white-space: nowrap; }
+a.tv-co-signal-note { color: var(--tv-co-accent); text-decoration: none; }
+.tv-co-signal-err { margin-top: 6px; font-size: 12px; color: var(--tv-co-danger); }

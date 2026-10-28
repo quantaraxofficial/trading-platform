@@ -332,6 +332,9 @@ class Supervisor:
         for sig in made:   # straight out (and past the poller)
             self.last_signal = max(self.last_signal or 0, sig.id)
             self.dispatch(sig)
+        from .copy_share import broadcast
+        for sig in made:   # and posted where the channel is connected (after the copies are on their way)
+            broadcast(sig)
 
     def _open_refs(self, channel_id):
         """The provider's mirrored positions still open, as the signals last left them"""

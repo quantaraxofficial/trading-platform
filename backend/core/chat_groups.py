@@ -47,7 +47,9 @@ def message_json(m):
         "author": m.author.uid if m.author else None,
         "author_name": display_name(m.author) if m.author else None,
     }
-    if m.attachment:
+    if m.kind == 'signal':
+        out["signal"] = m.attachment   # a copy channel's signal (copy_share.py), shown as a card
+    elif m.attachment:
         out["attachment"] = {**{k: m.attachment.get(k) for k in ('name', 'size', 'type', 'image', 'width', 'height')},
                              **({"audio": True, "duration": m.attachment.get('duration')} if m.attachment.get('audio') else {})}
     return out

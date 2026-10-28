@@ -7,6 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { createPortal } from "react-dom";
 import { useEscapeClose } from "../../lib/useEscapeClose";
 import "./collab.css";
+import SignalCard from "./SignalCard";
 import { collab, useCollab, chatFileProblem, CHAT_FILE_ACCEPT, type ChatMessage, type Peer, type SharedAlert } from "../../lib/collab/session";
 import { useAlerts } from "@/context/AlertsContext";
 import { Avatar } from "./CollabDialog";
@@ -311,7 +312,8 @@ export function Message({ m, prev, mine, color, onView, files = groupFiles, onAu
             <b style={{ color, cursor: canDm ? "pointer" : undefined }} onClick={dm} title={canDm ? `Message ${m.author_name} privately` : undefined} data-name={canDm ? "collab-author-dm" : undefined}>{name}</b>
             <span>{timeOf(m.time)}</span>
           </div>}
-          {m.attachment ? <Attachment m={m} onView={onView} files={files} /> : <div className="tv-co-msg-text">{m.text}</div>}
+          {m.signal ? <SignalCard s={m.signal} mine={mine} />
+            : m.attachment ? <Attachment m={m} onView={onView} files={files} /> : <div className="tv-co-msg-text">{m.text}</div>}
           {status && <div className="tv-co-msg-status" data-name="msg-status">{status}</div>}
         </div>
       </div>

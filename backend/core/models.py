@@ -271,7 +271,8 @@ class CollabMessage(models.Model):
     caption), or a notice such as "Asha joined"."""
     room = models.ForeignKey(CollabRoom, on_delete=models.CASCADE, related_name='messages')
     author = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
-    kind = models.CharField(max_length=10, choices=[('text', 'Text'), ('system', 'System'), ('file', 'File')], default='text')
+    # ('signal': a copy channel's signal posted here, its card in `attachment`, see copy_share.py)
+    kind = models.CharField(max_length=10, choices=[('text', 'Text'), ('system', 'System'), ('file', 'File'), ('signal', 'Signal')], default='text')
     text = models.TextField(blank=True)
     # A shared file: {path (in the private collab-files folder), name, size, type, image, width, height}
     attachment = models.JSONField(null=True, blank=True)
@@ -322,7 +323,7 @@ class ChatGroupMessage(models.Model):
     chats), or a notice such as "Asha added Ravi"."""
     group = models.ForeignKey(ChatGroup, on_delete=models.CASCADE, related_name='messages')
     author = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
-    kind = models.CharField(max_length=10, choices=[('text', 'Text'), ('system', 'System'), ('file', 'File')], default='text')
+    kind = models.CharField(max_length=10, choices=[('text', 'Text'), ('system', 'System'), ('file', 'File'), ('signal', 'Signal')], default='text')
     text = models.TextField(blank=True)
     attachment = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -617,6 +618,45 @@ class CopyExecution(models.Model):
     class Meta:
         ordering = ['-id']
         unique_together = ('signal', 'subscription')
+
+
+class CopyConnection(models.Model):
+    """Where a copy channel's signals are posted as well (core/copy_share.py): a Telegram channel or
+    group (through the owner's bot), a Discord channel (its webhook), WhatsApp numbers (the owner's
+    WhatsApp Cloud API number), or one of the owner's chats here: a group, a personal chat or a
+    collab. The tokens are kept encrypted and never sent back to the browser."""
+    KINDS = [('telegram', 'Telegram'), ('discord', 'Discord'), ('whatsapp', 'WhatsApp'), ('group', 'Group chat'), ('collab', 'Collab chat')]
+    channel = models.ForeignKey(CopyChannel, on_delete=models.CASCADE, related_name='connections')
+    kind = models.CharField(max_length=10, choices=KINDS)
+    label = models.CharField(max_length=200, blank=True)        # what it is, as the platform names it
+    target = models.CharField(max_length=260, blank=True)       # Telegram chat id / WhatsApp number id / a chat's token
+    secret = models.TextField(blank=True)                       # encrypted: bot token / webhook URL / access token
+    options = models.JSONField(default=dict, blank=True)        # WhatsApp: recipients, template, language
+    post_open = models.BooleanField(default=True)
+    post_modify = models.BooleanField(default=True)
+    post_close = models.BooleanField(default=True)
+    enabled = models.BooleanField(default=True)
+    last_at = models.DateTimeField(null=True, blank=True)
+    last_ok = models.BooleanField(null=True)
+    last_error = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['id']
+
+
+class CopyPost(models.Model):
+    """One signal posted to one connection: its id there (to reply to the trade's first post on
+    Telegram), or why it failed"""
+    connection = models.ForeignKey(CopyConnection, on_delete=models.CASCADE, related_name='posts')
+    signal = models.ForeignKey(CopySignal, on_delete=models.CASCADE, related_name='posts')
+    ok = models.BooleanField(default=False)
+    external_id = models.CharField(max_length=100, blank=True)
+    error = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('connection', 'signal')
 
 
 class CopierHeartbeat(models.Model):

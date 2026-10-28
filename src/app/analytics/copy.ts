@@ -8,11 +8,20 @@ export interface CopierStatus { running: boolean; terminals: number; connected: 
 export interface Channel {
   id: number; name: string; description: string; code: string; default_risk: number; max_slippage: number; mirror_mt5: boolean;
   active: boolean; owner: string; subscribers: number; copying: number; created_at: number;
-  signals?: Signal[]; followers?: Follower[];
+  signals?: Signal[]; followers?: Follower[]; connections?: Connection[];
 }
+// Where a channel's signals are posted as well (backend copy_share.py); its token never comes back
+export type ConnectionKind = "telegram" | "discord" | "whatsapp" | "group" | "collab";
+export interface Connection {
+  id: number; kind: ConnectionKind; label: string; target: string; post_open: boolean; post_modify: boolean; post_close: boolean; enabled: boolean;
+  show_code: boolean; recipients: string[]; template: string; language: string; last_at: number | null; last_ok: boolean | null; last_error: string;
+}
+// One of your chats here a channel can post to
+export interface ShareTarget { kind: "group" | "collab"; personal: boolean; token: string; name: string }
 export interface Signal {
   id: number; kind: "open" | "modify" | "close"; ref: string; source: "site" | "mt5"; symbol: string; side: string; entry: number | null;
   sl: number | null; tp: number | null; risk_percent: number | null; fraction: number; created_at: number; filled?: number; skipped?: number; failed?: number;
+  posted?: number; post_failed?: number;
 }
 export interface Follower {
   id: number; name: string; auto_copy: boolean; terminal_status: string; terminal_error: string;
@@ -47,6 +56,13 @@ export const updateChannel = (uid: string, id: number, patch: Partial<Channel>) 
 export const deleteChannel = (uid: string, id: number) => call(uid, `channels/${id}/`, "DELETE");
 export const sendSignal = (uid: string, id: number, s: Record<string, unknown>) => call<{ signal: Signal }>(uid, `channels/${id}/signals/`, "POST", s).then(d => d.signal);
 export const signalResults = (uid: string, id: number, sid: number) => call<{ signal: Signal; results: Execution[] }>(uid, `channels/${id}/signals/${sid}/`);
+export const addConnection = (uid: string, id: number, body: Record<string, unknown>) =>
+  call<{ connection: Connection }>(uid, `channels/${id}/connections/`, "POST", body).then(d => d.connection);
+export const updateConnection = (uid: string, id: number, xid: number, patch: Record<string, unknown>) =>
+  call<{ connection: Connection }>(uid, `channels/${id}/connections/${xid}/`, "PATCH", patch).then(d => d.connection);
+export const removeConnection = (uid: string, id: number, xid: number) => call(uid, `channels/${id}/connections/${xid}/`, "DELETE");
+export const testConnection = (uid: string, id: number, xid: number) => call<{ connection: Connection }>(uid, `channels/${id}/connections/${xid}/test/`, "POST", {});
+export const shareTargets = (uid: string) => call<{ targets: ShareTarget[] }>(uid, "share-targets/").then(d => d.targets);
 export const joinChannel = (uid: string, code: string) => call<{ subscription: Subscription }>(uid, "join/", "POST", { code }).then(d => d.subscription);
 export const updateSubscription = (uid: string, id: number, patch: Partial<Subscription>) =>
   call<{ subscription: Subscription; copier: CopierStatus }>(uid, `subscriptions/${id}/`, "PATCH", patch);
