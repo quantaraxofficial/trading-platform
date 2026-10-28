@@ -677,3 +677,44 @@ class AlgoLog(models.Model):
 
     class Meta:
         ordering = ['-at', '-id']
+
+
+class OptimizerRun(models.Model):
+    """A strategy optimization (core/optimizer_api.py): every combination of the settings chosen to
+    vary (symbols, chart timeframes, input values), each backtested in the owner's browser over the
+    chosen period, with its results kept here. It's paused, closed and continued from `cursor` (the
+    next combination); one window runs it at a time (`runner`, kept alive by `heartbeat_at`)."""
+    STATUSES = [('ready', 'Ready'), ('running', 'Running'), ('paused', 'Paused'), ('done', 'Done')]
+    owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='optimizer_runs')
+    script_key = models.CharField(max_length=120)                # the saved script's id (or its name, unsaved)
+    script_name = models.CharField(max_length=200)
+    language = models.CharField(max_length=10, default='pine')
+    code = models.TextField()                                    # the version being optimized
+    name = models.CharField(max_length=120, blank=True)
+    config = models.JSONField(default=dict)                      # what's varied, the period, capital, search, pace
+    ranking = models.JSONField(default=dict)                     # sort by / filters (only how results are shown)
+    total = models.IntegerField(default=0)                       # combinations to test
+    cursor = models.IntegerField(default=0)                      # how many are done (the next one's position)
+    status = models.CharField(max_length=10, choices=STATUSES, default='ready')
+    runner = models.CharField(max_length=40, blank=True)
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    elapsed_ms = models.BigIntegerField(default=0)               # time spent running, all sessions together
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+
+
+class OptimizerResult(models.Model):
+    """One combination's backtest: its settings and its metrics (or why it couldn't run)"""
+    run = models.ForeignKey(OptimizerRun, on_delete=models.CASCADE, related_name='results')
+    index = models.BigIntegerField()                             # the combination's number in the run's space
+    params = models.JSONField(default=dict)                      # {symbol, interval, inputs: {name: value}}
+    metrics = models.JSONField(null=True, blank=True)
+    error = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('run', 'index')
+

@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, analytics, broker_algo, broker_mt5, copy_api, copy_share, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github
+from . import views, analytics, broker_algo, broker_mt5, copy_api, copy_share, optimizer_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -50,6 +50,11 @@ urlpatterns = [
     path('copy/<str:uid>/channels/<int:cid>/connections/<int:xid>/', copy_share.connection, name='copy_connection'),
     path('copy/<str:uid>/channels/<int:cid>/connections/<int:xid>/test/', copy_share.connection_test, name='copy_connection_test'),
     path('copy/<str:uid>/share-targets/', copy_share.share_targets, name='copy_share_targets'),
+    # The strategy optimizer's runs and results (the testing runs in the browser: src/app/lib/optimizer)
+    path('optimizer/<str:uid>/runs/', optimizer_api.runs, name='optimizer_runs'),
+    path('optimizer/<str:uid>/runs/<int:rid>/', optimizer_api.run, name='optimizer_run'),
+    path('optimizer/<str:uid>/runs/<int:rid>/claim/', optimizer_api.claim, name='optimizer_claim'),
+    path('optimizer/<str:uid>/runs/<int:rid>/results/', optimizer_api.results, name='optimizer_results'),
     path('copy/<str:uid>/join/', copy_api.join, name='copy_join'),
     path('copy/<str:uid>/subscriptions/<int:sid>/', copy_api.subscription, name='copy_subscription'),
     path('copy/<str:uid>/subscriptions/<int:sid>/log/', copy_api.subscription_log, name='copy_subscription_log'),

@@ -342,6 +342,15 @@ function AppLayout() {
     window.addEventListener("tv:set-symbol", onSet);
     return () => window.removeEventListener("tv:set-symbol", onSet);
   }, []);
+  // The chart's timeframe, from elsewhere (the strategy optimizer's Apply to chart)
+  useEffect(() => {
+    const onSet = (e: Event) => {
+      const iv = (e as CustomEvent).detail?.interval;
+      if (typeof iv === "string" && iv && iv !== intervalRef.current) handleIntervalChangeRef.current(iv, intervalToLabel(iv));
+    };
+    window.addEventListener("tv:set-interval", onSet);
+    return () => window.removeEventListener("tv:set-interval", onSet);
+  }, []);
 
   // The theme is remembered (the layout's inline script applies it before the first paint)
   const themeLoaded = useRef(false);

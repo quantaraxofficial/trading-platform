@@ -11,6 +11,8 @@ import { TVGoToDateIcon } from "./icons/TVIcons";
 import { useEscapeClose } from "../lib/useEscapeClose";
 import { pineDock } from "./pine/pineStore";
 import { strategyDock, useStrategyPresence, STRATEGY_HOST_ID } from "./strategy/strategyStore";
+import { optimizerDock } from "../lib/optimizer/dock";
+import OptimizerReport from "./optimizer/OptimizerReport";
 
 export type DateRangeSpan = { days?: number; months?: number } | "ytd" | "all";
 
@@ -181,8 +183,31 @@ export default function BottomPanel({ interval }: { theme?: string; interval?: s
     document.addEventListener("mouseup", up);
   };
 
+  // The strategy optimizer's report: its own tab, like the Strategy Tester's
+  const opt = optimizerDock.useValue();
+  const optOn = opt.open && opt.runId != null;
+  const optHeight = opt.expanded ? opt.height : PANEL_ROW_HEIGHT;
+  const optMax = optOn && opt.maximized;
+  const startOptResize = (e: React.MouseEvent) => {
+    if (!opt.expanded || opt.maximized) return;
+    e.preventDefault();
+    const startY = e.clientY, startH = opt.height;
+    document.body.style.cursor = "ns-resize";
+    let frame = 0;
+    const move = (ev: MouseEvent) => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const max = Math.max(MIN_PANEL_HEIGHT, window.innerHeight - MIN_CHART_SPACE);
+        optimizerDock.set({ height: Math.round(Math.max(MIN_PANEL_HEIGHT, Math.min(max, startH + startY - ev.clientY))) });
+      });
+    };
+    const up = () => { cancelAnimationFrame(frame); document.body.style.cursor = ""; document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  };
+
   // Everything below the chart (for the grid row, and for toasts that sit above it)
-  const bottomHeight = RANGE_ROW_HEIGHT + 1 + (pineBottom ? PANEL_GAP + pineHeight : 0) + (strategyOn ? PANEL_GAP + stHeight : 0) + (connected ? PANEL_GAP + (panelOpen ? panel.height : PANEL_ROW_HEIGHT) : 0);
+  const bottomHeight = RANGE_ROW_HEIGHT + 1 + (pineBottom ? PANEL_GAP + pineHeight : 0) + (strategyOn ? PANEL_GAP + stHeight : 0) + (optOn ? PANEL_GAP + optHeight : 0) + (connected ? PANEL_GAP + (panelOpen ? panel.height : PANEL_ROW_HEIGHT) : 0);
   useEffect(() => {
     const root = document.documentElement.style;
     root.setProperty("--tv-bottom-toolbar-height", `${bottomHeight}px`);
@@ -193,7 +218,7 @@ export default function BottomPanel({ interval }: { theme?: string; interval?: s
   const [columnBox, setColumnBox] = useState<{ left: number; width: number } | null>(null);
   useEffect(() => {
     const root = document.documentElement.style;
-    if (!maximized && !stMax) { root.removeProperty("--tv-bottom-panel-z"); return; }
+    if (!maximized && !stMax && !optMax) { root.removeProperty("--tv-bottom-panel-z"); return; }
     root.setProperty("--tv-bottom-panel-z", "2003");
     const measure = () => {
       const r = rootRef.current?.getBoundingClientRect();
@@ -202,7 +227,7 @@ export default function BottomPanel({ interval }: { theme?: string; interval?: s
     measure();
     window.addEventListener("resize", measure);
     return () => { window.removeEventListener("resize", measure); root.removeProperty("--tv-bottom-panel-z"); };
-  }, [maximized, stMax]);
+  }, [maximized, stMax, optMax]);
 
   // Dragging the gap between the chart and the open panel resizes the panel
   const dragRef = useRef<{ startY: number; startH: number } | null>(null);
@@ -365,6 +390,18 @@ export default function BottomPanel({ interval }: { theme?: string; interval?: s
               ? { position: "fixed", top: 0, bottom: 0, left: columnBox.left, width: columnBox.width, zIndex: 3, background: "var(--st-bg)" }
               : { height: stHeight, flexShrink: 0, minHeight: 0, position: "relative", background: "var(--st-bg)" }}
           />
+        </>
+      )}
+
+      {optOn && (
+        <>
+          <div onMouseDown={startOptResize} aria-hidden style={{ height: PANEL_GAP, flexShrink: 0, cursor: opt.expanded && !opt.maximized ? "ns-resize" : "default" }} />
+          <div data-name="optimizer-section"
+            style={optMax && columnBox
+              ? { position: "fixed", top: 0, bottom: 0, left: columnBox.left, width: columnBox.width, zIndex: 3, background: "var(--st-bg)" }
+              : { height: optHeight, flexShrink: 0, minHeight: 0, position: "relative", background: "var(--st-bg)" }}>
+            <OptimizerReport />
+          </div>
         </>
       )}
 

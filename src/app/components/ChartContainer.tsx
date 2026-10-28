@@ -1755,8 +1755,10 @@ export default function ChartContainer({
     setPineInputsMeta(compiled ? getCompiledPineInputsMeta(compiled) : getScriptInputsMeta(language, p.code));
     plotColorsRef.current = p.colors || {};
     setPlotColorOverrides(p.colors || {});
-    setBacktestRange({ kind: "all" });
-    if (fullDataRef.current.length) runBacktest({ kind: "all" }, p.capital ?? null, p.overrides || {}, true);
+    // (a testing period comes with the strategy optimizer's Apply to chart)
+    const range = p.range && ["all", "days", "custom", "history"].includes(p.range.kind) ? p.range : { kind: "all" as const };
+    setBacktestRange(range);
+    if (fullDataRef.current.length) runBacktest(range, p.capital ?? null, p.overrides || {}, true);
     else { setCapitalOverride(p.capital ?? null); setInputOverrides(p.overrides || {}); }
   };
   useEffect(() => {

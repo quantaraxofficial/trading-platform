@@ -40,8 +40,19 @@ import PineLiveBadge from "./collab/PineLiveBadge";
 import CollabDialog from "./collab/CollabDialog";
 import { CollabIcon } from "./collab/icons";
 import GitHubDialog, { GitHubIcon } from "./pine/GitHubDialog";
+import OptimizerDialog from "./pine/OptimizerDialog";
+import { useOptimizer } from "../lib/optimizer/manager";
 import PublishDialog from "./pine/PublishDialog";
 import { github, githubUrl, languageOfPath, scriptNameOfPath, shortLink, type GitHubAccount, type GitHubLink, type PulledFile, type PushResult } from "../lib/github";
+
+// The optimizer's button: sliders being tuned
+function OptimizeIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden>
+      <path d="M7 6v16M14 6v16M21 6v16" /><rect x="5" y="15" width="4" height="3" rx="1" fill="currentColor" /><rect x="12" y="9" width="4" height="3" rx="1" fill="currentColor" /><rect x="19" y="17" width="4" height="3" rx="1" fill="currentColor" />
+    </svg>
+  );
+}
 
 const PineMonaco = dynamic(() => import("./pine/PineMonaco"), { ssr: false, loading: () => null });
 
@@ -752,6 +763,21 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       </button>
     </Tip>
   );
+  // The strategy optimizer (strategies only): every combination of its settings, backtested and ranked
+  const [showOptimizer, setShowOptimizer] = useState(false);
+  const optimizer = useOptimizer();
+  const optimizing = optimizer.phase !== "idle";
+  const optimizeButton = scriptType === "strategy" ? (
+    <Tip text={optimizing ? `Optimizing: ${optimizer.cursor.toLocaleString()} of ${optimizer.total.toLocaleString()} tested` : "Optimize this strategy's settings"}>
+      <button type="button" aria-label="Optimize strategy" data-name="pine-optimize" className="pine-hover-btn"
+        onClick={() => { if (!uid) { setToast("Sign in to optimize strategies"); return; } setShowOptimizer(true); }}
+        style={{ ...btnBase, position: "relative", padding: wide ? "0 8px 0 4px" : 0, color: p.text }}>
+        <OptimizeIcon />
+        {wide && <span>{optimizing && optimizer.total ? `Optimizing ${Math.floor(optimizer.cursor / optimizer.total * 100)}%` : "Optimize"}</span>}
+        {optimizing && !wide && <span aria-hidden style={{ position: "absolute", top: 5, right: 4, width: 6, height: 6, borderRadius: "50%", background: "#089981" }} />}
+      </button>
+    </Tip>
+  ) : null;
   const githubButton = (
     <Tip text={ghLink ? `GitHub · ${shortLink(ghLink)}` : "GitHub: push and pull"}>
       <button type="button" aria-label="GitHub" aria-haspopup="menu" aria-expanded={menu?.which === "github"} data-name="pine-github" data-pine-menu-trigger className="pine-hover-btn"
@@ -866,6 +892,10 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       )}
       {dialog === "shortcuts" && <KeyboardShortcutsDialog p={p} onClose={() => setDialog(null)} />}
       {dialog === "reportEmpty" && <StrategyReportEmptyDialog p={p} onClose={() => setDialog(null)} />}
+      {showOptimizer && uid && (
+        <OptimizerDialog p={p} uid={uid} scriptKey={currentScriptId ?? `untitled:${scriptName}`} scriptName={scriptName} language={language} code={code}
+          onClose={() => setShowOptimizer(false)} />
+      )}
       {publishOpen && uid && currentScriptId && (
         <PublishDialog p={p} uid={uid} sourceKey={currentScriptId} name={scriptName} kind={scriptType === "strategy" ? "strategy" : "indicator"} language={language} code={code}
           onClose={() => setPublishOpen(false)} onDone={text => { setPublishOpen(false); setToast(text); }} />
@@ -991,6 +1021,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
           {nameButton}
           {runButton}
           {saveButton}
+          {optimizeButton}
           {collabButton}
           {githubButton}
           <PineLiveBadge />
