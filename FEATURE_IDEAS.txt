@@ -1,0 +1,89 @@
+TradePilot - new feature ideas
+==============================
+Effort: S = a day or two, M = under a week, L = more than that.
+
+
+MAKE MONEY / GROW
+-----------------
+1. Paid subscriptions (S-M)
+   Pricing tiers already exist on the site, but nothing charges or enforces them.
+   Connect a payment provider (Razorpay or Stripe) and lock features by plan
+   (copy-trading followers, hidden-code scripts, more MT5 accounts).
+
+2. Paid copy-trading channels and invite-only scripts (M)
+   Channel owners set a monthly price; the site takes a cut. The Telegram signal
+   group idea, automated end to end. Depends on #1.
+
+3. Leaderboards (S)
+   Top traders by verified MT5 or paper performance, plus top scripts and top
+   channels. Brings traffic to profiles and channels.
+
+
+TRUST
+-----
+4. Verified track records (M)
+   A "Verified" badge on profiles and channels whose stats come straight from the
+   linked MT5 history, not self-reported. The main thing buyers of signals want.
+
+5. Two-factor sign-in and session list (S)
+   Important now that real broker accounts are linked.
+
+
+TRADING TOOLS
+-------------
+6. Trade replay inside Trade Analysis (M)
+   The one TradeFXBook feature still missing: candle-by-candle replay around each
+   trade's entry and exit, built on the existing bar replay.
+
+7. Risk guard (M)
+   Daily loss limit, maximum open risk and maximum lots across paper, MT5 and
+   auto-trading. Blocks or warns before an order breaks your rules (prop-firm
+   style rules).
+
+8. Position-size calculator on the order ticket (S)
+   Risk % plus a stop on the chart gives the lots, sized with the MT5 symbol's
+   real tick value (the copier already has this logic).
+
+9. Strategy optimizer (M-L)
+   Runs a Pine strategy across ranges of its inputs, shows a heatmap of profit
+   factor and drawdown, with a walk-forward check against overfitting. Reuses the
+   Strategy Tester.
+
+10. Alerts to Telegram and webhooks (S-M)
+    Price, drawing, Pine alert() and copier events sent to Telegram or any
+    webhook.
+
+
+LEARNING AND COMMUNITY
+----------------------
+11. Ideas feed (M)
+    Publish a chart snapshot with your analysis; people like and comment;
+    followers see it in a feed (like TradingView's Ideas). Snapshots, profiles
+    and follows already exist.
+
+12. Journal reminders and weekly review (S)
+    A Monday email or notification with last week's stats, best and worst trade,
+    unjournaled trades and rule breaks. Reuses Analytics.
+
+13. AI trade coach (M)
+    Reads your Analytics and journal and points out patterns, e.g. "you lose most
+    on Fridays after 3 PM" or "your losses grow after two wins".
+
+
+PLATFORM
+--------
+14. Mobile layout (M-L)
+    Phone-friendly chart, positions, copy-trading log and notifications, possibly
+    an installable web app with push notifications.
+
+15. Economic calendar on the chart (S-M)
+    High-impact news as markers on the time axis, with an option to pause
+    auto-trading or copying around news.
+
+
+TOP PICKS, IN ORDER
+-------------------
+1. Subscriptions (#1) and paid channels (#2) - turn what's built into revenue.
+2. Verified track records (#4) - make the channels sellable.
+3. Trade replay (#6) - completes the Analytics comparison with TradeFXBook.
+4. Risk guard (#7) - protects users now that real money is involved.
