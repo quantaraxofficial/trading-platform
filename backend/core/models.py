@@ -471,6 +471,95 @@ class TradeJournal(models.Model):
         unique_together = ('owner', 'source', 'trade_key')
 
 
+class CopyChannel(models.Model):
+    """A trade-copying channel (core/copier.py): a provider's signals — from their own MT5 account
+    (mirrored) or sent from the site — are placed straight on every subscriber's broker account,
+    sized by risk % of the subscriber's own equity."""
+    owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='copy_channels')
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    code = models.CharField(max_length=12, unique=True)        # what subscribers join with
+    default_risk = models.FloatField(default=1.0)               # % of equity per trade, when a signal doesn't say
+    max_slippage = models.FloatField(default=25.0)              # % of the stop distance a copy may be late by
+    mirror_mt5 = models.BooleanField(default=False)             # copy the owner's own MT5 trades
+    mirror_since = models.DateTimeField(null=True, blank=True)  # positions opened before this aren't copied
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class CopySubscription(models.Model):
+    """Someone following a channel: whether their broker account copies it automatically, and their
+    own limits — risk per trade, open trades, a daily loss limit, the symbols they take"""
+    channel = models.ForeignKey(CopyChannel, on_delete=models.CASCADE, related_name='subscriptions')
+    subscriber = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='copy_subscriptions')
+    auto_copy = models.BooleanField(default=False)
+    risk_mode = models.CharField(max_length=10, default='signal')   # 'signal': the signal's risk %; 'fixed': risk_percent
+    risk_percent = models.FloatField(default=1.0)
+    max_risk = models.FloatField(default=2.0)                   # never more than this % per trade
+    no_sl_lots = models.FloatField(default=0)                   # lots for a signal without a stop loss (0: skip it)
+    max_open = models.IntegerField(default=5)
+    daily_loss_limit = models.FloatField(default=5.0)           # % of balance; 0: none
+    symbols = models.JSONField(default=list)                    # [] = all
+    real_confirmed = models.BooleanField(default=False)
+    terminal_status = models.CharField(max_length=20, default='off')   # off / starting / connected / error
+    terminal_error = models.CharField(max_length=300, blank=True)
+    terminal_seen = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('channel', 'subscriber')
+
+
+class CopySignal(models.Model):
+    """One instruction from the provider: open (symbol, side, entry, SL, TP, risk %), modify (new
+    SL / TP) or close (all or a fraction) of the position the provider calls `ref`"""
+    KINDS = [('open', 'Open'), ('modify', 'Modify'), ('close', 'Close')]
+    channel = models.ForeignKey(CopyChannel, on_delete=models.CASCADE, related_name='signals')
+    kind = models.CharField(max_length=10, choices=KINDS)
+    ref = models.CharField(max_length=40)                       # the provider's position (MT5 ticket, or a site id)
+    source = models.CharField(max_length=10, default='site')    # site / mt5
+    symbol = models.CharField(max_length=40, blank=True)
+    side = models.CharField(max_length=4, blank=True)           # buy / sell
+    entry = models.FloatField(null=True, blank=True)
+    sl = models.FloatField(null=True, blank=True)
+    tp = models.FloatField(null=True, blank=True)
+    risk_percent = models.FloatField(null=True, blank=True)
+    fraction = models.FloatField(default=1.0)                   # close: how much of the position
+    volume = models.FloatField(null=True, blank=True)           # the provider's lots (MT5 mirror), for partial closes
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['id']
+
+
+class CopyExecution(models.Model):
+    """What a signal did on one subscriber's broker account"""
+    signal = models.ForeignKey(CopySignal, on_delete=models.CASCADE, related_name='executions')
+    subscription = models.ForeignKey(CopySubscription, on_delete=models.CASCADE, related_name='executions')
+    status = models.CharField(max_length=10)                    # filled / modified / closed / skipped / failed
+    ticket = models.BigIntegerField(null=True, blank=True)      # the subscriber's position
+    symbol = models.CharField(max_length=40, blank=True)
+    volume = models.FloatField(null=True, blank=True)
+    price = models.FloatField(null=True, blank=True)
+    sl = models.FloatField(null=True, blank=True)
+    tp = models.FloatField(null=True, blank=True)
+    message = models.CharField(max_length=300, blank=True)
+    latency_ms = models.IntegerField(null=True, blank=True)     # from the signal to the broker's answer
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-id']
+        unique_together = ('signal', 'subscription')
+
+
+class CopierHeartbeat(models.Model):
+    """The copier service (manage.py run_copier) saying it's alive, and how many terminals it runs"""
+    host = models.CharField(max_length=100, unique=True)
+    seen = models.DateTimeField()
+    terminals = models.IntegerField(default=0)
+    connected = models.IntegerField(default=0)
+
+
 class AlgoLog(models.Model):
     """What an auto-traded strategy did on the broker: switched on/off, opened, closed, skipped, failed"""
     strategy = models.ForeignKey(AlgoStrategy, on_delete=models.CASCADE, related_name='log')

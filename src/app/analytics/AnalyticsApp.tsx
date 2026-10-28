@@ -5,7 +5,7 @@
 // own look (the landing / login pages).
 
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BarChart3, FlaskConical, LineChart, LogIn, RefreshCw, TrendingUp, Wallet } from "lucide-react";
+import { ArrowLeft, BarChart3, FlaskConical, LineChart, LogIn, Radio, RefreshCw, TrendingUp, Wallet } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useEngineState } from "../trading/store";
 import { setBrokerUser, useBroker } from "../trading/broker";
@@ -14,12 +14,14 @@ import type { Period } from "./stats";
 import Performance from "./Performance";
 import TradeAnalysis from "./TradeAnalysis";
 import Backtests from "./Backtests";
+import CopyTrading from "./CopyTrading";
 
-type View = "performance" | "trades" | "backtests";
+type View = "performance" | "trades" | "backtests" | "copy";
 const NAV: { id: View; label: string; icon: React.ReactNode; hint: string }[] = [
   { id: "performance", label: "Performance", icon: <BarChart3 size={18} />, hint: "Your results at a glance" },
   { id: "trades", label: "Trade Analysis", icon: <LineChart size={18} />, hint: "Each trade, scored and journaled" },
   { id: "backtests", label: "Backtests", icon: <FlaskConical size={18} />, hint: "Backtest sessions and saved strategy backtests" },
+  { id: "copy", label: "Copy trading", icon: <Radio size={18} />, hint: "Your trades copied to followers' brokers, and channels you follow" },
 ];
 const ACCOUNT_KEY = "tv:analyticsAccount";
 const MT5_DAYS: Record<Period, number> = { today: 31, "7d": 31, "30d": 31, "3m": 92, "1y": 366, all: 3650 };
@@ -34,7 +36,7 @@ export default function AnalyticsApp() {
   // (read after the first render, so the server's page and the browser's match)
   useEffect(() => {
     const v = new URLSearchParams(window.location.search).get("view");
-    if (v === "trades" || v === "backtests") setView(v);
+    if (v === "trades" || v === "backtests" || v === "copy") setView(v);
     const sid = Number(new URLSearchParams(window.location.search).get("session"));
     if (sid > 0) { setView("backtests"); setOpenSessionId(sid); }
     try { setAccount(localStorage.getItem(ACCOUNT_KEY) || ""); } catch { /* storage off */ }
@@ -123,7 +125,7 @@ export default function AnalyticsApp() {
               </button>
             ))}
           </nav>
-          {view !== "backtests" && accounts.length > 0 && (
+          {view !== "backtests" && view !== "copy" && accounts.length > 0 && (
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-wider text-purple-400/70 px-3 mb-2">Account</div>
               <div className="space-y-1" data-testid="accounts">
@@ -147,19 +149,19 @@ export default function AnalyticsApp() {
           <header className="flex flex-wrap items-center gap-3 mb-6">
             <div className="min-w-0">
               <h1 className="text-2xl sm:text-3xl font-bold">{nav.label}</h1>
-              <p className="text-purple-300/80 text-sm">{nav.hint}{view !== "backtests" && current ? ` · ${current.label}` : ""}</p>
+              <p className="text-purple-300/80 text-sm">{nav.hint}{view !== "backtests" && view !== "copy" && current ? ` · ${current.label}` : ""}</p>
             </div>
             <div className="md:hidden w-full">
               <select value={view} onChange={e => setView(e.target.value as View)} className="w-full bg-gray-900/60 border border-purple-700/50 rounded-lg px-3 py-2 text-sm">
                 {NAV.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
               </select>
-              {view !== "backtests" && accounts.length > 1 && (
+              {view !== "backtests" && view !== "copy" && accounts.length > 1 && (
                 <select value={current?.id} onChange={e => setAccount(e.target.value)} className="mt-2 w-full bg-gray-900/60 border border-purple-700/50 rounded-lg px-3 py-2 text-sm">
                   {accounts.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
                 </select>
               )}
             </div>
-            {source === "mt5" && view !== "backtests" && (
+            {source === "mt5" && view !== "backtests" && view !== "copy" && (
               <button onClick={() => fetchMt5(days)} className="ml-auto flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-purple-700/50 text-purple-200 hover:bg-purple-800/30">
                 <RefreshCw size={14} className={mt5Loading ? "animate-spin" : ""} />Refresh from MT5</button>
             )}
@@ -172,6 +174,8 @@ export default function AnalyticsApp() {
               <p className="text-purple-300 mb-6">Your trades, journal and backtests are saved to your TradePilot account.</p>
               <a href="/login" className="inline-flex items-center justify-center gap-2 w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 py-3 rounded-lg font-semibold"><LogIn size={18} />Sign in</a>
             </div>
+          ) : view === "copy" ? (
+            <CopyTrading uid={uid} />
           ) : view === "backtests" ? (
             <Backtests uid={uid} journals={journals} onJournal={onJournal} openSessionId={openSessionId} />
           ) : (

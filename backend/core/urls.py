@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, analytics, broker_algo, broker_mt5, chat_groups, chat_presence, collab, collab_dms, collab_files, github
+from . import views, analytics, broker_algo, broker_mt5, copy_api, chat_groups, chat_presence, collab, collab_dms, collab_files, github
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -27,6 +27,15 @@ urlpatterns = [
     path('broker/<str:uid>/mt5/pending/<int:ticket>/', broker_mt5.mt5_pending, name='broker_mt5_pending'),
     path('broker/<str:uid>/mt5/history/', broker_mt5.mt5_history, name='broker_mt5_history'),
     path('broker/<str:uid>/mt5/algo/', broker_algo.algo_strategies, name='broker_mt5_algo'),
+    # Trade copying (core/copy_api.py; the copier service is manage.py run_copier)
+    path('copy/<str:uid>/', copy_api.overview, name='copy_overview'),
+    path('copy/<str:uid>/channels/', copy_api.create_channel, name='copy_create_channel'),
+    path('copy/<str:uid>/channels/<int:cid>/', copy_api.channel, name='copy_channel'),
+    path('copy/<str:uid>/channels/<int:cid>/signals/', copy_api.send_signal, name='copy_send_signal'),
+    path('copy/<str:uid>/channels/<int:cid>/signals/<int:sid>/', copy_api.signal_results, name='copy_signal_results'),
+    path('copy/<str:uid>/join/', copy_api.join, name='copy_join'),
+    path('copy/<str:uid>/subscriptions/<int:sid>/', copy_api.subscription, name='copy_subscription'),
+    path('copy/<str:uid>/subscriptions/<int:sid>/log/', copy_api.subscription_log, name='copy_subscription_log'),
     # Analytics (core/analytics.py): saved backtests and trade journals
     path('analytics/<str:uid>/backtests/', analytics.backtests, name='analytics_backtests'),
     path('analytics/<str:uid>/backtests/<int:bid>/', analytics.backtest, name='analytics_backtest'),

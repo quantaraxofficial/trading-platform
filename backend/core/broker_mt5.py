@@ -139,7 +139,9 @@ class FakeMt5:
         bid, ask, digits = self.PRICES[name]
         return _Obj(name=name, visible=True, digits=digits, volume_min=0.01, volume_max=50.0, volume_step=0.01, filling_mode=2,
                     trade_mode=4, trade_contract_size=100.0 if name.startswith("XAU") else 100000.0, bid=bid, ask=ask,
-                    trade_stops_level=0, currency_profit="USD", description=name)
+                    trade_stops_level=0, currency_profit="USD", description=name,
+                    # what one tick is worth for 1 lot (USD account): 0.01 × 100 oz; 0.00001 × 100,000
+                    trade_tick_size=10 ** -digits, trade_tick_value=1.0)
 
     def symbols_get(self, group=None):
         pattern = (group or "*").strip("*")

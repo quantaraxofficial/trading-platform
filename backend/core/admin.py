@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, CollabRoom, CollabMember, CollabMessage, CollabJoinRequest, GitHubLink, BrokerAccount, AlgoStrategy, AlgoLog, BacktestRun, TradeJournal, ReplaySession, SavedReplay
+from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, CollabRoom, CollabMember, CollabMessage, CollabJoinRequest, GitHubLink, BrokerAccount, AlgoStrategy, AlgoLog, BacktestRun, TradeJournal, ReplaySession, SavedReplay, CopyChannel, CopySubscription, CopySignal, CopyExecution
 
 @admin.register(FailedRequest)
 class FailedRequestAdmin(admin.ModelAdmin):
@@ -144,3 +144,27 @@ class ReplaySessionAdmin(admin.ModelAdmin):
 class SavedReplayAdmin(admin.ModelAdmin):
     list_display = ("owner", "symbol", "interval", "time", "saved_at")
     search_fields = ("owner__name", "symbol")
+
+
+@admin.register(CopyChannel)
+class CopyChannelAdmin(admin.ModelAdmin):
+    list_display = ("name", "owner", "code", "default_risk", "mirror_mt5", "active", "created_at")
+    search_fields = ("name", "owner__name", "code")
+
+
+@admin.register(CopySubscription)
+class CopySubscriptionAdmin(admin.ModelAdmin):
+    list_display = ("channel", "subscriber", "auto_copy", "risk_mode", "risk_percent", "max_risk", "terminal_status", "terminal_seen")
+    list_filter = ("auto_copy", "terminal_status")
+
+
+@admin.register(CopySignal)
+class CopySignalAdmin(admin.ModelAdmin):
+    list_display = ("id", "channel", "kind", "source", "symbol", "side", "entry", "sl", "tp", "risk_percent", "created_at")
+    list_filter = ("kind", "source")
+
+
+@admin.register(CopyExecution)
+class CopyExecutionAdmin(admin.ModelAdmin):
+    list_display = ("signal", "subscription", "status", "symbol", "volume", "price", "latency_ms", "created_at")
+    list_filter = ("status",)

@@ -35,3 +35,6 @@ Thumbs.db
 .snapshots/
 backend/media/
 backend/private_uploads/
+
+# Trade copier: one MT5 terminal folder per subscriber (manage.py run_copier)
+backend/copier_terminals/

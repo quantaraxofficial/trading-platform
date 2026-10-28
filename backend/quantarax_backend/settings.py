@@ -187,3 +187,5 @@ ALLOW_UNVERIFIED_SIGNIN = env.bool('ALLOW_UNVERIFIED_SIGNIN', default=False)
 # stand-in account instead of a terminal (tests, or trying the site without MT5)
 MT5_TERMINAL_PATH = env('MT5_TERMINAL_PATH', default='')
 MT5_FAKE = env.bool('MT5_FAKE', default=False)
+# Trade copier (core/copier_service.py, manage.py run_copier): where each subscriber's own MT5 terminal folder goes
+COPIER_TERMINALS_DIR = env('COPIER_TERMINALS_DIR', default=str(BASE_DIR / 'copier_terminals'))
