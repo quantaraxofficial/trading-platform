@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 
 export type DrawingType =
   | 'trendline' | 'horizontal_line' | 'horizontal_ray' | 'text' | 'rectangle' | 'fibonacci'
@@ -167,6 +167,7 @@ import { isTypingTarget } from '../../../lib/isTypingTarget';
 import { writeDrawingIndex } from '../../../lib/drawingIndex';
 import { backendFetch } from "@/lib/backend";
 import { useCollabChartActive } from '../../../lib/collab/session';
+import { getDrawingSession, getSessionDrawings, registerDrawingsGetter, saveSessionDrawings, subscribeDrawingSession } from '@/app/analytics/sessions';
 
 const DrawingContext = createContext<DrawingContextType | undefined>(undefined);
 
@@ -311,62 +312,91 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  // Load drawings when user or symbol changes
+  // Whose drawings the chart shows: the symbol's, or — while a backtest session is open — that
+  // session's own (analytics/sessions.ts), so sessions on the same symbol never mix their drawings
+  const drawingSession = useSyncExternalStore(subscribeDrawingSession, getDrawingSession, () => null);
+  const scopeKey = drawingSession ? `session:${drawingSession}` : `symbol:${symbol}`;
+  // The scope whose drawings are in state: nothing is saved anywhere until they've loaded
+  const loadedScopeRef = useRef<string | null>(null);
+  const drawingsNowRef = useRef(drawings);
+  drawingsNowRef.current = drawings;
+  useEffect(() => { registerDrawingsGetter(() => drawingsNowRef.current); }, []);
+
+  // Load drawings when the user, symbol or backtest session changes
   useEffect(() => {
     if (inCollab) return;
-    if (user && symbol) {
+    loadedScopeRef.current = null;
+    let gone = false;
+    // Couldn't load them: an empty chart rather than the previous symbol's (or session's) drawings,
+    // and nothing saved over the real ones (the scope stays "not loaded")
+    const clearShown = () => { setDrawings([]); setHistory([[]]); setHistoryIndex(0); };
+    const show = (data: BaseDrawing[], key: string) => {
+      if (gone) return;
+      loadedScopeRef.current = key;
+      setDrawings(data);
+      setHistory([data]);
+      setHistoryIndex(0);
+    };
+    if (user && drawingSession) {
+      const key = `session:${drawingSession}`;
+      getSessionDrawings(user.uid, drawingSession)
+        .then(d => show(d as BaseDrawing[], key))
+        .catch(error => { console.error("Error loading the session's drawings:", error); if (!gone) clearShown(); })
+        .finally(() => { if (!gone) setIsInitialLoad(false); });
+    } else if (user && symbol) {
       const loadDrawings = async () => {
+        let ok = false;
         try {
           const res = await backendFetch(`http://localhost:8000/api/users/drawings/${user.uid}/?symbol=${symbol}`);
-          if (res.ok) {
-            const data = await res.json();
-            setDrawings(data);
-            setHistory([data]);
-            setHistoryIndex(0);
-          }
+          if (res.ok) { show(await res.json(), `symbol:${symbol}`); ok = true; }
         } catch (error) {
           console.error("Error loading drawings:", error);
         } finally {
-          setIsInitialLoad(false);
+          if (!gone && !ok) clearShown();
+          if (!gone) setIsInitialLoad(false);
         }
       };
       loadDrawings();
     } else {
-      setDrawings([]);
-      setHistory([[]]);
-      setHistoryIndex(0);
+      show([], `symbol:${symbol}`);
     }
-  }, [user, symbol, inCollab]);
+    return () => { gone = true; };
+  }, [user, symbol, inCollab, drawingSession]);
 
   // The local per-symbol index of drawings (Manage layout drawings), once this symbol's are loaded
+  // (a backtest session's drawings aren't the symbol's)
   useEffect(() => {
-    if (!symbol || (user && isInitialLoad) || inCollab) return;
+    if (!symbol || (user && isInitialLoad) || inCollab || drawingSession) return;
     const t = setTimeout(() => writeDrawingIndex(symbol, drawings), 300);
     return () => clearTimeout(t);
-  }, [drawings, symbol, user, isInitialLoad, inCollab]);
+  }, [drawings, symbol, user, isInitialLoad, inCollab, drawingSession]);
 
-  // Save drawings when they change (debounced or after each action)
+  // Save drawings when they change (debounced), to the symbol or to the open backtest session; a
+  // save still waiting when the session closes (or the page goes) is sent at once
+  const pendingSaveRef = useRef<{ key: string; run: (keepalive?: boolean) => void } | null>(null);
   useEffect(() => {
-    if (user && symbol && !isInitialLoad && !inCollab) {
-      const saveDrawings = async () => {
-        try {
-          await backendFetch(`http://localhost:8000/api/users/drawings/${user.uid}/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              symbol: symbol,
-              drawings: drawings
-            })
-          });
-        } catch (error) {
-          console.error("Error saving drawings:", error);
-        }
-      };
-      
-      const timer = setTimeout(saveDrawings, 1000); // Debounce save
-      return () => clearTimeout(timer);
-    }
-  }, [drawings, user, symbol, isInitialLoad, inCollab]);
+    if (!user || inCollab || isInitialLoad || loadedScopeRef.current !== scopeKey) return;
+    if (!drawingSession && !symbol) return;
+    const uid = user.uid, sid = drawingSession, sym = symbol, list = drawings, key = scopeKey;
+    const run = (keepalive = false) => {
+      if (pendingSaveRef.current?.key === key) pendingSaveRef.current = null;
+      if (sid) { saveSessionDrawings(uid, sid, list, keepalive).catch(error => console.error("Error saving the session's drawings:", error)); return; }
+      backendFetch(`http://localhost:8000/api/users/drawings/${uid}/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol: sym, drawings: list }),
+      }).catch(error => console.error("Error saving drawings:", error));
+    };
+    pendingSaveRef.current = { key, run };
+    const timer = setTimeout(() => run(), 1000); // Debounce save
+    return () => clearTimeout(timer);
+  }, [drawings, user, symbol, isInitialLoad, inCollab, drawingSession, scopeKey]);
+  useEffect(() => {
+    const key = scopeKey;
+    const flush = () => { const p = pendingSaveRef.current; if (p && p.key === key) p.run(true); };
+    window.addEventListener('pagehide', flush);
+    return () => { window.removeEventListener('pagehide', flush); flush(); };
+  }, [scopeKey]);
 
   // Push to history when drawings change meaningfully (refs written at once, so an undo
   // straight after sees the entry)

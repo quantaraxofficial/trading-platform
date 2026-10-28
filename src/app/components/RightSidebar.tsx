@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Wallet, Bot, Keyboard, Mail, Info, Tag } from "lucide-react";
+import { Wallet, Bot, Keyboard, Mail, Info, Tag, BarChart3 } from "lucide-react";
 import {
   TVPineIcon,
   TVWatchlistIcon,
@@ -76,6 +76,7 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     { icon: <TVPineIcon size={28} />, label: "Pine Editor", onClick: () => { if (!pineOpen) onOpenPineEditor?.(); } },
     { icon: <TVReplayIcon size={28} />, label: "Bar replay", onClick: () => onOpenReplay?.() },
     { icon: <Wallet {...i18} />, label: "Paper trading", onClick: () => window.dispatchEvent(new CustomEvent("tv:open-trading-panel")) },
+    { icon: <BarChart3 {...i18} />, label: "Analytics", onClick: () => window.open("/analytics", "_blank") },
     { icon: <Bot {...i18} />, label: "Trading Agent", onClick: () => onOpenAgent?.() },
     "divider",
     { icon: <Tag {...i18} />, label: "Pricing", onClick: () => router.push("/pricing") },

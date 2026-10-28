@@ -40,7 +40,8 @@ import type { IndicatorTemplate } from "./utils/indicatorTemplates";
 import MobileMenuDrawer, { MobilePanel, MobilePanelSheet } from "./components/MobileMenuDrawer";
 import KeyboardShortcutsDialog from "./components/KeyboardShortcutsDialog";
 import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
-import { saveReplay } from "./lib/savedReplay";
+import BacktestSessionBar from "./components/BacktestSessionBar";
+import { saveReplay, setSavedReplayUser } from "./lib/savedReplay";
 import { layoutStore, layouts, ensureLayout, readSharedLayout, newLayout } from "./lib/layoutStore";
 import { LAYOUTS } from "./lib/chartLayouts";
 import { setLayoutSync } from "./lib/layoutSync";
@@ -541,6 +542,8 @@ function AppLayout() {
   }, []);
 
   const { user } = useAuth();
+  // "Save this replay" is kept in the account: load this user's (and send any saved here before)
+  useEffect(() => { setSavedReplayUser(user?.uid ?? null); }, [user?.uid]);
   const { logAction } = useTelemetry();
 
   const { runSnapshot, toastElement: snapshotToast } = useChartSnapshot({ symbol, intervalLabel, theme });
@@ -564,8 +567,10 @@ function AppLayout() {
           return res.json();
         })
         .then(data => {
-          if (data.symbol) setSymbol(data.symbol);
-          if (data.interval) {
+          // (a backtest session being opened picks its own symbol and timeframe)
+          const openingSession = new URLSearchParams(window.location.search).has("session");
+          if (data.symbol && !openingSession) setSymbol(data.symbol);
+          if (data.interval && !openingSession) {
             setSelectedInterval(data.interval);
             const label = intervalToLabel(data.interval);
             if (label) setIntervalLabel(label);
@@ -1034,6 +1039,8 @@ function AppLayout() {
       )}
 
       {leaveReplayOpen && <ReplayLeaveDialog onStay={() => setLeaveReplayOpen(false)} onLeave={leaveReplay} />}
+      <BacktestSessionBar symbol={symbol} interval={selectedInterval} intervalLabel={intervalLabel}
+        onSymbol={setSymbol} onInterval={(iv, label) => handleIntervalChange(iv, label)} />
       {showShortcuts && <KeyboardShortcutsDialog onClose={() => setShowShortcuts(false)} />}
 
       {/* Collab charts: opening links and invites, keeping the shared chart in step, others' cursors and trades */}

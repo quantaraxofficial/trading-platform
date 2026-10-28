@@ -383,6 +383,94 @@ class AlgoStrategy(models.Model):
         return f"{self.owner.name}: {self.name} on {self.symbol} {self.timeframe}"
 
 
+class BacktestRun(models.Model):
+    """A strategy backtest saved from the chart's Strategy Tester for Analytics (core/analytics.py):
+    the script, symbol and timeframe it ran on, its capital, and its list of trades as the report had it"""
+    owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='backtest_runs')
+    name = models.CharField(max_length=120)
+    script = models.CharField(max_length=120, blank=True)
+    language = models.CharField(max_length=10, default='pine')
+    symbol = models.CharField(max_length=40)
+    timeframe = models.CharField(max_length=20, blank=True)
+    initial_capital = models.FloatField(default=0)
+    net_profit = models.FloatField(default=0)
+    trade_count = models.IntegerField(default=0)
+    period_from = models.BigIntegerField(null=True, blank=True)   # ms
+    period_to = models.BigIntegerField(null=True, blank=True)
+    trades = models.JSONField(default=list)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+
+class ReplaySession(models.Model):
+    """A backtest session (core/analytics.py): bar replay on one symbol you come back to — where it
+    is (the bar, timeframe and zoom), its own trading account as it stands (balance, positions,
+    orders, trades), its own drawings, what you're testing (strategy, rules, tags, notes), how long you've spent on it,
+    and whether it's active, paused or completed"""
+    STATUSES = [('active', 'Active'), ('paused', 'Paused'), ('completed', 'Completed')]
+    owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='replay_sessions')
+    name = models.CharField(max_length=120)
+    symbol = models.CharField(max_length=40)
+    interval = models.CharField(max_length=20)            # the chart's interval ("15min", "1day"…)
+    interval_label = models.CharField(max_length=20, blank=True)
+    start_time = models.BigIntegerField()                 # the bar it started from (seconds)
+    current_time = models.BigIntegerField()               # the bar it's on now (seconds)
+    visible_bars = models.IntegerField(null=True, blank=True)   # the zoom: bars across the chart
+    initial_balance = models.FloatField(default=10000)
+    account = models.JSONField(null=True, blank=True)     # the replay account (paper engine's Account)
+    book = models.JSONField(null=True, blank=True)        # its positions, orders, trades… (engine's Book)
+    drawings = models.JSONField(default=list)             # its own chart drawings (not the symbol's)
+    strategy = models.CharField(max_length=120, blank=True)
+    description = models.TextField(blank=True)
+    rules = models.JSONField(default=list)
+    tags = models.JSONField(default=list)
+    notes = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=STATUSES, default='active')
+    time_spent = models.IntegerField(default=0)           # seconds spent replaying it
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+
+
+class SavedReplay(models.Model):
+    """Bar replay's "Save this replay" (when leaving one): per symbol, the bar it was on and the
+    timeframe, so it can be continued later from the replay's starting-point menu"""
+    owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='saved_replays')
+    symbol = models.CharField(max_length=40)
+    interval = models.CharField(max_length=20)
+    time = models.BigIntegerField()             # the bar (seconds)
+    saved_at = models.BigIntegerField()         # when it was saved (ms)
+
+    class Meta:
+        unique_together = ('owner', 'symbol')
+
+
+class TradeJournal(models.Model):
+    """Your journal for one trade (paper, MT5 or a saved backtest's): what you planned and saw,
+    how it went, emotions, lessons, R:R notes, tags, the execution checklist and your 1–10 rating"""
+    owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='trade_journals')
+    source = models.CharField(max_length=20)       # paper / mt5 / backtest
+    trade_key = models.CharField(max_length=120)   # the trade's id within its source
+    symbol = models.CharField(max_length=40, blank=True)
+    pre_trade = models.TextField(blank=True)
+    post_trade = models.TextField(blank=True)
+    emotions = models.TextField(blank=True)
+    lessons = models.TextField(blank=True)
+    rr_notes = models.TextField(blank=True)
+    tags = models.JSONField(default=list)
+    checklist = models.JSONField(default=dict)     # {followed_plan, proper_risk, good_entry, patient_exit}: bool
+    rating = models.IntegerField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('owner', 'source', 'trade_key')
+
+
 class AlgoLog(models.Model):
     """What an auto-traded strategy did on the broker: switched on/off, opened, closed, skipped, failed"""
     strategy = models.ForeignKey(AlgoStrategy, on_delete=models.CASCADE, related_name='log')

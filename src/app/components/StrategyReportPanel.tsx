@@ -49,6 +49,7 @@ interface StrategyReportPanelProps {
   fullRangeStart?: number;
   fullRangeEnd?: number;
   algoChartId?: string;   // the chart's strategy for auto-trading on MT5 (trading/algo.ts)
+  onSaveToAnalytics?: () => Promise<string>;   // saves this backtest's trades for /analytics (its name back)
 }
 
 const CURRENCY = "USD";
@@ -196,6 +197,36 @@ function ToolbarPill({ icon, children, open, onClick, tip, btnRef, label, disabl
   // (always inside its tooltip, open or not: re-wrapping would remount the button a popover is anchored to)
   return tip ? <Tip text={tip}>{btn}</Tip> : btn;
 }
+// "Save to Analytics": keeps this backtest's trades for the Analytics page, then offers to open it
+function SaveToAnalytics({ save }: { save: () => Promise<string> }) {
+  const [state, setState] = useState<{ kind: "idle" | "busy" | "done" | "error"; text?: string }>({ kind: "idle" });
+  const run = async () => {
+    setState({ kind: "busy" });
+    try { await save(); setState({ kind: "done" }); }
+    catch (e: any) { setState({ kind: "error", text: e?.message || "Couldn't save" }); }
+  };
+  useEffect(() => {
+    if (state.kind !== "done" && state.kind !== "error") return;
+    const t = setTimeout(() => setState({ kind: "idle" }), 6000);
+    return () => clearTimeout(t);
+  }, [state.kind]);
+  if (state.kind === "done") {
+    return (
+      <a className="st-pill" data-name="analytics-saved" href="/analytics?view=backtests" target="_blank" rel="noreferrer" style={{ textDecoration: "none", whiteSpace: "nowrap" }}>
+        Saved · Open Analytics ↗
+      </a>
+    );
+  }
+  return (
+    <Tip text={state.kind === "error" ? state.text! : "Keep this backtest's trades in Analytics"}>
+      <button type="button" className="st-pill" data-name="save-to-analytics" disabled={state.kind === "busy"} onClick={run}
+        style={{ whiteSpace: "nowrap", color: state.kind === "error" ? "#f23645" : undefined }}>
+        {state.kind === "busy" ? "Saving…" : state.kind === "error" ? state.text : "Save to Analytics"}
+      </button>
+    </Tip>
+  );
+}
+
 const Caret = ({ open }: { open: boolean }) => <span style={{ display: "flex", paddingLeft: 4 }}>{open ? <StChevronUp18Icon /> : <StChevronDown18Icon />}</span>;
 
 const RANGE_PRESETS: { label: string; range: BacktestRange }[] = [
@@ -279,6 +310,7 @@ function Toolbar({ p, view, setView }: { p: StrategyReportPanelProps; view: "met
           <div style={{ width: 1, height: 28, background: "var(--st-fill-strong)", flexShrink: 0 }} />
           <ToolbarPill label="Settings" onClick={p.onOpenSettings} tip="Settings" icon={<StGear28Icon />} />
           <ToolbarPill label="Add alert" onClick={p.onAddAlert} tip="Add alert" icon={<StAddAlertIcon />} />
+          {p.onSaveToAnalytics && <SaveToAnalytics save={p.onSaveToAnalytics} />}
         </div>
       </div>
 
@@ -1096,6 +1128,7 @@ export default function StrategyReportPanel(props: StrategyReportPanelProps) {
     onOpenSettings: () => latest.current.onOpenSettings(),
     onAddAlert: () => latest.current.onAddAlert(),
     onRemove: () => latest.current.onRemove(),
+    onSaveToAnalytics: () => latest.current.onSaveToAnalytics?.() ?? Promise.reject(new Error("Not available")),
   }), []);
   const [host, setHost] = useState<HTMLElement | null>(null);
   useEffect(() => {

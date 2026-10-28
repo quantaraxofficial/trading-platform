@@ -83,6 +83,17 @@ class FakeMt5:
         self.positions = [_Obj(ticket=101, symbol="XAUUSD+", type=0, volume=0.05, price_open=3990.1, price_current=3998.6, sl=3970.0, tp=4030.0,
                                profit=42.5, swap=0.0, time=now - 3600, comment="", magic=0)]
         self.orders = [_Obj(ticket=202, symbol="EURUSD+", type=2, volume_current=0.1, price_open=1.0812, sl=1.075, tp=1.09, time_setup=now - 600, comment="")]
+        deal = lambda ticket, pos, sym, typ, entry, vol, price, profit, at: _Obj(
+            ticket=ticket, order=ticket, position_id=pos, symbol=sym, type=typ, entry=entry, volume=vol, price=price,
+            profit=profit, commission=-0.35, swap=0.0, fee=0.0, time=at, magic=0, comment="")
+        self.deals = [
+            # a won long two days ago, a lost short yesterday, and the open position's entry
+            deal(301, 90, "XAUUSD+", 0, 0, 0.1, 3950.0, 0.0, now - 2 * 86400 - 7200),
+            deal(302, 90, "XAUUSD+", 1, 1, 0.1, 3970.0, 200.0, now - 2 * 86400),
+            deal(303, 91, "EURUSD+", 1, 0, 0.5, 1.0800, 0.0, now - 86400 - 5400),
+            deal(304, 91, "EURUSD+", 0, 1, 0.5, 1.0830, -150.0, now - 86400 - 1800),
+            deal(305, 101, "XAUUSD+", 0, 0, 0.05, 3990.1, 0.0, now - 3600),
+        ]
 
     def initialize(self, *args, login=None, password=None, server=None, **kw):
         return self.login(login, password=password, server=server) if login else True
@@ -115,8 +126,12 @@ class FakeMt5:
         return [o for o in self.orders if ticket is None or o.ticket == ticket]
 
     def history_deals_get(self, date_from, date_to):
-        return [_Obj(ticket=303, order=301, symbol="XAUUSD+", type=0, entry=0, volume=0.05, price=3990.1, profit=0.0,
-                     commission=-0.35, swap=0.0, time=int(time.time()) - 3600, comment="")]
+        return [d for d in self.deals if date_from <= d.time <= date_to]
+
+    def _deal(self, ticket, pos, req, entry, profit):
+        self.deals.append(_Obj(ticket=ticket, order=ticket, position_id=pos, symbol=req["symbol"], type=req["type"], entry=entry,
+                               volume=req["volume"], price=req["price"], profit=profit, commission=-0.35, swap=0.0, fee=0.0,
+                               time=int(time.time()), magic=req.get("magic", 0), comment=req.get("comment", "")))
 
     def symbol_info(self, name):
         if name not in self.PRICES:
@@ -149,6 +164,9 @@ class FakeMt5:
                 p = next((p for p in self.positions if p.ticket == req["position"]), None)
                 if not p:
                     return _Obj(retcode=10013, comment="Invalid request")
+                size = 100.0 if p.symbol.startswith("XAU") else 100000.0
+                move = (req["price"] - p.price_open) * (1 if p.type == 0 else -1)
+                self._deal(t, p.ticket, req, 1, round(move * min(req["volume"], p.volume) * size, 2))
                 if req["volume"] >= p.volume:
                     self.positions.remove(p)
                 else:
@@ -156,6 +174,7 @@ class FakeMt5:
                 return done
             if req["volume"] > 10:
                 return _Obj(retcode=10019, comment="No money")
+            self._deal(t, t, req, 0, 0.0)
             self.positions.append(_Obj(ticket=t, symbol=req["symbol"], type=req["type"], volume=req["volume"], price_open=req["price"],
                                        price_current=req["price"], sl=req.get("sl", 0.0), tp=req.get("tp", 0.0), profit=0.0, swap=0.0,
                                        time=int(time.time()), comment=req.get("comment", ""), magic=req.get("magic", 0)))
@@ -590,6 +609,57 @@ def mt5_pending(request, uid, ticket):
         _check_can_trade(mt5, request.data if request.method == 'PATCH' else request.query_params)
         result = modify_order(mt5, int(ticket), request.data) if request.method == 'PATCH' else cancel_order(mt5, int(ticket))
         return Response({"result": result, **_snapshot(mt5)})
+    return _guard(go)
+
+
+def closed_trades(mt5, days):
+    """The account's closed positions over the last `days`: each position's entry and exit deals
+    put together (side, volume, entry / average exit price and time, profit, commission, swap),
+    times in real UTC ms"""
+    now = int(time.time())
+    off = _server_offset(mt5)
+    deals = mt5.history_deals_get(now - days * 86400 + off, now + off + 60) or []
+    by_pos = {}
+    for d in deals:
+        if getattr(d, 'entry', None) is None or d.type not in (0, 1):
+            continue   # balance, credit and other non-trade deals
+        by_pos.setdefault(getattr(d, 'position_id', 0) or d.order, []).append(d)
+    ms = lambda t: (int(t) - off) * 1000
+    trades = []
+    for pos, ds in by_pos.items():
+        ins = [d for d in ds if d.entry in (0, 2)]
+        outs = [d for d in ds if d.entry in (1, 2, 3)]
+        if not ins or not outs:
+            continue   # still open, or its entry is older than the period
+        vin = sum(d.volume for d in ins) or 1
+        vout = sum(d.volume for d in outs) or 1
+        first = min(ins, key=lambda d: d.time)
+        trades.append({
+            "ticket": pos, "symbol": first.symbol, "side": "long" if first.type == 0 else "short", "volume": round(vin, 2),
+            "entry_time": ms(first.time), "entry_price": round(sum(d.price * d.volume for d in ins) / vin, 6),
+            "exit_time": ms(max(d.time for d in outs)), "exit_price": round(sum(d.price * d.volume for d in outs) / vout, 6),
+            "profit": round(sum(d.profit for d in ds), 2), "commission": round(sum(getattr(d, 'commission', 0) + getattr(d, 'fee', 0) for d in ds), 2),
+            "swap": round(sum(getattr(d, 'swap', 0) for d in ds), 2), "magic": getattr(first, 'magic', 0), "comment": first.comment,
+        })
+    return sorted(trades, key=lambda t: t["exit_time"])
+
+
+@api_view(['GET'])
+def mt5_history(request, uid):
+    """?days= (1–3650, default 90): your linked account's closed trades over that period"""
+    found, denied = _session(request, uid)
+    if denied:
+        return denied
+    acc, password = found
+    try:
+        days = min(max(int(request.query_params.get('days') or 90), 1), 3650)
+    except ValueError:
+        days = 90
+
+    def go():
+        mt5 = _login(acc.login, password, acc.server)
+        a = mt5.account_info()
+        return Response({"trades": closed_trades(mt5, days), "currency": a.currency if a else "", "balance": a.balance if a else None})
     return _guard(go)
 
 

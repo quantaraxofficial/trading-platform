@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useSyncExternalStore, useState, useRef, useEffect, useCallback } from "react";
 import { useReplay, type ReplayStartMode } from "./ReplayContext";
 import ReplayDateDialog from "./ReplayDateDialog";
 import { getEarliestBarTime } from "../utils/earliestBar";
 import { useEscapeClose } from "../lib/useEscapeClose";
 import { getSavedReplay, type SavedReplay } from "../lib/savedReplay";
+import { useAuth } from "@/context/AuthContext";
+import { getActiveSession, getSessionUi, listSessions, subscribeActiveSession, subscribeSessionUi, OPEN_SESSION_EVENT, type BacktestSession } from "../analytics/sessions";
 import { collab, useCollab } from "../lib/collab/session";
 
 const SPEED_OPTIONS = [
@@ -53,6 +55,21 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
     window.addEventListener("tv:saved-replay-changed", read);
     return () => window.removeEventListener("tv:saved-replay-changed", read);
   }, [symbol]);
+  // Backtest sessions on this symbol (analytics/sessions.ts), to continue; and the replay under way,
+  // to keep as one
+  const { user } = useAuth();
+  const [sessions, setSessions] = useState<BacktestSession[]>([]);
+  const [activeSession, setActive] = useState<number | null>(getActiveSession());
+  useEffect(() => subscribeActiveSession(() => setActive(getActiveSession())), []);
+  useEffect(() => {
+    if (!showStartMenu || !user?.uid) return;
+    let gone = false;
+    listSessions(user.uid).then(l => { if (!gone) setSessions(l.filter(s => s.symbol === symbol && s.status !== "completed").slice(0, 4)); }, () => {});
+    return () => { gone = true; };
+  }, [showStartMenu, user?.uid, symbol]);
+  const sessionUi = useSyncExternalStore(subscribeSessionUi, getSessionUi, () => null);
+  const continueSession = (id: number) => { setShowStartMenu(false); window.dispatchEvent(new CustomEvent(OPEN_SESSION_EVENT, { detail: { id } })); };
+  const saveAsSession = () => { setShowStartMenu(false); window.dispatchEvent(new CustomEvent("tv:save-replay-as-session")); };
   const continueSaved = () => {
     setShowStartMenu(false);
     if (saved) window.dispatchEvent(new CustomEvent("tv:replay-start", { detail: { kind: "saved", at: saved.time } }));
@@ -177,6 +194,20 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
 
   return (
     <div style={barStyle}>
+      {/* The backtest session being replayed: its P&L, when it was saved, Save / Complete (the ✕ pauses it) */}
+      {sessionUi && !collabNote && !(inCollab && shared && replayDetached) && (
+        <div data-testid="bt-session-chip" title={`Backtest session: ${sessionUi.name} · equity $${sessionUi.equity.toFixed(2)} · ${sessionUi.spent} spent`}
+          style={{ position: "absolute", left: 10, top: 0, bottom: 0, display: "flex", alignItems: "center", gap: 8, fontSize: 12, pointerEvents: "auto", maxWidth: "calc(50% - 190px)", minWidth: 0 }}>
+          <span style={{ padding: "2px 6px", borderRadius: 5, background: "linear-gradient(90deg,#7c3aed,#4f46e5)", color: "#fff", fontSize: 10, fontWeight: 700, flex: "none" }}>BT</span>
+          <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{sessionUi.name}</span>
+          <span data-testid="bt-session-pnl" style={{ fontWeight: 600, flex: "none", color: sessionUi.pnl > 0.004 ? "#089981" : sessionUi.pnl < -0.004 ? "#f23645" : undefined }}>
+            {sessionUi.pnl >= 0 ? "+" : "-"}${Math.abs(sessionUi.pnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+          <span data-testid="bt-session-saved" style={{ color: sessionUi.error ? "#f23645" : "var(--tv-legend-args)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{sessionUi.error || sessionUi.saved}</span>
+          <button type="button" className="tv-bb-btn" data-testid="bt-session-save" onClick={sessionUi.save} style={{ padding: "0 8px", height: 26, fontSize: 12, flex: "none" }}>Save</button>
+          <button type="button" className="tv-bb-btn" data-testid="bt-session-complete" onClick={sessionUi.complete} style={{ padding: "0 8px", height: 26, fontSize: 12, flex: "none" }}>Complete</button>
+        </div>
+      )}
       {(collabNote || (inCollab && shared && replayDetached)) && (
         <div style={{ position: "absolute", left: 12, top: 0, bottom: 0, display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--tv-legend-args)", pointerEvents: "auto" }}>
           {collabNote}
@@ -223,6 +254,31 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
               background: "var(--tv-color-pane-bg)", border: "1px solid var(--tv-color-border)", borderRadius: 8,
               boxShadow: "0 4px 16px rgba(0,0,0,0.2)", zIndex: 1001,
             }}>
+              {(sessions.filter(s => s.id !== activeSession).length > 0 || (mode === "active" && hasStarted && !activeSession && user)) && (
+                <>
+                  <div style={{ padding: "6px 12px", fontSize: 11, fontWeight: 600, letterSpacing: "0.4px", color: "var(--tv-legend-args)" }}>BACKTEST SESSIONS</div>
+                  {sessions.filter(s => s.id !== activeSession).map(s => (
+                    <button key={s.id} type="button" role="menuitem" onClick={() => continueSession(s.id)} className="tv-bb-btn" data-session={s.id}
+                      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", height: 42, padding: "0 12px", border: "none", borderRadius: 0,
+                        justifyContent: "flex-start", fontSize: 14, fontFamily: "inherit", cursor: "pointer", color: "var(--tv-hdr-text)" }}>
+                      <span aria-hidden style={{ width: 22, height: 22, borderRadius: 6, background: "linear-gradient(135deg,#7c3aed,#4f46e5)", color: "#fff", fontSize: 10, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>BT</span>
+                      <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", lineHeight: "16px", minWidth: 0 }}>
+                        <span style={{ maxWidth: 190, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Continue: {s.name}</span>
+                        <span style={{ fontSize: 11, color: "var(--tv-legend-args)" }}>{s.interval_label || s.interval} · {new Date(s.current_time * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</span>
+                      </span>
+                    </button>
+                  ))}
+                  {mode === "active" && hasStarted && !activeSession && user && (
+                    <button type="button" role="menuitem" onClick={saveAsSession} className="tv-bb-btn" data-name="save-as-session"
+                      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", height: 38, padding: "0 12px", border: "none", borderRadius: 0,
+                        justifyContent: "flex-start", fontSize: 14, fontFamily: "inherit", cursor: "pointer", color: "var(--tv-hdr-text)" }}>
+                      <svg width="24" height="24" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden><path d="M7.5 6.5h10l3 3v12h-13z" /><path d="M10.5 6.5v5h6v-5M10.5 21.5v-5h7v5" /></svg>
+                      Save as backtest session
+                    </button>
+                  )}
+                  <div style={{ height: 1, margin: "6px 0", background: "var(--tv-color-border)" }} />
+                </>
+              )}
               {saved && (
                 <>
                   <button type="button" role="menuitem" onClick={continueSaved} className="tv-bb-btn"

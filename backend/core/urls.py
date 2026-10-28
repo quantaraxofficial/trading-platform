@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, broker_algo, broker_mt5, chat_groups, chat_presence, collab, collab_dms, collab_files, github
+from . import views, analytics, broker_algo, broker_mt5, chat_groups, chat_presence, collab, collab_dms, collab_files, github
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -25,7 +25,16 @@ urlpatterns = [
     path('broker/<str:uid>/mt5/symbol/', broker_mt5.mt5_symbol, name='broker_mt5_symbol'),
     path('broker/<str:uid>/mt5/position/<int:ticket>/', broker_mt5.mt5_position, name='broker_mt5_position'),
     path('broker/<str:uid>/mt5/pending/<int:ticket>/', broker_mt5.mt5_pending, name='broker_mt5_pending'),
+    path('broker/<str:uid>/mt5/history/', broker_mt5.mt5_history, name='broker_mt5_history'),
     path('broker/<str:uid>/mt5/algo/', broker_algo.algo_strategies, name='broker_mt5_algo'),
+    # Analytics (core/analytics.py): saved backtests and trade journals
+    path('analytics/<str:uid>/backtests/', analytics.backtests, name='analytics_backtests'),
+    path('analytics/<str:uid>/backtests/<int:bid>/', analytics.backtest, name='analytics_backtest'),
+    path('analytics/<str:uid>/journal/', analytics.journal, name='analytics_journal'),
+    path('analytics/<str:uid>/sessions/', analytics.sessions, name='analytics_sessions'),
+    path('analytics/<str:uid>/replays/', analytics.saved_replays, name='analytics_saved_replays'),
+    path('analytics/<str:uid>/sessions/<int:sid>/', analytics.session, name='analytics_session'),
+    path('analytics/<str:uid>/sessions/<int:sid>/drawings/', analytics.session_drawings, name='analytics_session_drawings'),
     path('broker/<str:uid>/mt5/algo/sync/', broker_algo.algo_sync, name='broker_mt5_algo_sync'),
     path('broker/<str:uid>/mt5/algo/<int:sid>/', broker_algo.algo_strategy, name='broker_mt5_algo_strategy'),
     # GitHub: push / pull scripts (core/github.py)

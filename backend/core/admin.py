@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, CollabRoom, CollabMember, CollabMessage, CollabJoinRequest, GitHubLink, BrokerAccount, AlgoStrategy, AlgoLog
+from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, CollabRoom, CollabMember, CollabMessage, CollabJoinRequest, GitHubLink, BrokerAccount, AlgoStrategy, AlgoLog, BacktestRun, TradeJournal, ReplaySession, SavedReplay
 
 @admin.register(FailedRequest)
 class FailedRequestAdmin(admin.ModelAdmin):
@@ -117,3 +117,30 @@ class AlgoStrategyAdmin(admin.ModelAdmin):
 class AlgoLogAdmin(admin.ModelAdmin):
     list_display = ("strategy", "at", "action", "ok", "message")
     list_filter = ("action", "ok")
+
+
+@admin.register(BacktestRun)
+class BacktestRunAdmin(admin.ModelAdmin):
+    list_display = ("owner", "name", "symbol", "timeframe", "trade_count", "net_profit", "created_at")
+    search_fields = ("owner__name", "name", "symbol")
+    exclude = ("trades",)
+
+
+@admin.register(TradeJournal)
+class TradeJournalAdmin(admin.ModelAdmin):
+    list_display = ("owner", "source", "trade_key", "symbol", "rating", "updated_at")
+    list_filter = ("source",)
+
+
+@admin.register(ReplaySession)
+class ReplaySessionAdmin(admin.ModelAdmin):
+    list_display = ("owner", "name", "symbol", "interval", "status", "time_spent", "updated_at")
+    list_filter = ("status",)
+    search_fields = ("owner__name", "name", "symbol")
+    exclude = ("account", "book")
+
+
+@admin.register(SavedReplay)
+class SavedReplayAdmin(admin.ModelAdmin):
+    list_display = ("owner", "symbol", "interval", "time", "saved_at")
+    search_fields = ("owner__name", "symbol")

@@ -50,6 +50,7 @@ import { formatQty } from "@/app/trading/instruments";
 import TradingOverlay from "@/app/trading/TradingOverlay";
 import { Tip, TipKey as Kbd, SymbolAvatar, Popover, MenuItem, MenuDivider } from "@/app/trading/ui";
 import { reportStrategy, strategyKey } from "@/app/trading/algo";
+import { saveBacktest } from "@/app/analytics/data";
 import { statusLine, type StatusLineSettings } from "../lib/statusLine";
 import { loadFavoriteIndicators, saveFavoriteIndicators } from "@/app/utils/favoriteIndicators";
 import { rememberExchangeTimezone, toChartTime, exchangeTimezoneOf } from "@/app/utils/exchangeTime";
@@ -1503,6 +1504,19 @@ export default function ChartContainer({
   }
   useEffect(() => () => reportStrategy(algoChartId, null), [algoChartId]);
 
+  // The Strategy Tester's "Save to Analytics": this backtest's closed trades, kept in your account
+  // for the Analytics page (/analytics → Backtests)
+  async function saveStrategyToAnalytics(): Promise<string> {
+    if (!user?.uid) throw new Error("Sign in to save backtests");
+    if (!strategyReport?.trades.length) throw new Error("No closed trades to save yet");
+    const name = strategyScriptName || "Strategy";
+    const b = await saveBacktest(user.uid, {
+      name: `${name} · ${symbolRef.current} ${intervalLabel}`, script: name, language: lastPineRunRef.current?.language || "pine",
+      symbol: symbolRef.current, timeframe: intervalLabel || intervalRef.current, report: strategyReport,
+    });
+    return b.name;
+  }
+
   // Renders a completed PineRunResult onto the chart (series/markers/tables/
   // legend/report) — shared by the initial run (tv:run-pine-script) and by
   // re-running the same script over a different backtest date range.
@@ -1580,7 +1594,7 @@ export default function ChartContainer({
       if (unique.length <= all.length || unique[0].time >= oldestBar.time) break; // no real progress
       all = unique;
       fullDataRef.current = unique;
-      (window as any).__chartFullData = fullDataRef.current;
+      (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
     }
     return all;
   }
@@ -2493,7 +2507,7 @@ export default function ChartContainer({
       } else return;
       if (brickTypeRef.current) {
         fullDataRef.current = bars.slice();
-        (window as any).__chartFullData = fullDataRef.current;
+        (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
         try { cs.setData(rawBars()); } catch { return; }
         if (volumeSeriesRef.current) volumeSeriesRef.current.setData(volumeHistogram(fullDataRef.current, volumeConfigRef.current.upColor, volumeConfigRef.current.downColor));
       } else {
@@ -2746,7 +2760,7 @@ export default function ChartContainer({
       candleSeries.setData(stockData);
       applyPricePrecision(stockData);
       fullDataRef.current = stockData;
-      (window as any).__chartFullData = fullDataRef.current;
+      (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
 
       // Pre-compute higher timeframes from 1m data for instant switching
       if (interval === '1min' && stockData.length > 0) {
@@ -2935,7 +2949,7 @@ export default function ChartContainer({
           }
 
           fullDataRef.current = unique;
-          (window as any).__chartFullData = fullDataRef.current;
+          (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
           if (brickTypeRef.current) setDrawings((prev: any[]) => remapDrawingPoints(prev, fullDataRef.current, '', shownBefore));
           recalcSessionBoxes(shownOf(unique));
           
@@ -2987,7 +3001,7 @@ export default function ChartContainer({
         // IMPORTANT: Update refs BEFORE setData so any synchronous scroll
         // handler events during setData see the new data, not the old data
         fullDataRef.current = stockData;
-        (window as any).__chartFullData = fullDataRef.current;
+        (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
 
         // Cache in agg cache for future instant switching
         const currentInterval = intervalRef.current;
@@ -3063,7 +3077,7 @@ export default function ChartContainer({
     // Replay's "Select starting point" (as on TradingView): a date from the dialog, the first bar
     // the provider has, or a random bar anywhere in the history. The chart is cut just before the
     // chosen bar, so it's the first one Play reveals; history outside the loaded range is fetched.
-    const replayFrom = async (detail: { kind: 'date' | 'first' | 'random' | 'saved'; date?: string; time?: string; at?: number }) => {
+    const replayFrom = async (detail: { kind: 'date' | 'first' | 'random' | 'saved'; date?: string; time?: string; at?: number; visibleBars?: number }) => {
       const iv = intervalRef.current;
       const daily = /day|week|month/.test(iv);
       const barMs = getIntervalMs(iv);
@@ -3120,12 +3134,17 @@ export default function ChartContainer({
       }
 
       startReplayAtRef.current(startIdx, data, candleSeries, newChart);
-      // Keep the bar spacing, with the start bar near the right edge
+      // Keep the bar spacing (or a backtest session's own zoom), with the start bar near the right edge
       const vr = newChart.timeScale().getVisibleLogicalRange();
-      const width = vr ? Math.max(20, vr.to - vr.from) : 120;
+      const width = detail.visibleBars && detail.visibleBars > 5 ? detail.visibleBars : vr ? Math.max(20, vr.to - vr.from) : 120;
       newChart.timeScale().setVisibleLogicalRange({ from: startIdx - width * 0.85, to: startIdx + width * 0.15 });
     };
     const onReplayStart = (e: Event) => { replayFrom((e as CustomEvent).detail); };
+    // How many bars the chart shows across (a backtest session keeps its zoom)
+    (window as any).__chartVisibleBars = () => {
+      const r = newChart.timeScale().getVisibleLogicalRange();
+      return r ? Math.round(r.to - r.from) : null;
+    };
     window.addEventListener('tv:replay-start', onReplayStart);
 
     window.addEventListener("resize", handleResize);
@@ -3397,7 +3416,7 @@ export default function ChartContainer({
           }
           const oldStockData = fullDataRef.current; // Save before overwriting
           fullDataRef.current = stockData;
-          (window as any).__chartFullData = fullDataRef.current;
+          (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
           pineRerunOnLoadRef.current();
           
           // Cache this interval's data in agg cache for future use
@@ -3712,7 +3731,7 @@ export default function ChartContainer({
       // the shown bars change (a built type, or its inputs): build them, place everything on them again
       const before = fullDataRef.current;
       fullDataRef.current = raw;
-      (window as any).__chartFullData = fullDataRef.current;
+      (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
       sr.setData(raw);
       if (volumeSeriesRef.current) volumeSeriesRef.current.setData(volumeHistogram(fullDataRef.current, volumeConfigRef.current.upColor, volumeConfigRef.current.downColor));
       updateEmaData(fullDataRef.current);
@@ -4319,6 +4338,7 @@ export default function ChartContainer({
           onAddAlert={() => setShowAlertModal(true)}
           onRemove={removePineScript}
           algoChartId={algoChartId}
+          onSaveToAnalytics={saveStrategyToAnalytics}
           fullRangeStart={fullDataRef.current[0]?.time}
           fullRangeEnd={fullDataRef.current[fullDataRef.current.length - 1]?.time}
         />
