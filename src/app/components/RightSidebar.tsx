@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Wallet, Bot, Keyboard, Mail, Info, Tag, BarChart3, Radio } from "lucide-react";
+import { Wallet, Bot, Keyboard, Mail, Info, Tag, BarChart3, Radio, Users } from "lucide-react";
 import {
   TVPineIcon,
   TVWatchlistIcon,
@@ -18,6 +18,7 @@ import { useAlerts } from "@/context/AlertsContext";
 import { useCollab } from "../lib/collab/session";
 import { CollabIcon } from "./collab/icons";
 import { useDms } from "../lib/collab/dms";
+import { useNotifications } from "../community/NotificationsPanel";
 
 // Trading Agent — a small chat-bubble-with-spark glyph (1px lines like the TradingView icons)
 function TVAgentIcon({ size = 28, ...props }: any) {
@@ -55,6 +56,7 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
   // messages as a count and a green dot while anyone is in the voice call
   const collabState = useCollab();
   const dms = useDms();
+  const notices = useNotifications();
   const inCollab = !!collabState.room && collabState.status !== "idle" && collabState.status !== "ended" && collabState.status !== "error";
   const voiceLive = collabState.peers.some(p => p.voice);
   const productsRef = useRef<HTMLButtonElement>(null);
@@ -68,6 +70,8 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     { id: "collab", icon: <CollabIcon size={28} />, tooltip: inCollab ? "Collab: group chat and voice" : "Collabs" },
     // Private chats with people in your collabs
     { id: "chats", icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width={28} height={28} fill="none" stroke="currentColor" aria-hidden><path d="M6.5 7.5h15a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4.5 3.5v-3.5h-2.5a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z" /><path d="M10 12h8M10 15h5" /></svg>, tooltip: "Chats" },
+    // New scripts from people you follow, followers, shared scripts, collab invites (community/NotificationsPanel)
+    { id: "notifications", icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width={28} height={28} fill="none" stroke="currentColor" aria-hidden><path d="M14 6.5a5 5 0 0 0-5 5v3.5l-1.5 3h13l-1.5-3v-3.5a5 5 0 0 0-5-5Z" /><path d="M12 20.5a2 2 0 0 0 4 0" /></svg>, tooltip: "Notifications" },
   ];
 
   const i18 = { size: 18, strokeWidth: 1.5 };
@@ -78,6 +82,7 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     { icon: <Wallet {...i18} />, label: "Paper trading", onClick: () => window.dispatchEvent(new CustomEvent("tv:open-trading-panel")) },
     { icon: <BarChart3 {...i18} />, label: "Analytics", onClick: () => window.open("/analytics", "_blank") },
     { icon: <Radio {...i18} />, label: "Copy trading", onClick: () => window.open("/analytics?view=copy", "_blank") },
+    { icon: <Users {...i18} />, label: "Community: people and scripts", onClick: () => window.open("/community", "_blank") },
     { icon: <Bot {...i18} />, label: "Trading Agent", onClick: () => onOpenAgent?.() },
     "divider",
     { icon: <Tag {...i18} />, label: "Pricing", onClick: () => router.push("/pricing") },
@@ -104,6 +109,9 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
               )}
               {p.id === "collab" && collabState.unread > 0 && (
                 <span data-testid="collab-badge" style={{ position: "absolute", top: 3, right: 3, minWidth: 16, height: 16, padding: "0 4px", boxSizing: "border-box", borderRadius: 8, background: "#f23645", color: "#fff", fontSize: 11, lineHeight: "16px", fontWeight: 600, pointerEvents: "none" }}>{collabState.unread > 99 ? "99+" : collabState.unread}</span>
+              )}
+              {p.id === "notifications" && notices.unread > 0 && (
+                <span data-testid="notifications-badge" style={{ position: "absolute", top: 3, right: 3, minWidth: 16, height: 16, padding: "0 4px", boxSizing: "border-box", borderRadius: 8, background: "#f23645", color: "#fff", fontSize: 11, lineHeight: "16px", fontWeight: 600, pointerEvents: "none" }}>{notices.unread > 99 ? "99+" : notices.unread}</span>
               )}
               {p.id === "chats" && dms.unread > 0 && (
                 <span data-testid="chats-badge" style={{ position: "absolute", top: 3, right: 3, minWidth: 16, height: 16, padding: "0 4px", boxSizing: "border-box", borderRadius: 8, background: "#f23645", color: "#fff", fontSize: 11, lineHeight: "16px", fontWeight: 600, pointerEvents: "none" }}>{dms.unread > 99 ? "99+" : dms.unread}</span>

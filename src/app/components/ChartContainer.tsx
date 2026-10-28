@@ -32,7 +32,7 @@ import CreateAlertModal from "./CreateAlertModal";
 import StrategyReportPanel from "./StrategyReportPanel";
 import { strategyDock } from "./strategy/strategyStore";
 import { fetchPineTimeframeData } from "../lib/pineDataFetch";
-import { appIntervalToPineTf, type PineInputMeta } from "../lib/pineScriptEngine";
+import { appIntervalToPineTf, runCompiledPineAsync, getCompiledPineInputsMeta, type CompiledPine, type PineInputMeta } from "../lib/pineScriptEngine";
 import { runScriptAsync, getScriptInputsMeta, asLanguage, type ScriptLanguage } from "../lib/scripting";
 import PineSettingsModal from "./PineSettingsModal";
 import { useAuth } from "@/context/AuthContext";
@@ -1443,7 +1443,8 @@ export default function ChartContainer({
   // so the strategy report's "Testing period" picker can re-run the exact
   // same script over a different bar range at any time, editor open or not.
   // The script on the chart (Pine Script, Python or MQL5), re-run for backtests, settings and new bars
-  const lastPineRunRef = useRef<{ code: string; symbol: string; pineTf: string; scriptName: string; language: ScriptLanguage } | null>(null);
+  // (compiled: a published script whose author hides its code — it runs from this, and `code` is empty)
+  const lastPineRunRef = useRef<{ code: string; symbol: string; pineTf: string; scriptName: string; language: ScriptLanguage; compiled?: CompiledPine } | null>(null);
   const [backtestRange, setBacktestRange] = useState<{ kind: "all" | "days" | "custom" | "history"; days?: number; from?: number; to?: number }>({ kind: "all" });
   const backtestRangeRef = useRef(backtestRange);
   backtestRangeRef.current = backtestRange;
@@ -1640,7 +1641,7 @@ export default function ChartContainer({
         backtestFrom = range.from;
         backtestTo = range.to;
       }
-      const result = await runScriptAsync(last.language, last.code, all, {
+      const runOpts = {
         symbol: last.symbol,
         pineTf: last.pineTf,
         fetchTimeframe: fetchPineTimeframeData,
@@ -1648,7 +1649,8 @@ export default function ChartContainer({
         inputOverrides: overrides ?? inputOverrides,
         backtestFrom,
         backtestTo,
-      });
+      };
+      const result = last.compiled ? await runCompiledPineAsync(last.compiled, all, runOpts) : await runScriptAsync(last.language, last.code, all, runOpts);
       if (result.errors.length === 0) {
         applyPineResult(result, last.scriptName);
         if (!silent) {
@@ -1747,9 +1749,10 @@ export default function ChartContainer({
       return;
     }
     const language = asLanguage(p.language);
-    lastPineRunRef.current = { code: p.code, symbol: symbolRef.current, pineTf: appIntervalToPineTf(intervalRef.current), scriptName: p.scriptName || "Script", language };
-    (window as any).__pineScript = { code: p.code, scriptName: p.scriptName || "Script", language };
-    setPineInputsMeta(getScriptInputsMeta(language, p.code));
+    const compiled: CompiledPine | undefined = !p.code && p.compiled ? p.compiled : undefined;
+    lastPineRunRef.current = { code: p.code || "", symbol: symbolRef.current, pineTf: appIntervalToPineTf(intervalRef.current), scriptName: p.scriptName || "Script", language, compiled };
+    (window as any).__pineScript = { code: p.code || "", scriptName: p.scriptName || "Script", language, ...(compiled ? { compiled } : {}) };
+    setPineInputsMeta(compiled ? getCompiledPineInputsMeta(compiled) : getScriptInputsMeta(language, p.code));
     plotColorsRef.current = p.colors || {};
     setPlotColorOverrides(p.colors || {});
     setBacktestRange({ kind: "all" });
@@ -1759,7 +1762,11 @@ export default function ChartContainer({
   useEffect(() => {
     const onCollabPine = (e: Event) => applyCollabPineRef.current((e as CustomEvent).detail?.pine ?? null);
     window.addEventListener("tv:collab-pine", onCollabPine);
-    return () => window.removeEventListener("tv:collab-pine", onCollabPine);
+    // A published script added from Indicators or the Community pages ({code, language, scriptName}):
+    // runs on the chart the same way
+    const onAddScript = (e: Event) => { const d = (e as CustomEvent).detail; if (d?.code || d?.compiled) applyCollabPineRef.current(d); };
+    window.addEventListener("tv:add-script", onAddScript);
+    return () => { window.removeEventListener("tv:collab-pine", onCollabPine); window.removeEventListener("tv:add-script", onAddScript); };
   }, []);
 
   useEffect(() => {
@@ -3978,7 +3985,7 @@ export default function ChartContainer({
             isVisible={pineVisible}
             onToggleVisibility={togglePineVisible}
             onOpenSettings={() => setShowPineSettings(true)}
-            onOpenCode={() => window.dispatchEvent(new CustomEvent("tv:open-pine-editor", {
+            onOpenCode={() => !lastPineRunRef.current?.compiled && window.dispatchEvent(new CustomEvent("tv:open-pine-editor", {
               detail: { code: lastPineRunRef.current?.code, scriptName: lastPineRunRef.current?.scriptName, language: lastPineRunRef.current?.language },
             }))}
             onRemove={removePineScript}

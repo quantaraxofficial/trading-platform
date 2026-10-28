@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, CollabRoom, CollabMember, CollabMessage, CollabJoinRequest, GitHubLink, BrokerAccount, AlgoStrategy, AlgoLog, BacktestRun, TradeJournal, ReplaySession, SavedReplay, CopyChannel, CopySubscription, CopySignal, CopyExecution
+from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, CollabRoom, CollabMember, CollabMessage, CollabJoinRequest, GitHubLink, BrokerAccount, AlgoStrategy, AlgoLog, BacktestRun, TradeJournal, ReplaySession, SavedReplay, CopyChannel, CopySubscription, CopySignal, CopyExecution, Follow, PublishedScript, Notification
 
 @admin.register(FailedRequest)
 class FailedRequestAdmin(admin.ModelAdmin):
@@ -168,3 +168,21 @@ class CopySignalAdmin(admin.ModelAdmin):
 class CopyExecutionAdmin(admin.ModelAdmin):
     list_display = ("signal", "subscription", "status", "symbol", "volume", "price", "latency_ms", "created_at")
     list_filter = ("status",)
+
+
+@admin.register(Follow)
+class FollowAdmin(admin.ModelAdmin):
+    list_display = ("follower", "following", "created_at")
+
+
+@admin.register(PublishedScript)
+class PublishedScriptAdmin(admin.ModelAdmin):
+    list_display = ("name", "owner", "kind", "language", "visibility", "version", "uses", "updated_at")
+    list_filter = ("kind", "visibility", "language")
+    search_fields = ("name", "owner__name", "owner__username")
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ("recipient", "kind", "text", "read_at", "created_at")
+    list_filter = ("kind",)

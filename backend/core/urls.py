@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, analytics, broker_algo, broker_mt5, copy_api, chat_groups, chat_presence, collab, collab_dms, collab_files, github
+from . import views, analytics, broker_algo, broker_mt5, copy_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -27,6 +27,19 @@ urlpatterns = [
     path('broker/<str:uid>/mt5/pending/<int:ticket>/', broker_mt5.mt5_pending, name='broker_mt5_pending'),
     path('broker/<str:uid>/mt5/history/', broker_mt5.mt5_history, name='broker_mt5_history'),
     path('broker/<str:uid>/mt5/algo/', broker_algo.algo_strategies, name='broker_mt5_algo'),
+    # People, profiles, follows, notifications and published scripts (core/social.py)
+    path('social/<str:uid>/search/', social.search, name='social_search'),
+    path('social/<str:uid>/me/', social.me_settings, name='social_me'),
+    path('social/<str:uid>/me/stats/', social.me_stats, name='social_me_stats'),
+    path('social/<str:uid>/notifications/', social.notifications, name='social_notifications'),
+    path('social/<str:uid>/scripts/', social.scripts, name='social_scripts'),
+    path('social/<str:uid>/scripts/publish/', social.publish, name='social_publish'),
+    path('social/<str:uid>/scripts/<int:sid>/', social.published, name='social_published'),
+    path('social/<str:uid>/people/<str:username>/', social.profile, name='social_profile'),
+    path('social/<str:uid>/people/<str:username>/follow/', social.follow, name='social_follow'),
+    path('social/<str:uid>/people/<str:username>/follows/', social.follow_list, name='social_follow_list'),
+    path('social/<str:uid>/people/<str:username>/message/', social.message, name='social_message'),
+    path('social/<str:uid>/people/<str:username>/invite/', social.invite, name='social_invite'),
     # Trade copying (core/copy_api.py; the copier service is manage.py run_copier)
     path('copy/<str:uid>/', copy_api.overview, name='copy_overview'),
     path('copy/<str:uid>/channels/', copy_api.create_channel, name='copy_create_channel'),

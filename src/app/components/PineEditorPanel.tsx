@@ -40,6 +40,7 @@ import PineLiveBadge from "./collab/PineLiveBadge";
 import CollabDialog from "./collab/CollabDialog";
 import { CollabIcon } from "./collab/icons";
 import GitHubDialog, { GitHubIcon } from "./pine/GitHubDialog";
+import PublishDialog from "./pine/PublishDialog";
 import { github, githubUrl, languageOfPath, scriptNameOfPath, shortLink, type GitHubAccount, type GitHubLink, type PulledFile, type PushResult } from "../lib/github";
 
 const PineMonaco = dynamic(() => import("./pine/PineMonaco"), { ssr: false, loading: () => null });
@@ -487,8 +488,11 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       const closed = runResult?.strategyReport ? (runResult.strategyReport as any).totalTrades ?? runResult.strategyReport.trades?.length ?? 0 : 0;
       if (!closed) { setDialog("reportEmpty"); return; }
     }
-    setToast("Publishing scripts isn't available yet");
+    if (!uid) { setToast("Sign in to publish scripts"); return; }
+    if (!currentScriptId) { setToast("Save the script first, then publish it"); return; }
+    setPublishOpen(true);
   }
+  const [publishOpen, setPublishOpen] = useState(false);
 
   // --- GitHub: connect, pull a file into the editor, push the script as a commit ---
   const [ghAccount, setGhAccount] = useState<GitHubAccount | null>(null);
@@ -862,6 +866,10 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       )}
       {dialog === "shortcuts" && <KeyboardShortcutsDialog p={p} onClose={() => setDialog(null)} />}
       {dialog === "reportEmpty" && <StrategyReportEmptyDialog p={p} onClose={() => setDialog(null)} />}
+      {publishOpen && uid && currentScriptId && (
+        <PublishDialog p={p} uid={uid} sourceKey={currentScriptId} name={scriptName} kind={scriptType === "strategy" ? "strategy" : "indicator"} language={language} code={code}
+          onClose={() => setPublishOpen(false)} onDone={text => { setPublishOpen(false); setToast(text); }} />
+      )}
       {confirm && <ConfirmDialog p={p} title={confirm.title} text={confirm.text} confirm={confirm.confirm} extra={confirm.extra} onExtra={confirm.onExtra} onCancel={() => setConfirm(null)} onConfirm={confirm.onConfirm} />}
       {menu?.which === "name" && <Menu p={p} anchor={menu.rect} items={nameItems} onClose={closeMenu} width={340} />}
       {menu?.which === "tab" && <Menu p={p} anchor={menu.rect} items={tabItems} onClose={closeMenu} width={300} />}

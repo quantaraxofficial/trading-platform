@@ -3095,6 +3095,116 @@ export async function runPineScriptAsync(
   return result;
 }
 
+// ---------------------------------------------------------------- compiled scripts
+// A published script whose author hides its code is shared compiled: the parsed program, with
+// comments and formatting gone and every name the author chose replaced (variables, functions,
+// parameters, loop variables) — except inputs', whose names are their labels in Settings. Those who
+// may not read the code get only this and run it here, exactly as the source would run.
+
+export interface CompiledPine { format: "pine-ast-1"; stmts: unknown[]; meta: PineRunResult["meta"] }
+const PINE_NAMESPACES = new Set(["ta", "math", "array", "str", "strategy", "request", "input", "color", "line", "label", "box", "table", "map", "matrix",
+  "timeframe", "syminfo", "chart", "ticker", "runtime", "log", "polyline", "linefill", "barstate", "session", "alert", "time", "dayofweek", "currency", "display",
+  "extend", "format", "hline", "location", "order", "position", "scale", "shape", "size", "text", "xloc", "yloc", "plot", "font", "adjustment", "backadjustment",
+  "dividends", "earnings", "splits", "settlement_as_close", "barmerge"]);
+
+export function compilePineForSharing(code: string): CompiledPine {
+  const { stmts, meta } = parseProgram(code);
+  const keep = new Set<string>();        // input variables keep their names (they label the inputs)
+  const declared = new Set<string>();
+  const fns = new Set<string>();
+  const methods = new Set<string>();   // functions declared with `method`, called as `x.name(…)`
+  const visit = (list: Stmt[]) => {
+    for (const st of list) {
+      if (st.type === "assign") {
+        if (st.expr.type === "call" && st.expr.name.startsWith("input")) keep.add(st.name); else declared.add(st.name);
+      } else if (st.type === "tupleAssign") st.names.forEach(n => declared.add(n));
+      else if (st.type === "for") { declared.add(st.varName); visit(st.body); }
+      else if (st.type === "forin") { if (st.idxVar) declared.add(st.idxVar); declared.add(st.valVar); visit(st.body); }
+      else if (st.type === "funcdef") { fns.add(st.def.name); if (st.def.isMethod) methods.add(st.def.name); st.def.params.forEach(pr => declared.add(pr.name)); visit(st.def.body); }
+      else if (st.type === "if") { visit(st.body); if (st.elseBody) visit(st.elseBody); }
+      else if (st.type === "while") visit(st.body);
+    }
+  };
+  visit(stmts);
+  const map = new Map<string, string>();
+  let n = 0;
+  Array.from(fns).forEach(name => { if (!keep.has(name)) map.set(name, `_f${n++}`); });
+  Array.from(declared).forEach(name => { if (!keep.has(name) && !map.has(name)) map.set(name, `_v${n++}`); });
+  // a dotted name (an object's field) renames its first part
+  const rn = (name: string) => { const i = name.indexOf("."); const head = i < 0 ? name : name.slice(0, i); const to = map.get(head); return to ? to + (i < 0 ? "" : name.slice(i)) : name; };
+  const renameArgs = (named: Record<string, any>) => Object.fromEntries(Object.entries(named).map(([k, v]) => [map.get(k) ?? k, v]));
+  const walk = (node: any): any => {
+    if (Array.isArray(node)) return node.map(walk);
+    if (!node || typeof node !== "object") return node;
+    const out: any = {};
+    for (const k of Object.keys(node)) out[k] = walk(node[k]);
+    switch (node.type) {
+      case "ident": out.name = rn(node.name); break;
+      case "call": case "mcall":
+        if (fns.has(node.name) && map.has(node.name)) { out.name = map.get(node.name); out.namedArgs = renameArgs(out.namedArgs); }
+        else if (node.type === "call" && node.name.includes(".")) {
+          // `myArray.push(…)` / `level.bump(…)`: the variable's part, and a method of the script's own
+          // (never on one of Pine's namespaces: `ta.`, `math.`…)
+          const parts = node.name.split(".");
+          const last = parts[parts.length - 1];
+          if (parts.length === 2 && methods.has(last) && !PINE_NAMESPACES.has(parts[0])) {
+            out.name = `${map.get(parts[0]) ?? parts[0]}.${map.get(last) ?? last}`;
+            out.namedArgs = renameArgs(out.namedArgs);
+          } else out.name = rn(node.name);
+        }
+        break;
+      case "assign": out.name = rn(node.name); break;
+      case "tupleAssign": out.names = node.names.map(rn); break;
+      case "for": out.varName = rn(node.varName); break;
+      case "forin": out.valVar = rn(node.valVar); if (node.idxVar) out.idxVar = rn(node.idxVar); break;
+      case "fieldAssign": out.target = rn(node.target); break;
+      case "funcdef": out.def = { ...out.def, name: map.get(node.def.name) ?? node.def.name, params: out.def.params.map((pr: any) => ({ ...pr, name: rn(pr.name) })) }; break;
+    }
+    return out;
+  };
+  return { format: "pine-ast-1", stmts: walk(stmts), meta };
+}
+
+function isCompiledPine(c: any): c is CompiledPine {
+  return !!c && c.format === "pine-ast-1" && Array.isArray(c.stmts) && !!c.meta && typeof c.meta === "object";
+}
+
+// Runs a compiled script (as runPineScriptAsync runs source)
+export async function runCompiledPineAsync(
+  compiled: CompiledPine,
+  bars: Bar[],
+  opts: { symbol: string; pineTf: string; fetchTimeframe: MtfFetcher; initialCapital?: number; inputOverrides?: Record<string, any>; backtestFrom?: number; backtestTo?: number }
+): Promise<PineRunResult> {
+  const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
+  let meta: PineRunResult["meta"] = { title: "Untitled script", isStrategy: false, overlay: true, initialCapital: 100000 };
+  let result: PineRunResult;
+  try {
+    if (!isCompiledPine(compiled)) throw new PineError("This compiled script can't be read", "CE99998");
+    const stmts = compiled.stmts as Stmt[];
+    meta = { ...compiled.meta };
+    const neededTfs = collectRequestTimeframes(stmts, opts.inputOverrides);
+    const mtfData: Record<string, Bar[]> = {};
+    await Promise.all(Array.from(neededTfs).map(async (tf) => {
+      try { mtfData[tf] = await opts.fetchTimeframe(tf, opts.symbol); } catch { mtfData[tf] = []; }
+    }));
+    alignDailyTimeframeBoundaries(mtfData);
+    result = executeParsed(stmts, meta, bars, {
+      symbol: opts.symbol, pineTf: opts.pineTf, mtfData, initialCapital: opts.initialCapital, inputOverrides: opts.inputOverrides,
+      backtestFrom: opts.backtestFrom, backtestTo: opts.backtestTo,
+    });
+  } catch (err: any) {
+    result = { plots: [], markers: [], tables: [], strategyReport: null, inputs: [], logs: [], warnings: [], errors: [], meta, execMs: 0 };
+    if (err instanceof PineError) result.errors.push({ message: err.message, code: err.code, line: err.line ?? 1 });
+    else result.errors.push({ message: err?.message ? String(err.message) : String(err), code: "CE99999", line: 1 });
+  }
+  result.execMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
+  return result;
+}
+
+export function getCompiledPineInputsMeta(compiled: CompiledPine): PineInputMeta[] {
+  try { return isCompiledPine(compiled) ? collectInputsMeta(compiled.stmts as Stmt[]) : []; } catch { return []; }
+}
+
 // Converts between this app's own interval strings ("5min", "4h", "1day",
 // TwelveData's convention) and Pine's own timeframe strings ("5", "240",
 // "D") used by input.timeframe()/timeframe.period and by request.security().

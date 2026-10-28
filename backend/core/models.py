@@ -8,6 +8,17 @@ class TraderProfile(models.Model):
     tier = models.CharField(max_length=20, default='free', choices=[('free', 'Free'), ('pro', 'Pro')])
     created_at = models.DateTimeField(auto_now_add=True)
     last_login = models.DateTimeField(auto_now=True)
+    # The public profile (core/social.py): how people find you (@username), a bio, what it shows
+    # (each off until you turn it on) and who may message you or invite you to a collab
+    username = models.CharField(max_length=30, unique=True, null=True, blank=True)
+    bio = models.CharField(max_length=300, blank=True)
+    show_trading_stats = models.BooleanField(default=False)
+    show_backtests = models.BooleanField(default=False)
+    show_sessions = models.BooleanField(default=False)
+    allow_messages = models.CharField(max_length=10, default='everyone')   # everyone / following / nobody
+    allow_invites = models.CharField(max_length=10, default='everyone')
+    stats_snapshot = models.JSONField(null=True, blank=True)   # the trading stats you chose to show
+    stats_updated_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.name} ({self.email})"
@@ -284,6 +295,8 @@ class ChatGroup(models.Model):
     created_by = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, related_name='+')
     # Its look (same shape as a collab's chat_theme: colours, font, a background photo)
     theme = models.JSONField(null=True, blank=True)
+    # A one-to-one chat started from someone's profile: the two uids, sorted ("a|b")
+    direct_key = models.CharField(max_length=260, unique=True, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -469,6 +482,60 @@ class TradeJournal(models.Model):
 
     class Meta:
         unique_together = ('owner', 'source', 'trade_key')
+
+
+class Follow(models.Model):
+    """Following someone: you're told when they publish a new indicator or strategy"""
+    follower = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='following_set')
+    following = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='followers_set')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('follower', 'following')
+
+
+class PublishedScript(models.Model):
+    """An indicator or strategy published from the Pine editor (core/social.py): public — anyone
+    finds it in Indicators and on its author's profile — or private — only its author and the
+    people they invite. Republishing the same editor script makes a new version."""
+    owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='published_scripts')
+    source_key = models.CharField(max_length=120)          # the editor script it comes from
+    name = models.CharField(max_length=100)
+    kind = models.CharField(max_length=10, default='indicator')   # indicator / strategy
+    language = models.CharField(max_length=10, default='pine')
+    description = models.TextField(blank=True)
+    code = models.TextField()
+    visibility = models.CharField(max_length=10, default='public')   # public / private
+    invited = models.ManyToManyField(TraderProfile, blank=True, related_name='shared_scripts')
+    # Who may read its code: everyone who can use it ('open'), only its author ('hidden'), or the
+    # author and code_viewers ('allowed'). Everyone else gets `compiled` instead — the parsed program
+    # with comments and the author's names gone (lib/pineScriptEngine compilePineForSharing) — and
+    # their chart runs that. Pine Script only (MQL5 compiles to JavaScript, Python runs as itself).
+    code_access = models.CharField(max_length=10, default='open')
+    code_viewers = models.ManyToManyField(TraderProfile, blank=True, related_name='code_shared_scripts')
+    compiled = models.JSONField(null=True, blank=True)
+    version = models.IntegerField(default=1)
+    uses = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('owner', 'source_key')
+
+
+class Notification(models.Model):
+    """Something to tell someone: a person they follow published a script, someone followed them,
+    shared a private script with them, or invited them to a collab"""
+    recipient = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='notifications')
+    actor = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, null=True, blank=True, related_name='+')
+    kind = models.CharField(max_length=20)
+    text = models.CharField(max_length=300)
+    data = models.JSONField(default=dict)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-id']
 
 
 class CopyChannel(models.Model):

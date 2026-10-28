@@ -5,7 +5,7 @@
 // sessions, top symbols, the daily P&L calendar and the full stats table.
 
 import React, { useMemo, useState } from "react";
-import { Activity, BarChart3, CalendarDays, ChevronLeft, ChevronRight, Clock, Download, FileText, Percent, Target, Trophy, Wallet } from "lucide-react";
+import { Activity, BarChart3, CalendarDays, ChevronLeft, ChevronRight, Clock, Download, FileText, Percent, Target, Trophy, User, Wallet } from "lucide-react";
 import type { ATrade, Journal } from "./data";
 import { downloadPerformancePdf, downloadTradesCsv } from "./exporters";
 import { computeStats, dayKey, duration, filterTrades, money, PERIODS, pnlClass, profitFactorLabel, type Outcome, type Period, type Stats } from "./stats";
@@ -13,16 +13,18 @@ import { Card, Empty, EquityChart, Kpi, Label, MiniStat, Pills, PnlBars, SplitBa
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-export default function Performance({ trades, currency = "USD", initialBalance = 0, period, onPeriod, onOpenTrade, note, journals, exportName = "Trading", exportSubtitle = "" }: {
+export default function Performance({ trades, currency = "USD", initialBalance = 0, period, onPeriod, onOpenTrade, note, journals, exportName = "Trading", exportSubtitle = "", onShowOnProfile }: {
   trades: ATrade[]; currency?: string; initialBalance?: number; period: Period; onPeriod: (p: Period) => void;
   onOpenTrade?: (t: ATrade) => void; note?: React.ReactNode;
   journals?: Record<string, Journal>; exportName?: string; exportSubtitle?: string;   // for CSV / PDF exports
+  onShowOnProfile?: (s: Stats, periodLabel: string) => Promise<string>;   // puts these stats on your public profile (its link back)
 }) {
   const [outcome, setOutcome] = useState<Outcome>("all");
   const [curve, setCurve] = useState<"equity" | "drawdown">("equity");
   const shown = useMemo(() => filterTrades(trades, period, outcome), [trades, period, outcome]);
   const s = useMemo(() => computeStats(shown, initialBalance), [shown, initialBalance]);
   const fmt = (v: number, signed = false) => money(v, currency, signed);
+  const [profileNote, setProfileNote] = useState<{ ok: boolean; text: string; href?: string } | null>(null);
 
   return (
     <div className="space-y-5" data-testid="performance">
@@ -37,7 +39,15 @@ export default function Performance({ trades, currency = "USD", initialBalance =
             options={[{ id: "all", label: "All Trades" }, { id: "winners", label: "Winners" }, { id: "losers", label: "Losers" }]} /></div>
         </div>
         {note && <div className="text-xs text-purple-300/70 pb-2">{note}</div>}
-        <div className="ml-auto flex gap-2 pb-0.5">
+        <div className="ml-auto flex gap-2 pb-0.5 items-center">
+          {profileNote && (profileNote.href
+            ? <a href={profileNote.href} target="_blank" rel="noreferrer" className="text-xs text-emerald-300 hover:underline" data-testid="profile-note">{profileNote.text} ↗</a>
+            : <span className="text-xs text-rose-400">{profileNote.text}</span>)}
+          {onShowOnProfile && (
+            <button data-testid="show-on-profile" title="Show these stats (this period) on your public profile"
+              onClick={() => onShowOnProfile(s, PERIODS.find(p => p.id === period)?.label || "").then(href => setProfileNote({ ok: true, text: "On your profile", href }), e => setProfileNote({ ok: false, text: e.message }))}
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-purple-700/50 text-purple-200 hover:bg-purple-800/30"><User size={14} />Show on my profile</button>
+          )}
           <button onClick={() => downloadTradesCsv(exportName, shown, journals)} data-testid="export-csv"
             className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-purple-700/50 text-purple-200 hover:bg-purple-800/30"><Download size={14} />CSV</button>
           <button data-testid="export-pdf" onClick={() => downloadPerformancePdf(exportName, {

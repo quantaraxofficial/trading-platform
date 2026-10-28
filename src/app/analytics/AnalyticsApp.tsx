@@ -15,6 +15,8 @@ import Performance from "./Performance";
 import TradeAnalysis from "./TradeAnalysis";
 import Backtests from "./Backtests";
 import CopyTrading from "./CopyTrading";
+import { profileUrl, putMyStats, updateMySettings } from "../community/social";
+import type { Stats } from "./stats";
 
 type View = "performance" | "trades" | "backtests" | "copy";
 const NAV: { id: View; label: string; icon: React.ReactNode; hint: string }[] = [
@@ -103,6 +105,20 @@ export default function AnalyticsApp() {
   }, [current, engineState, mt5]);
   const currency = current?.id === "mt5" ? mt5?.currency || current.currency : "USD";
   const nav = NAV.find(n => n.id === view)!;
+  // Analytics → "Show on my profile": these stats (headline figures and the equity curve, thinned
+  // to 150 points) become the trading stats your public profile shows, and showing them is on
+  const showOnProfile = async (s: Stats, label: string) => {
+    if (!uid) throw new Error("Sign in first");
+    const step = Math.max(1, Math.ceil(s.equity.length / 150));
+    const equity = s.equity.filter((_, i) => i % step === 0 || i === s.equity.length - 1).map(p => [p.time, p.equity] as [number, number]);
+    const finite = (v: number) => (Number.isFinite(v) ? v : 999);
+    await putMyStats(uid, { label, currency, equity, metrics: {
+      totalPnl: s.totalPnl, winRate: s.winRate, profitFactor: finite(s.profitFactor), expectancy: s.expectancy, trades: s.count,
+      maxDrawdown: s.maxDrawdown, avgWin: s.avgWin, avgLoss: s.avgLoss, best: s.best, worst: s.worst, tradingDays: s.tradingDays,
+    } });
+    const me = await updateMySettings(uid, { show_trading_stats: true });
+    return profileUrl(me.username);
+  };
 
   return (
     <div className="h-screen bg-gradient-to-br from-black via-purple-950 to-black text-white relative overflow-hidden" data-testid="analytics">
@@ -185,6 +201,7 @@ export default function AnalyticsApp() {
                 : view === "performance"
                   ? <Performance trades={trades} currency={currency} initialBalance={source === "paper" ? current?.balance || 0 : 0} period={period} onPeriod={setPeriod}
                       journals={journals[source]} exportName={current?.label || "Trading"} exportSubtitle={current ? `${current.label} · ${current.sub}` : ""}
+                      onShowOnProfile={(s, periodLabel) => showOnProfile(s, `${current?.label || "Trading"} · ${periodLabel}`)}
                       onOpenTrade={t => { setSelectedKey(t.key); setView("trades"); }}
                       note={source === "mt5" ? `Closed trades from MetaTrader 5 · last ${days >= 3650 ? "10 years" : `${days} days`}` : undefined} />
                   : <TradeAnalysis uid={uid} source={source} trades={trades} journals={journals[source]} onJournal={onJournal(source)} currency={currency} exportName={current?.label || "Trading"}

@@ -42,6 +42,7 @@ import KeyboardShortcutsDialog from "./components/KeyboardShortcutsDialog";
 import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
 import BacktestSessionBar from "./components/BacktestSessionBar";
 import { saveReplay, setSavedReplayUser } from "./lib/savedReplay";
+import { ADD_SCRIPT_EVENT, getScript } from "./community/social";
 import { layoutStore, layouts, ensureLayout, readSharedLayout, newLayout } from "./lib/layoutStore";
 import { LAYOUTS } from "./lib/chartLayouts";
 import { setLayoutSync } from "./lib/layoutSync";
@@ -52,6 +53,7 @@ import CollabController from "./components/collab/CollabController";
 import CollabDialog from "./components/collab/CollabDialog";
 import CollabPanel from "./components/collab/CollabPanel";
 import ChatsPanel, { type OpenChat } from "./components/collab/ChatsPanel";
+import NotificationsPanel from "./community/NotificationsPanel";
 import CollabOverlay from "./components/collab/CollabOverlay";
 import { CollabAlertsSync, CollabChartSync, CollabDrawingSync, CollabPineSync, CollabPresenceSync, CollabReplaySync } from "./components/collab/CollabSync";
 import { useCollabActive } from "./lib/collab/session";
@@ -544,6 +546,32 @@ function AppLayout() {
   const { user } = useAuth();
   // "Save this replay" is kept in the account: load this user's (and send any saved here before)
   useEffect(() => { setSavedReplayUser(user?.uid ?? null); }, [user?.uid]);
+  // Links from the Community pages: /?chat=<token> opens that one-to-one chat; /?addScript=<id>
+  // adds a published script to the chart once its bars are in
+  useEffect(() => {
+    if (!user?.uid) return;
+    const url = new URL(window.location.href);
+    const chat = url.searchParams.get("chat");
+    const scriptId = Number(url.searchParams.get("addScript"));
+    if (!chat && !(scriptId > 0)) return;
+    url.searchParams.delete("chat");
+    url.searchParams.delete("addScript");
+    window.history.replaceState(null, "", url.toString());
+    if (chat) setTimeout(() => window.dispatchEvent(new CustomEvent("tv:open-dm", { detail: { token: chat, group: true } })), 500);
+    if (scriptId > 0) {
+      let tries = 0;
+      const wait = setInterval(async () => {
+        if (++tries > 120) { clearInterval(wait); return; }
+        if (!((window as any).__chartFullData?.length > 0)) return;
+        clearInterval(wait);
+        try {
+          const s = await getScript(user.uid, scriptId, true);
+          window.dispatchEvent(new CustomEvent(ADD_SCRIPT_EVENT, { detail: s.code ? { code: s.code, language: s.language, scriptName: s.name } : { compiled: s.compiled, language: "pine", scriptName: s.name } }));
+        } catch (e) { console.warn("Couldn't add the script:", e); }
+      }, 500);
+      return () => clearInterval(wait);
+    }
+  }, [user?.uid]);
   const { logAction } = useTelemetry();
 
   const { runSnapshot, toastElement: snapshotToast } = useChartSnapshot({ symbol, intervalLabel, theme });
@@ -946,6 +974,8 @@ function AppLayout() {
             <CollabPanel onShare={() => setShowCollabDialog(true)} />
           ) : activeSidebarPanel === "chats" ? (
             <ChatsPanel open={openChat} onOpen={setOpenChat} />
+          ) : activeSidebarPanel === "notifications" ? (
+            <NotificationsPanel />
           ) : (
             <RightToolbar symbol={symbol} onSymbolChange={setSymbol} />
           )}
