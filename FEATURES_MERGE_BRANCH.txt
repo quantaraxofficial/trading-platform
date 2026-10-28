@@ -1,0 +1,314 @@
+TRADEPILOT - FEATURES BUILT ON THE MERGE BRANCH
+Branch: merge-main-left-toolbar-tools  (everything here is on top of main)
+Up to: 28 Oct 2026, commit 0160275 (35 commits)
+
+Contents
+  1. Drawing tools (left toolbar)
+  2. Chart, layouts and chart types
+  3. Bar replay
+  4. Trading: paper trading and MetaTrader 5
+  5. Alerts
+  6. Pine Editor and scripting (Pine, Python, MQL5)
+  7. Indicators
+  8. Strategy Tester and Strategy optimizer
+  9. Collab charts
+ 10. Chats
+ 11. Analytics and backtest sessions
+ 12. Copy trading
+ 13. Community
+ 14. Settings, sync and personalisation
+ 15. Security and admin
+ 16. Running it (setup notes)
+
+======================================================================
+1. DRAWING TOOLS (LEFT TOOLBAR)
+======================================================================
+Every tool was studied in TradingView Desktop (points, default levels, colours, look) and
+added with TradingView's icons, order and shortcuts.
+
+Lines
+  - Ray, extended line, info line (price change, %, pips/ticks, bars, time span, angle),
+    trend angle (arc with the angle in degrees)
+  - Horizontal / vertical / cross line across the whole chart, labelled on the axes in the
+    line's colour (Alt+H, Alt+V, Alt+C)
+
+Fibonacci and Gann
+  - Trend-based fib extension, fib channel, time zone, speed resistance fan, trend-based fib
+    time, circles, spiral, speed resistance arcs, wedge, pitchfan
+  - Gann box, Gann square fixed, Gann square, Gann fan
+
+Patterns
+  - XABCD, Cypher, Head and shoulders, ABCD, Triangle pattern, Three drives (leg ratios and
+    labels)
+  - Elliott waves: impulse, correction, triangle, double and triple combo
+  - Cycles: cyclic lines, time cycles, sine line
+
+Forecasting and measuring
+  - Position forecast, bars pattern, ghost feed, sector
+  - Anchored VWAP with band; fixed range and anchored volume profile (POC, 70% value area)
+  - Price range, date range, date and price range
+
+Channels and pitchforks
+  - Parallel channel, regression trend (least squares, +/-2 SD, Pearson's R), flat
+    top/bottom, disjoint channel
+  - Pitchfork, Schiff, modified Schiff, inside pitchfork
+
+Text, notes and content
+  - Note, price note, pin, table (editable cells), callout, comment, price label, signpost,
+    flag mark (start typing as soon as they're placed)
+  - Image (file picker), post and idea cards
+
+All tools share one multi-point shell (select, move, snapping handles) and feed the toolbar
+flyouts and quick search.
+
+======================================================================
+2. CHART, LAYOUTS AND CHART TYPES
+======================================================================
+Chart interactions
+  - Hovering a candle shows the pointer; clicking selects the price series (dots on the
+    candle bodies)
+  - Right-click menu on a candle: add alert / order / indicator, symbol info, copy price,
+    paste, table view, add to watchlist, add text note, settings
+  - Double-click a candle: Settings on the Symbol tab
+  - Navigation buttons near the bottom: zoom in/out, scroll left/right, reset chart view
+  - Symbol info dialog: exchange, currency, tick size, today's session on a 24-hour bar
+
+Layouts
+  - Multi-chart layouts (Layout setup grid, Manage layouts, sync in layout); each chart keeps
+    its own chart type
+  - Price scale on the left (Move scale to left)
+  - Object tree and Data window: symbol, indicators and drawings, groups, drag to reorder,
+    right-click menus, Manage layout drawings
+
+Chart types
+  - Every TradingView chart type, with favourites and per-type style settings
+  - Renko, Line break, Kagi, Point & figure and Range built from the time bars
+
+Other
+  - Execution marks: thin arrows, hover pill, fills card
+  - Symbol search: "xauusd" finds XAU/USD; Enter opens the top match
+  - Space / Shift+Space step through the watchlist
+  - Bar times in real UTC, so gold candles line up with TradingView
+  - Symbols shown as TradingView writes them (XAUUSD, EURUSD) everywhere
+
+======================================================================
+3. BAR REPLAY
+======================================================================
+  - Zoom and pan while picking the start bar; the clicked candle is cut too
+  - TP / SL and position lines show in replay
+  - Changing timeframe during replay keeps the replay's date
+  - Fixed React crashes when a drawing leaves the loaded bars and comes back
+  - "Save this replay" is kept in the account (not just the browser)
+
+======================================================================
+4. TRADING: PAPER TRADING AND METATRADER 5
+======================================================================
+Paper trading
+  - Buy / Sell project the order on the chart with draggable TP / SL
+  - Trades made right after the page opens are never lost
+
+MetaTrader 5
+  - Link an MT5 account (number, password, server; password stored encrypted)
+  - Live balance, equity, margin, positions, pending orders, last 24 hours' deals in the
+    trading panel
+  - Orders: market, limit and stop with SL / TP, sized by the broker's rules; close all or
+    part, change stops, move and cancel pending orders
+  - Real-money accounts confirm each order
+
+Auto-trading
+  - A Pine, Python or MQL5 strategy on the chart trades the MT5 account: long buys, short
+    sells, flat closes, a reversal closes and opens
+  - Once per signal, only its own tagged positions; Algo tab with the log
+  - Strategies recalculate on each bar close
+
+======================================================================
+5. ALERTS
+======================================================================
+  - Conditions: crossing, crossing up / down, greater / less than; trigger, expiration,
+    editable message
+  - Notifications: desktop notification, toast, webhook, sound with repeat (TradingView's
+    Classic and Soft sound sets)
+  - Toast at the bottom left with Edit alert
+  - Alerts panel: Alerts and Log tabs, unread badges, restart / stop, edit, delete, log by day
+  - Alerts on symbols not on the chart fire from the quote feed
+  - Replay mode blocks alert creation and replayed bars never fire alerts
+
+======================================================================
+6. PINE EDITOR AND SCRIPTING
+======================================================================
+Pine engine
+  - switch statements; about 50 ta.* functions plus math.*, str.*, color.*, matched against
+    17 TradingView indicators (RSI to ~3e-6)
+  - label / line / box drawings, user-defined types, methods, matrices, typed arrays,
+    for...in, request.security of a higher timeframe, runtime.error
+  - Indicators in their own pane (hlines, fills, gradients, shapes, per-bar colours)
+  - Scripts run in a background worker; unknown functions give a clear error
+
+Three languages
+  - Choose Pine Script, Python or MQL5 beside the editor title
+  - Python: CPython with NumPy in a sandboxed worker, Pine-like API, print() to Logs
+  - MQL5: indicators with buffers and built-in handles (iMA, iRSI, iATR, iBands...); Expert
+    Advisors trade via CTrade / OrderSend
+  - The legend, settings dialog and Strategy Tester work the same for all three
+
+Editor
+  - Never loses keystrokes when typing fast
+  - Collaborate: share only the script and edit it live together (cursors, chat, voice)
+  - GitHub: connect with a token (stored encrypted), pull a file, push as a commit (branch,
+    path, message), linked file for one-click pull / push, conflict check
+  - Publish script (see Community)
+  - Optimize button for strategies (see section 8)
+
+======================================================================
+7. INDICATORS
+======================================================================
+  - VWAP (anchors, bands), Ichimoku Cloud, Pivot Points Standard (6 types), Volume Profile
+    Visible Range, plus built-in Pine scripts
+  - Several instances each, own pane for oscillators, inputs kept per indicator
+  - Indicators dialog: My scripts, Invite-only, Community (Top / Newest / Following) with
+    each script's author
+
+======================================================================
+8. STRATEGY TESTER AND STRATEGY OPTIMIZER
+======================================================================
+Strategy Tester
+  - "Save to Analytics" keeps a backtest in the account
+
+Strategy optimizer (Pine Editor -> Optimize; strategies only, all three languages)
+  - Vary symbols, chart timeframes and the script's inputs: number ranges (from / to / step),
+    on/off switches, option lists, timeframe inputs
+  - Settings: testing period (one chart load, last N days, date range, whole history),
+    initial capital, every combination or a random sample (up to 100,000), and a pace
+    (Gentle / Balanced / Full speed)
+  - Each combination is backtested in a background worker; the page stays responsive
+  - Ranked by any of 18 metrics: net profit, net %, profit factor, return / drawdown,
+    Sharpe, Sortino, win rate, profitable months, worst month, max drawdown, trades, average
+    trade, long / short P&L...
+  - Filters: fewest trades, deepest drawdown, lowest profit factor, profitable only,
+    profitable every year
+  - Pause, close the window or the page, continue later from the next combination
+    (results are saved in the database as they're tested)
+  - One window runs it at a time; another window sees "Running in another window" and can
+    take it over
+  - Settings are locked while running; changing them while paused starts it over (asks
+    first); it keeps the code version it started with and offers to restart with new code
+  - Report in its own bottom-panel tab, like the Strategy Tester:
+      Summary: progress, the best combination with its full metric sheet, runners-up
+      All results: sortable, filterable table
+      Pause / Continue, collapse, maximize, close; stays across reloads
+  - Apply to chart: switches symbol and timeframe and runs the strategy with those settings
+    (the Strategy Tester then shows exactly the optimizer's figures)
+
+======================================================================
+9. COLLAB CHARTS
+======================================================================
+  - Right-click the chart -> Collaborate: share by link or invite by email / name
+  - Shared live: drawings, symbol / interval, indicators, cursors, paper trades, the Pine
+    script and shared alerts
+  - Group panel: chat with history, voice call (WebRTC), shared alerts, who drives the replay
+  - Replay together: one drives, everyone follows; take control, go solo, rejoin
+  - Live Pine co-editing with everyone's cursors
+  - Permissions per person (edit chart, control replay, add people, voice, alerts, Pine);
+    hand over ownership; enforced on the server
+  - Join / leave sounds, request to join, kick out, owner mic controls
+  - Share pictures and documents in the chat (20 MB, kept private to the collab)
+  - Your collabs list with roles (Admin, Controller, Editor, Participant, Viewer), filters,
+    settings without opening, leave or delete
+
+======================================================================
+10. CHATS
+======================================================================
+  - Chats button on the right toolbar: private chats and group chats, unread counts, chime
+    and notification
+  - Group chats: admins rename, add / remove people, make admins, set theme, delete
+  - Chat themes: colours, background photo, font and size
+  - Read receipts, "is typing", online / last seen, each with a privacy switch
+  - Voice messages, pictures and documents in every chat
+
+======================================================================
+11. ANALYTICS AND BACKTEST SESSIONS
+======================================================================
+Analytics page (/analytics, Products -> Analytics; TradePilot's look)
+  - Performance: P&L, win rate, profit factor, expectancy, equity and drawdown curve, long vs
+    short, weekdays, sessions, top symbols, daily calendar, full stats
+  - Trade analysis: each trade scored and compared with your average, with a journal
+  - Sources: paper accounts, the linked MT5 history, saved strategy backtests
+  - Export trades (with journal) as CSV, and a PDF performance report
+  - "Show on my profile" puts an account's stats on your public profile
+
+Backtest sessions
+  - Bar replays you come back to, with their own account, trades and drawings
+  - Resume on the exact bar, timeframe and zoom; autosave; time spent; active / paused /
+    completed
+  - Drawings are separate per session; they never load into or save over the wrong symbol
+    or session
+
+======================================================================
+12. COPY TRADING
+======================================================================
+Copier (Analytics -> Copy trading; Products -> Copy trading)
+  - Run a channel: join code, default risk %, max slippage; send signals from the site or
+    mirror your own MT5 trades (opens, stop changes, partial and full closes)
+  - Follow channels with your own limits: signal's or own risk %, max risk, open copied
+    trades, daily loss limit, symbols, lots for signals without a stop
+  - Copies go straight to each follower's broker: the broker's symbol name, stops at the same
+    distances from the fill, lots = risk % of the follower's own equity at that stop, late
+    copies skipped, only tagged copies touched, every result logged with its latency
+  - manage.py run_copier: one always-logged-in MT5 terminal per follower, each in its own
+    process, so a signal reaches every account at once
+
+Posting signals out
+  - A channel posts every open, stop move and close to:
+      Telegram channel / group (your own bot; moves and closes reply to the trade's post)
+      Discord channel (webhook)
+      WhatsApp numbers (Cloud API; approved template for business-initiated messages)
+      your group chats, personal chats and collabs here
+  - In chats here: a signal card with "Copy this channel", which follows the channel
+  - Each connection is checked when saved, can be tested, paused, set per event (opens /
+    stop moves / closes, join code on or off) and shows its last result
+  - Tokens stored encrypted, never sent back; posting runs in the background
+
+======================================================================
+13. COMMUNITY
+======================================================================
+  - /community: find people by name or @username, and published scripts by name or author
+  - Profiles (/u/<username>): bio, followers, scripts, and only if they turn each on, trading
+    stats, saved backtests, backtest sessions; follow, message, invite to a collab
+  - Edit your own profile and privacy
+  - Publish script: public or private (invited people); code open, hidden, or open to chosen
+    people. Hidden code is shared compiled (no comments, names replaced; Pine only)
+  - Notifications (chart bell): new scripts and every new version from people you follow,
+    new followers, shared scripts, collab invites
+
+======================================================================
+14. SETTINGS, SYNC AND PERSONALISATION
+======================================================================
+  - Cloud sync: layouts, watchlists, chart settings and templates, indicator templates,
+    favourites, theme follow the signed-in account
+  - Settings -> Canvas -> Background image: a photo behind the candles (strength and fit)
+  - Settings -> Canvas -> Site font: one font for the whole site
+  - Download all settings as a JSON file, import on another computer; imported parts become
+    renamable "Imported" templates (chart settings, drawing tools, indicators)
+  - TradingView's colour palette replaces the browser's colour pickers; dark mode throughout;
+    theme kept across reloads
+  - Reset chart view as TradingView does
+
+======================================================================
+15. SECURITY AND ADMIN
+======================================================================
+  - Sign-in opens a session only with a verified Firebase ID token
+  - Every per-user endpoint requires that user's session; deletes only remove your own items
+  - Failed request tracking: every failed /api/users/* call recorded (who, endpoint, reason)
+    and viewable in Django admin with day / week / month and status filters
+  - Secrets (MT5 passwords, GitHub tokens, Telegram / Discord / WhatsApp tokens) stored
+    encrypted and never sent back to the browser
+
+======================================================================
+16. RUNNING IT (SETUP NOTES)
+======================================================================
+  - Database: run "python manage.py migrate" (migrations up to 0036)
+  - Live collab / chats: the backend runs under daphne (Django Channels)
+  - Copy trading: run "python manage.py run_copier" on the copier server (MT5 installed)
+  - Market data: TWELVEDATA_API_KEY (8 requests a minute on the free plan; the optimizer
+    waits these out automatically)
+  - Feature ideas for later are listed in FEATURE_IDEAS.txt
