@@ -184,6 +184,18 @@ export default function OptimizerDialog({ p, uid, scriptKey, scriptName, languag
     } });
   };
   const edit = (c: OptimizerConfig) => { setDraft(c); setDirty(true); };
+  // Output (each combination's trades as a CSV) changes without starting a run over: saved at once
+  const setOutput = async (tradesCsv: boolean) => {
+    const next = { ...draft, output: { tradesCsv } };
+    if (selected === "new") { setDraft(next); return; }
+    setErr(null);
+    try {
+      const r = await patchRun(uid, selected, { output: { tradesCsv } });
+      setDraft(d => ({ ...d, output: r.config.output }));
+      setDetail(r);
+      setRuns(list => (list || []).map(x => (x.id === r.id ? { ...x, config: { ...x.config, output: r.config.output } } : x)));
+    } catch (e: any) { setErr(e.message); }
+  };
 
   const progress = here ? live.cursor : detail?.cursor ?? run?.cursor ?? 0;
   const runTotal = here ? live.total : detail?.total ?? run?.total ?? total;
@@ -208,7 +220,7 @@ export default function OptimizerDialog({ p, uid, scriptKey, scriptName, languag
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <div style={{ width: 400, flexShrink: 0, overflowY: "auto", borderRight: `1px solid ${p.border}`, padding: "12px 20px 20px" }} data-testid="opt-settings">
           {locked && <Note p={p}>Pause it to change its settings.</Note>}
-          <Settings p={p} cfg={draft} onChange={edit} locked={locked} />
+          <Settings p={p} cfg={draft} onChange={edit} locked={locked} onOutput={setOutput} files={problem ? 0 : (selected === "new" ? total : (detail?.total ?? total) - (detail?.cursor ?? 0))} />
         </div>
 
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
@@ -316,7 +328,9 @@ function NumberField({ p, value, onChange, disabled, width = 76, testId, placeho
   );
 }
 
-function Settings({ p, cfg, onChange, locked }: { p: PinePalette; cfg: OptimizerConfig; onChange: (c: OptimizerConfig) => void; locked: boolean }) {
+function Settings({ p, cfg, onChange, locked, onOutput, files }: {
+  p: PinePalette; cfg: OptimizerConfig; onChange: (c: OptimizerConfig) => void; locked: boolean; onOutput: (tradesCsv: boolean) => void; files: number;
+}) {
   const [sym, setSym] = useState("");
   const set = (patch: Partial<OptimizerConfig>) => onChange({ ...cfg, ...patch });
   const setParam = (i: number, patch: Partial<ParamSpec>) => set({ params: cfg.params.map((x, j) => (j === i ? { ...x, ...patch } as ParamSpec : x)) });
@@ -432,6 +446,20 @@ function Settings({ p, cfg, onChange, locked }: { p: PinePalette; cfg: Optimizer
         {PACES.map(x => <Chip key={x.id} p={p} on={cfg.pace === x.id} onClick={() => set({ pace: x.id })} testId={`opt-pace-${x.id}`}>{x.label}</Chip>)}
       </div>
       <div style={{ fontSize: 12, color: p.muted, marginTop: 6 }}>{PACES.find(x => x.id === cfg.pace)?.hint}. The page stays responsive either way.</div>
+
+      <H p={p}>Output</H>
+      <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, cursor: "pointer" }}>
+        <input type="checkbox" checked={!!cfg.output?.tradesCsv} onChange={e => onOutput(e.target.checked)} data-testid="opt-trades-csv" style={{ marginTop: 2 }} />
+        <span>
+          Download each combination&apos;s trades (.csv)
+          <span style={{ display: "block", fontSize: 12, color: p.muted, marginTop: 3, lineHeight: "17px" }}>
+            The Strategy Tester&apos;s list of trades for every combination tested from now on, saved to your Downloads folder
+            {cfg.output?.tradesCsv && files > 0 ? ` (up to ${files.toLocaleString()} file${files === 1 ? "" : "s"})` : ""}.
+            Each file is named after its symbol, timeframe and settings. The first time, your browser may ask to allow this site to download multiple files.
+            Turning it on or off doesn&apos;t start the optimization over.
+          </span>
+        </span>
+      </label>
     </fieldset>
   );
 }

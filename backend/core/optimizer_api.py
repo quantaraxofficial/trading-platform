@@ -156,7 +156,8 @@ def runs(request, uid):
 def run(request, uid, rid):
     """GET ?sort=&dir=&min_trades=&max_dd=&min_pf=&profitable=&every_year=&limit=: the run and its
     best results. PATCH: {name} / {ranking} anytime; {status: "paused"}; while it isn't running,
-    {config, total, code?} changes what's tested and starts it over. DELETE: it and its results."""
+    {output} (trades CSV on / off, results kept) and {config, total, code?}, which changes what's
+    tested and starts it over. DELETE: it and its results."""
     me, r, denied = _mine(request, uid, rid)
     if denied:
         return denied
@@ -169,6 +170,12 @@ def run(request, uid, rid):
             r.name = str(d.get('name') or '')[:120]
         if isinstance(d.get('ranking'), dict):
             r.ranking = d['ranking']
+        if isinstance(d.get('output'), dict) and 'config' not in d:
+            # What each combination leaves behind (its trades as a CSV): doesn't change what's
+            # tested, so the results stay; like every setting, only while it isn't running
+            if _live(r):
+                return Response({"error": "Pause it first, then change its settings"}, status=status.HTTP_409_CONFLICT)
+            r.config = {**(r.config or {}), "output": {"tradesCsv": d['output'].get('tradesCsv') is True}}
         if 'config' in d:
             if _live(r):
                 return Response({"error": "Pause it first, then change its settings"}, status=status.HTTP_409_CONFLICT)

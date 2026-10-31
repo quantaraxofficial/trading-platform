@@ -73,11 +73,16 @@ class OptimizerApiTests(TestCase):
         r = self.api("own", f"runs/{rid}/", "patch", {"config": {"dims": ["len", "x"]}, "total": 20})
         self.assertEqual(r.status_code, 409)
         self.assertIn("Pause it first", r.json()["error"])
+        self.assertEqual(self.api("own", f"runs/{rid}/", "patch", {"output": {"tradesCsv": True}}).status_code, 409)
         # Sorting / filters do
         self.assertEqual(self.api("own", f"runs/{rid}/", "patch", {"ranking": {"sort": "sharpe"}}).json()["run"]["ranking"], {"sort": "sharpe"})
         r = self.api("own", f"runs/{rid}/", "patch", {"status": "paused"})
         self.assertEqual(r.json()["run"]["status"], "paused")
         self.assertEqual(self.send(rid, "w1", 2, []).status_code, 409)   # the window that was running stops
+        # The trades-CSV output changes only while paused, and keeps the results
+        r = self.api("own", f"runs/{rid}/", "patch", {"output": {"tradesCsv": True}})
+        run = r.json()["run"]
+        self.assertEqual((run["config"]["output"], run["config"]["dims"], run["tested"], run["cursor"]), ({"tradesCsv": True}, ["len"], 1, 1))
         # Paused: new settings start it over
         r = self.api("own", f"runs/{rid}/", "patch", {"config": {"dims": ["len", "x"]}, "total": 20, "code": CODE + "// v2\n"})
         run = r.json()["run"]

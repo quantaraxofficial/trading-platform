@@ -1,6 +1,6 @@
 TRADEPILOT - FEATURES BUILT ON THE MERGE BRANCH
 Branch: merge-main-left-toolbar-tools  (everything here is on top of main)
-Up to: 28 Oct 2026, commit 0160275 (35 commits)
+Up to: 31 Oct 2026 (strategy optimizer: trades CSV per combination)
 
 Contents
   1. Drawing tools (left toolbar)
@@ -198,6 +198,10 @@ Strategy optimizer (Pine Editor -> Optimize; strategies only, all three language
       Pause / Continue, collapse, maximize, close; stays across reloads
   - Apply to chart: switches symbol and timeframe and runs the strategy with those settings
     (the Strategy Tester then shows exactly the optimizer's figures)
+  - Output -> "Download each combination's trades (.csv)": every combination tested saves its
+    list of trades (the Strategy Tester's CSV) to the Downloads folder, one file each, named
+    after the script, symbol, timeframe and settings; can be switched on or off while paused
+    without starting the optimization over
 
 ======================================================================
 9. COLLAB CHARTS

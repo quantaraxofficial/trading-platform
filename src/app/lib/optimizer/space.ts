@@ -33,6 +33,9 @@ export interface OptimizerConfig {
   capital: number | null;               // null: the script's own initial capital
   search: { mode: "grid" | "random"; samples: number; seed: number };
   pace: "gentle" | "balanced" | "full";
+  // What each combination leaves behind besides its metrics: its trades as a CSV in Downloads.
+  // (Changes without starting the run over: it doesn't change what's tested.)
+  output?: { tradesCsv?: boolean };
 }
 
 export interface Combo { symbol: string; interval: string; inputs: Record<string, number | string | boolean> }
@@ -117,15 +120,19 @@ export function totalOf(c: OptimizerConfig): number {
 export function decode(c: OptimizerConfig, index: number): Combo {
   const dims = dimsOf(c);
   const out: Combo = { symbol: "", interval: "", inputs: {} };
+  const picked: (number | string | boolean)[] = [];
   let rest = index;
   for (let i = dims.length - 1; i >= 0; i--) {
-    const d = dims[i], n = d.values.length;
-    const v = d.values[rest % n];
+    const n = dims[i].values.length;
+    picked[i] = dims[i].values[rest % n];
     rest = Math.floor(rest / n);
-    if (d.key === "symbol") out.symbol = String(v);
-    else if (d.key === "interval") out.interval = String(v);
-    else out.inputs[d.key.slice(6)] = v;
   }
+  // (inputs in the script's own order, for file names and how settings read)
+  dims.forEach((d, i) => {
+    if (d.key === "symbol") out.symbol = String(picked[i]);
+    else if (d.key === "interval") out.interval = String(picked[i]);
+    else out.inputs[d.key.slice(6)] = picked[i];
+  });
   return out;
 }
 

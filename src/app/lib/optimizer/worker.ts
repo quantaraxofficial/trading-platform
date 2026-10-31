@@ -6,6 +6,7 @@
 import { runPineScriptAsync, type Bar } from "../pineScriptEngine";
 import { runMql5 } from "../scripting/mql5Runtime";
 import { computeMetrics } from "./metrics";
+import { tradesCsv } from "../../components/strategy/stats";
 
 const bars = new Map<string, Bar[]>();
 const waiting = new Map<number, (b: Bar[]) => void>();
@@ -32,7 +33,8 @@ self.onmessage = async (e: MessageEvent) => {
     const result = m.language === "mql5" ? await runMql5(m.code, data, opts) : await runPineScriptAsync(m.code, data, opts);
     if (result.errors.length) out = { error: `Script error: ${result.errors[0].message}`.slice(0, 280) };
     else if (!result.strategyReport) out = { error: "No strategy results (is it a strategy?)" };
-    else out = { metrics: computeMetrics(result.strategyReport) };
+    // (with Output → trades CSV on: the Strategy Tester's "List of trades" file for this combination)
+    else out = { metrics: computeMetrics(result.strategyReport), ...(m.csv ? { csv: tradesCsv(result.strategyReport, m.tz || "UTC", "USD") } : {}) };
   } catch (err: any) {
     out = { error: `Failed: ${String(err?.message || err)}`.slice(0, 280) };
   }

@@ -12,6 +12,7 @@ import { runScriptAsync, type ScriptLanguage } from "../scripting";
 import { ApiError, claimRun, patchRun, resultsUrl, sendResults, type OptRun } from "./api";
 import { backtestWindow, DataLimitError, keepOnly, loadBars } from "./data";
 import { computeMetrics, type Metrics } from "./metrics";
+import { tradesCsv } from "../../components/strategy/stats";
 import { decode, orderOf, type Combo, type OptimizerConfig } from "./space";
 
 export type Phase = "idle" | "starting" | "loading" | "running" | "pausing" | "waiting";
@@ -59,6 +60,42 @@ function getWorker(): Worker {
 }
 const ask = (msg: Record<string, unknown>) => new Promise<any>(resolve => { const id = ++seq; pending.set(id, resolve); getWorker().postMessage({ ...msg, id }); });
 const REST = { gentle: 3, balanced: 1, full: 0 } as const;
+
+// ---- each combination's trades as a CSV in Downloads (Output → trades CSV)
+// One at a time, a moment apart (browsers drop downloads fired all at once); testing waits while
+// more than a few are queued, so they never pile up in memory.
+
+const downloads: { name: string; csv: string }[] = [];
+let downloading = false;
+const csvSafe = (s: string) => s.replace(/[\\/:*?"<>|]+/g, "").replace(/\s+/g, "_");
+
+export function csvFileName(script: string, combo: Combo, index: number): string {
+  const inputs = Object.entries(combo.inputs).map(([k, v]) => `${k}-${typeof v === "boolean" ? (v ? "on" : "off") : v}`).join("_");
+  const base = [script || "Strategy", combo.symbol, combo.interval, inputs].filter(Boolean).map(csvSafe).join("_");
+  return `${base.slice(0, 150)}_#${index}.csv`;
+}
+
+function pumpDownloads() {
+  if (downloading || !downloads.length) return;
+  downloading = true;
+  const { name, csv } = downloads.shift()!;
+  try {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  } catch { /* skipped */ }
+  setTimeout(() => { downloading = false; pumpDownloads(); }, 350);
+}
+
+async function queueDownload(name: string, csv: string) {
+  while (downloads.length >= 8) await wait(200);
+  downloads.push({ name, csv });
+  pumpDownloads();
+}
 
 // ---- running
 
@@ -130,6 +167,8 @@ async function loop(uid: string, run: OptRun, code: string) {
   const cfg: OptimizerConfig = run.config;
   const language = run.language as ScriptLanguage;
   const order = orderOf(cfg);
+  const wantCsv = !!cfg.output?.tradesCsv;
+  const tz = (typeof window !== "undefined" && (window as any).__chartTimezone) || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const total = run.total;
   let pos = run.cursor;
   current = { uid, id: run.id, pos };
@@ -168,6 +207,7 @@ async function loop(uid: string, run: OptRun, code: string) {
       // One combination
       const t = performance.now();
       let row: Row;
+      let csv: string | undefined;
       if (!bars.length) {
         row = { index, params: combo, error: `No ${combo.interval} data for ${combo.symbol}` };
       } else {
@@ -177,14 +217,17 @@ async function loop(uid: string, run: OptRun, code: string) {
             const res = await runScriptAsync("python", code, bars, { ...opts, fetchTimeframe: fetchPineTimeframeData });
             row = res.errors.length ? { index, params: combo, error: `Script error: ${res.errors[0].message}`.slice(0, 280) }
               : res.strategyReport ? { index, params: combo, metrics: computeMetrics(res.strategyReport) } : { index, params: combo, error: "No strategy results (is it a strategy?)" };
+            if (wantCsv && res.strategyReport && !res.errors.length) csv = tradesCsv(res.strategyReport, tz, "USD");
           } catch (e: any) { row = { index, params: combo, error: `Failed: ${e?.message || e}`.slice(0, 280) }; }
           const rest = REST[cfg.pace] * (performance.now() - t);
           if (rest > 0) await ask({ type: "sleep", ms: Math.min(5000, rest) });
         } else {
-          const m = await ask({ type: "run", language, code, key, opts, restFactor: REST[cfg.pace] });
+          const m = await ask({ type: "run", language, code, key, opts, restFactor: REST[cfg.pace], csv: wantCsv, tz });
           row = m.error ? { index, params: combo, error: m.error } : { index, params: combo, metrics: m.metrics };
+          csv = m.csv;
         }
       }
+      if (csv) await queueDownload(csvFileName(run.script_name, combo, index), csv);
       unsent.push(row);
       unsentMs += performance.now() - t;
       pos++; doneHere++;
