@@ -6,10 +6,11 @@ from django.conf.urls.static import static
 from core import tick_health
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
     # Tick-feed health dashboard (MT5 -> ClickHouse), admin-login-protected.
-    path('admin/tick-health/', tick_health.tick_health, name='tick_health'),
-    path('admin/tick-health/json/', tick_health.tick_health_json, name='tick_health_json'),
+    path(f'{settings.ADMIN_URL}tick-health/', tick_health.tick_health, name='tick_health'),
+    path(f'{settings.ADMIN_URL}tick-health/json/', tick_health.tick_health_json, name='tick_health_json'),
+    # The admin, at ADMIN_URL (admin/ unless set)
+    path(settings.ADMIN_URL, admin.site.urls),
     path('api/users/', include('core.urls')),
 ]
 

@@ -1,75 +1,74 @@
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, throttle_classes
 from rest_framework.response import Response
 from .access import access_of
 from .models import TraderProfile, DrawingTemplate, UserDrawing, UserSession, PineScript, UserStrategyNote, UserSetting, FailedRequest, FeedbackMessage
 from django.utils import timezone
 from django.conf import settings
-from .auth import verified_uid, require_session, session_owner, session_key_of
+from .auth import verified_claims, require_session, session_owner, session_key_of, live_session, new_session_key
+from .throttles import FeedbackThrottle, ReportThrottle, SignInThrottle
 from .middleware import get_client_ip
 from django.core.files.storage import default_storage
 import os
+import re
+import secrets
 import time
 
 
 @api_view(['POST'])
+@throttle_classes([SignInThrottle])
 def sync_user(request):
-    data = request.data
-    uid = data.get('uid')
-    session_key = data.get('session_key')
-    force = data.get('force', False)
+    """Signing in on this browser: {uid, id_token, session_key?, name?, phone?, device_info?, force?}.
+    The Firebase ID token must be that user's; the email is taken from it (never from the request).
+    An existing session key of theirs is refreshed; otherwise the server issues a new one (two
+    devices at most; force replaces the oldest) and sends it back as `session_key`."""
+    data = request.data if isinstance(request.data, dict) else {}
+    uid = str(data.get('uid') or '')[:128]
+    force = data.get('force') is True
 
     if not uid:
         return Response({"error": "UID is required"}, status=status.HTTP_400_BAD_REQUEST)
 
     # Only the user themself can open a session: the Firebase ID token must be theirs. (Local test
-    # accounts are allowed only with ALLOW_UNVERIFIED_SIGNIN on, for development.)
-    if not settings.ALLOW_UNVERIFIED_SIGNIN and verified_uid(data.get('id_token')) != uid:
-        return Response({"error": "Sign-in could not be verified"}, status=status.HTTP_401_UNAUTHORIZED)
+    # accounts are allowed only with ALLOW_UNVERIFIED_SIGNIN on, which settings refuse outside DEBUG.)
+    claims = None
+    if not settings.ALLOW_UNVERIFIED_SIGNIN:
+        claims = verified_claims(data.get('id_token'))
+        if not claims or (claims.get('user_id') or claims.get('sub')) != uid:
+            return Response({"error": "Sign-in could not be verified"}, status=status.HTTP_401_UNAUTHORIZED)
+    email = (claims.get('email') if claims else data.get('email')) or ''
+    defaults = {'email': str(email)[:254], 'last_login': timezone.now()}
+    name = str(data.get('name') or '').strip()[:255]
+    if name:
+        defaults['name'] = name
+    if data.get('phone'):
+        defaults['phone'] = str(data.get('phone'))[:20]
+    profile, created = TraderProfile.objects.update_or_create(uid=uid, defaults=defaults)
 
-    profile, created = TraderProfile.objects.update_or_create(
-        uid=uid,
-        defaults={
-            'name': data.get('name', ''),
-            'email': data.get('email', ''),
-            'phone': data.get('phone', ''),
-            'last_login': timezone.now()
-        }
-    )
-
-    # Session management
-    if session_key:
-        try:
-            session = UserSession.objects.get(user=profile, session_key=session_key)
-            session.last_active = timezone.now()
-            session.save()
-        except UserSession.DoesNotExist:
-            current_sessions = UserSession.objects.filter(user=profile).order_by('last_active')
-            if current_sessions.count() >= 2:
-                if force:
-                    # Remove oldest session to make room
-                    current_sessions.first().delete()
-                    UserSession.objects.create(
-                        user=profile,
-                        session_key=session_key,
-                        device_info=data.get('device_info', '')
-                    )
-                else:
-                    return Response({
-                        "limit_reached": True,
-                        "message": "You have already reached the limit of number of devices per account."
-                    })
-            else:
-                UserSession.objects.create(
-                    user=profile,
-                    session_key=session_key,
-                    device_info=data.get('device_info', '')
-                )
+    # Session management: a key of theirs is refreshed, anything else gets a fresh server-made key
+    key = session_key_of(request)
+    session = live_session(UserSession.objects.filter(user=profile, session_key=key)) if key else None
+    if session:
+        UserSession.objects.filter(id=session.id).update(last_active=timezone.now())
+        new_key = session.session_key
+    else:
+        current_sessions = UserSession.objects.filter(user=profile).order_by('last_active')
+        if current_sessions.count() >= 2:
+            if not force:
+                return Response({
+                    "limit_reached": True,
+                    "message": "You have already reached the limit of number of devices per account."
+                })
+            for old in current_sessions[:current_sessions.count() - 1]:
+                old.delete()   # room for this one (the oldest go)
+        new_key = new_session_key()
+        UserSession.objects.create(user=profile, session_key=new_key, device_info=str(data.get('device_info') or '')[:255])
 
     return Response({
         "success": True,
         "tier": profile.tier,
-        "is_new": created
+        "is_new": created,
+        "session_key": new_key,
     })
 
 
@@ -380,6 +379,7 @@ def manage_settings(request, uid):
 # --- Failed-request tracking ---
 
 @api_view(['POST'])
+@throttle_classes([ReportThrottle])
 def track_failure(request):
     """Browser self-report of a request that did not come back to the user (a Next.js /api/*
     data-route failure, or a cloud-sync miss). The Django middleware already records the
@@ -418,7 +418,26 @@ def track_failure(request):
 # straight to the developer's Django admin. Multipart: text fields + `images`
 # (repeatable file field). No session required — anonymous reports are allowed.
 
+FEEDBACK_MAX_IMAGES = 5
+FEEDBACK_MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+def _real_image(f):
+    """The image format if the upload really is a picture (decoded, not just named like one)"""
+    try:
+        from PIL import Image
+        f.seek(0)
+        with Image.open(f) as im:
+            fmt = (im.format or '').lower()
+            im.verify()
+        f.seek(0)
+        return fmt if fmt in ('png', 'jpeg', 'webp', 'gif') else None
+    except Exception:
+        return None
+
+
 @api_view(['POST'])
+@throttle_classes([FeedbackThrottle])
 def submit_feedback(request):
     """Bug report / feedback from the chart's 'Send feedback' button.
 
@@ -428,13 +447,17 @@ def submit_feedback(request):
     owner = session_owner(request)
     session_key = session_key_of(request) or ""
 
+    # Screenshots: a few, not too big, and really pictures (re-checked by decoding), stored under
+    # names the server makes; anything else is dropped without failing the report
     image_urls = []
     try:
-        for f in request.FILES.getlist('images'):
-            ext = os.path.splitext(f.name)[1].lower() or ".png"
-            if ext not in ('.png', '.jpg', '.jpeg', '.webp', '.gif'):
-                ext = '.png'
-            safe_name = f"fb_{int(time.time() * 1000)}_{os.getpid()}{ext}"
+        for f in request.FILES.getlist('images')[:FEEDBACK_MAX_IMAGES]:
+            if f.size > FEEDBACK_MAX_IMAGE_BYTES:
+                continue
+            fmt = _real_image(f)
+            if not fmt:
+                continue
+            safe_name = f"fb_{secrets.token_hex(12)}.{'jpg' if fmt == 'jpeg' else fmt}"
             path = default_storage.save(f"feedback/{safe_name}", f)
             image_urls.append(f"/media/{path}")
     except Exception:
@@ -476,6 +499,17 @@ def create_cashfree_order(request):
 # public (no session) — they only read settled bar data, which is fine to serve
 # to anyone who has the app.
 
+# A symbol is only ever letters, digits and . _ - / (so it can't carry quotes, backslashes or SQL)
+SYMBOL_RE = re.compile(r"^[A-Z0-9][A-Z0-9._/-]{0,23}$")
+
+
+def _ch_str(value: str) -> str:
+    """A ClickHouse string literal for a value that already matched SYMBOL_RE"""
+    if not SYMBOL_RE.match(value):
+        raise ValueError("not a symbol")
+    return "'" + value + "'"
+
+
 def _ch_client():
     """A ClickHouse client with a short read timeout so a missing/overloaded
     server degrades to an empty response instead of hanging the request."""
@@ -507,7 +541,7 @@ def get_last_prices(request):
     """
     from pipeline.config import CONFIG
     raw = request.query_params.get("symbols") or ",".join(CONFIG.SYMBOLS)
-    syms = [s.strip() for s in raw.split(",") if s.strip()][:32]
+    syms = [s for s in (x.strip().upper() for x in raw.split(",")) if SYMBOL_RE.match(s)][:32]
     if not syms:
         return Response({}, status=status.HTTP_200_OK)
     out = {}
@@ -519,7 +553,7 @@ def get_last_prices(request):
             "SELECT symbol, any(open) AS open, max(high) AS high, min(low) AS low, "
             "any(close) AS close, sum(ticks) AS ticks, max(ts) AS ts "
             f"FROM {CONFIG.CH_DATABASE}.tick_bars "
-            f"WHERE symbol IN ({','.join(repr(s) for s in syms)}) "
+            f"WHERE symbol IN ({','.join(_ch_str(s) for s in syms)}) "
             "AND ts >= now() - toIntervalMinute(3) GROUP BY symbol"
         )
         for r in _ch_read(ch, sql):
@@ -549,10 +583,13 @@ def get_candles(request):
     """
     from pipeline.config import CONFIG
     sym = request.query_params.get("symbol", "").strip().upper()
-    limit = int(request.query_params.get("limit", 500) or 500)
+    try:
+        limit = int(request.query_params.get("limit", 500) or 500)
+    except (TypeError, ValueError):
+        limit = 500
     limit = max(1, min(limit, 5000))
-    if not sym:
-        return Response({"error": "symbol is required"}, status=status.HTTP_400_BAD_REQUEST)
+    if not SYMBOL_RE.match(sym):
+        return Response({"error": "symbol is required (letters, digits and . _ - /)"}, status=status.HTTP_400_BAD_REQUEST)
 
     values = []
     try:
@@ -562,7 +599,7 @@ def get_candles(request):
             f"toString(low) AS low, toString(close) AS close, "
             f"CAST(ticks AS String) AS volume "
             f"FROM {CONFIG.CH_DATABASE}.tick_bars "
-            f"WHERE symbol = {repr(sym)} "
+            f"WHERE symbol = {_ch_str(sym)} "
             f"ORDER BY ts DESC LIMIT {limit}"
         )
         rows = _ch_read(ch, sql)

@@ -1,14 +1,25 @@
 /** @type {import('next').NextConfig} */
+// Security headers on every page: no framing (clickjacking), no MIME sniffing, a strict referrer,
+// only the browser features the site uses (the mic for collab voice), HTTPS pinned in production.
+const securityHeaders = [
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  { key: 'Permissions-Policy', value: 'camera=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), microphone=(self), display-capture=()' },
+  // (allow-popups: the Google sign-in window must be able to report back)
+  { key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' },
+  { key: 'Content-Security-Policy', value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'" },
+  ...(process.env.NODE_ENV === 'production' ? [{ key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' }] : []),
+];
+
 const nextConfig = {
+  // The site doesn't use next/image: the image optimizer (and its attack surface) stays off
   images: {
-    remotePatterns: [
-      {
-        protocol: 'http',
-        hostname: 'localhost',
-        port: '3000',
-        pathname: '/**',
-      },
-    ],
+    unoptimized: true,
+  },
+  poweredByHeader: false,
+  async headers() {
+    return [{ source: '/:path*', headers: securityHeaders }];
   },
   webpack: (config) => {
     // Ignore node-specific modules when bundling for the browser

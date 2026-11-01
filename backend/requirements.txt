@@ -1,0 +1,24 @@
+# TradePilot backend (aditya-students). Minimum versions are the first releases without known
+# security advisories (checked against OSV on 2026-11-01); install with
+#   python -m pip install -r requirements.txt
+Django>=6.0.8,<6.1
+djangorestframework>=3.18.2
+channels>=4.3.1
+daphne>=4.2.2
+# HTTP request smuggling / HTTP/2 rapid-reset fixes (daphne serves through Twisted)
+Twisted>=26.10.0
+django-cors-headers>=4.9.0
+django-axes>=8.3.1
+django-csp>=4.0,<5
+django-environ>=0.13.0
+google-auth>=2.49.1
+pycrdt>=0.12.44
+Pillow>=13.0.0
+requests>=2.33.0
+urllib3>=2.8.0
+sqlparse>=0.6.0
+certifi>=2026.10.23
+idna>=3.15
+cryptography>=50.0.2
+asgiref>=3.11.1
+# MetaTrader5 is only needed on the Windows machine that runs the tick pipeline (pipeline/)

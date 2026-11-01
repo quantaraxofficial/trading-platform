@@ -22,6 +22,7 @@ from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.utils import timezone
 
 from .access import is_locked
+from .auth import live_session
 from .collab import clean_pine, color_of, display_name, group_name, message_json, perms_of, room_json
 from .models import CollabMember, CollabMessage, CollabRoom, UserSession
 
@@ -462,7 +463,8 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
     def _load_member(self, uid, key):
         if not uid or not key:
             return None
-        session = UserSession.objects.filter(session_key=key, user__uid=uid).select_related('user').first()
+        # (a session unused for weeks has ended: core/auth.py)
+        session = live_session(UserSession.objects.filter(session_key=key, user__uid=uid))
         if not session:
             return None
         if is_locked(session.user, 'collab'):

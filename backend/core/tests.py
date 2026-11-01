@@ -61,6 +61,8 @@ class AccessTests(TestCase):
     """Every per-user endpoint needs that user's session; sign-in needs their Firebase token"""
 
     def setUp(self):
+        from django.core.cache import cache
+        cache.clear()   # (sign-ins are rate limited per IP; each test starts afresh)
         self.a = TraderProfile.objects.create(uid="ua", name="A", email="ua@example.com")
         self.b = TraderProfile.objects.create(uid="ub", name="B", email="ub@example.com")
         UserSession.objects.create(user=self.a, session_key="ska")
@@ -89,12 +91,15 @@ class AccessTests(TestCase):
     def test_sign_in_needs_the_users_token(self):
         body = {"uid": "ua", "session_key": "evil", "force": True, "email": "ua@example.com"}
         self.assertEqual(self.c.post("/api/users/sync/", body, format="json").status_code, 401)
-        with patch("core.views.verified_uid", return_value="ub"):   # someone else's token
+        with patch("core.views.verified_claims", return_value={"user_id": "ub", "email": "ub@example.com"}):   # someone else's token
             self.assertEqual(self.c.post("/api/users/sync/", {**body, "id_token": "x"}, format="json").status_code, 401)
         self.assertFalse(UserSession.objects.filter(session_key="evil").exists())
-        with patch("core.views.verified_uid", return_value="ua"):
-            self.assertEqual(self.c.post("/api/users/sync/", {**body, "id_token": "x"}, format="json").status_code, 200)
-        self.assertTrue(UserSession.objects.filter(user=self.a, session_key="evil").exists())
+        with patch("core.views.verified_claims", return_value={"user_id": "ua", "email": "ua@example.com"}):
+            r = self.c.post("/api/users/sync/", {**body, "id_token": "x"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        # The browser's own key is never registered: the server issues a random one
+        self.assertFalse(UserSession.objects.filter(session_key="evil").exists())
+        self.assertTrue(UserSession.objects.filter(user=self.a, session_key=r.json()["session_key"]).exists())
 
     @override_settings(ALLOW_UNVERIFIED_SIGNIN=True)
     def test_unverified_sign_in_only_when_allowed(self):

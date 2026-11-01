@@ -20,14 +20,20 @@ _TRACK_PREFIX = "/api/users/"
 
 
 def get_client_ip(request):
-    """The caller's IP: first hop of X-Forwarded-For when present, else REMOTE_ADDR.
+    """The caller's IP: REMOTE_ADDR, or the client's hop of X-Forwarded-For behind a trusted proxy.
     Returns None when the value is not a valid IPv4/IPv6 address, so the
     GenericIPAddressField never receives garbage."""
     import ipaddress
+    from django.conf import settings
     raw = None
+    # X-Forwarded-For only when the server sits behind a proxy we trust (TRUSTED_PROXY_COUNT): the
+    # client is the entry that many hops from the right. Otherwise anyone could forge the header.
+    proxies = getattr(settings, "TRUSTED_PROXY_COUNT", 0)
     fwd = request.META.get("HTTP_X_FORWARDED_FOR")
-    if fwd:
-        raw = fwd.split(",")[0].strip()[:32]
+    if fwd and proxies > 0:
+        hops = [h.strip() for h in fwd.split(",") if h.strip()]
+        if len(hops) >= proxies:
+            raw = hops[-proxies][:45]
     if not raw:
         raw = request.META.get("REMOTE_ADDR")
     if not raw:

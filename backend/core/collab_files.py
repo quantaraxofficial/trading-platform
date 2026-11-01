@@ -14,10 +14,11 @@ from django.dispatch import receiver
 from django.http import FileResponse
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.decorators import api_view, parser_classes
+from rest_framework.decorators import api_view, parser_classes, throttle_classes
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
+from .throttles import UploadThrottle
 from .auth import require_session
 from .collab import message_json, notify_room
 from .models import CollabMember, CollabMessage, CollabRoom
@@ -106,6 +107,7 @@ def _member(request, uid, token):
 
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
+@throttle_classes([UploadThrottle])
 def collab_upload(request, uid, token):
     """multipart {file, text?}: shares an image or document in the group chat"""
     room, member, denied = _member(request, uid, token)
