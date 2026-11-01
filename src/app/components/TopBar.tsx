@@ -49,6 +49,9 @@ interface TopBarProps {
   onSymbolSearchClose?: () => void;
   onSettingsClick?: () => void;
   onMaximizeClick?: () => void;
+  // Redesign: move the site's widgets anywhere (components/layout/LayoutEditor)
+  onRedesignClick?: () => void;
+  redesigning?: boolean;
   onSnapshot?: (action: SnapshotAction) => void;
   activeIndicators?: { id: string; name: string; visible?: boolean }[];
   onApplyIndicatorTemplate?: (template: IndicatorTemplate) => void;
@@ -182,7 +185,17 @@ function saveFavoriteIntervals(values: string[]) {
   }
 }
 
-export default function TopBar({ theme, toggleTheme, interval, onIntervalChange, onReplayClick, isReplayActive, symbol, onSymbolChange, onIndicatorSelect, isBotActive, onToggleBot, onAlertClick, symbolSearchOpen, symbolSearchInitial, onSymbolSearchClose, onSettingsClick, onMaximizeClick, onSnapshot, activeIndicators = [], onApplyIndicatorTemplate, onQuickSearchClick, onMenuClick, drawingsPanelVisible, onToggleDrawingsPanel }: TopBarProps) {
+// Redesign's icon: panels with a move arrow
+function RedesignIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden>
+      <rect x="5.5" y="6.5" width="10" height="6" rx="1" /><rect x="5.5" y="15.5" width="5" height="7" rx="1" />
+      <path d="M19 12v10M14 17h10M19 12l-1.6 1.6M19 12l1.6 1.6M19 22l-1.6-1.6M19 22l1.6-1.6M14 17l1.6-1.6M14 17l1.6 1.6M24 17l-1.6-1.6M24 17l-1.6 1.6" />
+    </svg>
+  );
+}
+
+export default function TopBar({ theme, toggleTheme, interval, onIntervalChange, onReplayClick, isReplayActive, symbol, onSymbolChange, onIndicatorSelect, isBotActive, onToggleBot, onAlertClick, symbolSearchOpen, symbolSearchInitial, onSymbolSearchClose, onSettingsClick, onMaximizeClick, onSnapshot, activeIndicators = [], onApplyIndicatorTemplate, onQuickSearchClick, onMenuClick, drawingsPanelVisible, onToggleDrawingsPanel, onRedesignClick, redesigning }: TopBarProps) {
   const [showSymbolSearchInternal, setShowSymbolSearchInternal] = useState(false);
   const [internalSearchInitial, setInternalSearchInitial] = useState("");
   const showSymbolSearch = showSymbolSearchInternal || !!symbolSearchOpen;
@@ -472,7 +485,15 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
           <button className="tv-hdr-btn" onClick={onQuickSearchClick} aria-label="Quick search"><TVQuickSearchIcon size={28} /></button>
         </Tip>
 
-        {/* Settings, Fullscreen, Snapshot */}
+        {/* Redesign, Settings, Fullscreen, Snapshot */}
+        {onRedesignClick && (
+          <Tip text="Redesign: move the toolbars and panels anywhere" placement="bottom">
+            <button className={`tv-hdr-btn tv-wide-only ${redesigning ? "active" : ""}`} onClick={onRedesignClick} aria-label="Redesign layout" data-name="redesign-layout"
+              style={redesigning ? { color: "#2962ff" } : undefined}>
+              <RedesignIcon />
+            </button>
+          </Tip>
+        )}
         <Tip text="Settings" placement="bottom">
           <button className="tv-hdr-btn" onClick={onSettingsClick} aria-label="Settings"><TVSettingsHexIcon size={28} /></button>
         </Tip>

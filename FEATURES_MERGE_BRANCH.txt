@@ -1,6 +1,6 @@
 TRADEPILOT - FEATURES BUILT ON THE MERGE BRANCH
 Branch: merge-main-left-toolbar-tools  (everything here is on top of main)
-Up to: 31 Oct 2026 (strategy optimizer: trades CSV per combination)
+Up to: 1 Nov 2026 (Redesign: movable widgets, layout templates and colours)
 
 Contents
   1. Drawing tools (left toolbar)
@@ -90,6 +90,20 @@ Other
   - Space / Shift+Space step through the watchlist
   - Bar times in real UTC, so gold candles line up with TradingView
   - Symbols shown as TradingView writes them (XAUUSD, EURUSD) everywhere
+
+Redesign (the site's own layout)
+  - Top bar -> Redesign: the top bar, drawing toolbar, right panel, right toolbar and bottom
+    panel (date ranges, Strategy Tester, paper trading) float with a shining blue border; drag
+    any of them anywhere, resize the ones that can be resized by their edge handles
+  - Magnetic: edges snap to the screen's and to the other widgets' (4px apart or lined up),
+    with a guide line where they snapped
+  - The chart takes the space left: a tall widget keeps its side of the screen, a wide one
+    the top or bottom; small ones float over the chart
+  - Done keeps the layout, Cancel / Esc puts it back, Reset returns to the default grid;
+    the layout follows the account and adapts to other screen sizes (docked edges stay docked)
+  - Settings -> Layout (new tab): default grid or custom layout, Redesign..., layout templates
+    (save, apply, rename, delete; also "Save as template" in Redesign), and each widget's
+    colour; applied live, Cancel reverts
 
 ======================================================================
 3. BAR REPLAY

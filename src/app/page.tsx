@@ -47,6 +47,8 @@ import { layoutStore, layouts, ensureLayout, readSharedLayout, newLayout } from 
 import { LAYOUTS } from "./lib/chartLayouts";
 import { setLayoutSync } from "./lib/layoutSync";
 import SecondaryChart from "./components/SecondaryChart";
+import LayoutEditor from "./components/layout/LayoutEditor";
+import { chartArea, defaultRects, fitRects, MIN_CUSTOM_WIDTH, WIDGETS, widgetLayout, widgetLayoutTemplates, type Rect, type WidgetId } from "./lib/widgetLayout";
 import { watchlists, listSymbols, sameSymbol } from "./components/watchlist/store";
 import { backendFetch, sessionKey } from "@/lib/backend";
 import CollabController from "./components/collab/CollabController";
@@ -839,6 +841,72 @@ function AppLayout() {
     { id: 'timezone', label: 'Time zone', section: 'SETTINGS', keywords: ['timezone', 'clock', 'utc'], icon: <Globe {...icon18} />, run: () => window.dispatchEvent(new CustomEvent('tv:open-timezone-menu')) },
   ];
 
+  // ---- The site's layout: the default grid, or the widgets where Redesign put them (lib/widgetLayout)
+  const lay = widgetLayout.useValue();
+  const [winH, setWinH] = useState(0);
+  useEffect(() => {
+    const on = () => setWinH(window.innerHeight);
+    on();
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  // The bottom panel's height follows its content (date ranges, Strategy Tester, trading panel)
+  const footerRef = useRef<HTMLElement | null>(null);
+  const [bottomH, setBottomH] = useState(0);
+  useEffect(() => {
+    const el = footerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setBottomH(Math.round(el.getBoundingClientRect().height)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const [redesign, setRedesign] = useState<Record<WidgetId, Rect> | null>(null);
+  const viewW = layoutW, viewH = winH;
+  const canCustom = viewW >= MIN_CUSTOM_WIDTH && viewH > 0 && !panelsHidden;
+  const widgetsShown: Record<WidgetId, boolean> = { topbar: true, left: drawingsPanelVisible, panel: showRightPanel, sidebar: true, bottom: true };
+  const placed: Record<WidgetId, Rect> | null = !canCustom ? null : redesign || (lay.custom ? fitRects(lay, viewW, viewH, bottomH) : null);
+  const area = placed ? chartArea(Object.fromEntries((Object.keys(placed) as WidgetId[]).filter(id => widgetsShown[id])
+    .map(id => [id, id === "bottom" && bottomH ? { ...placed[id], h: bottomH } : placed[id]])), viewW, viewH) : null;
+  const widgetStyle = (id: WidgetId): React.CSSProperties => {
+    const col = lay.colors[id];
+    const colour: React.CSSProperties = col ? { background: col, ["--tv-color-bg" as any]: col } : {};
+    if (!placed) return colour;
+    const r = placed[id];
+    return {
+      ...colour, position: "fixed", left: r.x, top: r.y, width: r.w, height: id === "bottom" ? "var(--tv-bottom-toolbar-height)" : r.h,
+      margin: 0, gridColumn: "auto", gridRow: "auto", justifySelf: "auto", alignSelf: "auto",
+    };
+  };
+  // Redesign: starts from where everything is now (measured), so nothing jumps
+  const beginRedesign = () => {
+    if (panelsHidden) setPanelsHidden(false);
+    const W = window.innerWidth - splitW, H = window.innerHeight;
+    if (W < MIN_CUSTOM_WIDTH) return;
+    const start = lay.custom ? fitRects(lay, W, H, bottomH) : defaultRects(W, H);
+    for (const { id } of WIDGETS) {
+      const el = document.querySelector<HTMLElement>(`[data-widget="${id}"]`);
+      if (!el) continue;
+      const b = el.getBoundingClientRect();
+      if (b.width > 0 && b.height > 0) start[id] = { x: b.left, y: b.top, w: b.width, h: b.height };
+    }
+    setRedesign(start);
+  };
+  const beginRedesignRef = useRef(beginRedesign);
+  beginRedesignRef.current = beginRedesign;
+  useEffect(() => {
+    const on = () => beginRedesignRef.current();
+    window.addEventListener("tv:redesign", on);
+    return () => window.removeEventListener("tv:redesign", on);
+  }, []);
+  const finishRedesign = (keep: boolean) => {
+    if (keep && redesign) widgetLayout.set({ custom: true, rects: redesign, viewport: { w: viewW, h: viewH } });
+    setRedesign(null);
+  };
+  const saveLayoutTemplate = (name: string) => {
+    const layout = { ...lay, custom: true, rects: redesign || placed || lay.rects, viewport: { w: viewW, h: viewH } };
+    widgetLayoutTemplates.set(t => ({ items: [...t.items, { id: `lt${Date.now()}`, name, layout, createdAt: Date.now() }] }));
+  };
+
   return (
     <div
       className={`${styles.layout} ${layoutWidthClass}`}
@@ -848,10 +916,12 @@ function AppLayout() {
         ...(!showRightPanel ? { ["--tv-right-toolbar-width" as any]: "0px" } : {}),
         // Pine Editor in split view: the whole layout makes room beside it
         ...(splitW ? { width: `calc(100vw - ${splitW}px)` } : {}),
+        // A redesigned layout: what sits around the chart for the overlays that read these
+        ...(area ? { ["--tv-header-height" as any]: `${area.y}px`, ["--tv-left-toolbar-width" as any]: `${area.x}px` } : {}),
       }}
     >
       {!panelsHidden && (
-        <header className={styles.topbar}>
+        <header className={styles.topbar} data-widget="topbar" style={widgetStyle("topbar")}>
           <TopBar
             theme={theme}
             toggleTheme={toggleTheme}
@@ -877,6 +947,8 @@ function AppLayout() {
             onApplyIndicatorTemplate={applyIndicatorTemplate}
             onQuickSearchClick={() => setShowQuickSearch(true)}
             onMenuClick={() => setShowMobileMenu(true)}
+            onRedesignClick={beginRedesign}
+            redesigning={!!redesign}
           />
         </header>
       )}
@@ -888,12 +960,12 @@ function AppLayout() {
       />
 
       {!panelsHidden && drawingsPanelVisible && (
-        <aside className={styles.leftToolbar}>
+        <aside className={styles.leftToolbar} data-widget="left" style={widgetStyle("left")}>
           <LeftToolbar indicatorCount={activeIndicators.length} onRemoveIndicators={() => setActiveIndicators([])} />
         </aside>
       )}
 
-      <main className={styles.mainChart}>
+      <main className={styles.mainChart} style={area ? { position: "fixed", left: area.x, top: area.y, width: area.w, height: area.h, gridColumn: "auto", gridRow: "auto" } : undefined}>
         {(() => {
           // Layout setup: each chart's cell; the full chart sits in the active one (moved, not
           // remounted, when another chart is clicked), the others are SecondaryCharts
@@ -972,7 +1044,7 @@ function AppLayout() {
       </main>
 
       {!panelsHidden && showRightPanel && (
-        <aside className={styles.rightToolbar}>
+        <aside className={styles.rightToolbar} data-widget="panel" style={widgetStyle("panel")}>
           {dockedTicketOpen ? (
             <DockedTradingPanel />
           ) : activeSidebarPanel === "alerts" ? (
@@ -992,7 +1064,7 @@ function AppLayout() {
       )}
 
       {!panelsHidden && (
-        <aside className={styles.rightSidebar}>
+        <aside className={styles.rightSidebar} data-widget="sidebar" style={widgetStyle("sidebar")}>
           <RightSidebar
             activePanel={showRightPanel ? activeSidebarPanel : null}
             onPanelChange={(id) => {
@@ -1010,9 +1082,17 @@ function AppLayout() {
         </aside>
       )}
 
-      <footer className={styles.bottomPanel}>
+      <footer className={styles.bottomPanel} data-widget="bottom" ref={footerRef} style={widgetStyle("bottom")}>
         <BottomPanel theme={theme} interval={selectedInterval} />
       </footer>
+
+      {redesign && (
+        <LayoutEditor rects={redesign} visible={widgetsShown} W={viewW} H={viewH}
+          onChange={(id, r) => setRedesign(cur => (cur ? { ...cur, [id]: r } : cur))}
+          onDone={() => finishRedesign(true)} onCancel={() => finishRedesign(false)}
+          onReset={() => setRedesign(defaultRects(viewW, viewH))}
+          onSaveTemplate={saveLayoutTemplate} />
+      )}
 
       {showPineEditor && (
         <PineEditorPanel

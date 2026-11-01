@@ -27,6 +27,7 @@ import {
 import { chartBgImage, readImageFile, BG_IMAGE_FITS } from '../lib/chartBackgroundImage';
 import { FONTS, FONT_KEYS } from '../lib/fonts';
 import { downloadSettings, readSettingsFile, applySettingsFile, type SettingsFile } from '../lib/settingsTransfer';
+import { startRedesign, WIDGETS, widgetLayout, widgetLayoutTemplates, type WidgetLayout } from '../lib/widgetLayout';
 
 export interface CandleColors {
   upColor: string; downColor: string; borderUpColor: string; borderDownColor: string; wickUpColor: string; wickDownColor: string;
@@ -46,7 +47,7 @@ interface Props {
 
 const TABS = [
   { id: 'symbol', label: 'Symbol' }, { id: 'legend', label: 'Status line' }, { id: 'scales', label: 'Scales and lines' },
-  { id: 'canvas', label: 'Canvas' }, { id: 'trading', label: 'Trading' }, { id: 'alerts', label: 'Alerts' }, { id: 'events', label: 'Events' },
+  { id: 'canvas', label: 'Canvas' }, { id: 'layout', label: 'Layout' }, { id: 'trading', label: 'Trading' }, { id: 'alerts', label: 'Alerts' }, { id: 'events', label: 'Events' },
 ] as const;
 const TAB_ALIASES: Record<string, string> = { status: 'legend', appearance: 'canvas' };
 
@@ -57,6 +58,7 @@ function TabIcon({ id }: { id: string }) {
     case 'legend': return <svg {...p}><path d="M7 9.5h14M7 13.5h14M7 17.5h9" /></svg>;
     case 'scales': return <svg {...p}><path d="M8.5 6v15.5H24" /><path d="M6 8.5l2.5-2.5L11 8.5M21.5 19L24 21.5 21.5 24" /><circle cx="8.5" cy="21.5" r="1.5" /></svg>;
     case 'canvas': return <svg {...p}><path d="M18.5 7.5l2 2L11 19l-3 1 1-3 9.5-9.5z" /><path d="M16.5 9.5l2 2" /></svg>;
+    case 'layout': return <svg {...p}><rect x="6.5" y="6.5" width="15" height="15" rx="1.5" /><path d="M6.5 11h15M11 11v10.5" /></svg>;
     case 'trading': return <svg {...p}><path d="M6 19l5-5 4 3 7-7" /><path d="M18 10h4v4" /><path d="M6 22h16" /></svg>;
     case 'alerts': return <svg {...p}><circle cx="14" cy="15" r="7" /><path d="M14 11v4l2.5 2M8 8l2-2M20 8l-2-2" /></svg>;
     default: return <svg {...p}><rect x="7.5" y="8.5" width="13" height="12" rx="1.5" /><path d="M7.5 12.5h13M11 6.5v4M17 6.5v4" /></svg>;
@@ -222,12 +224,13 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
   const setTr = (patch: Partial<TradingSettings>) => tradingSettings.set(patch);
 
   // What Cancel restores
-  const snapRef = useRef<{ snap: ChartSettingsSnapshot; tz: string; bg: { data: string; name: string } } | null>(null);
-  if (!snapRef.current) snapRef.current = { snap: takeSnapshot(), tz: timezone, bg: chartBgImage.get() };
+  const snapRef = useRef<{ snap: ChartSettingsSnapshot; tz: string; bg: { data: string; name: string }; layout: WidgetLayout } | null>(null);
+  if (!snapRef.current) snapRef.current = { snap: takeSnapshot(), tz: timezone, bg: chartBgImage.get(), layout: widgetLayout.get() };
   const cancel = () => {
     applySnapshot(snapRef.current!.snap);
     onTimezone(snapRef.current!.tz);
     if (chartBgImage.get().data !== snapRef.current!.bg.data) chartBgImage.set(snapRef.current!.bg);
+    if (widgetLayout.get() !== snapRef.current!.layout) widgetLayout.set(snapRef.current!.layout);
     onClose();
   };
   const ok = () => { onCommit?.(); onClose(); };
@@ -596,7 +599,10 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
     {line(<Check c={c} label="News notification" checked={s.newsNotification} onChange={v => set({ newsNotification: v })} />)}
   </>);
 
-  const content: Record<string, React.ReactNode> = { symbol: symbolTab, legend: legendTab, scales: scalesTab, canvas: canvasTab, trading: tradingTab, alerts: alertsTab, events: eventsTab };
+  // -- Layout: the site's widgets (the default grid, or where Redesign put them), templates, colours --
+  const layoutTab = <LayoutTab c={c} section={section} line={line} desc={desc} onRedesign={() => { ok(); setTimeout(startRedesign, 0); }} />;
+
+  const content: Record<string, React.ReactNode> = { symbol: symbolTab, legend: legendTab, scales: scalesTab, canvas: canvasTab, layout: layoutTab, trading: tradingTab, alerts: alertsTab, events: eventsTab };
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
@@ -634,6 +640,81 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Settings → Layout: default grid or the redesigned layout, its templates, each widget's colour
+// (applied live; the dialog's Cancel puts the layout back as it was)
+function LayoutTab({ c, section, line, desc, onRedesign }: {
+  c: Colors; section: (t: string, first?: boolean) => React.ReactNode; line: (children: React.ReactNode, indent?: number, h?: number) => React.ReactNode;
+  desc: (t: string, indent?: number) => React.ReactNode; onRedesign: () => void;
+}) {
+  const lay = widgetLayout.useValue();
+  const { items } = widgetLayoutTemplates.useValue();
+  const [name, setName] = useState('');
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const hasCustom = Object.keys(lay.rects).length > 0;
+  const btn: React.CSSProperties = { height: 30, padding: '0 10px', borderRadius: 6, border: `1px solid ${c.border}`, background: 'transparent', color: c.text, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' };
+  const input: React.CSSProperties = { height: 30, boxSizing: 'border-box', borderRadius: 6, border: `1px solid ${c.border}`, padding: '0 8px', fontSize: 14, outline: 'none', background: 'transparent', color: c.text, fontFamily: 'inherit' };
+  const radio = (on: boolean, label: React.ReactNode, onPick: () => void, disabled?: boolean, testId?: string) => (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1 }}>
+      <input type="radio" checked={on} disabled={disabled} onChange={onPick} data-testid={testId} style={{ width: 16, height: 16, accentColor: c.text }} />{label}
+    </label>
+  );
+  const themeBg = typeof window !== 'undefined' ? (getComputedStyle(document.documentElement).getPropertyValue('--tv-color-bg').trim() || '#ffffff') : '#ffffff';
+  const save = () => {
+    const n = name.trim();
+    if (!n) return;
+    widgetLayoutTemplates.set(t => ({ items: [...t.items, { id: `lt${Date.now()}`, name: n, layout: { ...lay }, createdAt: Date.now() }] }));
+    setName('');
+  };
+  const rename = (id: string, value: string) => {
+    if (!value.trim()) return;
+    widgetLayoutTemplates.set(x => ({ items: x.items.map(i => (i.id === id ? { ...i, name: value.trim() } : i)) }));
+    setRenaming(null);
+  };
+  return (
+    <div data-testid="layout-tab">
+      {section('Layout', true)}
+      {line(radio(!lay.custom, "Default: TradingView's grid", () => widgetLayout.set({ custom: false }), false, 'layout-default'), 0, 38)}
+      {line(radio(lay.custom, 'Custom: the widgets where you put them', () => widgetLayout.set({ custom: true }), !hasCustom, 'layout-custom'), 0, 38)}
+      {desc(hasCustom ? 'Custom layouts apply on screens at least 900 px wide; smaller ones use the default grid.' : 'Arrange the widgets with Redesign first.')}
+      {line(<button type="button" style={{ ...btn, borderColor: '#2962ff', color: '#2962ff' }} onClick={onRedesign} data-testid="layout-redesign">Redesign…</button>, 0, 40)}
+
+      {section('Templates')}
+      {items.length === 0 && <div style={{ fontSize: 13, color: c.muted, margin: '4px 0 8px' }}>No layout templates yet.</div>}
+      {items.map(t => (
+        <div key={t.id} data-testid="layout-template" style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 40 }}>
+          {renaming?.id === t.id ? (
+            <input autoFocus value={renaming.name} onChange={e => setRenaming({ id: t.id, name: e.target.value })} style={{ ...input, flex: 1 }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') rename(t.id, renaming.name);
+                if (e.key === 'Escape') { e.stopPropagation(); setRenaming(null); }
+              }} />
+          ) : (
+            <span style={{ flex: 1, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}
+              <span style={{ color: c.muted, fontSize: 12, marginLeft: 8 }}>{t.layout.custom ? 'custom' : 'default grid'}{Object.keys(t.layout.colors || {}).length ? ' · colours' : ''}</span></span>
+          )}
+          <button type="button" style={btn} onClick={() => widgetLayout.set({ ...t.layout })} data-testid="layout-template-apply">Apply</button>
+          <button type="button" style={btn} onClick={() => setRenaming({ id: t.id, name: t.name })}>Rename</button>
+          <button type="button" style={btn} aria-label={`Delete ${t.name}`} onClick={() => widgetLayoutTemplates.set(x => ({ items: x.items.filter(i => i.id !== t.id) }))}>Delete</button>
+        </div>
+      ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Template name" data-testid="layout-template-name" style={{ ...input, flex: 1 }}
+          onKeyDown={e => { if (e.key === 'Enter') save(); }} />
+        <button type="button" style={btn} onClick={save} disabled={!name.trim()} data-testid="layout-template-save">Save current layout</button>
+      </div>
+
+      {section('Widget colours')}
+      {WIDGETS.map(w => (
+        <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 44 }} data-testid={`layout-color-${w.id}`}>
+          <div style={{ width: 180, fontSize: 14 }}>{w.label}<div style={{ fontSize: 12, color: c.muted }}>{w.hint}</div></div>
+          <Swatch c={c} label={`${w.label} colour`} color={lay.colors[w.id] || themeBg} onChange={col => widgetLayout.set({ colors: { ...lay.colors, [w.id]: col } })} />
+          {lay.colors[w.id] && <button type="button" style={btn} onClick={() => { const next = { ...lay.colors }; delete next[w.id]; widgetLayout.set({ colors: next }); }}>Default</button>}
+        </div>
+      ))}
     </div>
   );
 }
