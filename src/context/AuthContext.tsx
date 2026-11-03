@@ -12,7 +12,7 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
 import { backendFetch, BACKEND_URL } from "@/lib/backend";
-import { setAccess, refreshAccess, accessAge } from "@/lib/access";
+import { setAccess, setSignedOut, setNotPremium, refreshAccess, accessAge } from "@/lib/access";
 
 interface AuthContextType {
   user: User | null;
@@ -34,14 +34,22 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
 });
 
+// Accounts made in admin with a user ID instead of an email sign in to Firebase as
+// <id>@USER_ID_DOMAIN (a reserved domain no mail goes to). Same rule as backend/core/access.py
+export const USER_ID_DOMAIN = 'id.tradepilot.invalid';
+export const signInEmail = (login: string) => {
+  const s = login.trim().toLowerCase();
+  return s.includes('@') ? s : `${s}@${USER_ID_DOMAIN}`;
+};
+
 // Firebase's error codes as messages for the sign-in / sign-up forms
 function authErrorMessage(error: any): string {
   switch (error?.code) {
     case 'auth/invalid-credential':
     case 'auth/wrong-password':
     case 'auth/user-not-found':
-    case 'auth/invalid-login-credentials': return 'Incorrect email or password.';
-    case 'auth/invalid-email': return "That email address isn't valid.";
+    case 'auth/invalid-login-credentials': return 'Incorrect email / user ID or password.';
+    case 'auth/invalid-email': return "That email address or user ID isn't valid.";
     case 'auth/user-disabled': return 'This account has been disabled.';
     case 'auth/too-many-requests': return 'Too many attempts. Please wait a moment and try again.';
     case 'auth/email-already-in-use': return 'An account with this email already exists. Sign in instead.';
@@ -144,13 +152,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           const profileRes = await backendFetch(`${BACKEND_URL}/api/users/user/${activeUser.uid}/`);
           const profileData = await profileRes.json();
           setUserData(profileData);
-          setAccess(profileData?.access ?? null);
+          // The server answered without their profile (e.g. a refused session): the free plan
+          if (profileData?.access) setAccess(profileData.access); else setNotPremium();
         } catch (error) {
           console.error("Error syncing with Django", error);
+          setAccess(null);   // not known: nothing limited rather than a premium user held to the free plan
         }
       } else {
         setUserData(null);
-        setAccess(null);
+        setSignedOut();
       }
       setLoading(false);
     });
@@ -205,9 +215,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const signIn = async (email: string, pass: string) => {
+  // `login` is an email or a user ID
+  const signIn = async (login: string, pass: string) => {
     try {
-      await signInWithEmailAndPassword(auth, email, pass);
+      await signInWithEmailAndPassword(auth, signInEmail(login), pass);
     } catch (error: any) {
       // A wrong password etc. is an error on the form, never a local stand-in account
       throw new Error(authErrorMessage(error));

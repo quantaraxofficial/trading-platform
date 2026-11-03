@@ -109,12 +109,23 @@ class AccessFilter(admin.SimpleListFilter):
 
 class CreateAccountForm(forms.Form):
     name = forms.CharField(max_length=255)
-    email = forms.EmailField()
-    months = forms.TypedChoiceField(choices=[(1, '1 month'), (3, '3 months'), (6, '6 months'), (12, '12 months'), (0, 'Days only (below)')], coerce=int, initial=1)
+    login = forms.CharField(max_length=254, label="Email or user ID",
+                            help_text="An email, or a user ID (3–32 letters, digits, . - _) they sign in with instead")
+    months = forms.TypedChoiceField(choices=[(1, '1 month'), (3, '3 months'), (6, '6 months'), (12, '12 months'), (-1, 'Unlimited'), (0, 'Days only (below)')], coerce=int, initial=1)
     days = forms.IntegerField(min_value=0, max_value=3650, initial=0, required=False, help_text="Extra days (added to the months)")
     amount = forms.CharField(max_length=40, required=False, help_text="What they paid, for your records (e.g. ₹1,500 UPI)")
     note = forms.CharField(max_length=300, required=False)
     phone = forms.CharField(max_length=20, required=False)
+
+    def clean_login(self):
+        v = self.cleaned_data['login']
+        try:
+            email = access.sign_in_email(v)
+        except ValueError as e:
+            raise forms.ValidationError(str(e))
+        if '@' in v:
+            forms.EmailField().clean(email)
+        return email
 
     def clean(self):
         d = super().clean()
@@ -135,7 +146,7 @@ def _extend_action(months):
 
 @admin.register(TraderProfile)
 class TraderProfileAdmin(admin.ModelAdmin):
-    list_display = ('name', 'email', 'phone', 'access_status', 'access_until_col', 'created_at', 'last_login')
+    list_display = ('name', 'sign_in', 'phone', 'access_status', 'access_until_col', 'created_at', 'last_login')
     list_filter = (AccessFilter, 'tier', 'created_at')
     search_fields = ('name', 'email', 'phone', 'uid')
     ordering = ('-created_at',)
@@ -145,10 +156,17 @@ class TraderProfileAdmin(admin.ModelAdmin):
     @admin.display(description='Subscription')
     def access_status(self, obj):
         a = access.access_of(obj)
+        if a['unlimited']:
+            return format_html('<b style="color:#1e8e3e">{}</b>', 'Active · unlimited')
         if a['active']:
             color = '#b26a00' if a['days_left'] <= 7 else '#1e8e3e'
             return format_html('<b style="color:{}">Active · {} day{} left</b>', color, a['days_left'], '' if a['days_left'] == 1 else 's')
         return format_html('<span style="color:#c5221f">{}</span>', 'Ended' if a['until'] else 'None')
+
+    @admin.display(description='Email / user ID', ordering='email')
+    def sign_in(self, obj):
+        uid = access.user_id_of(obj.email)
+        return format_html('<b>{}</b> <span style="color:#888">(user ID)</span>', uid) if uid else obj.email
 
     @admin.display(description='Until')
     def access_until_col(self, obj):
@@ -165,6 +183,9 @@ class TraderProfileAdmin(admin.ModelAdmin):
     def send_reset(self, request, queryset):
         sent = 0
         for p in queryset:
+            if access.user_id_of(p.email):
+                self.message_user(request, f"{p.name}: signs in with a user ID, so there's no email to send to (create a new password for them in Firebase)", messages.WARNING)
+                continue
             try:
                 access.send_password_reset(p.email)
                 sent += 1
@@ -182,9 +203,10 @@ class TraderProfileAdmin(admin.ModelAdmin):
         form = CreateAccountForm(request.POST or None)
         if request.method == 'POST' and form.is_valid():
             d = form.cleaned_data
-            email = d['email'].strip().lower()
+            email = d['login']
+            user_id = access.user_id_of(email)
             if TraderProfile.objects.filter(email__iexact=email).exists():
-                ctx.update(form=form, error="An account with this email already exists here: open it and extend its subscription instead")
+                ctx.update(form=form, error=f"An account with this {'user ID' if user_id else 'email'} already exists here: open it and extend its subscription instead")
                 return TemplateResponse(request, "admin/core/create_account.html", ctx)
             password = access.new_password()
             try:
@@ -194,8 +216,11 @@ class TraderProfileAdmin(admin.ModelAdmin):
                 return TemplateResponse(request, "admin/core/create_account.html", ctx)
             with transaction.atomic():
                 p = TraderProfile.objects.create(uid=uid, name=d['name'], email=email, phone=d.get('phone') or '')
-                sub = access.extend(p, months=d['months'], days=d.get('days') or 0, amount=d.get('amount') or '', note=d.get('note') or 'Created from admin')
-            ctx["created"] = {"name": p.name, "email": email, "password": password, "until": sub.ends_at, "profile_id": p.id}
+                if d['months'] == -1:
+                    sub = access.extend(p, days=access.UNLIMITED_DAYS, amount=d.get('amount') or '', note=d.get('note') or 'Unlimited, created from admin')
+                else:
+                    sub = access.extend(p, months=d['months'], days=d.get('days') or 0, amount=d.get('amount') or '', note=d.get('note') or 'Created from admin')
+            ctx["created"] = {"name": p.name, "email": email, "user_id": user_id, "unlimited": d['months'] == -1, "password": password, "until": sub.ends_at, "profile_id": p.id}
             return TemplateResponse(request, "admin/core/create_account.html", ctx)
         ctx["form"] = form
         return TemplateResponse(request, "admin/core/create_account.html", ctx)
@@ -204,8 +229,8 @@ class TraderProfileAdmin(admin.ModelAdmin):
 @admin.register(LockedFeature)
 class LockedFeatureAdmin(admin.ModelAdmin):
     """What needs an active subscription (switch `locked` off to open a feature to everyone)"""
-    list_display = ('label', 'key', 'locked', 'description')
-    list_editable = ('locked',)
+    list_display = ('label', 'key', 'locked', 'free_limit', 'description')
+    list_editable = ('locked', 'free_limit')
 
 
 @admin.register(PlanSettings)

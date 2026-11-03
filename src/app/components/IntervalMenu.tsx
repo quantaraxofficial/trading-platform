@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import { intervalLocked, requireFeature, useAccess } from "@/lib/access";
 import {
   SECTIONS, type SectionId, CUSTOM_TYPES, intervalName, isIntervalAvailable, sectionOf, sortIntervals,
   getCustomIntervals, subscribeCustomIntervals, addCustomInterval, removeCustomInterval, customIntervalError,
@@ -130,7 +131,7 @@ export function IntervalMenu({ anchor, interval, favorites, onSelect, onToggleFa
       <div ref={menuRef} className="tv-im" data-name="interval-menu">
         <div className="tv-im-box">
           <div className="tv-im-list">
-            <div className="tv-im-row tv-im-add" onClick={() => setDialogOpen(true)}>
+            <div className="tv-im-row tv-im-add" onClick={() => { if (requireFeature("custom_interval")) setDialogOpen(true); }}>
               <span className="tv-im-add-icon"><PlusIcon /></span>
               <span className="tv-im-title">Add custom interval…</span>
             </div>
@@ -173,6 +174,9 @@ function IntervalRow({ value, selected, favorite, isCustom, onSelect, onToggleFa
 }) {
   // Tick and range bars (and seconds other than 30) can't be built from this app's data
   const available = isIntervalAvailable(value);
+  // 30s and custom intervals are premium: a lock on the row (choosing it opens the popup)
+  const { plan } = useAccess();
+  const locked = available && !!plan && intervalLocked(value);
   return (
     <div
       className={`tv-im-row${selected ? " selected" : ""}${available ? "" : " unavailable"}`}
@@ -182,6 +186,11 @@ function IntervalRow({ value, selected, favorite, isCustom, onSelect, onToggleFa
     >
       <span className="tv-im-title">{intervalName(value)}</span>
       <span className="tv-im-actions">
+        {locked && (
+          <span className="tv-im-icon" title="Premium" aria-label="Premium" style={{ opacity: 0.7 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden><rect x="5" y="10.5" width="14" height="10" rx="2" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /></svg>
+          </span>
+        )}
         {isCustom && (
           <button className="tv-im-icon hover-only" title="Remove" aria-label="Remove" onClick={e => { e.stopPropagation(); onRemove(); }}>
             <TrashIcon />

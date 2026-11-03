@@ -4,6 +4,7 @@ import React, { useRef, useState } from "react";
 import { Tip, Popover } from "../trading/ui";
 import { LAYOUT_ROWS, LAYOUTS } from "../lib/chartLayouts";
 import { layoutStore, layouts, type LayoutSync } from "../lib/layoutStore";
+import { featureLimit, requireRoom, useAccess } from "@/lib/access";
 
 // The header's "Layout setup" (TradingView's): how many charts the layout shows and how they're
 // arranged — a row of arrangements for each count, 1 to 16 — and "Sync in layout".
@@ -39,9 +40,12 @@ export default function LayoutSetupMenu() {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const grid = w?.grid || "1a";
+  useAccess();   // (re-render when premium changes: the rows past the free limit are dimmed)
+  const maxCharts = featureLimit("charts");
 
   const choose = (id: string) => {
     const charts = LAYOUTS[id].charts;
+    if (!requireRoom("charts", charts)) { setOpen(false); return; }   // more than 3 charts is premium
     layouts.update(l => {
       const cells = [...l.cells];
       // new charts start as copies of the active chart; extra ones beyond the count are dropped
@@ -65,7 +69,9 @@ export default function LayoutSetupMenu() {
               {row.layouts.map(l => (
                 <button key={l.id} type="button" role="menuitemradio" aria-checked={grid === l.id} aria-label={`${l.charts} chart${l.charts > 1 ? "s" : ""} (${l.id})`}
                   onClick={() => choose(l.id)}
+                  title={l.charts > maxCharts ? `Premium: more than ${maxCharts} charts` : undefined}
                   style={{
+                    opacity: l.charts > maxCharts ? 0.45 : 1,
                     width: 35, height: 35, display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: 6, cursor: "pointer",
                     background: grid === l.id ? "var(--tv-active-neutral)" : "transparent", color: "var(--tv-hdr-text)",
                   }}

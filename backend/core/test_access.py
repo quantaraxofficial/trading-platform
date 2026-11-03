@@ -16,10 +16,30 @@ from .routing import websocket_urlpatterns
 
 
 def seed_features():
+    # Just these two, locked (the lock mechanics; the seeded premium set is tested on its own).
     # (TransactionTestCase empties the tables the data migration filled)
-    LockedFeature.objects.get_or_create(key='collab', defaults={"label": "Collab"})
-    LockedFeature.objects.get_or_create(key='replay', defaults={"label": "Bar replay"})
+    LockedFeature.objects.all().delete()
+    LockedFeature.objects.create(key='collab', label="Collab")
+    LockedFeature.objects.create(key='replay', label="Bar replay")
     PlanSettings.objects.get_or_create(id=1)
+
+
+class PremiumPlanTests(TestCase):
+    """The premium set the migration seeds, and the public plan endpoint"""
+    def test_seeded_plan(self):
+        r = self.client.get("/api/users/plan/")
+        self.assertEqual(r.status_code, 200)
+        d = r.json()
+        self.assertEqual(sorted(d["features"]), ["alerts", "charts", "custom_interval", "indicators", "replay", "seconds"])
+        self.assertEqual(d["limits"], {"alerts": 3, "charts": 3, "indicators": 3})
+        self.assertNotIn("collab", d["features"])   # collab is free
+        p = TraderProfile.objects.create(uid="pp", name="P", email="pp@example.com")
+        self.assertFalse(access.is_locked(p, "collab"))
+        a = access.access_of(p)
+        self.assertEqual(a["limits"], d["limits"])
+        self.assertIn("seconds", a["locked"])
+        access.extend(p, days=access.UNLIMITED_DAYS)
+        self.assertEqual(access.access_of(p)["locked"], [])
 
 
 class FakeFirebase:
@@ -154,7 +174,7 @@ class CreateAccountAdminTests(TestCase):
     def test_creates_login_profile_and_subscription(self):
         fb = FakeFirebase()
         with mock.patch("core.access.requests.post", fb):
-            r = self.client.post(self.url, {"name": "Ravi K", "email": "Ravi@Example.com", "months": 3, "days": 2, "amount": "4500 UPI"})
+            r = self.client.post(self.url, {"name": "Ravi K", "login": "Ravi@Example.com", "months": 3, "days": 2, "amount": "4500 UPI"})
         self.assertEqual(r.status_code, 200)
         created = r.context["created"]
         self.assertEqual(created["email"], "ravi@example.com")
@@ -170,16 +190,42 @@ class CreateAccountAdminTests(TestCase):
         TraderProfile.objects.create(uid="x", name="X", email="taken@example.com")
         fb = FakeFirebase()
         with mock.patch("core.access.requests.post", fb):
-            r = self.client.post(self.url, {"name": "T", "email": "TAKEN@example.com", "months": 1})
+            r = self.client.post(self.url, {"name": "T", "login": "TAKEN@example.com", "months": 1})
         self.assertContains(r, "already exists")
         self.assertEqual(fb.calls, [])
         with mock.patch("core.access.requests.post", FakeFirebase(fail="EMAIL_EXISTS")):
-            r = self.client.post(self.url, {"name": "N", "email": "new@example.com", "months": 1})
+            r = self.client.post(self.url, {"name": "N", "login": "new@example.com", "months": 1})
         self.assertContains(r, "extend its subscription instead")
         self.assertFalse(TraderProfile.objects.filter(email="new@example.com").exists())
 
+    def test_user_id_instead_of_email(self):
+        fb = FakeFirebase()
+        with mock.patch("core.access.requests.post", fb):
+            r = self.client.post(self.url, {"name": "Siddhant", "login": " Siddhant ", "months": -1})
+        created = r.context["created"]
+        self.assertContains(r, "Valid until: unlimited")
+        self.assertEqual(created["user_id"], "siddhant")
+        self.assertEqual(fb.calls[0][1]["email"], "siddhant@" + access.USER_ID_DOMAIN)
+        self.assertContains(r, "User ID: siddhant")
+        p = TraderProfile.objects.get(uid="fb-uid-1")
+        self.assertEqual(access.user_id_of(p.email), "siddhant")
+        a = access.access_of(p)
+        self.assertTrue(a["active"] and a["unlimited"])
+        # the same ID again, and IDs that aren't allowed
+        with mock.patch("core.access.requests.post", FakeFirebase()):
+            self.assertContains(self.client.post(self.url, {"name": "S2", "login": "SIDDHANT", "months": 1}), "user ID already exists")
+            for bad in ("ab", "has space", "-dash", "x" * 33):
+                self.assertContains(self.client.post(self.url, {"name": "B", "login": bad, "months": 1}), "A user ID is 3")
+        # the list shows the ID, and a reset email is skipped for it
+        cl = "/admin/core/traderprofile/"
+        self.assertContains(self.client.get(cl), "<b>siddhant</b>")
+        self.assertContains(self.client.get(cl), "Active · unlimited")
+        with mock.patch("core.access.requests.post", FakeFirebase()):
+            r = self.client.post(cl, {"action": "send_reset", "_selected_action": [p.id]}, follow=True)
+        self.assertContains(r, "signs in with a user ID")
+
     def test_needs_some_time(self):
-        r = self.client.post(self.url, {"name": "N", "email": "n@example.com", "months": 0, "days": 0})
+        r = self.client.post(self.url, {"name": "N", "login": "n@example.com", "months": 0, "days": 0})
         self.assertContains(r, "Give at least some months or days")
 
     def test_list_actions(self):

@@ -20,7 +20,8 @@ import BottomPanel from "./components/BottomPanel";
 import AlertsSidebar from "./components/AlertsSidebar";
 import CreateAlertModal from "./components/CreateAlertModal";
 import ChangeIntervalModal from "./components/ChangeIntervalModal";
-import { parseInterval, intervalShort } from "./lib/intervals";
+import { parseInterval, intervalShort, intervalSeconds, isIntervalAvailable, SECTIONS } from "./lib/intervals";
+import { featureLimit, intervalFeature, intervalLocked, requireFeature, requireInterval, requireRoom, useAccess } from "@/lib/access";
 import ObjectTreePanel from "./components/objectTree/ObjectTreePanel";
 import FavoritesToolbar from "./components/FavoritesToolbar";
 import PineEditorPanel from "./components/PineEditorPanel";
@@ -41,7 +42,7 @@ import KeyboardShortcutsDialog from "./components/KeyboardShortcutsDialog";
 import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
 import { saveReplay } from "./lib/savedReplay";
 import { layoutStore, layouts, ensureLayout, readSharedLayout, newLayout } from "./lib/layoutStore";
-import { LAYOUTS } from "./lib/chartLayouts";
+import { LAYOUTS, LAYOUT_ROWS } from "./lib/chartLayouts";
 import { setLayoutSync } from "./lib/layoutSync";
 import SecondaryChart from "./components/SecondaryChart";
 import { watchlists, listSymbols, sameSymbol } from "./components/watchlist/store";
@@ -500,6 +501,7 @@ function AppLayout() {
   }, [showAlertModal, showIntervalModal, showSymbolSearch, showQuickSearch, showMobileMenu, showShortcuts, symbol, mode]);
 
   const handleIntervalChange = (interval: string, label?: string) => {
+    if (!requireInterval(interval)) return;   // 30s and custom intervals are premium
     setSelectedInterval(interval);
     if (label) setIntervalLabel(label);
   };
@@ -525,6 +527,39 @@ function AppLayout() {
   }, []);
 
   const { user } = useAuth();
+
+  // Without premium (an account whose access ended, or signed out), what the chart opened with is
+  // brought within the free plan, with the popup saying why: a 30s / custom interval becomes the
+  // nearest standard one, and indicators and charts in the layout beyond the free 3 are dropped.
+  // Nothing happens until it's known whether they're premium.
+  const { plan: accessPlan } = useAccess();
+  useEffect(() => {
+    if (!isStateLoaded || !accessPlan) return;
+    if (intervalLocked(selectedInterval)) {
+      const secs = intervalSeconds(selectedInterval) || 60;
+      const dist = (v: string) => Math.abs(Math.log(intervalSeconds(v) / secs));
+      const free = SECTIONS.flatMap(sec => sec.standard).filter(v => isIntervalAvailable(v) && !intervalLocked(v) && intervalSeconds(v) > 0);
+      const next = free.reduce((best, v) => (dist(v) < dist(best) ? v : best), "1min");
+      requireFeature(intervalFeature(selectedInterval)!);
+      setSelectedInterval(next);
+      setIntervalLabel(intervalToLabel(next) || intervalShort(next));
+    }
+    const maxIndicators = featureLimit("indicators");
+    if (activeIndicators.length > maxIndicators) {
+      requireRoom("indicators", activeIndicators.length);
+      setActiveIndicators(prev => prev.slice(0, maxIndicators));
+    }
+    const maxCharts = featureLimit("charts");
+    const w = layoutStore.get().working;
+    if (w && w.cells.length > maxCharts) {
+      const row = [...LAYOUT_ROWS].reverse().find(r => r.charts <= maxCharts);
+      if (row) {
+        requireRoom("charts", w.cells.length);
+        layouts.update(l => ({ grid: row.layouts[0].id, cells: l.cells.slice(0, row.charts), active: Math.min(l.active, row.charts - 1) }));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStateLoaded, accessPlan, selectedInterval, activeIndicators.length, workingLayout?.cells.length]);
 
   const { runSnapshot, toastElement: snapshotToast } = useChartSnapshot({ symbol, intervalLabel, theme });
   const runSnapshotRef = useRef(runSnapshot);
@@ -710,11 +745,10 @@ function AppLayout() {
   };
 
   const handleIndicatorSelect = (indicator: string) => {
-    setActiveIndicators(prev => {
-      // EMAs and the Pine-based indicators can be added several times (as on TradingView); Volume / FXN once
-      if (indicator !== "Moving Average Exponential" && !isPineIndicator(indicator) && prev.some(i => i.name === indicator)) return prev;
-      return [...prev, { id: Math.random().toString(36).substring(7), name: indicator }];
-    });
+    // EMAs and the Pine-based indicators can be added several times (as on TradingView); Volume / FXN once
+    if (indicator !== "Moving Average Exponential" && !isPineIndicator(indicator) && activeIndicators.some(i => i.name === indicator)) return;
+    if (!requireRoom("indicators", activeIndicators.length + 1)) return;   // more than 3 is premium
+    setActiveIndicators(prev => [...prev, { id: Math.random().toString(36).substring(7), name: indicator }]);
   };
 
   const handleRemoveIndicator = (id: string) => {
@@ -728,6 +762,7 @@ function AppLayout() {
   // Applying an indicator template replaces the chart's indicators with the saved set
   // (fresh ids, saved settings restored), then switches symbol/interval if it kept them.
   const applyIndicatorTemplate = (template: IndicatorTemplate) => {
+    if (!requireRoom("indicators", template.indicators.length)) return;
     const next = template.indicators.map(item => ({
       id: Math.random().toString(36).substring(7),
       name: item.name,

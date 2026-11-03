@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 
 /**
  * TradingView-style login page (observed from the real in.tradingview.com UI):
- * dark, centered card with email + password, a "Remember me" checkbox,
+ * dark, centered card with email (or user ID) + password, a "Remember me" checkbox,
  * "Forgot password?" (handled by the platform owner, not self-service),
  * a primary action button, and a muted "create account" link. This build
  * has no public self-signup (accounts are created by the operator in the
@@ -104,14 +104,17 @@ export default function LoginPage() {
         <div style={{ padding: '20px 24px 24px' }}>
           <form onSubmit={handleManualSignIn} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--tv-color-text-muted)' }}>Email</span>
+              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--tv-color-text-muted)' }}>Email or user ID</span>
               <input
-                type="email"
+                type="text"
                 name="email"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
                 value={formData.email}
                 onChange={handleChange}
                 required
-                placeholder="you@example.com"
+                placeholder="you@example.com or your user ID"
                 style={{
                   height: '38px', padding: '0 12px', borderRadius: '6px',
                   border: '1px solid var(--tv-color-border)', background: 'var(--tv-color-bg)',

@@ -15,6 +15,7 @@ import ReplayAlertDialog from "./alerts/ReplayAlertDialog";
 import { SymbolChip } from "./alerts/AlertToasts";
 import { SOUND_GROUPS, SOUND_REPEATS, soundName, playAlertSound } from "../lib/alertSounds";
 import { collab, useCollabChartActive } from "../lib/collab/session";
+import { requireRoom } from "@/lib/access";
 import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 interface CreateAlertModalProps {
@@ -95,6 +96,9 @@ function AlertDialog({ onClose, theme, symbol: chartSymbol = 'XAUUSD', initialPr
 
   const submit = () => {
     if (!valid) return;
+    // More than 3 active alerts is premium: the popup, and this dialog stays open with what they entered
+    const othersActive = alerts.filter(a => a.status === 'active' && a.id !== editing?.id).length;
+    if (!(canShare && shared) && !requireRoom('alerts', othersActive + 1)) return;
     const data = { symbol, condition: operator, value: parseFloat(value), trigger, expiration, message: (message ?? autoMessage).trim() || autoMessage, notify };
     if (canShare && shared) collab.addSharedAlert({ symbol, condition: data.condition, value: data.value, trigger, expiration, message: data.message });
     else if (editing) updateAlert(editing.id, data); else addAlert(data);

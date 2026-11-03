@@ -7,6 +7,7 @@ subscription's time is up the account still signs in and works, but the features
 Firebase accounts are made through Firebase's own sign-up service with the site's web API key (the
 same public key the sign-in page uses), so no service-account file is needed.
 """
+import re
 import secrets
 import string
 from datetime import timedelta
@@ -18,6 +19,7 @@ from django.utils import timezone
 from .models import LockedFeature, PlanSettings, Subscription
 
 IDENTITY = "https://identitytoolkit.googleapis.com/v1"
+UNLIMITED_DAYS = 36500   # "Unlimited" in admin: a hundred years
 
 
 # ---------------------------------------------------------------- access
@@ -27,19 +29,28 @@ def access_until(profile):
     return s.ends_at if s else None
 
 
+def plan_info():
+    """What needs a subscription, for anyone (signed out too): {features: {key: label},
+    limits: {key: how many are free}, message}"""
+    rows = list(LockedFeature.objects.filter(locked=True).values_list('key', 'label', 'free_limit'))
+    plan = PlanSettings.objects.first()
+    return {"features": {k: label for k, label, _ in rows},
+            "limits": {k: n for k, _, n in rows if n is not None},
+            "message": plan.renew_message if plan else "Your subscription has ended."}
+
+
 def access_of(profile):
-    """{active, until (ms), days_left, locked: [feature keys locked for this person now],
+    """{active, until (ms), days_left, unlimited, locked: [feature keys locked for this person now],
     features: {key: label} of everything a subscription is needed for (so the page can lock them
-    itself when the time runs out while it's open), message}"""
+    itself when the time runs out while it's open), limits: {key: free count}, message}"""
     until = access_until(profile)
     now = timezone.now()
     active = bool(until and until > now)
-    features = dict(LockedFeature.objects.filter(locked=True).values_list('key', 'label'))
     days_left = max(0, (until - now).days + (1 if (until - now).seconds else 0)) if active else 0
-    plan = PlanSettings.objects.first()
+    plan = plan_info()
     return {"active": active, "until": int(until.timestamp() * 1000) if until else None, "days_left": days_left,
-            "locked": [] if active else list(features), "features": features,
-            "message": plan.renew_message if plan else "Your subscription has ended."}
+            "unlimited": active and days_left > 50 * 365,
+            "locked": [] if active else list(plan["features"]), **plan}
 
 
 def is_locked(profile, key):
@@ -99,6 +110,29 @@ def _post(path, body):
             "TOO_MANY_ATTEMPTS_TRY_LATER": "Firebase is limiting requests: try again in a few minutes",
         }.get(code, f"Firebase refused it ({code})"))
     return data
+
+
+# An account can have a user ID instead of an email: its Firebase sign-in is <id>@USER_ID_DOMAIN, a
+# reserved domain no mail ever goes to (the sign-in page adds it when there's no "@"; same rule as
+# signInEmail in src/context/AuthContext.tsx)
+USER_ID_DOMAIN = "id.tradepilot.invalid"
+USER_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,31}$")
+
+
+def sign_in_email(login):
+    """An email or a user ID → the email Firebase knows the account by. ValueError for a bad user ID"""
+    s = (login or "").strip().lower()
+    if "@" in s:
+        return s
+    if not USER_ID_RE.match(s):
+        raise ValueError("A user ID is 3–32 characters: letters, digits, dot, dash or underscore, starting with a letter or digit")
+    return f"{s}@{USER_ID_DOMAIN}"
+
+
+def user_id_of(email):
+    """The user ID of an account made with one, else None"""
+    suffix = "@" + USER_ID_DOMAIN
+    return email[:-len(suffix)] if email and email.lower().endswith(suffix) else None
 
 
 def new_password(length=12):

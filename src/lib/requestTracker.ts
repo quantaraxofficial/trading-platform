@@ -11,10 +11,10 @@
 // Both are fire-and-forget: never awaited, never retried, never throwing, one small POST,
 // so a report can't block the user or lag the machine (per the no-PC-lag constraint).
 
+// (on the server BACKEND_URL; in the browser the public one, as src/lib/backend.ts)
 const REPORT_URL =
-  (typeof process !== "undefined" && process.env && process.env.BACKEND_URL
-    ? process.env.BACKEND_URL.replace(/\/$/, "")
-    : "http://localhost:8000") + "/api/users/track-failure/";
+  ((typeof window === "undefined" && process.env.BACKEND_URL) || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000")
+    .replace(/\/$/, "") + "/api/users/track-failure/";
 
 function sessionKeyOf(): string {
   try { return typeof localStorage !== "undefined" ? (localStorage.getItem("tv_session_key") || "") : ""; }

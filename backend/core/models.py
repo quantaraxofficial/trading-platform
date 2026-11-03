@@ -302,10 +302,12 @@ class Subscription(models.Model):
 
 class LockedFeature(models.Model):
     """A part of the site only someone with an active subscription may use (when `locked` is on).
-    The site checks these keys: collab, replay."""
+    The site checks these keys: seconds, custom_interval, indicators, alerts, charts, replay, collab.
+    With a free limit, people without a subscription may still have that many (3 indicators…)."""
     key = models.CharField(max_length=40, unique=True)
     label = models.CharField(max_length=100)
     locked = models.BooleanField(default=True)
+    free_limit = models.PositiveIntegerField(null=True, blank=True, help_text="Without a subscription: up to this many (blank: none at all)")
     description = models.CharField(max_length=300, blank=True)
 
     def __str__(self):

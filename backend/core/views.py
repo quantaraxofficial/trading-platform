@@ -1,7 +1,7 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, throttle_classes
 from rest_framework.response import Response
-from .access import access_of
+from .access import access_of, plan_info
 from .models import TraderProfile, DrawingTemplate, UserDrawing, UserSession, PineScript, UserStrategyNote, UserSetting, FailedRequest, FeedbackMessage
 from django.utils import timezone
 from django.conf import settings
@@ -70,6 +70,12 @@ def sync_user(request):
         "is_new": created,
         "session_key": new_key,
     })
+
+
+@api_view(['GET'])
+def plan(request):
+    """What needs a subscription (for the signed-out page; signed in, it comes with their access)"""
+    return Response(plan_info())
 
 
 @api_view(['GET'])

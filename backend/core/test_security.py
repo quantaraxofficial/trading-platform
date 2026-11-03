@@ -96,15 +96,21 @@ class LiveDataInjectionTests(TestCase):
         self.c = APIClient()
 
     def test_candles_refuse_anything_but_a_symbol(self):
-        with mock.patch("core.views._ch_read", return_value=[]) as read, mock.patch("core.views._ch_client"):
+        # (candles come from core.market since the live Vantage feed)
+        ch = mock.Mock()
+        ch._session.post.return_value.text = '{"data": []}'
+        with mock.patch("core.market._ch", return_value=ch), mock.patch("core.market._db", return_value="ticks"):
             for evil in ["XAUUSD' OR 1=1 --", "x\\' UNION SELECT", 'A"B', "AAPL;DROP TABLE x", "a" * 40]:
-                r = self.c.get("/api/users/live/candles/", {"symbol": evil})
+                r = self.c.get("/api/users/live/candles/", {"symbol": evil, "interval": "1min"})
                 self.assertEqual(r.status_code, 400, evil)
-            self.assertEqual(read.call_count, 0)
-            self.assertEqual(self.c.get("/api/users/live/candles/", {"symbol": "xau/usd", "limit": "abc"}).status_code, 200)
-            sql = read.call_args[0][1]
-            self.assertIn("WHERE symbol = 'XAU/USD'", sql)
-            self.assertIn("LIMIT 500", sql)
+            for evil in ["1min' OR 1=1", "7x", "45s"]:
+                r = self.c.get("/api/users/live/candles/", {"symbol": "XAUUSD", "interval": evil})
+                self.assertEqual(r.status_code, 400, evil)
+            self.assertEqual(ch._session.post.call_count, 0)
+            self.assertEqual(self.c.get("/api/users/live/candles/", {"symbol": "xau/usd", "interval": "1min", "limit": "abc"}).status_code, 200)
+            sql = ch._session.post.call_args[1]["data"].decode()
+            self.assertIn("WHERE symbol = 'XAUUSD'", sql)
+            self.assertIn("LIMIT 5000", sql)
 
     def test_last_prices_drop_bad_symbols(self):
         with mock.patch("core.views._ch_read", return_value=[]) as read, mock.patch("core.views._ch_client"):

@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { DEFAULT_SOUND } from '@/app/lib/alertSounds';
 import { setAlertWatchSymbols } from '@/app/trading/quoteFeed';
+import { featureLimit, requireRoom, useAccess } from '@/lib/access';
 
 export type AlertOperator = 'Crossing' | 'Crossing Up' | 'Crossing Down' | 'Greater Than' | 'Less Than';
 export type AlertTrigger = 'Once only' | 'Every time';
@@ -177,7 +178,12 @@ export const AlertsProvider = ({ children }: { children: ReactNode }) => {
     return () => clearInterval(t);
   }, []);
 
+  // More than 3 active alerts is premium: adding, restarting or re-saving one past that opens the
+  // popup instead ('' / nothing done)
+  const activeCount = (exceptId?: string) => alertsRef.current.filter(a => a.status === 'active' && a.id !== exceptId).length;
+  const roomFor = (exceptId?: string) => requireRoom('alerts', activeCount(exceptId) + 1);
   const addAlert = useCallback((alertData: NewAlert) => {
+    if (!roomFor()) return '';
     const id = uid();
     setAlerts(prev => [{ ...alertData, id, createdAt: Date.now(), status: 'active' }, ...prev]);
     return id;
@@ -185,11 +191,13 @@ export const AlertsProvider = ({ children }: { children: ReactNode }) => {
 
   // Saving an edited alert restarts it, as in TradingView
   const updateAlert = useCallback((id: string, patch: Partial<NewAlert>) => {
+    if (!roomFor(id)) return;
     setAlerts(prev => prev.map(a => (a.id === id ? { ...a, ...patch, status: 'active' } : a)));
   }, []);
 
   const removeAlert = useCallback((id: string) => setAlerts(prev => prev.filter(a => a.id !== id)), []);
   const restartAlert = useCallback((id: string) => {
+    if (!roomFor(id)) return;
     setAlerts(prev => prev.map(a => {
       if (a.id !== id) return a;
       // An expired alert gets a fresh month, like TradingView's restart
@@ -198,6 +206,16 @@ export const AlertsProvider = ({ children }: { children: ReactNode }) => {
     }));
   }, []);
   const stopAlert = useCallback((id: string) => setAlerts(prev => prev.map(a => (a.id === id ? { ...a, status: 'stopped' } : a))), []);
+  // Without premium, active alerts past the free limit are stopped (the newest; restartable once premium)
+  const { plan } = useAccess();
+  useEffect(() => {
+    if (!plan) return;
+    const max = featureLimit('alerts');
+    const active = alerts.filter(a => a.status === 'active');
+    if (active.length <= max) return;
+    const keep = new Set(active.sort((a, b) => a.createdAt - b.createdAt).slice(0, max).map(a => a.id));
+    setAlerts(prev => prev.map(a => (a.status === 'active' && !keep.has(a.id) ? { ...a, status: 'stopped' } : a)));
+  }, [plan, alerts]);
   const markAsTriggered = useCallback((id: string) => setAlerts(prev => prev.map(a => (a.id === id ? { ...a, status: 'triggered' } : a))), []);
   const markLogRead = useCallback(() => setLog(prev => (prev.some(e => !e.read) ? prev.map(e => (e.read ? e : { ...e, read: true })) : prev)), []);
   const clearLog = useCallback(() => setLog([]), []);

@@ -4,6 +4,7 @@ from . import views, collab, collab_files, market
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
     path('user/<str:uid>/', views.get_user_data, name='get_user_data'),
+    path('plan/', views.plan, name='plan'),
     path('templates/<str:uid>/', views.manage_templates, name='manage_templates'),
     path('templates/delete/<int:template_id>/', views.delete_template, name='delete_template'),
     path('pinescripts/<str:uid>/', views.manage_pinescripts, name='manage_pinescripts'),

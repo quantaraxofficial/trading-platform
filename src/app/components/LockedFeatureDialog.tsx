@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { featureLabel, featureLocked, refreshAccess, useAccess } from "@/lib/access";
+import { featureWhat, featureLocked, refreshAccess, useAccess } from "@/lib/access";
 import { useEscapeClose } from "../lib/useEscapeClose";
 
-// "Collab needs an active subscription": opened by requireFeature() / a 402 from the server
-// (tv:feature-locked). Check again re-reads the subscription, for a renewal the admin just made.
+// "You're not a premium user": opened by requireFeature() / requireRoom() / a 402 from the server
+// (tv:feature-locked) when someone without a subscription tries a premium feature. Signed out it
+// asks them to sign in; Check again re-reads the subscription, for a renewal the admin just made.
 export default function LockedFeatureDialog() {
   const [key, setKey] = useState<string | null>(null);
   useEffect(() => {
@@ -21,10 +23,11 @@ export default function LockedFeatureDialog() {
 function Dialog({ featureKey, onClose }: { featureKey: string; onClose: () => void }) {
   useEscapeClose(onClose);
   const { user } = useAuth();
+  const router = useRouter();
   const { access } = useAccess();
   const [checking, setChecking] = useState(false);
   const [stillLocked, setStillLocked] = useState(false);
-  const label = featureKey ? featureLabel(featureKey) : "This";
+  const what = featureKey ? featureWhat(featureKey) : "This";
   const ended = access?.until ? new Date(access.until).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : null;
 
   const checkAgain = async () => {
@@ -40,7 +43,7 @@ function Dialog({ featureKey, onClose }: { featureKey: string; onClose: () => vo
     <div onMouseDown={onClose} style={{ position: "fixed", inset: 0, zIndex: 10060, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.15)", padding: 16 }}>
       <div
         role="dialog"
-        aria-label={`${label} needs an active subscription`}
+        aria-label={user ? "You're not a premium user" : "Premium feature"}
         onMouseDown={e => e.stopPropagation()}
         style={{
           position: "relative", width: 460, maxWidth: "100%", boxSizing: "border-box", padding: "36px 36px 32px", borderRadius: 8,
@@ -56,18 +59,33 @@ function Dialog({ featureKey, onClose }: { featureKey: string; onClose: () => vo
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden style={{ flexShrink: 0 }}>
             <rect x="5" y="10.5" width="14" height="10" rx="2" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
           </svg>
-          {label} needs an active subscription
+          {user ? <>You&apos;re not a premium user</> : <>Premium feature</>}
         </div>
         <div style={{ fontSize: 15, lineHeight: "22px", marginBottom: 8 }}>
-          {ended ? <>Your subscription ended on <b>{ended}</b>.</> : <>Your account doesn&apos;t have a subscription yet.</>}
+          <b>{what}</b> {/^More than/.test(what) || what.endsWith("s") ? "are" : "is"} for premium users only.
         </div>
-        {access?.message && <div style={{ fontSize: 15, lineHeight: "22px", whiteSpace: "pre-line" }}>{access.message}</div>}
+        {user ? (
+          <>
+            <div style={{ fontSize: 15, lineHeight: "22px", marginBottom: 8 }}>
+              {ended ? <>Your premium access ended on <b>{ended}</b>.</> : <>Your account doesn&apos;t have premium access.</>}
+            </div>
+            {access?.message && <div style={{ fontSize: 15, lineHeight: "22px", whiteSpace: "pre-line" }}>{access.message}</div>}
+          </>
+        ) : (
+          <div style={{ fontSize: 15, lineHeight: "22px" }}>Sign in with a premium account to use it.</div>
+        )}
         {stillLocked && <div style={{ fontSize: 13, marginTop: 12, color: "var(--tv-legend-args, #787b86)" }}>Still not renewed. Once it is, this opens again.</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 28 }}>
-          <button type="button" onClick={checkAgain} disabled={checking || !user}
+          {!user && (
+            <button type="button" onClick={() => { onClose(); router.push("/login"); }}
+              style={{ height: 34, padding: "0 11px", borderRadius: 6, fontSize: 15, fontWeight: 600, cursor: "pointer", background: "transparent", color: "inherit", border: "1px solid var(--tv-color-border, #dbdbdb)" }}>
+              Sign in
+            </button>
+          )}
+          {user && <button type="button" onClick={checkAgain} disabled={checking}
             style={{ height: 34, padding: "0 11px", borderRadius: 6, fontSize: 15, fontWeight: 600, cursor: checking ? "default" : "pointer", background: "transparent", color: "inherit", border: "1px solid var(--tv-color-border, #dbdbdb)", opacity: checking ? 0.6 : 1 }}>
             {checking ? "Checking…" : "Check again"}
-          </button>
+          </button>}
           <button type="button" onClick={onClose} autoFocus
             style={{ height: 34, padding: "0 14px", borderRadius: 6, fontSize: 15, fontWeight: 500, cursor: "pointer", border: "none",
               background: "var(--tv-hdr-text, #131722)", color: "var(--tv-color-pane-bg, #ffffff)" }}>

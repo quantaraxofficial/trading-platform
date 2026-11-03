@@ -51,6 +51,7 @@ export default function AccountMenu({ isDark, onToggleTheme, height, drawingsPan
   const fmtDate = (ms: number) => new Date(ms).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
   const lockedNames = Object.values(access?.features || {}).join(", ");
   const planStatus: React.ReactNode = !user || !access ? null
+    : active && access.unlimited ? <span>Unlimited access</span>
     : active ? <span style={{ color: access.days_left <= 7 ? "#b26a00" : undefined }}>{access.days_left} day{access.days_left === 1 ? "" : "s"} left · until {fmtDate(access.until!)}</span>
     : access.until ? <span style={{ color: "var(--tv-color-bear, #f23645)" }}>Ended on {fmtDate(access.until)}{lockedNames ? ` · ${lockedNames} locked` : ""}</span>
     : lockedNames ? <span>No subscription · {lockedNames} locked</span> : null;
