@@ -26,9 +26,9 @@ interface ChangeIntervalModalProps {
   onClose: () => void;
   theme?: string;
   /**
-   * Pre-fills the input from the chart's current interval (e.g. "1day" → "1d")
-   * instead of showing a bare digit — exactly what TradingView's "Change interval"
-   * dialog does. The digit is ignored when this is passed.
+   * Pre-fills the input from the chart's current interval (e.g. "1day" → "1d") when the dialog
+   * is opened without typing (the toolbar's "Change interval"). Opened by a number key, the
+   * input holds only that number, as on TradingView — never the old interval.
    */
   currentInterval?: string;
   /** Opens with the "Change interval..." dialog's custom interval form pre-shown. */
@@ -38,7 +38,7 @@ interface ChangeIntervalModalProps {
 type IntervalUnit = "s" | "min" | "h" | "day" | "week" | "month";
 
 export default function ChangeIntervalModal({ initialDigit, currentInterval, startInCustomForm, onApply, onClose, theme }: ChangeIntervalModalProps) {
-  const [value, setValue] = useState(currentInterval ? toShortLabel(currentInterval) : (initialDigit ? `${initialDigit}min` : ""));
+  const [value, setValue] = useState(initialDigit ? initialDigit : currentInterval ? toShortLabel(currentInterval) : "");
   const [showCustom, setShowCustom] = useState(!!startInCustomForm);
   const [customNumber, setCustomNumber] = useState("1");
   const [customUnit, setCustomUnit] = useState<IntervalUnit>("min");
