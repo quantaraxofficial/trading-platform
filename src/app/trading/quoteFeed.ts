@@ -6,13 +6,13 @@
 // price goes to the engine (fills, P&L), to the chart (live last candle) and
 // to the watchlist.
 //
-// Source priority: the MT5→ClickHouse live endpoint when it's on and has the
-// symbol; otherwise the TwelveData quote. Both feed the same "tv:live-price"
-// event the chart already listens for, so the live last-candle logic is shared.
+// Vantage symbols (XAUUSD) don't poll: they stream tick by tick over our own
+// WebSocket (lib/vantageFeed). Both feed the same "tv:live-price" event the
+// chart already listens for, so the live last-candle logic is shared.
 
 import { engine, tradingUi } from "./store";
 import { rememberFromQuote } from "../utils/symbolInfo";
-import { fetchMt5LivePrice } from "../lib/mt5Live";
+import { isVantageSymbol, watchVantageSymbols } from "../lib/vantageFeed";
 
 const POLL_MS = 60000;
 const SPACING_MS = 7000;
@@ -58,20 +58,6 @@ export function startQuoteFeed(): () => void {
   const sleep = (ms: number) => new Promise<void>(res => { timer = setTimeout(res, ms); });
 
   const fetchOne = async (symbol: string) => {
-    // 1) Try the MT5→ClickHouse live price first. If it returns one, we're
-    //    done — no TwelveData rate-limit spend for a symbol we already stream.
-    const mt5 = await fetchMt5LivePrice(symbol);
-    if (mt5 && isFinite(mt5.price) && mt5.price > 0) {
-      const marketOpen = true; // MT5 feed is live; trust it over the calendar heuristic
-      engine.setQuote(symbol, mt5.price, mt5.time * 1000);
-      rememberFromQuote(symbol, { symbol, close: mt5.price, source: "mt5-clickhouse" }, marketOpen);
-      window.dispatchEvent(new CustomEvent("tv:live-price", {
-        detail: { symbol, price: mt5.price, time: mt5.time * 1000, marketOpen, raw: { source: "mt5-clickhouse", ts: mt5.time } },
-      }));
-      return;
-    }
-
-    // 2) Fall back to the TwelveData quote (the original path).
     try {
       const res = await fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`);
       const data = await res.json();
@@ -89,11 +75,15 @@ export function startQuoteFeed(): () => void {
     } catch { /* offline: try again next round */ }
   };
 
+  // The streamed symbols follow the watch list (chart symbol, positions, orders, alerts)
+  const streams = setInterval(() => watchVantageSymbols(symbolsToWatch()), 2000);
+  watchVantageSymbols(symbolsToWatch());
+
   const loop = async () => {
     await sleep(FIRST_POLL_MS);
     while (!stopped) {
       if (document.visibilityState === "visible" && Date.now() >= backoffUntil) {
-        for (const sym of symbolsToWatch()) {
+        for (const sym of symbolsToWatch().filter(s => !isVantageSymbol(s))) {
           if (stopped || Date.now() < backoffUntil) break;
           await fetchOne(sym);
           await sleep(SPACING_MS);
@@ -104,5 +94,5 @@ export function startQuoteFeed(): () => void {
   };
   loop();
 
-  return () => { stopped = true; if (timer) clearTimeout(timer); };
+  return () => { stopped = true; if (timer) clearTimeout(timer); clearInterval(streams); watchVantageSymbols([]); };
 }

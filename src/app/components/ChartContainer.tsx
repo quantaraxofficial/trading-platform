@@ -326,12 +326,13 @@ import { applyChartWheel } from "../lib/chartWheel";
 import { computeEma, normalizeEma, savedEmaDefaults, emaVisibleOnInterval, emaInputsText, type EmaConfig } from "../lib/emaCalc";
 import { BandFill } from "./chartPrimitives/BandFill";
 import { SessionBreaks } from "./chartPrimitives/SessionBreaks";
-import { chartSettings, themeCanvas, precisionFormat, type ChartSettings } from "../lib/chartSettings";
+import { chartSettings, themeCanvas, precisionFormat, wheelSpeed, type ChartSettings } from "../lib/chartSettings";
 import { chartBgImage, canvasBackgroundCss } from "../lib/chartBackgroundImage";
 import type { DateRangeSpan } from "./BottomPanel";
 import { detectPrecision, simulatedQuote } from "@/app/utils/pricePrecision";
 import { feedTimeToUnix } from "../utils/feedTime";
 import { backendFetch, BACKEND_URL } from "@/lib/backend";
+import { fetchVantageCandles, isVantageSymbol, vantageBarTime } from "../lib/vantageFeed";
 import { featureLocked, requireFeature } from "@/lib/access";
 import { CollabIcon } from "./collab/icons";
 import { useCollabAlerts } from "../lib/collab/session";
@@ -367,21 +368,11 @@ async function fetchStockDataUncached(symbol: string = 'AAPL', interval: string 
   }
 
   try {
-    // Live MT5→ClickHouse source takes precedence when it has data for this
-    // symbol; otherwise fall through to the existing TwelveData path below.
-    // A 30-second resampled bar series maps to the "30s" request interval.
-    const useMt5Live = interval === "30s" || interval === "1min";
-    if (useMt5Live) {
-      const { fetchMt5LiveCandles, liveMode } = await import("../lib/mt5Live");
-      if (liveMode()) {
-        const liveBars = await fetchMt5LiveCandles(symbol, 500);
-        if (liveBars && liveBars.length > 0) {
-          setCachedData(cacheKey, liveBars);
-          console.log(`[MT5-Live] ${symbol} (${liveBars.length} bars from ClickHouse)`);
-          return liveBars;
-        }
-      }
-    }
+    // Vantage symbols (XAUUSD) come from our own store on every timeframe; TwelveData only when
+    // the store can't answer (an interval it can't build, or nothing stored yet). Not cached here:
+    // the backend answers quickly and the newest bar keeps moving
+    const vantage = await fetchVantageCandles(symbol, interval, endDate, startDate);
+    if (vantage) return vantage;
 
     let url = `/api/stock-data?symbol=${encodeURIComponent(symbol)}&interval=${interval}`;
     if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
@@ -420,6 +411,13 @@ async function fetchStockDataUncached(symbol: string = 'AAPL', interval: string 
     if (err.message === 'API_LIMIT') throw err;
     return [];
   }
+}
+
+// Weekend bars are feed artefacts, dropped; Vantage's Sunday-evening bars are the real week open
+function weekendBar(symbol: string, time: number): boolean {
+  if (isVantageSymbol(symbol)) return false;
+  const day = new Date(time * 1000).getUTCDay();
+  return day === 0 || day === 6;
 }
 
 // The EMA settings' line style as lightweight-charts' lineStyle (0 solid, 1 dotted, 2 dashed)
@@ -863,8 +861,11 @@ export default function ChartContainer({
     const id = setInterval(update, 1000);
     const chart = chartRef.current;
     chart?.timeScale().subscribeVisibleLogicalRangeChange(schedule);
+    // Each live tick moves the last-price label: the countdown under it moves in the same frame
+    window.addEventListener('tv:live-price', schedule);
     return () => {
       clearInterval(id);
+      window.removeEventListener('tv:live-price', schedule);
       cancelAnimationFrame(frame);
       try { chart?.timeScale().unsubscribeVisibleLogicalRangeChange(schedule); } catch { /* chart gone */ }
     };
@@ -1566,8 +1567,7 @@ export default function ChartContainer({
       let unique = Array.from(dataMap.values());
       unique.sort((a: any, b: any) => (a.time as number) - (b.time as number));
       unique = unique.filter((d: any) => {
-        const day = new Date(d.time * 1000).getUTCDay();
-        return day !== 0 && day !== 6;
+        return !weekendBar(symbolRef.current, d.time);
       });
 
       if (unique.length <= all.length || unique[0].time >= oldestBar.time) break; // no real progress
@@ -2469,11 +2469,22 @@ export default function ChartContainer({
       if (!(step > 0)) return;
       const last = bars[bars.length - 1];
       const t = toChartTime(d.symbol, d.time);
+      // A batch of ticks carries its own high / low (and first price, for a bar it opens)
+      const hi = Math.max(d.price, typeof d.high === 'number' ? d.high : d.price);
+      const lo = Math.min(d.price, typeof d.low === 'number' ? d.low : d.price);
+      const vol = (b: any) => (typeof d.ticks === 'number' && typeof b.volume === 'number' ? b.volume + d.ticks : b.volume);
+      // Vantage bars start on the feed's own boundaries (17:00 New York sessions), so the bar a
+      // tick belongs to is computed, not stepped
+      const start = d.source === 'vantage' ? vantageBarTime(intervalRef.current, d.time) : null;
       let bar: any;
-      if (t >= last.time && t < last.time + step) {
-        bar = { ...last, high: Math.max(last.high, d.price), low: Math.min(last.low, d.price), close: d.price };
+      if (start !== null ? start === last.time : t >= last.time && t < last.time + step) {
+        bar = { ...last, high: Math.max(last.high, hi), low: Math.min(last.low, lo), close: d.price, volume: vol(last) };
         bars[bars.length - 1] = bar;
-      } else if (step < 86400 && t >= last.time + step && t < last.time + 2 * step) {
+      } else if (start !== null && start > last.time) {
+        const open = typeof d.open === 'number' ? d.open : d.price;
+        bar = { time: start, open, high: Math.max(open, hi), low: Math.min(open, lo), close: d.price, volume: d.ticks };
+        bars.push(bar);
+      } else if (start === null && step < 86400 && t >= last.time + step && t < last.time + 2 * step) {
         bar = { time: last.time + step, open: last.close, high: Math.max(last.close, d.price), low: Math.min(last.close, d.price), close: d.price };
         bars.push(bar);
       } else return;
@@ -2484,6 +2495,10 @@ export default function ChartContainer({
         if (volumeSeriesRef.current) volumeSeriesRef.current.setData(volumeHistogram(fullDataRef.current, volumeConfigRef.current.upColor, volumeConfigRef.current.downColor));
       } else {
         try { cs.update(bar); } catch { return; }
+        const vs = volumeSeriesRef.current;
+        const vp = vs && typeof bar.volume === 'number'
+          ? volumeHistogram([bar], volumeConfigRef.current.upColor, volumeConfigRef.current.downColor)[0] : null;
+        if (vs && vp) { try { vs.update(vp); } catch { /* the volume pane is being rebuilt */ } }
       }
       updateEmaData(fullDataRef.current);
       setLastPriceData({ price: d.price, prevPrice: bars.length > 1 ? bars[bars.length - 2].close : d.price });
@@ -2721,8 +2736,7 @@ export default function ChartContainer({
       // Filter out weekends and "dead" bars (identifiable by identical open prices and low volatility)
       // Filter out weekend bars only — keep all trading-session candles regardless of range
       stockData = stockData.filter((d: any) => {
-        const day = new Date(d.time * 1000).getUTCDay();
-        return day !== 0 && day !== 6;
+        return !weekendBar(symbolRef.current, d.time);
       });
 
       const oldInitData = fullDataRef.current; // May be empty on first load, but helps for subsequent remaps
@@ -2887,8 +2901,7 @@ export default function ChartContainer({
           
           // Filter out weekend bars only — keep all trading-session candles regardless of range
           unique = unique.filter((d: any) => {
-            const day = new Date(d.time * 1000).getUTCDay();
-            return day !== 0 && day !== 6; // Remove Saturday (6) and Sunday (0)
+            return !weekendBar(symbolRef.current, d.time);
           });
           
           // Calculate shift for drawings
@@ -2963,8 +2976,7 @@ export default function ChartContainer({
         stockData = stockData.filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.time === v.time) === i);
         stockData.sort((a: any, b: any) => (a.time as number) - (b.time as number));
         stockData = stockData.filter((d: any) => {
-          const day = new Date(d.time * 1000).getUTCDay();
-          return day !== 0 && day !== 6;
+          return !weekendBar(symbolRef.current, d.time);
         });
         if (stockData.length === 0) return null;
 
@@ -3148,7 +3160,7 @@ export default function ChartContainer({
       const anchor = cursorPrice !== null ? cursorPrice : (visibleRange.from + visibleRange.to) / 2;
 
       // Scroll up = zoom in (compress the visible range), scroll down = zoom out (expand it)
-      const zoomFactor = e.deltaY < 0 ? 0.9 : 1 / 0.9;
+      const zoomFactor = Math.pow(e.deltaY < 0 ? 0.9 : 1 / 0.9, wheelSpeed());
       const newFrom = anchor - (anchor - visibleRange.from) * zoomFactor;
       const newTo = anchor + (visibleRange.to - anchor) * zoomFactor;
       if (newTo - newFrom < 1e-9) return;
@@ -3369,8 +3381,7 @@ export default function ChartContainer({
 
           // Filter out weekends
           stockData = stockData.filter((d: any) => {
-            const day = new Date(d.time * 1000).getUTCDay();
-            return day !== 0 && day !== 6;
+            return !weekendBar(symbolRef.current, d.time);
           });
 
           clearOverlaySeriesData();

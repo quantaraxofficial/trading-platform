@@ -500,3 +500,31 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
         msg = CollabMessage.objects.create(room_id=self.room.id, author=self.member.profile if kind == 'text' else None, kind=kind, text=text)
         CollabRoom.objects.filter(id=self.room.id).update(updated_at=timezone.now())
         return message_json(msg)
+
+
+class TicksConsumer(AsyncJsonWebsocketConsumer):
+    """ws/ticks/<symbol>/: the live Vantage prices for one symbol, as the MT5 collector posts them
+    (market.ingest). Read-only and public like the candles; the last price is sent on connect."""
+
+    async def connect(self):
+        from .market import SYMBOL_RE, group_of, live_snapshot
+        self.symbol = str(self.scope['url_route']['kwargs'].get('symbol', '')).upper()
+        if not SYMBOL_RE.match(self.symbol):
+            await self.close()
+            return
+        self.group = group_of(self.symbol)
+        await self.channel_layer.group_add(self.group, self.channel_name)
+        await self.accept()
+        snap = live_snapshot(self.symbol)
+        if snap:
+            await self.send_json(snap)
+
+    async def disconnect(self, code):
+        if getattr(self, 'group', None):
+            await self.channel_layer.group_discard(self.group, self.channel_name)
+
+    async def receive_json(self, content, **kwargs):
+        pass    # nothing to say back: the feed only flows out
+
+    async def tick_message(self, event):
+        await self.send_json(event['data'])

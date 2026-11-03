@@ -58,6 +58,7 @@ services:
       CLICKHOUSE_USER: tradepilot
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       PIPELINE_SYMBOLS: XAUUSD
+      LIVE_INGEST_TOKEN: ${LIVE_INGEST_TOKEN}    # the MT5 collector's key for /api/users/live/ingest/
     volumes:
       - static:/data/static
       - media:/data/media

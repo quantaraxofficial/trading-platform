@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, collab, collab_files
+from . import views, collab, collab_files, market
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -19,7 +19,8 @@ urlpatterns = [
     path('feedback/', views.submit_feedback, name='submit_feedback'),
     # Live data read endpoints (ClickHouse -> the site)
     path('live/last-prices/', views.get_last_prices, name='live_last_prices'),
-    path('live/candles/', views.get_candles, name='live_candles'),
+    path('live/candles/', market.candles, name='live_candles'),
+    path('live/ingest/', market.ingest, name='live_ingest'),
     # Collab charts (the live part is the WebSocket in consumers.py)
     path('collab/<str:uid>/rooms/', collab.collab_rooms, name='collab_rooms'),
     path('collab/<str:uid>/people/', collab.collab_people, name='collab_people'),

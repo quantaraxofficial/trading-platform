@@ -34,6 +34,7 @@ SITE_HOST=${SITE_HOST}
 DJANGO_SECRET_KEY=$(openssl rand -base64 48 | tr -d '\n/+=' | cut -c1-60)
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 CLICKHOUSE_PASSWORD=$(openssl rand -hex 24)
+LIVE_INGEST_TOKEN=$(openssl rand -hex 32)
 FIREBASE_PROJECT_ID=quantarax
 FIREBASE_WEB_API_KEY=
 TWELVEDATA_API_KEY=
@@ -43,4 +44,6 @@ EOF
 else
   sed -i "s/^SITE_HOST=.*/SITE_HOST=${SITE_HOST}/" .env
 fi
+# The MT5 collector's key (added to older .env files too)
+grep -q '^LIVE_INGEST_TOKEN=' .env || echo "LIVE_INGEST_TOKEN=$(openssl rand -hex 32)" >> .env
 echo "Setup done for ${SITE_HOST}"

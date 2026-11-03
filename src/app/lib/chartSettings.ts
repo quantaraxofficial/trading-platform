@@ -61,6 +61,8 @@ export interface ChartSettings {
   lines: string;
   navButtons: Visibility3; paneButtons: Visibility3;
   marginTop: number; marginBottom: number; marginRight: number;
+  // Mouse wheel speed over the chart and the price scale (1 = TradingView's own step)
+  wheelSpeed: number;
   // Alerts
   alertLines: boolean; alertLineColor: string; onlyActiveAlerts: boolean; autoHideToasts: boolean;
   // Events
@@ -110,6 +112,7 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   fontSize: 12,
   navButtons: "Visible on mouse over", paneButtons: "Visible on mouse over",
   marginTop: 10, marginBottom: 8, marginRight: 10,
+  wheelSpeed: 1,
   alertLines: true, alertLineColor: "#089981", onlyActiveAlerts: true, autoHideToasts: true,
   ideas: false, ideasMode: "All ideas",
   sessionBreaks: false, sessionBreaksStyle: { color: "#4985e7", width: 1, style: "Dashed" },
@@ -117,6 +120,13 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   latestNews: true, newsNotification: false,
   colorsTheme: "light",
 };
+
+export const WHEEL_SPEED_MIN = 0.25, WHEEL_SPEED_MAX = 5;
+// The saved speed, kept in range (an imported or hand-edited file can hold anything)
+export function wheelSpeed(): number {
+  const v = Number(chartSettings.get().wheelSpeed);
+  return Number.isFinite(v) ? Math.min(WHEEL_SPEED_MAX, Math.max(WHEEL_SPEED_MIN, v)) : 1;
+}
 
 export const chartSettings = makeStore<ChartSettings>("tv:chartSettings", DEFAULT_CHART_SETTINGS);
 

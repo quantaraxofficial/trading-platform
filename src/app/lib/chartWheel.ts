@@ -7,6 +7,9 @@
 //   Shift + wheel,
 //   horizontal      pan, 0.8 px per unit of delta (Shift + wheel down goes back in time)
 // Used for the chart canvas and the drawing layer above it, so both behave the same.
+// Settings → Scales and lines → Mouse wheel speed multiplies both the zoom and the pan step.
+
+import { wheelSpeed } from "./chartSettings";
 
 const MIN_BARS = 3;
 
@@ -15,7 +18,7 @@ export function applyChartWheel(chart: any, e: WheelEvent, paneX: number): boole
   const lr = ts?.getVisibleLogicalRange?.();
   const width = ts?.width?.();
   if (!lr || !width) return false;
-  const unit = e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? width : 1;
+  const unit = (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? width : 1) * wheelSpeed();
   let dx = e.deltaX * unit, dy = e.deltaY * unit;
   if (e.shiftKey && dy && !dx) { dx = -dy; dy = 0; }
   const size = lr.to - lr.from;
