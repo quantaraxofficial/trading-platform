@@ -136,6 +136,9 @@ class ClickHouseClient:
     def query(self, sql: str) -> list[dict]:
         """Run a SELECT and return a list of row-dicts. For the admin dashboard /
         the Django admin's "data health" view."""
+        # (with the column names as the first row: _parse_tsv keys each row by them)
+        if " format " not in sql.lower():
+            sql = sql.rstrip().rstrip(";") + " FORMAT TabSeparatedWithNames"
         resp = self._get(f"/?database={CONFIG.CH_DATABASE}", body=sql)
         return _parse_tsv(resp.text)
 

@@ -8,7 +8,7 @@ import { isImported, renameDrawingTemplate } from './drawingTemplates';
 import { ColorPickerPopup, stopAll } from './ColorPickerPopup';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
 import { PaletteInput } from "./PaletteInput";
-import { backendFetch } from "@/lib/backend";
+import { backendFetch, BACKEND_URL } from "@/lib/backend";
 
 interface FibonacciSettingsModalProps {
   onClose: () => void;
@@ -255,7 +255,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
 
   useEffect(() => {
     if (user && drawing) {
-      backendFetch(`http://localhost:8000/api/users/templates/${user.uid}/?tool_type=${drawing.type}`)
+      backendFetch(`${BACKEND_URL}/api/users/templates/${user.uid}/?tool_type=${drawing.type}`)
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data)) setTemplates(data.filter(t => t.name !== 'default'));
@@ -274,7 +274,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
   const [renamingId, setRenamingId] = useState<string | number | null>(null);
   const reloadTemplates = () => {
     if (!user || !drawing) return;
-    backendFetch(`http://localhost:8000/api/users/templates/${user.uid}/?tool_type=${drawing.type}`)
+    backendFetch(`${BACKEND_URL}/api/users/templates/${user.uid}/?tool_type=${drawing.type}`)
       .then(res => res.json())
       .then(data => { if (Array.isArray(data)) setTemplates(data.filter((t: any) => t.name !== 'default')); })
       .catch(() => {});
@@ -712,7 +712,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
           onClose={(saved) => {
             setShowSaveModal(false);
             if (saved && user && drawing) {
-              backendFetch(`http://localhost:8000/api/users/templates/${user.uid}/?tool_type=${drawing.type}`)
+              backendFetch(`${BACKEND_URL}/api/users/templates/${user.uid}/?tool_type=${drawing.type}`)
                 .then(res => res.json())
                 .then(data => { if (Array.isArray(data)) setTemplates(data.filter((t: any) => t.name !== 'default')); });
             }

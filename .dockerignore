@@ -1,0 +1,15 @@
+# Kept out of the Docker build context (deploy/prod)
+.git
+node_modules
+.next
+**/__pycache__
+backend/venv
+backend/db.sqlite3*
+backend/media
+backend/private_uploads
+backend/staticfiles
+backend/copier_terminals
+deploy/prod/.env
+.env*
+!.env.example
+*.log

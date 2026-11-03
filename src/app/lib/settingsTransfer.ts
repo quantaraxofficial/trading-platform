@@ -11,7 +11,7 @@
 
 import { SYNCED_KEYS, flushCloudSync } from "./cloudSync";
 import { DEFAULT_CHART_SETTINGS, importedTemplateName, type ChartSettingsSnapshot, type ChartTemplate } from "./chartSettings";
-import { backendFetch } from "@/lib/backend";
+import { backendFetch, BACKEND_URL } from "@/lib/backend";
 
 const APP = "tradepilot-settings";
 const VERSION = 1;
@@ -29,7 +29,7 @@ export interface SettingsFile {
   drawing_templates?: DrawingToolTemplate[];
 }
 
-const TEMPLATES_API = "http://localhost:8000/api/users/templates";
+const TEMPLATES_API = `${BACKEND_URL}/api/users/templates`;
 export const IMPORTED_PREFIX = "Imported · ";
 
 // The account's drawing-tool defaults and templates (the chart settings' templates are in the settings)

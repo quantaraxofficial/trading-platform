@@ -3,7 +3,7 @@
 // marked locked (collab, bar replay…) are refused: requireFeature() says so with the locked dialog.
 // The server refuses collab by itself too; replay runs only in the browser, so this is its lock.
 import { useSyncExternalStore } from "react";
-import { backendFetch } from "./backend";
+import { BACKEND_URL, backendFetch } from "./backend";
 
 export interface Access {
   active: boolean;
@@ -62,7 +62,7 @@ export function onLockedResponse(data: any) {
 
 export async function refreshAccess(uid: string): Promise<Access | null> {
   try {
-    const res = await backendFetch(`http://localhost:8000/api/users/user/${encodeURIComponent(uid)}/`);
+    const res = await backendFetch(`${BACKEND_URL}/api/users/user/${encodeURIComponent(uid)}/`);
     if (!res.ok) return access;
     const data = await res.json();
     if (data?.access) setAccess(data.access);

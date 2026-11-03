@@ -187,15 +187,20 @@ WSGI_APPLICATION = 'quantarax_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-        'OPTIONS': {
-            'timeout': 20,
+# PostgreSQL when DATABASE_URL is set (the deployment: postgres://user:pass@host:5432/name),
+# else the local SQLite file
+if env('DATABASE_URL', default=''):
+    DATABASES = {'default': {**env.db('DATABASE_URL'), 'CONN_MAX_AGE': 60, 'CONN_HEALTH_CHECKS': True}}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+            'OPTIONS': {
+                'timeout': 20,
+            }
         }
     }
-}
 
 
 # Password validation
@@ -233,10 +238,14 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = "static/"
+# Where collectstatic puts the admin's files for the web server (deployment)
+STATIC_ROOT = env('STATIC_ROOT', default=str(BASE_DIR / 'staticfiles'))
 
 # Media files (uploaded feedback screenshots)
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = env('MEDIA_ROOT', default=str(BASE_DIR / "media"))
+# Collab chat files: private (served only to the collab's members, never by the web server)
+COLLAB_FILES_ROOT = env('COLLAB_FILES_ROOT', default=str(BASE_DIR / 'private_uploads' / 'collab'))
 
 # Sign-in (api/users/sync/) checks the Firebase ID token against this project
 FIREBASE_PROJECT_ID = env('FIREBASE_PROJECT_ID', default='quantarax')

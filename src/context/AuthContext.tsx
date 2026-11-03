@@ -11,7 +11,7 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
-import { backendFetch } from "@/lib/backend";
+import { backendFetch, BACKEND_URL } from "@/lib/backend";
 import { setAccess, refreshAccess, accessAge } from "@/lib/access";
 
 interface AuthContextType {
@@ -91,7 +91,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (activeUser && sessionKey !== null) {
         try {
           // Sync with Django API
-          const syncRes = await fetch('http://localhost:8000/api/users/sync/', {
+          const syncRes = await fetch(`${BACKEND_URL}/api/users/sync/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -113,7 +113,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             if (syncResult.limit_reached) {
               const confirm = window.confirm(syncResult.message + "\n\nDo you want to log out of one of your other devices and log in here?");
             if (confirm) {
-              const forced = await fetch('http://localhost:8000/api/users/sync/', {
+              const forced = await fetch(`${BACKEND_URL}/api/users/sync/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -141,7 +141,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
           
         // Fetch full profile from Django
-          const profileRes = await backendFetch(`http://localhost:8000/api/users/user/${activeUser.uid}/`);
+          const profileRes = await backendFetch(`${BACKEND_URL}/api/users/user/${activeUser.uid}/`);
           const profileData = await profileRes.json();
           setUserData(profileData);
           setAccess(profileData?.access ?? null);
@@ -187,7 +187,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       await updateProfile(res.user, { displayName: name });
 
       // Sync with Django API
-      await fetch('http://localhost:8000/api/users/sync/', {
+      await fetch(`${BACKEND_URL}/api/users/sync/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

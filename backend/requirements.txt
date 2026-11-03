@@ -21,4 +21,6 @@ certifi>=2026.10.23
 idna>=3.15
 cryptography>=50.0.2
 asgiref>=3.11.1
+# PostgreSQL (the deployment's database)
+psycopg[binary]>=3.2.3
 # MetaTrader5 is only needed on the Windows machine that runs the tick pipeline (pipeline/)

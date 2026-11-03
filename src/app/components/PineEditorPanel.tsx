@@ -24,7 +24,7 @@ import {
   pinePalette, SaveScriptDialog, OpenScriptDialog, BuiltinScriptDialog, EditorSettingsDialog, VersionHistoryDialog,
   KeyboardShortcutsDialog, StrategyReportEmptyDialog, ConfirmDialog, formatStamp, type PinePalette,
 } from "./pine/PineDialogs";
-import { backendFetch } from "@/lib/backend";
+import { backendFetch, BACKEND_URL } from "@/lib/backend";
 import PineLiveBadge from "./collab/PineLiveBadge";
 import CollabDialog from "./collab/CollabDialog";
 import { CollabIcon } from "./collab/icons";
@@ -241,17 +241,17 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
   async function syncScriptToServer(partial: { id?: string; name?: string; script_type?: string; code?: string; versions?: { code: string; savedAt: number }[]; order?: number }) {
     if (!uid) return null;
     try {
-      const res = await backendFetch(`http://localhost:8000/api/users/pinescripts/${uid}/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(partial) });
+      const res = await backendFetch(`${BACKEND_URL}/api/users/pinescripts/${uid}/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(partial) });
       return res.ok ? await res.json() : null;
     } catch { return null; }
   }
   async function deleteScriptOnServer(id: string) {
     if (!uid) return;
-    try { await backendFetch(`http://localhost:8000/api/users/pinescripts/${uid}/`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); } catch { /* ignore */ }
+    try { await backendFetch(`${BACKEND_URL}/api/users/pinescripts/${uid}/`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); } catch { /* ignore */ }
   }
   useEffect(() => {
     if (!uid) { setScripts(loadScripts()); return; }
-    backendFetch(`http://localhost:8000/api/users/pinescripts/${uid}/`).then(r => r.json()).then((data) => {
+    backendFetch(`${BACKEND_URL}/api/users/pinescripts/${uid}/`).then(r => r.json()).then((data) => {
       if (!Array.isArray(data)) return;
       setScripts(data.map((s: any): SavedScript => ({ id: String(s.id), name: s.name, code: s.code, type: s.script_type as ScriptType, updatedAt: new Date(s.updated_at).getTime(), order: s.order, versions: s.versions || [] })));
     }).catch(() => setScripts(loadScripts()));

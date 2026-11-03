@@ -1,10 +1,10 @@
 // A drawing tool's saved templates (kept in the account, per tool type): renaming one, and
 // telling the imported ones apart (an imported settings file adds them as "Imported · <owner>",
 // see lib/settingsTransfer).
-import { backendFetch } from "@/lib/backend";
+import { backendFetch, BACKEND_URL } from "@/lib/backend";
 import { IMPORTED_PREFIX } from "../../../lib/settingsTransfer";
 
-const API = "http://localhost:8000/api/users/templates";
+const API = `${BACKEND_URL}/api/users/templates`;
 
 export interface DrawingTemplate { id: number | string; name: string; tool_type: string; settings: any }
 

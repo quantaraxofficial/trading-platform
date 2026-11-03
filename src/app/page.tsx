@@ -45,7 +45,7 @@ import { LAYOUTS } from "./lib/chartLayouts";
 import { setLayoutSync } from "./lib/layoutSync";
 import SecondaryChart from "./components/SecondaryChart";
 import { watchlists, listSymbols, sameSymbol } from "./components/watchlist/store";
-import { backendFetch, sessionKey } from "@/lib/backend";
+import { backendFetch, sessionKey, BACKEND_URL } from "@/lib/backend";
 import CollabController from "./components/collab/CollabController";
 import CollabDialog from "./components/collab/CollabDialog";
 import CollabPanel from "./components/collab/CollabPanel";
@@ -541,7 +541,7 @@ function AppLayout() {
   // Load Chart State from Django Backend
   useEffect(() => {
     if (user) {
-      backendFetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`)
+      backendFetch(`${BACKEND_URL}/api/users/chart_state/${user.uid}/`)
         .then(res => {
           if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
           return res.json();
@@ -587,7 +587,7 @@ function AppLayout() {
       clearTimeout((window as any).__saveChartStateTimer);
       const timer = setTimeout(() => {
         console.log(`[Page] Saving state on symbol/interval change: ${symbol} / ${selectedInterval}`);
-        backendFetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
+        backendFetch(`${BACKEND_URL}/api/users/chart_state/${user.uid}/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -607,7 +607,7 @@ function AppLayout() {
     if (user && isStateLoaded && hasLoadedOnce.current) {
       const timer = setTimeout(() => {
         console.log(`[Page] Saving indicators: ${activeIndicators.length} indicators`);
-        backendFetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
+        backendFetch(`${BACKEND_URL}/api/users/chart_state/${user.uid}/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -634,7 +634,7 @@ function AppLayout() {
       });
       // Use sendBeacon for reliable delivery during page unload
       navigator.sendBeacon(
-        `http://localhost:8000/api/users/chart_state/${user.uid}/?session_key=${encodeURIComponent(sessionKey())}`,
+        `${BACKEND_URL}/api/users/chart_state/${user.uid}/?session_key=${encodeURIComponent(sessionKey())}`,
         new Blob([payload], { type: 'application/json' })
       );
     };
@@ -659,7 +659,7 @@ function AppLayout() {
     // Signed out, the layout is still kept on this device: stay on the chart
     if (!user) { setHeaderToast("Chart layout saved"); return; }
     clearTimeout((window as any).__saveChartStateTimer);
-    backendFetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
+    backendFetch(`${BACKEND_URL}/api/users/chart_state/${user.uid}/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -879,7 +879,7 @@ function AppLayout() {
                   const currentSymbol = symbolRef.current;
                   const currentInterval = intervalRef.current;
                   console.log(`[Page] Saving state to DB: sym=${currentSymbol}, int=${currentInterval}, ts=${newTimestamp}, bs=${newBarSpacing}`);
-                  backendFetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
+                  backendFetch(`${BACKEND_URL}/api/users/chart_state/${user.uid}/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 

@@ -331,7 +331,7 @@ import { chartBgImage, canvasBackgroundCss } from "../lib/chartBackgroundImage";
 import type { DateRangeSpan } from "./BottomPanel";
 import { detectPrecision, simulatedQuote } from "@/app/utils/pricePrecision";
 import { feedTimeToUnix } from "../utils/feedTime";
-import { backendFetch } from "@/lib/backend";
+import { backendFetch, BACKEND_URL } from "@/lib/backend";
 import { featureLocked, requireFeature } from "@/lib/access";
 import { CollabIcon } from "./collab/icons";
 import { useCollabAlerts } from "../lib/collab/session";
@@ -925,7 +925,7 @@ export default function ChartContainer({
   const [savedTemplates, setSavedTemplates] = useState<any[]>([]);
   const fetchSavedTemplates = useCallback(() => {
     if (!user?.uid) return;
-    backendFetch(`http://localhost:8000/api/users/templates/${user.uid}/?tool_type=chart_settings`)
+    backendFetch(`${BACKEND_URL}/api/users/templates/${user.uid}/?tool_type=chart_settings`)
       .then(res => res.json())
       .then(data => { if (Array.isArray(data)) setSavedTemplates(data); })
       .catch(e => console.error("Failed to load chart templates:", e));

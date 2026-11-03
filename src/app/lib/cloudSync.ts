@@ -4,10 +4,11 @@
 // sign-in / when the tab comes back into view the newer copies are fetched. Per key, the most
 // recent change wins.
 
+import { BACKEND_URL } from "@/lib/backend";
 import { reloadStore } from "../trading/settings";
 import { reportFailure } from "@/lib/requestTracker";
 
-const API = "http://localhost:8000/api/users/settings/";
+const API = `${BACKEND_URL}/api/users/settings/`;
 
 // What follows the user between devices. (Per-device things — panel sizes and docks, open
 // tabs, caches — stay local.)

@@ -8,7 +8,7 @@
 import { makeStore, tradingSettings, type TradingSettings } from "../trading/settings";
 import { statusLine, type StatusLineSettings } from "./statusLine";
 import type { SeriesStyles } from "./seriesStyles";
-import { backendFetch } from "@/lib/backend";
+import { backendFetch, BACKEND_URL } from "@/lib/backend";
 
 export type Visibility3 = "Visible on mouse over" | "Always visible" | "Always invisible";
 export const VISIBILITY3: Visibility3[] = ["Visible on mouse over", "Always visible", "Always invisible"];
@@ -154,7 +154,7 @@ export function defaultSnapshot(dark: boolean): ChartSettingsSnapshot {
 export type ChartTemplate = { name: string; settings: ChartSettingsSnapshot; id?: string | number };
 const TEMPLATES_KEY = "tv:chartSettingsTemplates";
 export const chartTemplates = makeStore<{ list: ChartTemplate[] }>(TEMPLATES_KEY, { list: [] });
-const API = "http://localhost:8000/api/users/templates";
+const API = `${BACKEND_URL}/api/users/templates`;
 const byName = (list: ChartTemplate[]) => [...list].sort((a, b) => a.name.localeCompare(b.name));
 // Saves a template to the account and remembers the id the account gave it (for rename / delete)
 async function uploadTemplate(name: string, settings: ChartSettingsSnapshot, uid?: string | null) {

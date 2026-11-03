@@ -1,0 +1,117 @@
+# TradePilot production stack (one VM): Caddy (HTTPS) in front of the Next.js frontend and the
+# Django backend; PostgreSQL for the app's data; ClickHouse for market data (Vantage 30-second
+# bars). Only Caddy is reachable from outside (80/443). ClickHouse listens on the VM's loopback
+# only, for the market-data uploader that reaches it through an SSH tunnel.
+#
+#   cd /opt/tradepilot && docker compose -f deploy/prod/docker-compose.yml --env-file deploy/prod/.env up -d --build
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_HOST: ${SITE_HOST}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+      - static:/srv/static:ro
+      - media:/srv/media:ro
+    depends_on: [frontend, backend]
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: deploy/prod/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_BACKEND_URL: https://${SITE_HOST}
+    restart: unless-stopped
+    environment:
+      TWELVEDATA_API_KEY: ${TWELVEDATA_API_KEY}
+      NEXT_PUBLIC_BACKEND_URL: https://${SITE_HOST}
+    mem_limit: 900m
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: deploy/prod/Dockerfile.backend
+    restart: unless-stopped
+    environment:
+      DEBUG: "False"
+      SECRET_KEY: ${DJANGO_SECRET_KEY}
+      ALLOWED_HOSTS: ${SITE_HOST},backend,localhost
+      FRONTEND_ORIGINS: https://${SITE_HOST}
+      TRUSTED_PROXY_COUNT: "1"
+      DATABASE_URL: postgres://tradepilot:${POSTGRES_PASSWORD}@postgres:5432/tradepilot
+      STATIC_ROOT: /data/static
+      MEDIA_ROOT: /data/media
+      COLLAB_FILES_ROOT: /data/private/collab
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-quantarax}
+      FIREBASE_WEB_API_KEY: ${FIREBASE_WEB_API_KEY}
+      ADMIN_URL: ${ADMIN_URL:-admin/}
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DATABASE: ticks
+      CLICKHOUSE_USER: tradepilot
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      PIPELINE_SYMBOLS: XAUUSD
+    volumes:
+      - static:/data/static
+      - media:/data/media
+      - private:/data/private
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    mem_limit: 700m
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tradepilot
+      POSTGRES_USER: tradepilot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tradepilot -d tradepilot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 400m
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: ticks
+      CLICKHOUSE_USER: tradepilot
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "0"
+    ports:
+      - "127.0.0.1:8123:8123"     # loopback only: the uploader comes in through an SSH tunnel
+    volumes:
+      - ch-data:/var/lib/clickhouse
+      - ./clickhouse-lowmem.xml:/etc/clickhouse-server/config.d/lowmem.xml:ro
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8123/ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    mem_limit: 1200m
+
+volumes:
+  caddy-data:
+  caddy-config:
+  static:
+  media:
+  private:
+  pg-data:
+  ch-data:
