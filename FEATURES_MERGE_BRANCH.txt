@@ -1,6 +1,6 @@
 TRADEPILOT - FEATURES BUILT ON THE MERGE BRANCH
 Branch: merge-main-left-toolbar-tools  (everything here is on top of main)
-Up to: 1 Nov 2026 (Redesign: movable widgets, layout templates and colours)
+Up to: 4 Nov 2026 (Smooth zoom and pan)
 
 Contents
   1. Drawing tools (left toolbar)
@@ -71,6 +71,9 @@ Chart interactions
     paste, table view, add to watchlist, add text note, settings
   - Double-click a candle: Settings on the Symbol tab
   - Navigation buttons near the bottom: zoom in/out, scroll left/right, reset chart view
+  - Smooth zoom and pan, as on openmarket.xyz: wheel zoom / pan glide to where the wheel is
+    taking them (eased ~140 ms, TradingView's anchoring and step), the price axis glides to its
+    new range instead of snapping, and a released drag keeps sliding (momentum)
   - Symbol info dialog: exchange, currency, tick size, today's session on a 24-hour bar
 
 Layouts
