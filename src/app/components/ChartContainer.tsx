@@ -2534,7 +2534,8 @@ export default function ChartContainer({
   useEffect(() => {
     const onLive = (e: Event) => {
       const d = (e as CustomEvent).detail;
-      if (!d || d.symbol !== symbolRef.current || mode !== 'idle' || !d.marketOpen) return;
+      // (__replayActive: a replay that has just started, before this listener knows it)
+      if (!d || d.symbol !== symbolRef.current || mode !== 'idle' || (window as any).__replayActive || !d.marketOpen) return;
       const bars = rawBars();
       const cs = candleSeriesRef.current;
       if (!bars.length || !cs) return;
@@ -2674,6 +2675,18 @@ export default function ChartContainer({
         if (d?.length) rawUpdate(d[d.length - 1]);
       } catch { /* the chart is gone */ }
     });
+    // lightweight-charts works out the visible time range for its time-range listeners, and throws
+    // ("Value is null") when the visible bars have no times — a moment that comes when a replay
+    // cuts the bars a view was just placed on. That threw out of the page (a blank error page);
+    // "no range" (null, as the API already returns when there's none) is what it means
+    {
+      const tsProto = Object.getPrototypeOf(newChart.timeScale());
+      if (tsProto && !tsProto.__safeVisibleRange) {
+        const orig = tsProto.getVisibleRange;
+        tsProto.getVisibleRange = function (this: any) { try { return orig.call(this); } catch { return null; } };
+        tsProto.__safeVisibleRange = true;
+      }
+    }
     const candleSeries = newChart.addSeries(CandlestickSeries, {
       autoscaleInfoProvider: priceGlide.provider,
       upColor: candleColorsRef.current.bodyVisible ? candleColorsRef.current.upColor : 'transparent', 
@@ -2826,6 +2839,12 @@ export default function ChartContainer({
           stockData = await fetchStockData(symbol, interval);
         }
         
+      // The symbol or timeframe changed while this first load was on its way (e.g. a backtest
+      // session switching 1h → 15m): these bars are the old one's — the switch loads the right
+      // ones. Shown anyway, they were taken for the new timeframe's (a session started its replay
+      // on 1h bars and the view ended up weeks away)
+      if (symbolRef.current !== symbol || intervalRef.current !== interval) return;
+
       // Deduplicate and sort by time to ensure strictly increasing timestamps
       stockData = stockData.filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.time === v.time) === i);
       stockData.sort((a: any, b: any) => (a.time as number) - (b.time as number));
@@ -2841,7 +2860,7 @@ export default function ChartContainer({
       candleSeries.setData(stockData);
       applyPricePrecision(stockData);
       fullDataRef.current = stockData;
-      (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
+      (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbol}|${interval}`;
 
       // Pre-compute higher timeframes from 1m data for instant switching
       if (interval === '1min' && stockData.length > 0) {

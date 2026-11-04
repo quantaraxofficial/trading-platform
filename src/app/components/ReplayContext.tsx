@@ -157,6 +157,9 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     setFullData(data);
 
     const clamped = Math.max(0, Math.min(data.length - 1, index));
+    // Set at once (React's mode follows a render later): the chart's live ticks must not touch
+    // the replay's bars in between — one appended today's candle after the replay's last bar
+    (window as any).__replayActive = true;
     replayIndexRef.current = clamped;
     setReplayIndex(clamped);
     setMode('active');
@@ -169,6 +172,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
   // leaving replay shows that instead of the replay's copy of the old bars
   const stopReplay = useCallback((nextData?: CandleData[]) => {
     stopInterval();
+    (window as any).__replayActive = false;
     if (Array.isArray(nextData)) { fullDataRef.current = nextData; setFullData(nextData); }
     setMode('idle');
     setHasStarted(false);

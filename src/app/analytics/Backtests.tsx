@@ -50,6 +50,19 @@ export default function Backtests({ uid, journals, onJournal, openSessionId }: {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [uid]);
   useEffect(() => { if (openSessionId) openSession(openSessionId); }, [openSessionId]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // An opened session follows its trading on the chart (another tab saves it every 15 s): read
+  // again every 10 s while this page is visible, and on coming back to it
+  const openedSessionId = opened?.kind === "session" ? opened.s.id : null;
+  useEffect(() => {
+    if (!openedSessionId) return;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      getSession(uid, openedSessionId).then(s => setOpened(o => (o?.kind === "session" && o.s.id === s.id ? { kind: "session", s } : o)), () => {});
+    };
+    const t = setInterval(refresh, 10000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", refresh); };
+  }, [uid, openedSessionId]);
 
   const openSession = (id: number) => getSession(uid, id).then(s => { setOpened({ kind: "session", s }); setView("performance"); setSelectedKey(null); }, e => setError(e.message));
   const openRun = (id: number) => getBacktest(uid, id).then(b => { setOpened({ kind: "strategy", b }); setView("performance"); setSelectedKey(null); }, e => setError(e.message));
@@ -120,6 +133,7 @@ export default function Backtests({ uid, journals, onJournal, openSessionId }: {
             {opened.s.tags.length > 0 && <div className="flex gap-1.5 mt-3 flex-wrap">{opened.s.tags.map(t => <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-purple-700/30 border border-purple-600/40 text-purple-100">{t}</span>)}</div>}
           </Card>
         )}
+        {isSession && <OpenNow s={opened.s} />}
         {view === "performance"
           ? <Performance trades={trades} initialBalance={capital} period={period} onPeriod={setPeriod} journals={journals[src]} exportName={name}
               exportSubtitle={isSession ? `Backtest session · ${opened.s.symbol} ${opened.s.interval_label || opened.s.interval}` : `Strategy backtest · ${opened.b.symbol} ${opened.b.timeframe}`}
@@ -234,6 +248,44 @@ export default function Backtests({ uid, journals, onJournal, openSessionId }: {
 }
 
 // "New session": what to replay, from when, with what balance — and what you're testing
+// A session's open positions and working orders (its book as last saved): the closed trades are
+// in Performance / Trades, these are what's still running
+function OpenNow({ s }: { s: BacktestSession }) {
+  const positions = s.book?.positions || [];
+  const orders = (s.book?.orders || []).filter(o => o.status === "working");
+  if (!positions.length && !orders.length) return null;
+  const px = (v?: number) => (typeof v === "number" ? v.toLocaleString(undefined, { maximumFractionDigits: 5 }) : "—");
+  const when = (ms?: number) => (ms ? new Date(ms).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "");
+  return (
+    <Card title="Open now" subtitle="Positions and orders still running in this session (as last saved from the chart)">
+      <div className="grid md:grid-cols-2 gap-4" data-testid="session-open-now">
+        <div>
+          <Label>Positions ({positions.length})</Label>
+          {positions.length ? positions.map((p, i) => (
+            <div key={i} className="flex items-center gap-2 text-sm mt-2">
+              <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${p.side === "buy" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{p.side === "buy" ? "Long" : "Short"}</span>
+              <span className="text-white">{p.qty} {p.symbol}</span>
+              <span className="text-purple-300/80">at {px(p.avgPrice)}</span>
+              <span className="ml-auto text-xs text-purple-300/60">{when(p.openedAt)}</span>
+            </div>
+          )) : <div className="text-sm text-purple-300/60 mt-2">None</div>}
+        </div>
+        <div>
+          <Label>Working orders ({orders.length})</Label>
+          {orders.length ? orders.map(o => (
+            <div key={o.id} className="flex items-center gap-2 text-sm mt-2">
+              <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${o.side === "buy" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{o.side === "buy" ? "Buy" : "Sell"} {o.type}</span>
+              <span className="text-white">{o.qty} {o.symbol}</span>
+              <span className="text-purple-300/80">at {px(o.type === "stop" ? o.stopPrice : o.limitPrice ?? o.stopPrice)}</span>
+              <span className="ml-auto text-xs text-purple-300/60">{o.role !== "entry" ? o.role : when(o.placedAt)}</span>
+            </div>
+          )) : <div className="text-sm text-purple-300/60 mt-2">None</div>}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function NewSessionDialog({ uid, onClose, onCreated }: { uid: string; onClose: () => void; onCreated: (s: BacktestSession) => void }) {
   useEscapeClose(onClose);
   const [name, setName] = useState("");

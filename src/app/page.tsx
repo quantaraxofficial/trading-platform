@@ -54,7 +54,7 @@ import CollabDialog from "./components/collab/CollabDialog";
 import CollabPanel from "./components/collab/CollabPanel";
 import CollabOverlay from "./components/collab/CollabOverlay";
 import { CollabAlertsSync, CollabChartSync, CollabDrawingSync, CollabPineSync, CollabPresenceSync, CollabReplaySync } from "./components/collab/CollabSync";
-import { useCollabActive } from "./lib/collab/session";
+import { collab, useCollabActive, useCollabChartActive } from "./lib/collab/session";
 import { displaySymbol } from "@/app/lib/symbolDisplay";
 
 const DRAWINGS_PANEL_KEY = "tv:drawingsPanelVisible";
@@ -533,11 +533,14 @@ function AppLayout() {
   // Without premium (an account whose access ended, or signed out), what the chart opened with is
   // brought within the free plan, with the popup saying why: a 30s / custom interval becomes the
   // nearest standard one, and indicators and charts in the layout beyond the free 3 are dropped.
-  // Nothing happens until it's known whether they're premium.
+  // Nothing happens until it's known whether they're premium. In a collab the timeframe and the
+  // indicators are the room's (set by whoever may change them, e.g. a 30s chart): everyone in it
+  // sees them as they are — only their own choices are held to their plan.
   const { plan: accessPlan } = useAccess();
+  const inCollabChart = useCollabChartActive();
   useEffect(() => {
     if (!isStateLoaded || !accessPlan) return;
-    if (intervalLocked(selectedInterval)) {
+    if (!inCollabChart && intervalLocked(selectedInterval)) {
       const secs = intervalSeconds(selectedInterval) || 60;
       const dist = (v: string) => Math.abs(Math.log(intervalSeconds(v) / secs));
       const free = SECTIONS.flatMap(sec => sec.standard).filter(v => isIntervalAvailable(v) && !intervalLocked(v) && intervalSeconds(v) > 0);
@@ -547,7 +550,7 @@ function AppLayout() {
       setIntervalLabel(intervalToLabel(next) || intervalShort(next));
     }
     const maxIndicators = featureLimit("indicators");
-    if (activeIndicators.length > maxIndicators) {
+    if (!inCollabChart && activeIndicators.length > maxIndicators) {
       requireRoom("indicators", activeIndicators.length);
       setActiveIndicators(prev => prev.slice(0, maxIndicators));
     }
@@ -561,7 +564,7 @@ function AppLayout() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStateLoaded, accessPlan, selectedInterval, activeIndicators.length, workingLayout?.cells.length]);
+  }, [isStateLoaded, accessPlan, selectedInterval, activeIndicators.length, workingLayout?.cells.length, inCollabChart]);
   // "Save this replay" is kept in the account: load this user's (and send any saved here before)
   useEffect(() => { setSavedReplayUser(user?.uid ?? null); }, [user?.uid]);
 
@@ -587,6 +590,33 @@ function AppLayout() {
     } catch { /* none kept */ }
   };
 
+  // A collab's own view in this browser (kept per collab link, apart from this user's chart): its
+  // symbol, timeframe, centre bar and zoom, so reloading a collab comes back where you were
+  const collabToken = () => new URLSearchParams(window.location.search).get("collab") || collab.get().token || "";
+  const restoreCollabView = (token: string) => {
+    try {
+      const v = JSON.parse(localStorage.getItem(`tv:collabView:${token}`) || 'null');
+      if (!v) return;
+      if (typeof v.symbol === 'string' && v.symbol) setSymbol(v.symbol);
+      const label = typeof v.interval === 'string' ? intervalToLabel(v.interval) : undefined;
+      if (label) { setSelectedInterval(v.interval); setIntervalLabel(label); }
+      if (typeof v.timestamp === 'number') { setTargetTimestamp(v.timestamp); viewTimestampRef.current = v.timestamp; }
+      if (typeof v.bar_spacing === 'number' && v.bar_spacing > 0) { setTargetBarSpacing(v.bar_spacing); viewBarSpacingRef.current = v.bar_spacing; }
+    } catch { /* none kept */ }
+  };
+  const saveCollabView = (timestamp: number | null, barSpacing: number | null) => {
+    const token = collabToken();
+    if (!token || timestamp == null) return;
+    try { localStorage.setItem(`tv:collabView:${token}`, JSON.stringify({ symbol: symbolRef.current, interval: intervalRef.current, timestamp, bar_spacing: barSpacing })); } catch { /* full */ }
+  };
+  // The view a page opens with: a collab link's own, else this browser's
+  const restoreView = () => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("collab");
+    if (token) restoreCollabView(token);
+    else if (!params.has("session")) restoreLocalView();   // a session places the chart itself
+  };
+
   // Load Chart State from Django Backend
   useEffect(() => {
     if (user) {
@@ -596,8 +626,12 @@ function AppLayout() {
           return res.json();
         })
         .then(data => {
-          // (a backtest session being opened picks its own symbol and timeframe)
-          const openingSession = new URLSearchParams(window.location.search).has("session");
+          // (a backtest session being opened picks its own symbol and timeframe; so does a collab
+          // link: the room's chart where this user last was in that collab — their own chart's
+          // view doesn't carry into it)
+          const params = new URLSearchParams(window.location.search);
+          const openingCollab = params.has("collab");
+          const openingSession = params.has("session") || openingCollab;
           if (data.symbol && !openingSession) setSymbol(data.symbol);
           // Only an interval the app knows ("15min", not the label "15m" older saves can hold)
           const label = data.interval ? intervalToLabel(data.interval) : undefined;
@@ -605,19 +639,23 @@ function AppLayout() {
             setSelectedInterval(data.interval);
             setIntervalLabel(label);
           }
-          if (data.timestamp) { setTargetTimestamp(data.timestamp); viewTimestampRef.current = data.timestamp; }
-          if (data.bar_spacing) { setTargetBarSpacing(data.bar_spacing); viewBarSpacingRef.current = data.bar_spacing; }
-          if (!data.timestamp) restoreLocalView();
+          if (openingCollab) restoreCollabView(params.get("collab") || "");
+          // (a backtest session places the chart at its own bar: this user's view would fight it)
+          else if (!params.has("session")) {
+            if (data.timestamp) { setTargetTimestamp(data.timestamp); viewTimestampRef.current = data.timestamp; }
+            if (data.bar_spacing) { setTargetBarSpacing(data.bar_spacing); viewBarSpacingRef.current = data.bar_spacing; }
+            if (!data.timestamp) restoreLocalView();
+          }
           if (data.indicators && Array.isArray(data.indicators) && data.indicators.length > 0) {
             setActiveIndicators(data.indicators);
           }
         })
         // the backend being down or failing just means the chart opens with what this browser kept
-        .catch(err => { console.warn("Chart state not loaded, using this browser's:", err.message); restoreLocalIndicators(); restoreLocalView(); })
+        .catch(err => { console.warn("Chart state not loaded, using this browser's:", err.message); restoreLocalIndicators(); restoreView(); })
         .finally(() => setIsStateLoaded(true));
     } else {
       restoreLocalIndicators();
-      restoreLocalView();
+      restoreView();
       setIsStateLoaded(true);
     }
   }, [user]);
@@ -630,7 +668,8 @@ function AppLayout() {
 
   // Save chart state when symbol or interval changes (skip initial load)
   useEffect(() => {
-    if (user && isStateLoaded) {
+    // (in a collab the chart is the room's: nothing of it is saved as this user's own chart)
+    if (user && isStateLoaded && !collab.chartActive) {
       // Skip the very first fire (when isStateLoaded transitions to true with loaded values)
       if (!hasLoadedOnce.current) {
         hasLoadedOnce.current = true;
@@ -657,7 +696,7 @@ function AppLayout() {
 
   // Save indicators when they change
   useEffect(() => {
-    if (user && isStateLoaded && hasLoadedOnce.current) {
+    if (user && isStateLoaded && hasLoadedOnce.current && !collab.chartActive) {
       const timer = setTimeout(() => {
         console.log(`[Page] Saving indicators: ${activeIndicators.length} indicators`);
         backendFetch(`${BACKEND_URL}/api/users/chart_state/${user.uid}/`, {
@@ -678,6 +717,8 @@ function AppLayout() {
   useEffect(() => {
     if (!user) return;
     const handleBeforeUnload = () => {
+      // the room's chart isn't this user's own: kept as that collab's view instead
+      if (collab.chartActive) { saveCollabView(viewTimestampRef.current, viewBarSpacingRef.current); return; }
       const payload = JSON.stringify({
         symbol,
         interval: selectedInterval,
@@ -922,6 +963,13 @@ function AppLayout() {
             initialBarSpacing={targetBarSpacing}
             onOpenOrderPanel={(side) => requestTrade(side, symbol)}
             onChartStateChange={(newTimestamp, newBarSpacing) => {
+              // In a collab the view is kept as that collab's (this browser), not this user's own chart
+              if (collab.chartActive) {
+                viewTimestampRef.current = newTimestamp;
+                viewBarSpacingRef.current = newBarSpacing;
+                saveCollabView(newTimestamp, newBarSpacing);
+                return;
+              }
               // Keep local state in sync so beforeunload can persist latest values
               viewTimestampRef.current = newTimestamp;
               viewBarSpacingRef.current = newBarSpacing;
@@ -1106,7 +1154,9 @@ function AppLayout() {
         interval={selectedInterval}
         indicators={activeIndicators}
         setSymbol={setSymbol}
-        setInterval={(i) => handleIntervalChange(i, intervalToLabel(i))}
+        // The room's timeframe as it is (a 30s or custom one too, without premium): only this
+        // user's own switches go through the plan check (handleIntervalChange)
+        setInterval={(i) => { setSelectedInterval(i); setIntervalLabel(intervalToLabel(i) || intervalShort(i)); }}
         setIndicators={setActiveIndicators}
       />
       <CollabPresenceSync symbol={symbol} />

@@ -334,7 +334,9 @@ export class PaperTradingEngine {
     const acc = seed ? { ...seed.account, leverage: { ...DEFAULT_LEVERAGE, ...(seed.account.leverage || {}) } } : createAccount("Replay Trading", src?.initialBalance ?? DEFAULT_BALANCE);
     if (src && !seed) acc.leverage = { ...src.leverage };
     this.live = live;
-    this.state = { ...live, accounts: [acc], activeAccountId: acc.id, books: { [acc.id]: seed ? { ...createBook(), ...structuredClone(seed.book) } : createBook() }, quotes: {} };
+    // (connected: a replay's account is the simulator's own — Buy / Sell work at once, with no
+    // "Trade with your broker" prompt, which left a backtest session's orders unplaced)
+    this.state = { ...live, connected: true, accounts: [acc], activeAccountId: acc.id, books: { [acc.id]: seed ? { ...createBook(), ...structuredClone(seed.book) } : createBook() }, quotes: {} };
     this.listeners.forEach(l => l());
   }
 
