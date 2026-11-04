@@ -49,6 +49,7 @@ import { formatQty } from "@/app/trading/instruments";
 import TradingOverlay from "@/app/trading/TradingOverlay";
 import { Tip, TipKey as Kbd, SymbolAvatar, Popover, MenuItem, MenuDivider } from "@/app/trading/ui";
 import { saveBacktest } from "@/app/analytics/data";
+import { installCursorLog } from "@/app/lib/cursorLog";
 import { statusLine, type StatusLineSettings } from "../lib/statusLine";
 import { loadFavoriteIndicators, saveFavoriteIndicators } from "@/app/utils/favoriteIndicators";
 import { rememberExchangeTimezone, toChartTime, exchangeTimezoneOf } from "@/app/utils/exchangeTime";
@@ -323,7 +324,8 @@ import ChartTableView from "./ChartTableView";
 import { useChartTick } from "./drawing/core/useChartTick";
 import { chartObjects, sameObjects, type ChartObject, type DataWindowData, type DataWindowSection, type DataWindowRow } from "../lib/chartObjects";
 import { sideOfPlacement, applyScaleSide, mainPriceScale, paneGeometry, onPriceAxis, mainScaleSide } from "../lib/priceScaleSide";
-import { applyChartWheel } from "../lib/chartWheel";
+import { applyChartWheel, stopChartGlide } from "../lib/chartWheel";
+import { easedAutoscale } from "../lib/easedAutoscale";
 import { computeEma, normalizeEma, savedEmaDefaults, emaVisibleOnInterval, emaInputsText, type EmaConfig } from "../lib/emaCalc";
 import { BandFill } from "./chartPrimitives/BandFill";
 import { SessionBreaks } from "./chartPrimitives/SessionBreaks";
@@ -574,6 +576,12 @@ export default function ChartContainer({
   triggerSettings
 }: ChartContainerProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  // Debug, off by default: console logs of every cursor change on the chart ([CursorLog];
+  // localStorage tv:cursorLog = 1)
+  useEffect(() => {
+    const el = (chartContainerRef.current?.closest('[data-active-chart]') as HTMLElement | null) || chartContainerRef.current;
+    return el ? installCursorLog(el) : undefined;
+  }, []);
   const overlayRef = useRef<HTMLDivElement>(null);
   const { activeTool, shiftDrawings, setSymbol: setDrawingSymbol, setDrawings, selectedShapeId } = useDrawing();
   const { mode, replayIndex, startReplayAt, getReplayTime, stopReplay, togglePlay, stepBack, stepForward, setHoverX, hoverX, updateReplayData, cancelSelect } = useReplay();
@@ -2593,6 +2601,8 @@ export default function ChartContainer({
           return formatTickMark(ts, tickMarkType, chartTimezoneRef.current);
         },
       },
+      // A drag released while moving keeps the chart gliding, slowing down (as on openmarket.xyz)
+      kineticScroll: { mouse: true, touch: true },
       crosshair: {
         mode: 0,
         vertLine: { color: canvasColorsRef.current.crosshair },
@@ -2606,7 +2616,17 @@ export default function ChartContainer({
       },
     });
 
+    // The price axis glides to a new range rather than snapping (lib/easedAutoscale). Its next
+    // step is asked for by re-sending the last bar unchanged: lightweight-charts recomputes the
+    // auto scale on every data update, and nothing else moves
+    const priceGlide = easedAutoscale(() => {
+      try {
+        const d = (candleSeries as any).data?.();
+        if (d?.length) rawUpdate(d[d.length - 1]);
+      } catch { /* the chart is gone */ }
+    });
     const candleSeries = newChart.addSeries(CandlestickSeries, {
+      autoscaleInfoProvider: priceGlide.provider,
       upColor: candleColorsRef.current.bodyVisible ? candleColorsRef.current.upColor : 'transparent', 
       downColor: candleColorsRef.current.bodyVisible ? candleColorsRef.current.downColor : 'transparent',
       borderVisible: candleColorsRef.current.borderVisible,
@@ -2618,9 +2638,9 @@ export default function ChartContainer({
     });
 
     // Symbol → Color bars based on previous close (see recolorCandlesRef)
+    const rawUpdate = candleSeries.update.bind(candleSeries);
     {
       const rawSetData = candleSeries.setData.bind(candleSeries);
-      const rawUpdate = candleSeries.update.bind(candleSeries);
       const colorOf = (bar: any, prevClose: number | null) => {
         const c = candleColorsRef.current;
         const up = bar.close >= (prevClose ?? bar.open);
@@ -2640,6 +2660,7 @@ export default function ChartContainer({
         styleStyledRef.current = styleBars(effectiveTypeRef.current, typeStyleRef.current, data, candleColor);
         // the extra series first, so the two never hold different symbols' bars at once
         styleOverlaySyncRef.current();
+        priceGlide.snap();   // new bars: their range at once, not a glide from the old ones
         rawSetData(styleStyledRef.current);
       };
       (candleSeries as any).update = (bar: any, ...rest: any[]) => {
@@ -3213,6 +3234,9 @@ export default function ChartContainer({
       if (applyChartWheel(newChart, e, e.clientX - rect.left - paneGeometry(newChart).paneLeft)) { e.preventDefault(); e.stopImmediatePropagation(); }
     };
     containerEl.addEventListener('wheel', handleChartWheel, { passive: false, capture: true });
+    // Grabbing the chart stops a wheel glide still under way (the drag takes over)
+    const stopGlide = () => stopChartGlide(newChart);
+    containerEl.addEventListener('pointerdown', stopGlide, true);
 
     // Clicking and dragging directly on the price axis rescales it live — this is
     // the library's own native gesture, handled entirely internally with no
@@ -3245,6 +3269,9 @@ export default function ChartContainer({
       resizeObserver.disconnect();
       containerEl.removeEventListener('wheel', handlePriceAxisWheel, { capture: true });
       containerEl.removeEventListener('wheel', handleChartWheel, { capture: true });
+      containerEl.removeEventListener('pointerdown', stopGlide, true);
+      stopChartGlide(newChart);
+      priceGlide.dispose();
       containerEl.removeEventListener('mousedown', handlePriceAxisMouseDown);
       stopPriceAxisDragTracking();
       newChart.remove();
