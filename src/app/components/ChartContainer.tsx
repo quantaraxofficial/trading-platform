@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo, forwardRef, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, forwardRef, useSyncExternalStore, startTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { createChart, ColorType, ISeriesApi, IChartApi, CandlestickSeries, HistogramSeries, LineSeries, BarSeries, AreaSeries, BaselineSeries, LineType, PriceScaleMode, TickMarkType, LineStyle, createTextWatermark } from "lightweight-charts";
 import { CandleBodyAwareLine, candlestickBodyWidthCss } from "./chartPrimitives/CandleBodyAwareLine";
@@ -1203,7 +1203,8 @@ export default function ChartContainer({
       if (!cell || getComputedStyle(e.target as HTMLElement).cursor.includes('resize')) return;
       grabbed = cell; startX = e.clientX; startY = e.clientY;
     };
-    // Over a candle the pane shows the pointing hand (it can be clicked / right-clicked / double-clicked)
+    // The pane keeps the mode's cursor (the cross) everywhere, over candles and a trade's
+    // execution arrow too (still clickable: its fills card)
     let hoverCell: HTMLElement | null = null;
     const onHover = (e: MouseEvent) => {
       if (grabbed || e.buttons) return;
@@ -1215,8 +1216,8 @@ export default function ChartContainer({
       const px = e.clientX - r.left - paneGeometry(chartRef.current).paneLeft, py = e.clientY - r.top;
       const mark = execMarksRef.current?.hitTest(px, py) ?? null;
       execMarksRef.current?.setHover(mark);
-      const over = !!mark || candleAtRef.current(px, py) >= 0;
-      cell.style.cursor = over ? 'pointer' : cursorStyle;
+      const over = !!mark;
+      cell.style.cursor = cursorStyle;
       hoverCell = over ? cell : null;
     };
     const onMove = (e: MouseEvent) => {
@@ -2127,25 +2128,46 @@ export default function ChartContainer({
   const applyEmaStylesRef = useRef(applyEmaStyles);
   applyEmaStylesRef.current = applyEmaStyles;
 
+  // EMA results remembered for the bars on the chart: going back to a length (9 → 15 → 9) or
+  // re-applying the same settings reuses the result instead of working it out again. Keyed by the
+  // settings, the timeframe and the bars (count, first / last bar and its close: a live tick on
+  // the last bar or new history makes a new key). Small: the last 24 results.
+  const emaMemoRef = useRef(new Map<string, ReturnType<typeof computeEma>>());
+  const computeEmaCached = (bars: any[], cfg: EmaConfig) => {
+    const first = bars[0], last = bars[bars.length - 1];
+    const key = `${intervalRef.current}|${bars.length}|${first?.time}|${last?.time}|${last?.close}|${JSON.stringify(cfg)}`;
+    const memo = emaMemoRef.current;
+    const hit = memo.get(key);
+    if (hit) { memo.delete(key); memo.set(key, hit); return hit; }   // most recently used last
+    const out = computeEma(bars, cfg, intervalRef.current);
+    memo.set(key, out);
+    if (memo.size > 24) memo.delete(memo.keys().next().value as string);
+    return out;
+  };
+  // The bars the EMAs are worked out on (in replay, up to the replay's bar)
+  const emaBars = (data: any[]) =>
+    modeRef.current !== 'idle' && replayIndexRef.current >= 0 && replayIndexRef.current < data.length ? data.slice(0, replayIndexRef.current + 1) : data;
+  // One EMA's lines from its settings
+  const refreshEma = (id: string, bars: any[]) => {
+    const s = emasRef.current[id];
+    if (!s || !bars.length) return;
+    const cfg = emaCfg(id);
+    const out = computeEmaCached(bars, cfg);
+    s.setData(out.ema as any);
+    syncEmaExtras(id, cfg);
+    const x = emaExtrasRef.current[id];
+    if (x?.ma) x.ma.setData((out.ma || []) as any);
+    if (x?.upper) x.upper.setData((out.upper || []) as any);
+    if (x?.lower) x.lower.setData((out.lower || []) as any);
+  };
+
   const updateEmaData = (data: any[]) => {
     if (!data || data.length === 0) return;
     // The Pine indicators follow the same bar updates (debounced, off the main thread)
     pineIndRerunRef.current();
     // In replay mode, clip data to the replay index
-    let effectiveData = data;
-    if (modeRef.current !== 'idle' && replayIndexRef.current >= 0 && replayIndexRef.current < data.length) {
-      effectiveData = data.slice(0, replayIndexRef.current + 1);
-    }
-    Object.keys(emasRef.current).forEach(id => {
-      const cfg = emaCfg(id);
-      const out = computeEma(effectiveData, cfg, intervalRef.current);
-      emasRef.current[id].setData(out.ema as any);
-      syncEmaExtras(id, cfg);
-      const x = emaExtrasRef.current[id];
-      if (x?.ma) x.ma.setData((out.ma || []) as any);
-      if (x?.upper) x.upper.setData((out.upper || []) as any);
-      if (x?.lower) x.lower.setData((out.lower || []) as any);
-    });
+    const effectiveData = emaBars(data);
+    Object.keys(emasRef.current).forEach(id => refreshEma(id, effectiveData));
     // Also clip volume in replay mode
     if (modeRef.current !== 'idle' && volumeSeriesRef.current && effectiveData !== data) {
       const volData = volumeHistogram(effectiveData, 'rgba(38, 166, 154, 0.5)', 'rgba(239, 83, 80, 0.5)');
@@ -2387,12 +2409,27 @@ export default function ChartContainer({
     }
   }, [volumeVisible, activeIndicators]);
 
-  // Settings changes show at once (the settings dialog edits live, as on TradingView)
+  // Settings changes show at once (the settings dialog edits live, as on TradingView). Only the
+  // EMAs whose settings changed are worked out again, and an EMA setting doesn't re-run the Pine
+  // indicators (they don't depend on it); a new timeframe redoes them all
+  const emaAppliedRef = useRef<{ interval: string; cfgs: Record<string, string> }>({ interval: '', cfgs: {} });
   useEffect(() => {
-    emaConfigsRef.current = emaConfigs;
+    emaConfigsRef.current = { ...emaConfigsRef.current, ...emaConfigs };
     emaVisibilitiesRef.current = emaVisibilities;
     Object.keys(emasRef.current).forEach(id => applyEmaStyles(id));
-    updateEmaData(fullDataRef.current);
+    const applied = emaAppliedRef.current;
+    if (applied.interval !== interval) {
+      emaAppliedRef.current = { interval, cfgs: Object.fromEntries(Object.keys(emasRef.current).map(id => [id, JSON.stringify(emaCfg(id))])) };
+      updateEmaData(fullDataRef.current);
+      return;
+    }
+    const bars = emaBars(fullDataRef.current);
+    Object.keys(emasRef.current).forEach(id => {
+      const json = JSON.stringify(emaCfg(id));
+      if (applied.cfgs[id] === json) return;
+      applied.cfgs[id] = json;
+      refreshEma(id, bars);
+    });
   }, [emaConfigs, emaVisibilities, interval]);
 
   const updateReplayDataRef = useRef(updateReplayData);
@@ -4194,7 +4231,18 @@ export default function ChartContainer({
           onClose={() => setShowEmaSettingsFor(null)} 
           theme={theme} 
           config={normalizeEma(emaConfigs[showEmaSettingsFor] ?? savedEmaDefaults())}
-          onChangeConfig={(newConfig) => setEmaConfigs(prev => ({ ...prev, [showEmaSettingsFor]: newConfig }))}
+          onChangeConfig={(newConfig) => {
+            // Drawn at once on the chart (just this EMA), the rest of the page's state follows in
+            // the background so typing a length never waits on a full re-render
+            const id = showEmaSettingsFor;
+            emaConfigsRef.current = { ...emaConfigsRef.current, [id]: newConfig };
+            if (emasRef.current[id]) {
+              applyEmaStyles(id);
+              refreshEma(id, emaBars(fullDataRef.current));
+              emaAppliedRef.current.cfgs[id] = JSON.stringify(emaCfg(id));
+            }
+            startTransition(() => setEmaConfigs(prev => ({ ...prev, [id]: newConfig })));
+          }}
         />
       )}
 

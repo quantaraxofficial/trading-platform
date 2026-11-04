@@ -65,8 +65,9 @@ flyouts and quick search.
 2. CHART, LAYOUTS AND CHART TYPES
 ======================================================================
 Chart interactions
-  - Hovering a candle shows the pointer; clicking selects the price series (dots on the
-    candle bodies)
+  - The cursor stays the cross over the whole chart (candles, the price "+" button, execution
+    arrows); clicking a candle selects the price series (dots on the candle bodies)
+  - Changing an EMA's settings redraws just that EMA at once; results are remembered (9 -> 15 -> 9)
   - Right-click menu on a candle: add alert / order / indicator, symbol info, copy price,
     paste, table view, add to watchlist, add text note, settings
   - Double-click a candle: Settings on the Symbol tab
