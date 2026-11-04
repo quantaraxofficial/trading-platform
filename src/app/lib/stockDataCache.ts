@@ -3,6 +3,8 @@
 // multi-timeframe fetcher (request.security()/request.security_lower_tf()
 // data). Lives in its own module so those two don't need to import from
 // each other just to share this.
+import { isVantageSymbol } from "./vantageFeed";
+
 export const CACHE_PREFIX = 'tv_data_';
 const CACHE_TTL_LIVE = 5 * 60 * 1000;      // 5 min for today's data
 const CACHE_TTL_HISTORICAL = 7 * 24 * 60 * 60 * 1000; // 7 days for historical
@@ -20,7 +22,12 @@ function isToday(dateStr?: string): boolean {
   return dateStr === today;
 }
 
+// Vantage symbols (XAUUSD) are never cached: their candles come from our own fast server, and a
+// stale copy (or another feed's) showed wrong bars until a reload
+const vantageKey = (key: string) => isVantageSymbol(key.slice(CACHE_PREFIX.length).split('|')[0] || '');
+
 export function getCachedData(key: string, endDate?: string): any[] | null {
+  if (vantageKey(key)) return null;
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
@@ -39,6 +46,7 @@ export function getCachedData(key: string, endDate?: string): any[] | null {
 }
 
 export function setCachedData(key: string, data: any[]): void {
+  if (vantageKey(key)) return;
   try {
     // Evict oldest entries if approaching limit
     const allKeys: { key: string; ts: number }[] = [];
@@ -68,4 +76,19 @@ export function setCachedData(key: string, data: any[]): void {
     keys.slice(0, Math.ceil(keys.length / 2)).forEach(k => localStorage.removeItem(k));
     try { localStorage.setItem(key, JSON.stringify({ data, ts: Date.now(), v: CACHE_FORMAT })); } catch {}
   }
+}
+
+// Gold's copies kept by older versions (candles and aggregated timeframes): removed once per load
+if (typeof window !== 'undefined') {
+  try {
+    const gone: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      const sym = k.startsWith(CACHE_PREFIX) ? k.slice(CACHE_PREFIX.length).split('|')[0]
+        : k.startsWith('tv_agg2_') ? k.slice('tv_agg2_'.length).split('|')[0] : null;
+      if (sym && isVantageSymbol(sym)) gone.push(k);
+    }
+    gone.forEach(k => localStorage.removeItem(k));
+  } catch { /* storage unavailable */ }
 }

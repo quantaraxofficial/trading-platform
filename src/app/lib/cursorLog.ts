@@ -28,7 +28,7 @@ export function installCursorLog(root: HTMLElement): () => void {
     ...styleDesc,
     get(this: HTMLElement) {
       const real = styleDesc.get!.call(this) as CSSStyleDeclaration;
-      if (!root.contains(this)) return real;
+      if (!document.documentElement.contains(this)) return real;   // anywhere on the page
       let w = wrapped.get(real);
       if (!w) {
         w = new Proxy(real, {
@@ -77,13 +77,18 @@ export function installCursorLog(root: HTMLElement): () => void {
       console.log(`[CursorLog] style ${describe(el)}: "${before}" -> "${now}"${tickNote()}\n   set by: ${by}`);
     }
   });
-  mo.observe(root, { subtree: true, attributes: true, attributeFilter: ["style"], attributeOldValue: true });
+  // the whole page: a cursor set on the body or an overlay outside the chart shows over it too
+  mo.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["style"], attributeOldValue: true });
 
   // 3) The cursor actually under the (still) mouse
   let mx = -1, my = -1, under = "", underEl = "";
   const onMove = (e: MouseEvent) => { mx = e.clientX; my = e.clientY; };
   window.addEventListener("mousemove", onMove, true);
-  const poll = setInterval(() => {
+  // every frame (a flicker shorter than a poll interval would slip through), while the mouse is
+  // over the chart
+  let raf = 0;
+  const poll = () => {
+    raf = requestAnimationFrame(poll);
     if (mx < 0) return;
     const r = root.getBoundingClientRect();
     if (mx < r.left || mx > r.right || my < r.top || my > r.bottom) { under = ""; return; }
@@ -95,13 +100,14 @@ export function installCursorLog(root: HTMLElement): () => void {
       under = c;
       underEl = d;
     }
-  }, 200);
+  };
+  raf = requestAnimationFrame(poll);
   console.log("[CursorLog] watching the chart's cursor (temporary debug logging)");
 
   return () => {
     installed = false;
     mo.disconnect();
-    clearInterval(poll);
+    cancelAnimationFrame(raf);
     window.removeEventListener("mousemove", onMove, true);
     window.removeEventListener("tv:live-price", onTick);
     Object.defineProperty(HTMLElement.prototype, "style", styleDesc);

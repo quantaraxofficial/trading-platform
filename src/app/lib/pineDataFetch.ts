@@ -2,6 +2,7 @@ import { barVolume } from "../utils/volume";
 import { pineTfToAppInterval, type Bar as PineBar } from "./pineScriptEngine";
 import { getCacheKey, getCachedData, setCachedData } from "./stockDataCache";
 import { feedTimeToUnix } from "../utils/feedTime";
+import { fetchVantageCandles, isVantageSymbol, vantageInterval } from "./vantageFeed";
 
 // Fetches real historical OHLC data for a timeframe OTHER than the one
 // currently loaded on the chart, via the same /api/stock-data proxy
@@ -13,6 +14,16 @@ import { feedTimeToUnix } from "../utils/feedTime";
 // the other just for this.
 export async function fetchPineTimeframeData(pineTf: string, symbol: string): Promise<PineBar[]> {
   const appInterval = pineTfToAppInterval(pineTf);
+  // Vantage symbols (XAUUSD): the same server candles as the chart, never cached here or taken
+  // from TwelveData (other prices: a script's other timeframe wouldn't match the chart)
+  if (isVantageSymbol(symbol) && vantageInterval(appInterval)) {
+    for (const wait of [0, 700, 2000]) {
+      if (wait) await new Promise(r => setTimeout(r, wait));
+      const bars = await fetchVantageCandles(symbol, appInterval);
+      if (bars) return bars as PineBar[];
+    }
+    return [];
+  }
   // Share ChartContainer's own localStorage cache (same key shape, same TTL)
   // so re-running a script doesn't re-fetch the same timeframe from the API
   // every click — the TwelveData free tier caps at 8 requests/minute, and a

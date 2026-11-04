@@ -541,7 +541,11 @@ function PlusButton({ chart, series, symbol, paneW, paneH, prec, connected, left
   const hoverRef = useRef(false);
   useEffect(() => {
     const onMove = (param: any) => {
-      if (hoverRef.current) return;
+      // The mouse resting on this button is off the chart canvas, so the chart reports no
+      // crosshair (on every live tick it redraws): hiding the button then put the canvas back
+      // under the mouse, the crosshair and the button came back, and the cursor flipped between
+      // the hand and the cross with each tick. Over the button, it stays where it is.
+      if (hoverRef.current || btnRef.current?.matches(':hover')) return;
       setY(param?.point && param.point.y >= 0 && param.point.y <= paneH ? param.point.y : null);
     };
     chart.subscribeCrosshairMove(onMove);
@@ -569,7 +573,8 @@ function PlusButton({ chart, series, symbol, paneW, paneH, prec, connected, left
           onClick={() => { if (price !== null) setMenuPrice(price); }}
           style={{
             position: "absolute", left, top: (y ?? 0) - 10, width: 20, height: 20, borderRadius: 4, padding: 0,
-            border: "none", background: "#131722", color: "#fff", cursor: "pointer", pointerEvents: "auto",
+            // the chart's cross, not the hand: the cursor never changes over the chart
+            border: "none", background: "#131722", color: "#fff", cursor: "crosshair", pointerEvents: "auto",
             display: "flex", alignItems: "center", justifyContent: "center", zIndex: 3,
           }}
         >

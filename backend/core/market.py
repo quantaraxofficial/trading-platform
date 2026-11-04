@@ -211,7 +211,9 @@ def candles(request):
         except Exception as e:
             import logging
             logging.getLogger("core.market").warning("candles unavailable for %s: %s", sym, e)
-            return Response({"bars": [], "meta": {"symbol": sym, "source": "unavailable"}})
+            # A failure, not "no bars": the chart retries instead of taking it as an empty store
+            return Response({"error": "candles unavailable", "meta": {"symbol": sym, "source": "unavailable"}},
+                            status=status.HTTP_503_SERVICE_UNAVAILABLE)
         if len(_cache) > 300:
             _cache.clear()
         # The latest window is re-read every few seconds; older windows don't change
