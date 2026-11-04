@@ -153,3 +153,18 @@ class ClientIpTests(TestCase):
             self.assertEqual(get_client_ip(req), "10.0.0.1")     # a forged header is ignored
         with override_settings(TRUSTED_PROXY_COUNT=1):
             self.assertEqual(get_client_ip(req), "10.0.0.9")     # the hop the proxy added
+
+
+class AdminCookieTests(TestCase):
+    """Someone signed in to Django admin on the same site: the app's own saves still work (the API
+    signs people in with its session keys, never Django's cookie, so no CSRF check applies)"""
+    def test_saves_work_with_an_admin_session_cookie(self):
+        from django.contrib.auth.models import User
+        c = APIClient(enforce_csrf_checks=True)
+        c.force_login(User.objects.create_superuser("boss", "boss@example.com", "pw-for-test-only"))
+        p = TraderProfile.objects.create(uid="u7", name="T", email="t7@example.com")
+        UserSession.objects.create(user=p, session_key="s" * 43)
+        r = c.post(f"/api/users/chart_state/u7/?session_key={'s' * 43}", {"symbol": "XAUUSD", "interval": "1min", "bar_spacing": 12.5}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        r = c.post(f"/api/users/collab/u7/rooms/?session_key={'s' * 43}", {"name": "Test", "symbol": "XAUUSD", "interval": "1min"}, format="json")
+        self.assertIn(r.status_code, (200, 201), r.content)

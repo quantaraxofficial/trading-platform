@@ -48,6 +48,7 @@ import { useTradingSettings } from "@/app/trading/settings";
 import { formatQty } from "@/app/trading/instruments";
 import TradingOverlay from "@/app/trading/TradingOverlay";
 import { Tip, TipKey as Kbd, SymbolAvatar, Popover, MenuItem, MenuDivider } from "@/app/trading/ui";
+import { saveBacktest } from "@/app/analytics/data";
 import { statusLine, type StatusLineSettings } from "../lib/statusLine";
 import { loadFavoriteIndicators, saveFavoriteIndicators } from "@/app/utils/favoriteIndicators";
 import { rememberExchangeTimezone, toChartTime, exchangeTimezoneOf } from "@/app/utils/exchangeTime";
@@ -1221,7 +1222,8 @@ export default function ChartContainer({
       if (!cell || getComputedStyle(e.target as HTMLElement).cursor.includes('resize')) return;
       grabbed = cell; startX = e.clientX; startY = e.clientY;
     };
-    // Over a candle the pane shows the pointing hand (it can be clicked / right-clicked / double-clicked)
+    // The pane keeps the mode's cursor (the cross) over candles too; only a trade's execution
+    // arrow (clickable: its fills card) shows the pointing hand
     let hoverCell: HTMLElement | null = null;
     const onHover = (e: MouseEvent) => {
       if (grabbed || e.buttons) return;
@@ -1233,7 +1235,7 @@ export default function ChartContainer({
       const px = e.clientX - r.left - paneGeometry(chartRef.current).paneLeft, py = e.clientY - r.top;
       const mark = execMarksRef.current?.hitTest(px, py) ?? null;
       execMarksRef.current?.setHover(mark);
-      const over = !!mark || candleAtRef.current(px, py) >= 0;
+      const over = !!mark;
       cell.style.cursor = over ? 'pointer' : cursorStyle;
       hoverCell = over ? cell : null;
     };
@@ -1498,6 +1500,19 @@ export default function ChartContainer({
     pineViewRef.current?.clear();
   }
 
+  // The Strategy Tester's "Save to Analytics": this backtest's closed trades, kept in your account
+  // for the Analytics page (/analytics → Backtests)
+  async function saveStrategyToAnalytics(): Promise<string> {
+    if (!user?.uid) throw new Error("Sign in to save backtests");
+    if (!strategyReport?.trades.length) throw new Error("No closed trades to save yet");
+    const name = strategyScriptName || "Strategy";
+    const b = await saveBacktest(user.uid, {
+      name: `${name} · ${symbolRef.current} ${intervalLabel}`, script: name, language: "pine",
+      symbol: symbolRef.current, timeframe: intervalLabel || intervalRef.current, report: strategyReport,
+    });
+    return b.name;
+  }
+
   // Renders a completed PineRunResult onto the chart (series/markers/tables/
   // legend/report) — shared by the initial run (tv:run-pine-script) and by
   // re-running the same script over a different backtest date range.
@@ -1573,7 +1588,7 @@ export default function ChartContainer({
       if (unique.length <= all.length || unique[0].time >= oldestBar.time) break; // no real progress
       all = unique;
       fullDataRef.current = unique;
-      (window as any).__chartFullData = fullDataRef.current;
+      (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
     }
     return all;
   }
@@ -2286,8 +2301,9 @@ export default function ChartContainer({
         priceFormat: { type: 'volume' },
         priceScaleId: '', // set as an overlay
       });
+      // The bottom quarter of the pane, as on TradingView (its tallest visible bar: 214 of 855 px)
       chartRef.current.priceScale('').applyOptions({
-        scaleMargins: { top: 0.8, bottom: 0 },
+        scaleMargins: { top: 0.75, bottom: 0 },
       });
       volumeSeriesRef.current = volumeSeries;
       
@@ -2490,7 +2506,7 @@ export default function ChartContainer({
       } else return;
       if (brickTypeRef.current) {
         fullDataRef.current = bars.slice();
-        (window as any).__chartFullData = fullDataRef.current;
+        (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
         try { cs.setData(rawBars()); } catch { return; }
         if (volumeSeriesRef.current) volumeSeriesRef.current.setData(volumeHistogram(fullDataRef.current, volumeConfigRef.current.upColor, volumeConfigRef.current.downColor));
       } else {
@@ -2664,6 +2680,15 @@ export default function ChartContainer({
     newChart.timeScale().subscribeVisibleLogicalRangeChange(() => {
       if (updateSessionDOMRef.current) updateSessionDOMRef.current();
     });
+    // The zoom as it is now: options().barSpacing stays at what was last set with applyOptions
+    // (wheel and pinch zooming don't change it), so it's worked out from the visible bars
+    const currentBarSpacing = () => {
+      const ts = newChart.timeScale();
+      const r = ts.getVisibleLogicalRange();
+      const w = ts.width();
+      // (the visible logical range spans one bar less than fits: lightweight-charts' leftBorder + 1)
+      return r && w > 0 && r.to > r.from ? Math.round((w / (r.to - r.from + 1)) * 1000) / 1000 : ts.options().barSpacing || 6;
+    };
     newChart.timeScale().subscribeVisibleTimeRangeChange(() => {
       if (updateSessionDOMRef.current) updateSessionDOMRef.current();
       
@@ -2674,12 +2699,14 @@ export default function ChartContainer({
         const ts = newChart.timeScale();
         const range = ts.getVisibleLogicalRange();
         if (range) {
-          const centerLogical = Math.floor((range.from + range.to) / 2);
-          if (centerLogical >= 0 && centerLogical < fullDataRef.current.length) {
-            const centerTime = fullDataRef.current[centerLogical].time;
-            const barSpacing = ts.options().barSpacing || 6;
-            onChartStateChange(centerTime, barSpacing);
-          }
+          // The middle bar's time; in the empty space after the last bar, a time that far past it
+          // (so a view with room on the right comes back the same), before the first bar the first
+          const data = fullDataRef.current;
+          const mid = Math.floor((range.from + range.to) / 2);
+          const last = data.length - 1;
+          const sec = getIntervalMs(intervalRef.current) / 1000;
+          const centerTime = mid > last && sec > 0 ? data[last].time + (mid - last) * sec : data[Math.max(0, Math.min(last, mid))].time;
+          onChartStateChange(centerTime, currentBarSpacing());
         }
       }
     });
@@ -2744,7 +2771,7 @@ export default function ChartContainer({
       candleSeries.setData(stockData);
       applyPricePrecision(stockData);
       fullDataRef.current = stockData;
-      (window as any).__chartFullData = fullDataRef.current;
+      (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
 
       // Pre-compute higher timeframes from 1m data for instant switching
       if (interval === '1min' && stockData.length > 0) {
@@ -2779,17 +2806,23 @@ export default function ChartContainer({
           const diff = Math.abs(stockData[i].time - initialTargetTimestamp);
           if (diff < minDiff) { minDiff = diff; closestIdx = i; }
         }
-        const timeScale = newChart.timeScale();
-        
-        if (initialBarSpacing) {
-          timeScale.applyOptions({ barSpacing: initialBarSpacing });
+        // A middle saved in the empty space after the last bar (see the range subscription)
+        const lastBar = stockData[stockData.length - 1];
+        const barSec = getIntervalMs(interval) / 1000;
+        if (initialTargetTimestamp > lastBar.time && barSec > 0) {
+          closestIdx = stockData.length - 1 + Math.min(500, Math.round((initialTargetTimestamp - lastBar.time) / barSec));
         }
-        
+        const timeScale = newChart.timeScale();
+
         let retries = 0;
         const applyPosition = () => {
           const visibleRange = timeScale.getVisibleLogicalRange();
           if (visibleRange && visibleRange.to - visibleRange.from > 0) {
-            const halfWidth = (visibleRange.to - visibleRange.from) / 2;
+            // The saved zoom as the number of bars across: lightweight-charts applies a new bar
+            // spacing only on its next frame, so the range measured now still has the old zoom,
+            // and setting the range from it would put that old zoom back
+            const width = timeScale.width();
+            const halfWidth = initialBarSpacing && width > 0 ? (width / initialBarSpacing - 1) / 2 : (visibleRange.to - visibleRange.from) / 2;
             console.log(`[ChartLoad] Applying position. closestIdx: ${closestIdx}, halfWidth: ${halfWidth}`);
             timeScale.setVisibleLogicalRange({ from: closestIdx - halfWidth, to: closestIdx + halfWidth });
           } else if (retries < 20) {
@@ -2932,7 +2965,7 @@ export default function ChartContainer({
           }
 
           fullDataRef.current = unique;
-          (window as any).__chartFullData = fullDataRef.current;
+          (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
           if (brickTypeRef.current) setDrawings((prev: any[]) => remapDrawingPoints(prev, fullDataRef.current, '', shownBefore));
           recalcSessionBoxes(shownOf(unique));
           
@@ -2983,7 +3016,7 @@ export default function ChartContainer({
         // IMPORTANT: Update refs BEFORE setData so any synchronous scroll
         // handler events during setData see the new data, not the old data
         fullDataRef.current = stockData;
-        (window as any).__chartFullData = fullDataRef.current;
+        (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
 
         // Cache in agg cache for future instant switching
         const currentInterval = intervalRef.current;
@@ -3050,16 +3083,13 @@ export default function ChartContainer({
       const stockData = await loadWindow(apiDate(Math.min(targetTimestamp * 1000 + halfMs, Date.now())));
       if (!stockData) return;
       centreOn(stockData);
-      if (onChartStateChange) {
-        const barSpacing = newChart.timeScale().options().barSpacing || 6;
-        onChartStateChange(targetTimestamp, barSpacing);
-      }
+      if (onChartStateChange) onChartStateChange(targetTimestamp, currentBarSpacing());
     };
 
     // Replay's "Select starting point" (as on TradingView): a date from the dialog, the first bar
     // the provider has, or a random bar anywhere in the history. The chart is cut just before the
     // chosen bar, so it's the first one Play reveals; history outside the loaded range is fetched.
-    const replayFrom = async (detail: { kind: 'date' | 'first' | 'random' | 'saved'; date?: string; time?: string; at?: number }) => {
+    const replayFrom = async (detail: { kind: 'date' | 'first' | 'random' | 'saved'; date?: string; time?: string; at?: number; visibleBars?: number }) => {
       if (!requireFeature('replay')) return;   // (a subscription that's ended)
       const iv = intervalRef.current;
       const daily = /day|week|month/.test(iv);
@@ -3117,12 +3147,17 @@ export default function ChartContainer({
       }
 
       startReplayAtRef.current(startIdx, data, candleSeries, newChart);
-      // Keep the bar spacing, with the start bar near the right edge
+      // Keep the bar spacing (or a backtest session's own zoom), with the start bar near the right edge
       const vr = newChart.timeScale().getVisibleLogicalRange();
-      const width = vr ? Math.max(20, vr.to - vr.from) : 120;
+      const width = detail.visibleBars && detail.visibleBars > 5 ? detail.visibleBars : vr ? Math.max(20, vr.to - vr.from) : 120;
       newChart.timeScale().setVisibleLogicalRange({ from: startIdx - width * 0.85, to: startIdx + width * 0.15 });
     };
     const onReplayStart = (e: Event) => { replayFrom((e as CustomEvent).detail); };
+    // How many bars the chart shows across (a backtest session keeps its zoom)
+    (window as any).__chartVisibleBars = () => {
+      const r = newChart.timeScale().getVisibleLogicalRange();
+      return r ? Math.round(r.to - r.from) : null;
+    };
     window.addEventListener('tv:replay-start', onReplayStart);
 
     window.addEventListener("resize", handleResize);
@@ -3393,7 +3428,7 @@ export default function ChartContainer({
           }
           const oldStockData = fullDataRef.current; // Save before overwriting
           fullDataRef.current = stockData;
-          (window as any).__chartFullData = fullDataRef.current;
+          (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
           pineRerunOnLoadRef.current();
           
           // Cache this interval's data in agg cache for future use
@@ -3710,7 +3745,7 @@ export default function ChartContainer({
       // the shown bars change (a built type, or its inputs): build them, place everything on them again
       const before = fullDataRef.current;
       fullDataRef.current = raw;
-      (window as any).__chartFullData = fullDataRef.current;
+      (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
       sr.setData(raw);
       if (volumeSeriesRef.current) volumeSeriesRef.current.setData(volumeHistogram(fullDataRef.current, volumeConfigRef.current.upColor, volumeConfigRef.current.downColor));
       updateEmaData(fullDataRef.current);
@@ -4316,6 +4351,7 @@ export default function ChartContainer({
           onOpenSettings={() => setShowPineSettings(true)}
           onAddAlert={() => setShowAlertModal(true)}
           onRemove={removePineScript}
+          onSaveToAnalytics={saveStrategyToAnalytics}
           fullRangeStart={fullDataRef.current[0]?.time}
           fullRangeEnd={fullDataRef.current[fullDataRef.current.length - 1]?.time}
         />

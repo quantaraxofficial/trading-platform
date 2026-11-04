@@ -328,11 +328,25 @@ export class PaperTradingEngine {
     if (this.live) return;
     const live = this.state;
     const src = live.accounts.find(a => a.id === live.activeAccountId);
-    const acc = createAccount("Replay Trading", src?.initialBalance ?? DEFAULT_BALANCE);
-    if (src) acc.leverage = { ...src.leverage };
+    // A backtest session being resumed carries on in its own saved account
+    const seed = this.replaySeed;
+    this.replaySeed = null;
+    const acc = seed ? { ...seed.account, leverage: { ...DEFAULT_LEVERAGE, ...(seed.account.leverage || {}) } } : createAccount("Replay Trading", src?.initialBalance ?? DEFAULT_BALANCE);
+    if (src && !seed) acc.leverage = { ...src.leverage };
     this.live = live;
-    this.state = { ...live, accounts: [acc], activeAccountId: acc.id, books: { [acc.id]: createBook() }, quotes: {} };
+    this.state = { ...live, accounts: [acc], activeAccountId: acc.id, books: { [acc.id]: seed ? { ...createBook(), ...structuredClone(seed.book) } : createBook() }, quotes: {} };
     this.listeners.forEach(l => l());
+  }
+
+  // Backtest sessions (analytics/sessions.ts): the account the next replay starts with (a saved
+  // session's balance, positions, orders and trades; null: a fresh one), and the replay account
+  // as it stands, to save
+  private replaySeed: { account: Account; book: Book } | null = null;
+  seedReplaySession(seed: { account: Account; book: Book } | null) { this.replaySeed = seed; }
+  replaySnapshot(): { account: Account; book: Book } | null {
+    if (!this.live) return null;
+    const acc = this.state.accounts.find(a => a.id === this.state.activeAccountId);
+    return acc ? structuredClone({ account: acc, book: this.state.books[acc.id] }) : null;
   }
 
   endReplaySession() {

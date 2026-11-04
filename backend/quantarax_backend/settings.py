@@ -146,6 +146,10 @@ CONTENT_SECURITY_POLICY = {
 # API request limits per IP (core/throttles.py): sign-ins, reports and uploads tight; the rest
 # generous, so only floods are stopped
 REST_FRAMEWORK = {
+    # The API knows people by their session keys (core/auth.py), never by Django's login cookie:
+    # with SessionAuthentication on, anyone also signed in to /admin on the site had every save
+    # refused (403, CSRF)
+    'DEFAULT_AUTHENTICATION_CLASSES': [],
     'DEFAULT_THROTTLE_CLASSES': ['core.throttles.ApiThrottle'],
     'DEFAULT_THROTTLE_RATES': {
         'api': env('THROTTLE_API', default='2000/min'),

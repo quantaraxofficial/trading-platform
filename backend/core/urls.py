@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, collab, collab_files, market
+from . import views, analytics, collab, collab_files, market
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -22,6 +22,14 @@ urlpatterns = [
     path('live/last-prices/', views.get_last_prices, name='live_last_prices'),
     path('live/candles/', market.candles, name='live_candles'),
     path('live/ingest/', market.ingest, name='live_ingest'),
+    # Analytics (core/analytics.py): saved backtests, backtest sessions, trade journals
+    path('analytics/<str:uid>/backtests/', analytics.backtests, name='analytics_backtests'),
+    path('analytics/<str:uid>/backtests/<int:bid>/', analytics.backtest, name='analytics_backtest'),
+    path('analytics/<str:uid>/journal/', analytics.journal, name='analytics_journal'),
+    path('analytics/<str:uid>/sessions/', analytics.sessions, name='analytics_sessions'),
+    path('analytics/<str:uid>/replays/', analytics.saved_replays, name='analytics_saved_replays'),
+    path('analytics/<str:uid>/sessions/<int:sid>/', analytics.session, name='analytics_session'),
+    path('analytics/<str:uid>/sessions/<int:sid>/drawings/', analytics.session_drawings, name='analytics_session_drawings'),
     # Collab charts (the live part is the WebSocket in consumers.py)
     path('collab/<str:uid>/rooms/', collab.collab_rooms, name='collab_rooms'),
     path('collab/<str:uid>/people/', collab.collab_people, name='collab_people'),

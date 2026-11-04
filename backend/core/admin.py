@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, FeedbackMessage, CollabRoom, CollabMember, CollabMessage, CollabJoinRequest
 from .models import LockedFeature, PlanSettings, Subscription
+from .models import BacktestRun, TradeJournal, ReplaySession, SavedReplay
 from . import access
 
 @admin.register(FeedbackMessage)
@@ -302,3 +303,30 @@ class CollabMessageAdmin(admin.ModelAdmin):
     list_display = ("created_at", "room", "author", "kind", "text")
     list_filter = ("kind",)
     search_fields = ("text", "room__name", "author__name")
+
+
+@admin.register(BacktestRun)
+class BacktestRunAdmin(admin.ModelAdmin):
+    list_display = ("owner", "name", "symbol", "timeframe", "trade_count", "net_profit", "created_at")
+    search_fields = ("owner__name", "name", "symbol")
+    exclude = ("trades",)
+
+
+@admin.register(TradeJournal)
+class TradeJournalAdmin(admin.ModelAdmin):
+    list_display = ("owner", "source", "trade_key", "symbol", "rating", "updated_at")
+    list_filter = ("source",)
+
+
+@admin.register(ReplaySession)
+class ReplaySessionAdmin(admin.ModelAdmin):
+    list_display = ("owner", "name", "symbol", "interval", "status", "time_spent", "updated_at")
+    list_filter = ("status",)
+    search_fields = ("owner__name", "name", "symbol")
+    exclude = ("account", "book")
+
+
+@admin.register(SavedReplay)
+class SavedReplayAdmin(admin.ModelAdmin):
+    list_display = ("owner", "symbol", "interval", "time", "saved_at")
+    search_fields = ("owner__name", "symbol")

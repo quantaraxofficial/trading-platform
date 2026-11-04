@@ -72,7 +72,7 @@ export default function SecondaryChart({ index, symbol, intervalLabel, interval,
     });
     // Volume (when the Volume indicator is on), as the main chart draws it: an overlay in the bottom fifth
     const volume = showVolume ? chart.addSeries(HistogramSeries, { priceScaleId: "", priceFormat: { type: "volume" }, lastValueVisible: false, priceLineVisible: false }) : null;
-    volume?.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+    volume?.priceScale().applyOptions({ scaleMargins: { top: 0.75, bottom: 0 } });   // the bottom quarter, as on TradingView
     volumeRef.current = volume;
     const layer = new StyleLayer(() => barsRef.current as any, () => undefined);
     series.attachPrimitive(layer as any);

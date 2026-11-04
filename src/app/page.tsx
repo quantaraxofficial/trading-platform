@@ -40,7 +40,8 @@ import type { IndicatorTemplate } from "./utils/indicatorTemplates";
 import MobileMenuDrawer, { MobilePanel, MobilePanelSheet } from "./components/MobileMenuDrawer";
 import KeyboardShortcutsDialog from "./components/KeyboardShortcutsDialog";
 import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
-import { saveReplay } from "./lib/savedReplay";
+import BacktestSessionBar from "./components/BacktestSessionBar";
+import { saveReplay, setSavedReplayUser } from "./lib/savedReplay";
 import { layoutStore, layouts, ensureLayout, readSharedLayout, newLayout } from "./lib/layoutStore";
 import { LAYOUTS, LAYOUT_ROWS } from "./lib/chartLayouts";
 import { setLayoutSync } from "./lib/layoutSync";
@@ -560,6 +561,8 @@ function AppLayout() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStateLoaded, accessPlan, selectedInterval, activeIndicators.length, workingLayout?.cells.length]);
+  // "Save this replay" is kept in the account: load this user's (and send any saved here before)
+  useEffect(() => { setSavedReplayUser(user?.uid ?? null); }, [user?.uid]);
 
   const { runSnapshot, toastElement: snapshotToast } = useChartSnapshot({ symbol, intervalLabel, theme });
   const runSnapshotRef = useRef(runSnapshot);
@@ -573,6 +576,16 @@ function AppLayout() {
     } catch { /* none kept */ }
   };
 
+  // The chart's view (centre bar and zoom) as last kept in this browser: signed out, the backend
+  // unreachable, or it has none yet
+  const restoreLocalView = () => {
+    try {
+      const v = JSON.parse(localStorage.getItem('tv:chartView') || 'null');
+      if (v && typeof v.timestamp === 'number') { setTargetTimestamp(v.timestamp); viewTimestampRef.current = v.timestamp; }
+      if (v && typeof v.bar_spacing === 'number' && v.bar_spacing > 0) { setTargetBarSpacing(v.bar_spacing); viewBarSpacingRef.current = v.bar_spacing; }
+    } catch { /* none kept */ }
+  };
+
   // Load Chart State from Django Backend
   useEffect(() => {
     if (user) {
@@ -582,24 +595,28 @@ function AppLayout() {
           return res.json();
         })
         .then(data => {
-          if (data.symbol) setSymbol(data.symbol);
+          // (a backtest session being opened picks its own symbol and timeframe)
+          const openingSession = new URLSearchParams(window.location.search).has("session");
+          if (data.symbol && !openingSession) setSymbol(data.symbol);
           // Only an interval the app knows ("15min", not the label "15m" older saves can hold)
           const label = data.interval ? intervalToLabel(data.interval) : undefined;
-          if (label) {
+          if (label && !openingSession) {
             setSelectedInterval(data.interval);
             setIntervalLabel(label);
           }
           if (data.timestamp) { setTargetTimestamp(data.timestamp); viewTimestampRef.current = data.timestamp; }
           if (data.bar_spacing) { setTargetBarSpacing(data.bar_spacing); viewBarSpacingRef.current = data.bar_spacing; }
+          if (!data.timestamp) restoreLocalView();
           if (data.indicators && Array.isArray(data.indicators) && data.indicators.length > 0) {
             setActiveIndicators(data.indicators);
           }
         })
         // the backend being down or failing just means the chart opens with what this browser kept
-        .catch(err => { console.warn("Chart state not loaded, using this browser's:", err.message); restoreLocalIndicators(); })
+        .catch(err => { console.warn("Chart state not loaded, using this browser's:", err.message); restoreLocalIndicators(); restoreLocalView(); })
         .finally(() => setIsStateLoaded(true));
     } else {
       restoreLocalIndicators();
+      restoreLocalView();
       setIsStateLoaded(true);
     }
   }, [user]);
@@ -907,14 +924,18 @@ function AppLayout() {
               // Keep local state in sync so beforeunload can persist latest values
               viewTimestampRef.current = newTimestamp;
               viewBarSpacingRef.current = newBarSpacing;
-              if (user) {
+              try { localStorage.setItem('tv:chartView', JSON.stringify({ timestamp: newTimestamp, bar_spacing: newBarSpacing })); } catch { /* full */ }
+              // (the chart keeps the first copy of this function, made before sign-in may have
+              // finished: the user is read from the ref, or a signed-in view would never be saved)
+              const u = userRef.current;
+              if (u) {
                 // Debounced save — use refs to always read latest symbol/interval
                 clearTimeout((window as any).__saveChartStateTimer);
                 (window as any).__saveChartStateTimer = setTimeout(() => {
                   const currentSymbol = symbolRef.current;
                   const currentInterval = intervalRef.current;
                   console.log(`[Page] Saving state to DB: sym=${currentSymbol}, int=${currentInterval}, ts=${newTimestamp}, bs=${newBarSpacing}`);
-                  backendFetch(`${BACKEND_URL}/api/users/chart_state/${user.uid}/`, {
+                  backendFetch(`${BACKEND_URL}/api/users/chart_state/${u.uid}/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
@@ -1061,6 +1082,8 @@ function AppLayout() {
       )}
 
       {leaveReplayOpen && <ReplayLeaveDialog onStay={() => setLeaveReplayOpen(false)} onLeave={leaveReplay} />}
+      <BacktestSessionBar symbol={symbol} interval={selectedInterval} intervalLabel={intervalLabel}
+        onSymbol={setSymbol} onInterval={(iv, label) => handleIntervalChange(iv, label)} />
       {showShortcuts && <KeyboardShortcutsDialog onClose={() => setShowShortcuts(false)} />}
 
       {showFeedback && (

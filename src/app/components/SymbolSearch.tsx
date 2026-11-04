@@ -15,7 +15,7 @@ interface SymbolItem {
 }
 
 const SYMBOLS: SymbolItem[] = [
-  { symbol: "XAU/USD", name: "Gold", type: "commodity cfd", exchange: "OANDA", color: "#f7b500" },
+  { symbol: "XAU/USD", name: "Gold", type: "commodity cfd", exchange: "", color: "#f7b500" },   // (no exchange name: the prices are Vantage's)
   { symbol: "NQ", name: "E-mini Nasdaq-100 Futures", type: "futures", exchange: "CME", color: "#00a3e0" },
   { symbol: "ES", name: "E-mini S&P 500 Futures", type: "futures", exchange: "CME", color: "#e31d1a" },
   { symbol: "AAPL", name: "Apple Inc.", type: "stock", exchange: "NASDAQ", color: "#000000" },
@@ -218,7 +218,7 @@ export default function SymbolSearch({ onClose, onSelect, initialSearch = "" }: 
               </div>
               <div style={{ textAlign: "right", display: "flex", flexDirection: "column", gap: "2px" }}>
                 <span style={{ fontSize: "12px", color: "var(--tv-color-text-muted)", textTransform: "lowercase" }}>{s.type}</span>
-                <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--tv-color-text)" }}>{s.exchange}</span>
+                {s.exchange && <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--tv-color-text)" }}>{s.exchange}</span>}
               </div>
             </div>
           ))}
