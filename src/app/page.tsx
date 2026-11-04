@@ -59,7 +59,7 @@ import ChatsPanel, { type OpenChat } from "./components/collab/ChatsPanel";
 import NotificationsPanel from "./community/NotificationsPanel";
 import CollabOverlay from "./components/collab/CollabOverlay";
 import { CollabAlertsSync, CollabChartSync, CollabDrawingSync, CollabPineSync, CollabPresenceSync, CollabReplaySync } from "./components/collab/CollabSync";
-import { useCollabActive } from "./lib/collab/session";
+import { collab, useCollabActive } from "./lib/collab/session";
 import type { ScriptLanguage } from "./lib/scripting";
 import { displaySymbol } from "@/app/lib/symbolDisplay";
 
@@ -598,6 +598,43 @@ function AppLayout() {
     } catch { /* none kept */ }
   };
 
+  // The chart's view (centre bar and zoom) as last kept in this browser: signed out, the backend
+  // unreachable, or it has none yet
+  const restoreLocalView = () => {
+    try {
+      const v = JSON.parse(localStorage.getItem('tv:chartView') || 'null');
+      if (v && typeof v.timestamp === 'number') { setTargetTimestamp(v.timestamp); viewTimestampRef.current = v.timestamp; }
+      if (v && typeof v.bar_spacing === 'number' && v.bar_spacing > 0) { setTargetBarSpacing(v.bar_spacing); viewBarSpacingRef.current = v.bar_spacing; }
+    } catch { /* none kept */ }
+  };
+
+  // A collab's own view in this browser (kept per collab link, apart from this user's chart): its
+  // symbol, timeframe, centre bar and zoom, so reloading a collab comes back where you were
+  const collabToken = () => new URLSearchParams(window.location.search).get("collab") || collab.get().token || "";
+  const restoreCollabView = (token: string) => {
+    try {
+      const v = JSON.parse(localStorage.getItem(`tv:collabView:${token}`) || 'null');
+      if (!v) return;
+      if (typeof v.symbol === 'string' && v.symbol) setSymbol(v.symbol);
+      const label = typeof v.interval === 'string' ? intervalToLabel(v.interval) : undefined;
+      if (label) { setSelectedInterval(v.interval); setIntervalLabel(label); }
+      if (typeof v.timestamp === 'number') { setTargetTimestamp(v.timestamp); viewTimestampRef.current = v.timestamp; }
+      if (typeof v.bar_spacing === 'number' && v.bar_spacing > 0) { setTargetBarSpacing(v.bar_spacing); viewBarSpacingRef.current = v.bar_spacing; }
+    } catch { /* none kept */ }
+  };
+  const saveCollabView = (timestamp: number | null, barSpacing: number | null) => {
+    const token = collabToken();
+    if (!token || timestamp == null) return;
+    try { localStorage.setItem(`tv:collabView:${token}`, JSON.stringify({ symbol: symbolRef.current, interval: intervalRef.current, timestamp, bar_spacing: barSpacing })); } catch { /* full */ }
+  };
+  // The view a page opens with: a collab link's own, else this browser's
+  const restoreView = () => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("collab");
+    if (token) restoreCollabView(token);
+    else if (!params.has("session")) restoreLocalView();   // a session places the chart itself
+  };
+
   // Load Chart State from Django Backend
   useEffect(() => {
     if (user) {
@@ -607,25 +644,35 @@ function AppLayout() {
           return res.json();
         })
         .then(data => {
-          // (a backtest session being opened picks its own symbol and timeframe)
-          const openingSession = new URLSearchParams(window.location.search).has("session");
+          // (a backtest session being opened picks its own symbol and timeframe; so does a collab
+          // link: the room's chart where this user last was in that collab — their own chart's
+          // view doesn't carry into it)
+          const params = new URLSearchParams(window.location.search);
+          const openingCollab = params.has("collab");
+          const openingSession = params.has("session") || openingCollab;
           if (data.symbol && !openingSession) setSymbol(data.symbol);
           if (data.interval && !openingSession) {
             setSelectedInterval(data.interval);
             const label = intervalToLabel(data.interval);
             if (label) setIntervalLabel(label);
           }
-          if (data.timestamp) { setTargetTimestamp(data.timestamp); viewTimestampRef.current = data.timestamp; }
-          if (data.bar_spacing) { setTargetBarSpacing(data.bar_spacing); viewBarSpacingRef.current = data.bar_spacing; }
+          if (openingCollab) restoreCollabView(params.get("collab") || "");
+          // (a backtest session places the chart at its own bar: this user's view would fight it)
+          else if (!params.has("session")) {
+            if (data.timestamp) { setTargetTimestamp(data.timestamp); viewTimestampRef.current = data.timestamp; }
+            if (data.bar_spacing) { setTargetBarSpacing(data.bar_spacing); viewBarSpacingRef.current = data.bar_spacing; }
+            if (!data.timestamp) restoreLocalView();
+          }
           if (data.indicators && Array.isArray(data.indicators) && data.indicators.length > 0) {
             setActiveIndicators(data.indicators);
           }
         })
         // the backend being down or failing just means the chart opens with what this browser kept
-        .catch(err => { console.warn("Chart state not loaded, using this browser's:", err.message); restoreLocalIndicators(); })
+        .catch(err => { console.warn("Chart state not loaded, using this browser's:", err.message); restoreLocalIndicators(); restoreView(); })
         .finally(() => setIsStateLoaded(true));
     } else {
       restoreLocalIndicators();
+      restoreView();
       setIsStateLoaded(true);
     }
   }, [user]);
@@ -638,7 +685,8 @@ function AppLayout() {
 
   // Save chart state when symbol or interval changes (skip initial load)
   useEffect(() => {
-    if (user && isStateLoaded) {
+    // (in a collab the chart is the room's: nothing of it is saved as this user's own chart)
+    if (user && isStateLoaded && !collab.chartActive) {
       // Skip the very first fire (when isStateLoaded transitions to true with loaded values)
       if (!hasLoadedOnce.current) {
         hasLoadedOnce.current = true;
@@ -665,7 +713,7 @@ function AppLayout() {
 
   // Save indicators when they change
   useEffect(() => {
-    if (user && isStateLoaded && hasLoadedOnce.current) {
+    if (user && isStateLoaded && hasLoadedOnce.current && !collab.chartActive) {
       const timer = setTimeout(() => {
         console.log(`[Page] Saving indicators: ${activeIndicators.length} indicators`);
         backendFetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
@@ -686,6 +734,8 @@ function AppLayout() {
   useEffect(() => {
     if (!user) return;
     const handleBeforeUnload = () => {
+      // the room's chart isn't this user's own: kept as that collab's view instead
+      if (collab.chartActive) { saveCollabView(viewTimestampRef.current, viewBarSpacingRef.current); return; }
       const payload = JSON.stringify({
         symbol,
         interval: selectedInterval,
@@ -1006,6 +1056,13 @@ function AppLayout() {
             initialBarSpacing={targetBarSpacing}
             onOpenOrderPanel={(side) => requestTrade(side, symbol)}
             onChartStateChange={(newTimestamp, newBarSpacing) => {
+              // In a collab the view is kept as that collab's (this browser), not this user's own chart
+              if (collab.chartActive) {
+                viewTimestampRef.current = newTimestamp;
+                viewBarSpacingRef.current = newBarSpacing;
+                saveCollabView(newTimestamp, newBarSpacing);
+                return;
+              }
               // Keep local state in sync so beforeunload can persist latest values
               viewTimestampRef.current = newTimestamp;
               viewBarSpacingRef.current = newBarSpacing;
@@ -1173,7 +1230,9 @@ function AppLayout() {
         interval={selectedInterval}
         indicators={activeIndicators}
         setSymbol={setSymbol}
-        setInterval={(i) => handleIntervalChange(i, intervalToLabel(i))}
+        // The room's timeframe as it is (a 30s or custom one too, without premium): only this
+        // user's own switches go through the plan check (handleIntervalChange)
+        setInterval={(i) => { setSelectedInterval(i); setIntervalLabel(intervalToLabel(i) || i); }}
         setIndicators={setActiveIndicators}
       />
       <CollabPresenceSync symbol={symbol} />

@@ -154,9 +154,16 @@ export default function BacktestSessionBar({ symbol, interval, intervalLabel, on
     return () => { clearInterval(t); document.removeEventListener("visibilitychange", onHide); window.removeEventListener("pagehide", onLeavePage); };
   }, [phase, save]);
 
-  // Leaving the replay (Exit, Replay, another bar, another symbol) ends it here, saved
+  // Picking another bar (Select bar, a date, the Replay button) keeps the session: its account as
+  // it stands is handed to the replay that starts next, so its trades carry on there (before, the
+  // session ended and the trades after it went to a throwaway "Replay Trading" account)
   useEffect(() => {
-    if (phase === "running" && mode !== "active") {
+    if (phase === "running" && mode === "selecting") engine.seedReplaySession(snapRef.current);
+  }, [mode, phase]);
+  // Leaving the replay (Exit, Complete, another symbol) ends it here, saved
+  useEffect(() => {
+    if (phase === "running" && mode === "idle") {
+      engine.seedReplaySession(null);   // (handed over for a bar that was never picked: not for the next replay)
       save({ status: statusRef.current }).finally(() => {
         setPhase("idle");
         setSession(null);

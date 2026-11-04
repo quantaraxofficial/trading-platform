@@ -232,6 +232,8 @@ Strategy optimizer (Pine Editor -> Optimize; strategies only, all three language
   - Group panel: chat with history, voice call (WebRTC), shared alerts, who drives the replay
   - Replay together: one drives, everyone follows; take control, go solo, rejoin
   - Live Pine co-editing with everyone's cursors
+  - Reloading a collab comes back where you were in it (its own view per collab, kept apart
+    from your own chart)
   - Permissions per person (edit chart, control replay, add people, voice, alerts, Pine);
     hand over ownership; enforced on the server
   - Join / leave sounds, request to join, kick out, owner mic controls
@@ -269,6 +271,9 @@ Backtest sessions
   - Optional length when creating one ("how much to backtest": hours / days / weeks / months /
     years); the end bar is worked out (calendar months / years) and what's left shows with a
     progress bar ("2 months 5 days left of 3 months")
+  - Trading in a session needs no broker connection; picking another bar keeps the session
+    (its account and trades carry on); Analytics shows its open positions and working orders and
+    follows it live
   - Backtest sessions panel in the right toolbar: every session with its status, bar, P&L,
     trades, time spent and time left; one clicked opens in a new tab and carries on
 
