@@ -17,6 +17,7 @@ import { useEscapeClose } from "../lib/useEscapeClose";
 import { useAlerts } from "@/context/AlertsContext";
 import { useCollab } from "../lib/collab/session";
 import { CollabIcon } from "./collab/icons";
+import { BacktestSessionsIcon } from "./BacktestSessionsPanel";
 
 // Trading Agent — a small chat-bubble glyph (1px lines like the TradingView icons)
 function TVAgentIcon({ size = 28, ...props }: any) {
@@ -65,6 +66,8 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     { id: "object_tree", icon: <TVObjectTreeIcon size={28} />, tooltip: "Object tree" },
     // Always there: inside a collab, its chat and voice; otherwise the list of your collabs
     { id: "collab", icon: <CollabIcon size={28} />, tooltip: inCollab ? "Collab: group chat and voice" : "Collabs" },
+    // Your backtest sessions: one clicked opens in a new tab, carrying on where it was left
+    { id: "backtest_sessions", icon: <BacktestSessionsIcon size={28} />, tooltip: "Backtest sessions" },
   ];
 
   const i18 = { size: 18, strokeWidth: 1.5 };

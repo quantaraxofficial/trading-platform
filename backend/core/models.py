@@ -362,6 +362,11 @@ class ReplaySession(models.Model):
     start_time = models.BigIntegerField()                 # the bar it started from (seconds)
     current_time = models.BigIntegerField()               # the bar it's on now (seconds)
     visible_bars = models.IntegerField(null=True, blank=True)   # the zoom: bars across the chart
+    # How much market time it's meant to cover (optional): e.g. 3 months; end_time is the bar
+    # that is (start + length, calendar months / years), so what's left = end_time - current_time
+    length_value = models.IntegerField(null=True, blank=True)
+    length_unit = models.CharField(max_length=10, blank=True)   # hours, days, weeks, months, years
+    end_time = models.BigIntegerField(null=True, blank=True)
     initial_balance = models.FloatField(default=10000)
     account = models.JSONField(null=True, blank=True)     # the replay account (paper engine's Account)
     book = models.JSONField(null=True, blank=True)        # its positions, orders, trades… (engine's Book)

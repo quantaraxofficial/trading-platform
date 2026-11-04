@@ -3334,7 +3334,10 @@ export default function ChartContainer({
         try {
           let endDateStr: string | undefined = undefined;
           let targetTimestamp: number | null = null;
-          let preservedRangeWidth: number | null = null;
+          // The old view's bar count (kept: the same candle size on the new timeframe, as on
+          // TradingView) and, when it showed the newest bar, the gap after it
+          let preservedBars: number | null = null;
+          let liveEdgeGap: number | null = null;
           // Scales → "Save chart left edge position when changing interval"
           let leftEdgeTime: number | null = null;
           let leftEdgeBars: number | null = null;
@@ -3360,20 +3363,16 @@ export default function ChartContainer({
               const timeScale = chartRef.current.timeScale();
               const visibleRange = timeScale.getVisibleLogicalRange();
               if (visibleRange) {
-                // Preserve the TIME DURATION of the visible window, not the bar count
-                // This ensures switching from 5min to 15min keeps the same date range visible
+                // Keep the BAR COUNT (candle size), not the time span: a 1m → 4h switch keeping
+                // the span would show a fraction of one huge candle
                 const fromIdx = Math.max(0, Math.floor(visibleRange.from));
-                const toIdx = Math.min(fullDataRef.current.length - 1, Math.ceil(visibleRange.to));
+                const lastIdx = fullDataRef.current.length - 1;
                 if (csRef.current.saveLeftEdge && visibleRange.from >= 0) { leftEdgeTime = fullDataRef.current[fromIdx]?.time ?? null; leftEdgeBars = visibleRange.to - visibleRange.from; }
-                if (fromIdx < fullDataRef.current.length && toIdx >= 0) {
-                  const fromTime = fullDataRef.current[fromIdx].time;
-                  const toTime = fullDataRef.current[toIdx].time;
-                  preservedRangeWidth = toTime - fromTime; // in seconds, not bars
-                }
-                const centerIdx = Math.round((visibleRange.from + visibleRange.to) / 2);
-                if (centerIdx >= 0 && centerIdx < fullDataRef.current.length) {
-                  targetTimestamp = fullDataRef.current[centerIdx].time;
-                }
+                preservedBars = visibleRange.to - visibleRange.from;
+                if (visibleRange.to >= lastIdx) liveEdgeGap = visibleRange.to - lastIdx;
+                // (the middle in the space after the newest bar: that bar)
+                const centerIdx = Math.max(0, Math.min(lastIdx, Math.round((visibleRange.from + visibleRange.to) / 2)));
+                if (lastIdx >= 0) targetTimestamp = fullDataRef.current[centerIdx].time;
               }
             }
 
@@ -3488,28 +3487,25 @@ export default function ChartContainer({
               const diff = Math.abs(stockData[i].time - targetTimestamp);
               if (diff < minDiff) { minDiff = diff; closestIdx = i; }
             }
-            // Convert preserved time duration (seconds) to bar count in the new timeframe
-            const newIntervalSec = getIntervalMs(interval) / 1000;
-            let halfBars: number;
-            if (preservedRangeWidth && newIntervalSec > 0) {
-              const totalBars = preservedRangeWidth / newIntervalSec;
-              halfBars = totalBars / 2;
-            } else {
-              // Fallback: show ~80 bars centered on target
-              halfBars = 40;
+            // As many bars across as before (the same candle size); fallback ~80
+            const halfBars = preservedBars && preservedBars > 0 ? preservedBars / 2 : 40;
+            let from = closestIdx - halfBars;
+            let to = closestIdx + halfBars;
+            // The newest bar was on screen: the new timeframe's newest bars, with the same gap after
+            if (liveEdgeGap !== null) {
+              to = stockData.length - 1 + liveEdgeGap;
+              from = to - halfBars * 2;
             }
             // Centering on the old view's middle can push most of the window past the newest
             // bar (e.g. 1h → 15m near the live edge), leaving an empty chart — so stop the
             // window at the last bar plus a small right margin, keeping its width.
-            let from = closestIdx - halfBars;
-            let to = closestIdx + halfBars;
             if (leftEdgeTime !== null && leftEdgeBars !== null) {
               // keep the left edge's time where it was, and the bar spacing
               let li = stockData.findIndex((b: any) => b.time >= leftEdgeTime!);
               if (li < 0) li = stockData.length - 1;
               from = li; to = li + leftEdgeBars;
             }
-            const maxTo = stockData.length - 1 + 5;
+            const maxTo = stockData.length - 1 + Math.max(5, liveEdgeGap ?? 0);
             if (to > maxTo) { from -= to - maxTo; to = maxTo; }
             chartRef.current.timeScale().setVisibleLogicalRange({ from, to });
           }
