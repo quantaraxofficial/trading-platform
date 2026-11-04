@@ -41,6 +41,7 @@ import MobileMenuDrawer, { MobilePanel, MobilePanelSheet } from "./components/Mo
 import KeyboardShortcutsDialog from "./components/KeyboardShortcutsDialog";
 import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
 import BacktestSessionBar from "./components/BacktestSessionBar";
+import BacktestSessionsPanel from "./components/BacktestSessionsPanel";
 import { saveReplay, setSavedReplayUser } from "./lib/savedReplay";
 import { ADD_SCRIPT_EVENT, getScript } from "./community/social";
 import { layoutStore, layouts, ensureLayout, readSharedLayout, newLayout } from "./lib/layoutStore";
@@ -1057,6 +1058,8 @@ function AppLayout() {
             <ChatsPanel open={openChat} onOpen={setOpenChat} />
           ) : activeSidebarPanel === "notifications" ? (
             <NotificationsPanel />
+          ) : activeSidebarPanel === "backtest_sessions" ? (
+            <BacktestSessionsPanel />
           ) : (
             <RightToolbar symbol={symbol} onSymbolChange={setSymbol} />
           )}

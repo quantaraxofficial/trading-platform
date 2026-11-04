@@ -9,12 +9,17 @@ import type { Account, Book } from "../trading/engine";
 import type { ATrade } from "./data";
 
 export type SessionStatus = "active" | "paused" | "completed";
+export type LengthUnit = "hours" | "days" | "weeks" | "months" | "years";
+export const LENGTH_UNITS: LengthUnit[] = ["hours", "days", "weeks", "months", "years"];
+export interface SessionLength { value: number; unit: LengthUnit }
 export interface BacktestSession {
   id: number; name: string; symbol: string; interval: string; interval_label: string;
   start_time: number; current_time: number; visible_bars: number | null;   // seconds; bars across the chart
   initial_balance: number; balance: number; trade_count: number; open_count: number; net_pnl: number; wins: number;
   strategy: string; description: string; rules: string[]; tags: string[]; notes: string;
   status: SessionStatus; time_spent: number; created_at: number; updated_at: number;
+  // How much market time it's meant to cover (optional) and the bar that is (seconds)
+  length: SessionLength | null; end_time: number | null;
   account?: Account | null; book?: Book | null;
 }
 export interface NewSession {
@@ -22,6 +27,7 @@ export interface NewSession {
   strategy?: string; description?: string; rules?: string[]; tags?: string[];
   account?: Account; book?: Book; current_time?: number; visible_bars?: number | null;
   drawings?: unknown[];   // its own drawings to start with
+  length?: SessionLength | null;
 }
 export interface SessionProgress {
   current_time?: number; interval?: string; interval_label?: string; visible_bars?: number | null;
@@ -69,6 +75,40 @@ export function sessionTrades(s: BacktestSession): ATrade[] {
 export const OPEN_SESSION_EVENT = "tv:open-backtest-session";
 export function chartUrlFor(s: Pick<BacktestSession, "id" | "symbol">) {
   return `/?symbol=${encodeURIComponent(s.symbol)}&session=${s.id}`;
+}
+
+// The bar `length` after `start` (seconds, UTC), as the server works it out (core/analytics.py
+// end_of): a month later is the same day, or the month's last day
+export function endOf(start: number, length: SessionLength): number {
+  const span: Record<string, number> = { hours: 3600, days: 86400, weeks: 7 * 86400 };
+  if (span[length.unit]) return start + length.value * span[length.unit];
+  const d = new Date(start * 1000);
+  const months = length.value * (length.unit === "years" ? 12 : 1);
+  const y = d.getUTCFullYear() + Math.floor((d.getUTCMonth() + months) / 12);
+  const m = (d.getUTCMonth() + months) % 12;
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return Math.floor(Date.UTC(y, m, Math.min(d.getUTCDate(), last), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()) / 1000);
+}
+
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+export const lengthText = (l: SessionLength) => plural(l.value, l.unit.replace(/s$/, ""));
+
+// What's left of a session with a length: market time from the bar it's on to its end, in
+// words ("2 months 5 days left"), how far through it is (0..1), and whether it's done
+export function timeLeft(s: Pick<BacktestSession, "start_time" | "current_time" | "end_time" | "length">): { text: string; done: boolean; progress: number } | null {
+  if (!s.end_time || !s.length) return null;
+  const total = Math.max(1, s.end_time - s.start_time);
+  const left = s.end_time - s.current_time;
+  const progress = Math.min(1, Math.max(0, (s.current_time - s.start_time) / total));
+  if (left <= 0) return { text: `Done: all ${lengthText(s.length)} covered`, done: true, progress: 1 };
+  const DAY = 86400, MONTH = 30.44 * DAY, YEAR = 365.25 * DAY;
+  let words: string;
+  if (left >= YEAR) { const y = Math.floor(left / YEAR), mo = Math.floor((left - y * YEAR) / MONTH); words = plural(y, "year") + (mo ? ` ${plural(mo, "month")}` : ""); }
+  else if (left >= MONTH) { const mo = Math.floor(left / MONTH), d = Math.floor((left - mo * MONTH) / DAY); words = plural(mo, "month") + (d ? ` ${plural(d, "day")}` : ""); }
+  else if (left >= DAY) { const d = Math.floor(left / DAY), h = Math.floor((left - d * DAY) / 3600); words = plural(d, "day") + (h ? ` ${plural(h, "hour")}` : ""); }
+  else if (left >= 3600) { const h = Math.floor(left / 3600), m = Math.floor((left % 3600) / 60); words = plural(h, "hour") + (m ? ` ${m} min` : ""); }
+  else words = `${Math.max(1, Math.floor(left / 60))} min`;
+  return { text: `${words} left`, done: false, progress };
 }
 
 export function spent(seconds: number) {

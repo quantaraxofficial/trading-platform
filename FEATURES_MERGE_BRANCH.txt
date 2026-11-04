@@ -1,6 +1,6 @@
 TRADEPILOT - FEATURES BUILT ON THE MERGE BRANCH
 Branch: merge-main-left-toolbar-tools  (everything here is on top of main)
-Up to: 4 Nov 2026 (Smooth zoom and pan)
+Up to: 4 Nov 2026 (Backtest sessions panel and length, timeframe switch keeps candle size)
 
 Contents
   1. Drawing tools (left toolbar)
@@ -71,6 +71,8 @@ Chart interactions
     paste, table view, add to watchlist, add text note, settings
   - Double-click a candle: Settings on the Symbol tab
   - Navigation buttons near the bottom: zoom in/out, scroll left/right, reset chart view
+  - Switching timeframe keeps the candle size (the same number of bars across), at the live
+    edge showing the new timeframe's newest bars, as on TradingView
   - Smooth zoom and pan, as on openmarket.xyz: wheel zoom / pan glide to where the wheel is
     taking them (eased ~140 ms, TradingView's anchoring and step), the price axis glides to its
     new range instead of snapping, and a released drag keeps sliding (momentum)
@@ -263,6 +265,11 @@ Backtest sessions
     completed
   - Drawings are separate per session; they never load into or save over the wrong symbol
     or session
+  - Optional length when creating one ("how much to backtest": hours / days / weeks / months /
+    years); the end bar is worked out (calendar months / years) and what's left shows with a
+    progress bar ("2 months 5 days left of 3 months")
+  - Backtest sessions panel in the right toolbar: every session with its status, bar, P&L,
+    trades, time spent and time left; one clicked opens in a new tab and carries on
 
 ======================================================================
 12. COPY TRADING

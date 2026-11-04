@@ -10,7 +10,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Clock, FlaskConical, Pencil, Play, Plus, Trash2, X } from "lucide-react";
 import { backtestTrades, deleteBacktest, getBacktest, listBacktests, renameBacktest, type ATrade, type Journal, type SavedBacktest, type Source } from "./data";
-import { chartUrlFor, createSession, deleteSession, freshAccount, getSession, listSessions, sessionTrades, spent, updateSession, type BacktestSession } from "./sessions";
+import { chartUrlFor, createSession, deleteSession, endOf, freshAccount, getSession, lengthText, LENGTH_UNITS, listSessions, sessionTrades, spent, timeLeft, updateSession, type BacktestSession, type LengthUnit, type SessionLength } from "./sessions";
 import { money, pnlClass, type Period } from "./stats";
 import Performance from "./Performance";
 import TradeAnalysis from "./TradeAnalysis";
@@ -171,6 +171,16 @@ export default function Backtests({ uid, journals, onJournal, openSessionId }: {
                   <span className={`px-2 py-0.5 rounded-full border capitalize ${STATUS_STYLE[s.status]}`}>{s.status}</span>
                   <span className="text-purple-300/80" data-testid="session-at">At {new Date(s.current_time * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</span>
                 </div>
+                {(() => {
+                  const left = timeLeft(s);
+                  if (!left) return null;
+                  return (
+                    <div className="mt-2" data-testid="session-left">
+                      <div className={`text-xs ${left.done ? "text-emerald-400" : "text-purple-200"}`}>{left.text}{s.length && !left.done ? ` of ${lengthText(s.length)}` : ""}</div>
+                      <div className="mt-1 h-1 rounded-full bg-purple-900/60 overflow-hidden"><div className={`h-full ${left.done ? "bg-emerald-500" : "bg-purple-500"}`} style={{ width: `${Math.round(left.progress * 100)}%` }} /></div>
+                    </div>
+                  );
+                })()}
                 <div className="grid grid-cols-4 gap-2 mt-4">
                   <div><Label>Balance</Label><div className="mt-0.5 text-sm font-semibold text-white tabular-nums">{money(s.balance)}</div></div>
                   <div><Label>P&L</Label><div className={`mt-0.5 text-sm font-semibold tabular-nums ${pnlClass(s.net_pnl)}`}>{money(s.net_pnl, "USD", true)}</div></div>
@@ -232,6 +242,9 @@ function NewSessionDialog({ uid, onClose, onCreated }: { uid: string; onClose: (
   const [date, setDate] = useState(() => new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10));
   const [time, setTime] = useState("00:00");
   const [balance, setBalance] = useState("10000");
+  // How much to backtest (optional): e.g. 3 months from the start
+  const [lengthValue, setLengthValue] = useState("");
+  const [lengthUnit, setLengthUnit] = useState<LengthUnit>("months");
   const [strategy, setStrategy] = useState("");
   const [description, setDescription] = useState("");
   const [rules, setRules] = useState<string[]>([]);
@@ -251,11 +264,19 @@ function NewSessionDialog({ uid, onClose, onCreated }: { uid: string; onClose: (
     if (!sym) { setError("Pick a symbol"); return; }
     if (!(start > 0) || start * 1000 > Date.now()) { setError("Pick a start date in the past"); return; }
     if (!(bal > 0)) { setError("The starting balance must be above 0"); return; }
+    let length: SessionLength | null = null;
+    if (lengthValue.trim()) {
+      const n = Number(lengthValue);
+      if (!Number.isInteger(n) || n < 1) { setError("How much to backtest: a whole number of hours, days, weeks, months or years (or leave it empty)"); return; }
+      length = { value: n, unit: lengthUnit };
+      if (endOf(start, length) * 1000 > Date.now()) { setError(`${lengthText(length)} from the start date runs past today: start earlier or test less`); return; }
+    }
     setBusy(true);
     try {
       const s = await createSession(uid, {
         name: name.trim() || `${sym} ${label} backtest`, symbol: sym, interval, interval_label: label, start_time: start, initial_balance: bal,
         strategy: strategy.trim(), description: description.trim(), rules, tags, account: freshAccount(`Backtest · ${name.trim() || sym}`, bal), book: {} as any,
+        length,
       });
       onCreated(s);
     } catch (e: any) { setError(e?.message || "Couldn't create the session"); }
@@ -287,6 +308,16 @@ function NewSessionDialog({ uid, onClose, onCreated }: { uid: string; onClose: (
             <input type="date" className={field} value={date} onChange={e => setDate(e.target.value)} data-testid="ns-date" style={{ colorScheme: "dark" }} /></label>
           <label><span className="block text-purple-300 text-sm font-medium mb-1.5">Start time {daily ? "(daily bars)" : ""}</span>
             <input type="time" className={field} value={time} disabled={daily} onChange={e => setTime(e.target.value)} style={{ colorScheme: "dark" }} /></label>
+          <div className="col-span-2"><span className="block text-purple-300 text-sm font-medium mb-1.5">How much to backtest (optional)</span>
+            <div className="flex gap-2">
+              <input className={field} style={{ flex: 1 }} value={lengthValue} onChange={e => setLengthValue(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric"
+                placeholder="e.g. 3" aria-label="How much to backtest" data-testid="ns-length" />
+              <select className={field} style={{ flex: 1 }} value={lengthUnit} onChange={e => setLengthUnit(e.target.value as LengthUnit)} aria-label="Unit" data-testid="ns-length-unit">
+                {LENGTH_UNITS.map(u => <option key={u} value={u} className="bg-gray-900">{u[0].toUpperCase() + u.slice(1)}</option>)}
+              </select>
+            </div>
+            <span className="block text-purple-400/70 text-xs mt-1">{lengthValue ? `The session covers ${lengthText({ value: Number(lengthValue) || 1, unit: lengthUnit })} of market time from the start; the side panel shows what's left.` : "Leave empty to backtest as long as you like."}</span>
+          </div>
           <label className="col-span-2"><span className="block text-purple-300 text-sm font-medium mb-1.5">Starting balance (USD)</span>
             <input className={field} value={balance} onChange={e => setBalance(e.target.value)} inputMode="decimal" data-testid="ns-balance" /></label>
           <label className="col-span-2"><span className="block text-purple-300 text-sm font-medium mb-1.5">Strategy (optional)</span>

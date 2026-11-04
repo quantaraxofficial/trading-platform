@@ -19,6 +19,7 @@ import { useCollab } from "../lib/collab/session";
 import { CollabIcon } from "./collab/icons";
 import { useDms } from "../lib/collab/dms";
 import { useNotifications } from "../community/NotificationsPanel";
+import { BacktestSessionsIcon } from "./BacktestSessionsPanel";
 
 // Trading Agent — a small chat-bubble-with-spark glyph (1px lines like the TradingView icons)
 function TVAgentIcon({ size = 28, ...props }: any) {
@@ -72,6 +73,8 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     { id: "chats", icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width={28} height={28} fill="none" stroke="currentColor" aria-hidden><path d="M6.5 7.5h15a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4.5 3.5v-3.5h-2.5a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z" /><path d="M10 12h8M10 15h5" /></svg>, tooltip: "Chats" },
     // New scripts from people you follow, followers, shared scripts, collab invites (community/NotificationsPanel)
     { id: "notifications", icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width={28} height={28} fill="none" stroke="currentColor" aria-hidden><path d="M14 6.5a5 5 0 0 0-5 5v3.5l-1.5 3h13l-1.5-3v-3.5a5 5 0 0 0-5-5Z" /><path d="M12 20.5a2 2 0 0 0 4 0" /></svg>, tooltip: "Notifications" },
+    // Your backtest sessions: one clicked opens in a new tab, carrying on where it was left
+    { id: "backtest_sessions", icon: <BacktestSessionsIcon size={28} />, tooltip: "Backtest sessions" },
   ];
 
   const i18 = { size: 18, strokeWidth: 1.5 };

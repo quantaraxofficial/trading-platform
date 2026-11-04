@@ -4,7 +4,9 @@ backtest or session). The statistics themselves are worked out in the browser fr
 trades (paper trading's own, the linked MT5 account's closed trades — broker_mt5.mt5_history —
 and these saved backtests), so the same numbers show wherever the trades come from.
 """
+import calendar
 import json
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.utils import timezone
 from rest_framework import status
@@ -162,6 +164,7 @@ def _session_json(r, full=False):
     closed = [t for t in trades if t.get("exitTime") is not None]
     d = {"id": r.id, "name": r.name, "symbol": r.symbol, "interval": r.interval, "interval_label": r.interval_label,
          "start_time": r.start_time, "current_time": r.current_time, "visible_bars": r.visible_bars,
+         "length": {"value": r.length_value, "unit": r.length_unit} if r.length_value else None, "end_time": r.end_time,
          "initial_balance": r.initial_balance, "balance": (r.account or {}).get("balance", r.initial_balance),
          "trade_count": len(closed), "open_count": len(trades) - len(closed),
          "net_pnl": round(sum(float(t.get("pnl") or 0) for t in closed), 2),
@@ -172,6 +175,23 @@ def _session_json(r, full=False):
     if full:
         d.update(account=r.account, book=r.book)
     return d
+
+
+LENGTH_UNITS = {"hours": 3600, "days": 86400, "weeks": 7 * 86400, "months": None, "years": None}
+LENGTH_MAX = {"hours": 24 * 365 * 5, "days": 365 * 30, "weeks": 52 * 30, "months": 12 * 30, "years": 30}
+
+
+def end_of(start, value, unit):
+    """The bar `value` hours / days / weeks / months / years after `start` (seconds, UTC; a month
+    later is the same day of the month, or its last day when that month is shorter)"""
+    if LENGTH_UNITS[unit]:
+        return start + value * LENGTH_UNITS[unit]
+    d = datetime.fromtimestamp(start, dt_timezone.utc)
+    months = value * (12 if unit == "years" else 1)
+    y, m = divmod(d.month - 1 + months, 12)
+    y, m = d.year + y, m + 1
+    day = min(d.day, calendar.monthrange(y, m)[1])
+    return int(d.replace(year=y, month=m, day=day).timestamp())
 
 
 def _str_list(v, n=30, size=200):
@@ -213,6 +233,23 @@ def _apply(r, d, creating=False):
         return "Pick the date the session starts from"
     if not (0 < r.initial_balance <= 1e12):
         return "The starting balance must be above 0"
+    # The length (optional): {"length": {"value": 3, "unit": "months"}} or null to have none
+    if "length" in d:
+        ln = d.get("length")
+        if ln in (None, '', {}):
+            r.length_value, r.length_unit = None, ''
+        else:
+            unit = str((ln or {}).get("unit") or '') if isinstance(ln, dict) else ''
+            try:
+                value = int(float((ln or {}).get("value")))
+            except (TypeError, ValueError, AttributeError):
+                return "The backtest length isn't a number"
+            if unit not in LENGTH_UNITS:
+                return "The backtest length is in hours, days, weeks, months or years"
+            if not (1 <= value <= LENGTH_MAX[unit]):
+                return f"The backtest length is 1 to {LENGTH_MAX[unit]} {unit}"
+            r.length_value, r.length_unit = value, unit
+    r.end_time = end_of(r.start_time, r.length_value, r.length_unit) if r.length_value else None
     if "status" in d:
         if d.get("status") not in dict(ReplaySession.STATUSES):
             return "Status is active, paused or completed"

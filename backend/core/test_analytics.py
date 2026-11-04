@@ -120,6 +120,31 @@ class SessionTests(TestCase):
         self.api(f"{s['id']}/", "delete")
         self.assertFalse(TradeJournal.objects.exists())
 
+    def test_optional_length_and_its_end(self):
+        from datetime import datetime, timezone
+        ts = lambda *a: int(datetime(*a, tzinfo=timezone.utc).timestamp())
+        base = {"name": "L", "symbol": "XAU/USD", "interval": "1h", "initial_balance": 1000}
+        # none given: no length, no end
+        s = self.api("", "post", {**base, "start_time": ts(2025, 1, 31)}).json()["session"]
+        self.assertEqual((s["length"], s["end_time"]), (None, None))
+        # 1 month from 31 Jan is the last day of February; years / weeks / hours as plain spans
+        for length, want in ((({"value": 1, "unit": "months"}), ts(2025, 2, 28)),
+                             (({"value": 2, "unit": "years"}), ts(2027, 1, 31)),
+                             (({"value": 3, "unit": "weeks"}), ts(2025, 2, 21)),
+                             (({"value": 36, "unit": "hours"}), ts(2025, 2, 1, 12))):
+            r = self.api("", "post", {**base, "start_time": ts(2025, 1, 31), "length": length})
+            self.assertEqual(r.status_code, 201, r.content)
+            got = r.json()["session"]
+            self.assertEqual((got["length"], got["end_time"]), (length, want))
+        # changed later, or taken away
+        sid = got["id"]
+        self.assertEqual(self.api(f"{sid}/", "patch", {"length": {"value": 10, "unit": "days"}}).json()["session"]["end_time"], ts(2025, 2, 10))
+        cleared = self.api(f"{sid}/", "patch", {"length": None}).json()["session"]
+        self.assertEqual((cleared["length"], cleared["end_time"]), (None, None))
+        # what isn't allowed
+        for bad in ({"value": 0, "unit": "days"}, {"value": 3, "unit": "fortnights"}, {"value": "x", "unit": "days"}, {"value": 31, "unit": "years"}):
+            self.assertEqual(self.api("", "post", {**base, "start_time": ts(2025, 1, 31), "length": bad}).status_code, 400, bad)
+
     def test_needs_symbol_and_start(self):
         self.assertEqual(self.api("", "post", {"symbol": "", "interval": "1h", "start_time": 1}).status_code, 400)
         self.assertEqual(self.api("", "post", {"symbol": "EUR/USD", "interval": "1h"}).status_code, 400)
