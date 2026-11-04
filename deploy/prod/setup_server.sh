@@ -46,4 +46,8 @@ else
 fi
 # The MT5 collector's key (added to older .env files too)
 grep -q '^LIVE_INGEST_TOKEN=' .env || echo "LIVE_INGEST_TOKEN=$(openssl rand -hex 32)" >> .env
+# The voice relay (coturn): its secret, and the VM's public / private addresses
+grep -q '^TURN_SECRET=' .env || echo "TURN_SECRET=$(openssl rand -hex 32)" >> .env
+grep -q '^TURN_EXTERNAL_IP=' .env || echo "TURN_EXTERNAL_IP=$(curl -s -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip)" >> .env
+grep -q '^TURN_INTERNAL_IP=' .env || echo "TURN_INTERNAL_IP=$(curl -s -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip)" >> .env
 echo "Setup done for ${SITE_HOST}"

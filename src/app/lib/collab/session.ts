@@ -74,6 +74,7 @@ export function chatFileProblem(file: File): string | null {
   if (file.size > CHAT_FILE_MAX_BYTES) return `${file.name} is over ${CHAT_FILE_MAX_BYTES / (1024 * 1024)} MB`;
   return null;
 }
+export interface DrawingPreview { by: string; symbol: string; drawing: any; at: number }
 export interface Cursor { id: string; uid: string; symbol: string; time: number; price: number; at: number }
 export interface TradeLine { side: "buy" | "sell"; qty: number; price: number; kind: "position" | "limit" | "stop" }
 export interface TradeSnap { symbol: string; name: string; color: string; lines: TradeLine[] }
@@ -104,8 +105,11 @@ export interface CollabState {
   chatOpen: boolean;
   cursors: Record<string, Cursor>;
   trades: Record<string, TradeSnap>;
-  // listenOnly: in the call without a mic (the owner hasn't let them talk)
-  voice: { joined: boolean; joining: boolean; muted: boolean; listenOnly: boolean; error: string | null; speaking: Record<string, boolean> };
+  // listenOnly: in the call without a mic (the owner hasn't let them talk, or there's none:
+  // noMic says which — "missing" no microphone, "blocked" the browser wasn't allowed one)
+  voice: { joined: boolean; joining: boolean; muted: boolean; listenOnly: boolean; noMic: "missing" | "blocked" | null; error: string | null; speaking: Record<string, boolean> };
+  // Shapes others are drawing, moving or resizing right now (connection id -> the shape as it is)
+  previews: Record<string, DrawingPreview>;
   replay: SharedReplay | null;
   // This person stepped out of the shared replay to replay on their own
   replayDetached: boolean;
@@ -114,8 +118,8 @@ export interface CollabState {
 
 const INITIAL: CollabState = {
   status: "idle", error: null, token: null, kind: null, room: null, you: null, uid: null, peers: [], messages: [], unread: 0,
-  chatOpen: false, cursors: {}, trades: {}, voice: { joined: false, joining: false, muted: false, listenOnly: false, error: null, speaking: {} },
-  replay: null, replayDetached: false, alerts: [],
+  chatOpen: false, cursors: {}, trades: {}, voice: { joined: false, joining: false, muted: false, listenOnly: false, noMic: null, error: null, speaking: {} },
+  previews: {}, replay: null, replayDetached: false, alerts: [],
 };
 
 // The live-edited Pine code: the room's document, others' edits and cursors (see pineDoc.ts)
@@ -184,6 +188,10 @@ class CollabSession {
   // Voice
   private localStream: MediaStream | null = null;
   private pcs = new Map<string, RTCPeerConnection>();
+  // Connection details that came before the offer / answer they belong to (applied after it)
+  private earlyCandidates = new Map<string, RTCIceCandidateInit[]>();
+  // STUN + this site's TURN relay with credentials for a day (see backend core/turn.py)
+  private ice: { servers: RTCIceServer[]; until: number } | null = null;
   private audios = new Map<string, HTMLAudioElement>();
   private meters = new Map<string, { analyser: AnalyserNode; data: Uint8Array<ArrayBuffer> }>();
   private audioCtx: AudioContext | null = null;
@@ -335,10 +343,12 @@ class CollabSession {
         }
         const cursors = { ...this.state.cursors };
         delete cursors[msg.id];
+        const previews = { ...this.state.previews };
+        delete previews[msg.id];
         const peers = this.state.peers.filter(p => p.id !== msg.id);
         const trades = { ...this.state.trades };
         if (!peers.some(p => p.uid === msg.uid)) delete trades[msg.uid];
-        this.set({ peers, cursors, trades });
+        this.set({ peers, cursors, trades, previews });
         this.dropPeerAudio(msg.id);
         this.emitPineDoc({ type: "left", id: msg.id });
         break;
@@ -410,7 +420,18 @@ class CollabSession {
       case "error":
         this.set({ error: msg.error });
         break;
+      case "drawings.preview": {
+        const previews = { ...this.state.previews };
+        if (msg.drawing && typeof msg.drawing === "object") previews[msg.id] = { by: msg.by, symbol: msg.symbol, drawing: msg.drawing, at: Date.now() };
+        else delete previews[msg.id];
+        this.set({ previews });
+        break;
+      }
       case "chart": case "indicators": case "drawings.upsert": case "drawings.delete": case "drawings.replace": case "pine":
+        // The finished shape has come: that person's preview is done
+        if (msg.by && Object.values(this.state.previews).some(p => p.by === msg.by)) {
+          this.set({ previews: Object.fromEntries(Object.entries(this.state.previews).filter(([, p]) => p.by !== msg.by)) });
+        }
         if (this.state.kind !== "pine") this.emitChart(msg);
         break;
     }
@@ -422,6 +443,11 @@ class CollabSession {
   sendIndicators(indicators: any[]) { if (this.canEdit) this.send({ type: "indicators", indicators }); }
   sendDrawingsUpsert(symbol: string, drawings: any[]) { if (this.canEdit && drawings.length) this.send({ type: "drawings.upsert", symbol, drawings }); }
   sendDrawingsDelete(symbol: string, ids: string[]) { if (this.canEdit && ids.length) this.send({ type: "drawings.delete", symbol, ids }); }
+  // A shape while it's being drawn / moved / resized (null: done or cancelled). Only while
+  // connected: a stale one is worth nothing later
+  sendDrawingPreview(symbol: string, drawing: any | null) {
+    if (this.canEdit && this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: "drawings.preview", symbol, drawing }));
+  }
   sendDrawingsReplace(symbol: string, drawings: any[]) { if (this.canEdit) this.send({ type: "drawings.replace", symbol, drawings }); }
   sendCursor(symbol: string, time: number | null, price: number | null) { if (this.chartActive) this.send({ type: "cursor", symbol, time, price }); }
   sendTrades(symbol: string, lines: TradeLine[]) { if (this.chartActive) this.send({ type: "trades", symbol, lines }); }
@@ -534,21 +560,30 @@ class CollabSession {
 
   // ---- voice (a full mesh: each person in the call connects to each other one)
 
-  // Without mic permission this joins to listen only
+  // Without mic permission, or without a microphone at all, this joins to listen only
   async joinVoice() {
     if (this.state.voice.joined || this.state.voice.joining || !this.live) return;
-    const listenOnly = !this.canVoice;
+    let noMic: "missing" | "blocked" | null = null;
     this.set({ voice: { ...this.state.voice, joining: true, error: null } });
-    if (!listenOnly) {
+    if (this.canVoice) {
       try {
-        this.localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        this.localStream = !navigator.mediaDevices?.getUserMedia ? null
+          : await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        if (!this.localStream) noMic = "missing";
       } catch (err: any) {
-        const denied = err?.name === "NotAllowedError" || err?.name === "SecurityError";
-        this.set({ voice: { ...this.state.voice, joining: false, error: denied ? "Microphone access was blocked. Allow it in the browser's site settings." : "No microphone was found." } });
-        return;
+        noMic = err?.name === "NotAllowedError" || err?.name === "SecurityError" ? "blocked" : "missing";
+        this.localStream = null;
       }
     }
-    this.set({ voice: { ...this.state.voice, joined: true, joining: false, muted: listenOnly, listenOnly, error: null } });
+    await this.loadIce();
+    if (!this.live) {
+      this.localStream?.getTracks().forEach(t => t.stop());
+      this.localStream = null;
+      this.set({ voice: { ...this.state.voice, joining: false } });
+      return;
+    }
+    const listenOnly = !this.localStream;
+    this.set({ voice: { ...this.state.voice, joined: true, joining: false, muted: listenOnly, listenOnly, noMic, error: null } });
     this.patchSelf({ voice: true, muted: listenOnly });
     if (this.localStream) this.addMeter("me", this.localStream);
     this.send({ type: "voice", voice: true, muted: listenOnly });
@@ -563,6 +598,7 @@ class CollabSession {
     const wasIn = this.state.voice.joined;
     this.pcs.forEach(pc => pc.close());
     this.pcs.clear();
+    this.earlyCandidates.clear();
     this.audios.forEach(a => { a.srcObject = null; a.remove(); });
     this.audios.clear();
     this.meters.clear();
@@ -572,7 +608,7 @@ class CollabSession {
     this.audioCtx?.close().catch(() => {});
     this.audioCtx = null;
     if (wasIn || this.state.voice.joining) {
-      this.set({ voice: { joined: false, joining: false, muted: false, listenOnly: false, error: null, speaking: {} } });
+      this.set({ voice: { joined: false, joining: false, muted: false, listenOnly: false, noMic: null, error: null, speaking: {} } });
       this.patchSelf({ voice: false, muted: false });
       this.send({ type: "voice", voice: false, muted: false });
     }
@@ -598,7 +634,7 @@ class CollabSession {
   private peerConnection(peerId: string): RTCPeerConnection {
     let pc = this.pcs.get(peerId);
     if (pc) return pc;
-    pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    pc = new RTCPeerConnection({ iceServers: this.ice?.servers || ICE_SERVERS });
     this.pcs.set(peerId, pc);
     if (this.localStream) this.localStream.getTracks().forEach(t => pc!.addTrack(t, this.localStream!));
     else pc.addTransceiver("audio", { direction: "recvonly" });   // listening only
@@ -619,7 +655,9 @@ class CollabSession {
       this.applyPeerMutes();
     };
     pc.onconnectionstatechange = () => {
-      if (pc!.connectionState === "failed" || pc!.connectionState === "closed") this.dropPeerAudio(peerId);
+      const st = pc!.connectionState;
+      if (st === "failed") console.warn(`[Collab voice] no audio route to ${this.peerById(peerId)?.name || peerId}: no direct connection and no relay (TURN) answered`);
+      if (st === "failed" || st === "closed") this.dropPeerAudio(peerId);
     };
     return pc;
   }
@@ -645,18 +683,37 @@ class CollabSession {
       const pc = this.peerConnection(from);
       if (data.sdp) {
         await pc.setRemoteDescription(data.sdp);
+        // Connection details that arrived before this offer / answer: now they can be used
+        const early = this.earlyCandidates.get(from) || [];
+        this.earlyCandidates.delete(from);
+        for (const c of early) await pc.addIceCandidate(c).catch(() => {});
         if (data.sdp.type === "offer") {
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           this.send({ type: "rtc", to: from, data: { sdp: pc.localDescription } });
         }
       } else if (data.candidate) {
-        await pc.addIceCandidate(data.candidate).catch(() => {});
+        // Before the offer / answer is in, a candidate would be refused (and lost): kept till then
+        if (!pc.remoteDescription) this.earlyCandidates.set(from, [...(this.earlyCandidates.get(from) || []), data.candidate]);
+        else await pc.addIceCandidate(data.candidate).catch(() => {});
       }
     } catch { /* a broken negotiation leaves that one person unheard; rejoining the call retries */ }
   }
 
+  // The ICE servers with fresh TURN credentials (kept until an hour before they expire); STUN
+  // alone if the server can't be asked
+  private async loadIce() {
+    if (this.ice && this.ice.until > Date.now()) return;
+    const uid = this.state.uid;
+    if (!uid) return;
+    try {
+      const d = await collabApi<{ iceServers: RTCIceServer[]; ttl: number }>(uid, "ice/");
+      if (Array.isArray(d.iceServers) && d.iceServers.length) this.ice = { servers: d.iceServers, until: Date.now() + Math.max(60, (d.ttl || 3600) - 3600) * 1000 };
+    } catch { /* STUN only */ }
+  }
+
   private dropPeerAudio(peerId: string) {
+    this.earlyCandidates.delete(peerId);
     this.pcs.get(peerId)?.close();
     this.pcs.delete(peerId);
     const a = this.audios.get(peerId);

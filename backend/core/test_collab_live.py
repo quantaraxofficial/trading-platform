@@ -90,3 +90,19 @@ class CollabLiveTests(TransactionTestCase):
         self.assertTrue(upd["peer"]["muted"])
         await own.disconnect()
         await bob.disconnect()
+
+    async def test_a_shape_being_drawn_goes_out_live(self):
+        own = await self.connect("own")
+        bob = await self.connect("bob")
+        shape = {"id": "preview-own", "type": "trendline", "points": [{"logical": 1, "price": 2}, {"logical": 5, "price": 3}]}
+        await own.send_json_to({"type": "drawings.preview", "symbol": "AAPL", "drawing": shape})
+        msg = await self.until(bob, "drawings.preview")
+        self.assertEqual(msg["drawing"], shape)
+        self.assertEqual(msg["by"], "own")
+        await own.send_json_to({"type": "drawings.preview", "symbol": "AAPL", "drawing": None})
+        self.assertIsNone((await self.until(bob, "drawings.preview"))["drawing"])
+        # Never stored: a newcomer's chart has no such drawing
+        eve_room = await sync_to_async(CollabRoom.objects.get)(token="tok")
+        self.assertNotIn("preview-own", str(eve_room.drawings))
+        await own.disconnect()
+        await bob.disconnect()

@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, analytics, collab, collab_files, market
+from . import views, analytics, collab, collab_files, market, turn
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -32,6 +32,7 @@ urlpatterns = [
     path('analytics/<str:uid>/sessions/<int:sid>/drawings/', analytics.session_drawings, name='analytics_session_drawings'),
     # Collab charts (the live part is the WebSocket in consumers.py)
     path('collab/<str:uid>/rooms/', collab.collab_rooms, name='collab_rooms'),
+    path('collab/<str:uid>/ice/', turn.ice_servers, name='collab_ice'),
     path('collab/<str:uid>/people/', collab.collab_people, name='collab_people'),
     path('collab/<str:uid>/room/<str:token>/', collab.collab_room, name='collab_room'),
     path('collab/<str:uid>/room/<str:token>/invite/', collab.collab_invite, name='collab_invite'),

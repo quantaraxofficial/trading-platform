@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { useCollab, useCollabChartActive } from '../../lib/collab/session';
 import { applyChartWheel } from '../../lib/chartWheel';
 import { Stage, Layer, Group, Rect as KonvaRect } from 'react-konva';
 import Konva from 'konva';
@@ -1496,6 +1497,27 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     } as any;
   })();
 
+  // Collab: the shape this user is drawing, moving or resizing right now goes to the room as it
+  // changes (CollabDrawingSync sends it), and others' show here live — a moved shape in place of
+  // its stored copy, a new one on top — until the finished shape arrives
+  const collabOn = useCollabChartActive() && !readOnly && !drawingsOverride;
+  const outgoingPreview: any = !collabOn ? null
+    : liveEdit ? (() => { const d = drawings.find(x => x.id === liveEdit.id); return d ? { ...d, ...liveEdit.updates } : null; })()
+    : previewDrawing ? previewDrawing
+    : activelyDrawingId && activeStrokeConfig && activeStrokePoints.length >= 2
+      ? { id: activelyDrawingId, type: activeStrokeConfig.type, visible: true, locked: false, stroke: activeStrokeConfig.stroke, strokeWidth: activeStrokeConfig.strokeWidth, points: activeStrokePoints }
+      : null;
+  const outgoingJson = outgoingPreview ? JSON.stringify(outgoingPreview) : "";
+  useEffect(() => {
+    if (!collabOn) return;
+    window.dispatchEvent(new CustomEvent('tv:drawing-preview', { detail: { drawing: outgoingJson ? JSON.parse(outgoingJson) : null } }));
+  }, [outgoingJson, collabOn]);
+  const { previews: collabPreviews } = useCollab();
+  const remotePreviews = useMemo(() => {
+    if (!collabOn) return new Map<string, any>();
+    return new Map(Object.values(collabPreviews).filter(p => p.symbol === ctx.symbol && p.drawing?.id && p.drawing.visible !== false).map(p => [p.drawing.id as string, p.drawing]));
+  }, [collabPreviews, collabOn, ctx.symbol]);
+
   // Renders a drawing as the chart shows it; the preview goes through here too
   const renderDrawing = (committed: any, asSelected = false) => {
             const drawing = liveEdit && liveEdit.id === committed.id ? { ...committed, ...liveEdit.updates } : committed;
@@ -2055,7 +2077,14 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
             )
           )}
 
-          {drawings.filter(d => d.visible).map(d => renderDrawing(d))}
+          {drawings.filter(d => d.visible).map(d => renderDrawing(remotePreviews.has(d.id) ? { ...d, ...remotePreviews.get(d.id) } : d))}
+
+          {/* Shapes others in the collab are drawing right now */}
+          {remotePreviews.size > 0 && (
+            <Group listening={false}>
+              {Array.from(remotePreviews.values()).filter(p => !drawings.some(d => d.id === p.id)).map(p => renderDrawing(p))}
+            </Group>
+          )}
 
           {previewDrawing && <Group listening={false}>{renderDrawing(previewDrawing, true)}</Group>}
 

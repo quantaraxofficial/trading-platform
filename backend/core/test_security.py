@@ -168,3 +168,25 @@ class AdminCookieTests(TestCase):
         self.assertEqual(r.status_code, 200, r.content)
         r = c.post(f"/api/users/collab/u7/rooms/?session_key={'s' * 43}", {"name": "Test", "symbol": "XAUUSD", "interval": "1min"}, format="json")
         self.assertIn(r.status_code, (200, 201), r.content)
+
+
+class TurnCredentialTests(TestCase):
+    """The voice call's TURN credentials: only for the signed-in user, valid a day, coturn's REST form"""
+    def test_ice_servers(self):
+        import base64, hashlib, hmac, os
+        c = APIClient()
+        p = TraderProfile.objects.create(uid="u8", name="T", email="t8@example.com")
+        UserSession.objects.create(user=p, session_key="v" * 43)
+        self.assertEqual(c.get("/api/users/collab/u8/ice/?session_key=wrong").status_code, 401)
+        with mock.patch.dict(os.environ, {"TURN_SECRET": "", "TURN_HOST": ""}):
+            d = c.get(f"/api/users/collab/u8/ice/?session_key={'v' * 43}").json()
+            self.assertEqual(len(d["iceServers"]), 1)   # STUN only
+        with mock.patch.dict(os.environ, {"TURN_SECRET": "s3cret", "TURN_HOST": "203.0.113.5"}):
+            d = c.get(f"/api/users/collab/u8/ice/?session_key={'v' * 43}").json()
+        turn = d["iceServers"][1]
+        self.assertIn("turn:203.0.113.5:3478?transport=udp", turn["urls"])
+        expires, who = turn["username"].split(":")
+        self.assertEqual(who, "u8")
+        self.assertAlmostEqual(int(expires), int(timezone.now().timestamp()) + 86400, delta=5)
+        want = base64.b64encode(hmac.new(b"s3cret", turn["username"].encode(), hashlib.sha1).digest()).decode()
+        self.assertEqual(turn["credential"], want)

@@ -30,7 +30,7 @@ SAVE_DELAY = 1.5          # seconds after the last change before the room is wri
 MAX_MESSAGE_BYTES = 512_000
 MAX_CHAT_CHARS = 2000
 HISTORY_MESSAGES = 100
-EDIT_TYPES = {'chart', 'indicators', 'drawings.upsert', 'drawings.delete', 'drawings.replace', 'pine'}
+EDIT_TYPES = {'chart', 'indicators', 'drawings.upsert', 'drawings.delete', 'drawings.replace', 'drawings.preview', 'pine'}
 MAX_ALERTS = 100
 MAX_PINE_DOC_CHARS = 200_000
 ALERT_OPERATORS = {'Crossing', 'Crossing Up', 'Crossing Down', 'Greater Than', 'Less Than'}
@@ -38,7 +38,7 @@ ALERT_TRIGGERS = {'Once only', 'Every time'}
 # Several browsers report the same crossing: one firing per alert within this many seconds (a
 # level alert set to "Every time" fires at most once a minute, as for personal alerts)
 # A Pine-script collab shares only the code: the chart's messages are ignored there
-CHART_ONLY = {'chart', 'indicators', 'drawings.upsert', 'drawings.delete', 'drawings.replace', 'pine',
+CHART_ONLY = {'chart', 'indicators', 'drawings.upsert', 'drawings.delete', 'drawings.replace', 'drawings.preview', 'pine',
               'replay', 'alert.add', 'alert.remove', 'alert.update', 'alert.fired', 'trades', 'cursor'}
 CROSSING_GAP = 10
 LEVEL_GAP = 60
@@ -206,6 +206,13 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
             self._schedule_save()
             out = {k: v for k, v in msg.items() if k in ('type', 'drawings', 'ids')}
             await self._broadcast({**out, "symbol": symbol, "by": self.uid}, exclude=self.channel_name)
+        elif kind == 'drawings.preview':
+            # A shape while it's being drawn, moved or resized: shown live on everyone else's chart,
+            # never stored (the finished shape comes as drawings.upsert)
+            d = msg.get('drawing')
+            await self._broadcast({"type": "drawings.preview", "id": self.channel_name, "by": self.uid,
+                                   "symbol": msg.get('symbol') if isinstance(msg.get('symbol'), str) else state.symbol,
+                                   "drawing": d if isinstance(d, dict) else None}, exclude=self.channel_name)
         elif kind == 'cursor':
             await self._broadcast({"type": "cursor", "id": self.channel_name, "uid": self.uid,
                                    "symbol": msg.get('symbol'), "time": msg.get('time'), "price": msg.get('price')},
