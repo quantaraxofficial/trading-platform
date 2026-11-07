@@ -895,7 +895,14 @@ export default function ChartContainer({
   // reloading in the same theme keeps any custom colours
   useEffect(() => {
     const want = theme === "dark" ? "dark" : "light";
-    if (csRef.current.colorsTheme === want) return;
+    // (read from the store, not csRef: a site theme sets colorsTheme the moment the page's theme
+    // changes for it, before this component has re-rendered with it — its colours stay)
+    const now = chartSettings.get();
+    if (now.colorsTheme === want) return;
+    // A site theme's colours are changed only by picking another theme or by the light / dark
+    // toggle (which goes back to the classic look first): not by the page's theme settling on
+    // load (it starts out light for a moment)
+    if (now.siteTheme && now.siteTheme !== 'classic') return;
     const t = themeCanvas(want === "dark");
     chartSettings.set({ colorsTheme: want, background: t.background, background2: t.background2, gridVert: t.gridVert, gridHorz: t.gridHorz, crosshair: { ...csRef.current.crosshair, color: t.crosshair.color }, text: t.text, lines: t.lines, watermarkColor: t.watermarkColor });
   }, [theme]);

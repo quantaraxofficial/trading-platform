@@ -71,6 +71,8 @@ export interface ChartSettings {
   economicEvents: boolean; onlyFutureEvents: boolean; eventsBreaks: boolean; eventsBreaksStyle: ColorLine;
   latestNews: boolean; newsNotification: boolean;
   colorsTheme: "light" | "dark";      // the theme the canvas colours were last set for
+  // Canvas → Site theme (lib/siteThemes): "classic" (plain light / dark) or a theme's id
+  siteTheme: string;
 }
 
 export const DATE_FORMATS = ["Mon Q3 '97", "Mon Q3 1997", "Mon 29 Sep '97", "Mon Sep '97", "Mon Sep 29, 1997", "Mon Sep 1997", "Mon Sep 29", "Mon 29 Sep",
@@ -119,6 +121,7 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   economicEvents: true, onlyFutureEvents: true, eventsBreaks: false, eventsBreaksStyle: { color: "#555555", width: 1, style: "Dashed" },
   latestNews: true, newsNotification: false,
   colorsTheme: "light",
+  siteTheme: "classic",
 };
 
 export const chartSettings = makeStore<ChartSettings>("tv:chartSettings", DEFAULT_CHART_SETTINGS);

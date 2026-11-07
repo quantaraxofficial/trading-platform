@@ -14,6 +14,7 @@ import { TelemetryProvider } from "@/context/TelemetryContext";
 import { AlertsProvider } from "@/context/AlertsContext";
 import { PaperTradingProvider } from "@/context/PaperTradingContext";
 import CloudSync from "./components/CloudSync";
+import SiteThemeVars from "./components/SiteThemeVars";
 
 export default function RootLayout({
   children,
@@ -24,11 +25,12 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* The saved theme, before the first paint (no light flash on a dark reload) */}
-        <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('tv:theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t)}catch(e){}` }} />
+        <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('tv:theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);var v=JSON.parse(localStorage.getItem('tv:siteThemeVars')||'null');if(v)for(var k in v)document.documentElement.style.setProperty(k,v[k])}catch(e){}` }} />
       </head>
       <body>
         <AuthProvider>
           <CloudSync />
+          <SiteThemeVars />
           <PaperTradingProvider>
             <AlertsProvider>
               <TelemetryProvider>

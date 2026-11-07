@@ -26,6 +26,8 @@ import FavoritesToolbar from "./components/FavoritesToolbar";
 import PineEditorPanel from "./components/PineEditorPanel";
 import { pineDock, openPine, defaultPineWidth } from "./components/pine/pineStore";
 import { isTypingTarget } from "./lib/isTypingTarget";
+import { CLASSIC_ID } from "./lib/siteThemes";
+import { chartSettings } from "./lib/chartSettings";
 import AgentChatPanel from "./components/AgentChatPanel";
 import dynamic from "next/dynamic";
 const ChartContainer = dynamic(() => import('./components/ChartContainer'), { ssr: false });
@@ -364,17 +366,40 @@ function AppLayout() {
   }, []);
 
   // The theme is remembered (the layout's inline script applies it before the first paint)
+  // (nothing is saved until the page holds the saved theme: saving the starting "light" first
+  // overwrote a dark one — in development, where effects run twice, every reload came back light)
   const themeLoaded = useRef(false);
+  const themeToLoad = useRef<string | null>(null);
   useEffect(() => {
-    try { const t = localStorage.getItem("tv:theme"); if (t === "dark" || t === "light") setTheme(t); } catch { /* ignore */ }
+    try { const t = localStorage.getItem("tv:theme"); if (t === "dark" || t === "light") { themeToLoad.current = t; setTheme(t); } } catch { /* ignore */ }
     themeLoaded.current = true;
   }, []);
   useEffect(() => {
+    if (themeToLoad.current && theme !== themeToLoad.current) return;   // still the starting theme
+    themeToLoad.current = null;
     document.documentElement.setAttribute("data-theme", theme);
     if (themeLoaded.current) { try { localStorage.setItem("tv:theme", theme); } catch { /* ignore */ } }
   }, [theme]);
 
+  // The site theme (Settings → Canvas → Site theme) sits on a light or dark base: when the
+  // chart settings move to another base (a theme picked, the dialog's Cancel, a template, the
+  // account's settings arriving), the page follows
+  useEffect(() => {
+    let last = chartSettings.get().colorsTheme;
+    return chartSettings.subscribe(() => {
+      const want = chartSettings.get().colorsTheme;
+      if (want === last) return;
+      last = want;
+      setTheme(prev => (prev === want ? prev : want));
+    });
+  }, []);
+
+  // Plain light / dark: back to the classic look (a theme's candles would suit only its own canvas)
   const toggleTheme = () => {
+    const cs = chartSettings.get();
+    if (cs.siteTheme && cs.siteTheme !== CLASSIC_ID) {
+      chartSettings.set({ siteTheme: CLASSIC_ID, candle: { ...cs.candle, upColor: "#089981", downColor: "#f23645", borderUpColor: "#089981", borderDownColor: "#f23645", wickUpColor: "#089981", wickDownColor: "#f23645" } });
+    }
     setTheme(prev => (prev === "light" ? "dark" : "light"));
   };
 

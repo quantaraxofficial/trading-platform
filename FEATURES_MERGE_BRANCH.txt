@@ -348,6 +348,12 @@ Posting signals out
     favourites, theme follow the signed-in account
   - Settings -> Canvas -> Background image: a photo behind the candles (strength and fit)
   - Settings -> Canvas -> Site font: one font for the whole site
+  - Settings -> Canvas -> Site theme: 10 colour themes for the whole site (panels, toolbars,
+    chart canvas and candles): Classic light, Classic dark, Midnight, Ocean, Forest, Sunset,
+    Graphite (monochrome candles), High contrast, Sepia, Arctic. Applied live (Cancel puts the
+    old one back), follows the account, kept across reloads with no flash; any colour can
+    still be changed after picking one; the light / dark toggle returns to the classic look
+  - Fixed: a dark theme no longer comes back light after a reload in development
   - Download all settings as a JSON file, import on another computer; imported parts become
     renamable "Imported" templates (chart settings, drawing tools, indicators)
   - TradingView's colour palette replaces the browser's colour pickers; dark mode throughout;

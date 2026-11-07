@@ -21,12 +21,13 @@ import { useChartType, chartTypeInfo, DRAWN_TYPES } from '../lib/chartType';
 import { PRICE_SOURCES, BOX_METHODS } from '../lib/seriesStyles';
 import { styleOf } from './chartPrimitives/ChartStyles';
 import {
-  chartSettings, takeSnapshot, applySnapshot, defaultSnapshot, chartTemplates, saveTemplate, removeTemplate, renameTemplate, syncTemplatesFromAccount, applyTemplate,
+  chartSettings, themeCanvas, takeSnapshot, applySnapshot, defaultSnapshot, chartTemplates, saveTemplate, removeTemplate, renameTemplate, syncTemplatesFromAccount, applyTemplate,
   VISIBILITY3, DATE_FORMATS, PRECISIONS, FONT_SIZES, type ChartSettings, type ColorLine, type ChartSettingsSnapshot,
 } from '../lib/chartSettings';
 import { chartBgImage, readImageFile, BG_IMAGE_FITS } from '../lib/chartBackgroundImage';
 import { FONTS, FONT_KEYS } from '../lib/fonts';
 import { downloadSettings, readSettingsFile, applySettingsFile, type SettingsFile } from '../lib/settingsTransfer';
+import { SITE_THEMES, CLASSIC_ID, CLASSIC_PREVIEW, themeSettings, type SiteThemeBase } from '../lib/siteThemes';
 import { startRedesign, WIDGETS, widgetLayout, widgetLayoutTemplates, type WidgetLayout } from '../lib/widgetLayout';
 
 export interface CandleColors {
@@ -205,6 +206,32 @@ function NumberInput({ c, value, onChange, label, width = 100, disabled, min }: 
       onBlur={() => setText(String(value))} onKeyDown={e => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
       style={{ width, height: 34, boxSizing: 'border-box', borderRadius: 6, border: `1px solid ${c.border}`, padding: '0 8px', fontSize: 14, outline: 'none',
         background: disabled ? c.disabledBg : 'transparent', color: disabled ? c.muted : c.text }} />
+  );
+}
+
+// A site theme's card (Canvas → Site theme): a small chart in its colours, its name under it
+function ThemeCard({ c, name, bg, panel, text, accent, up, down, selected, onPick }: {
+  c: Colors; name: string; bg: string; panel: string; text: string; accent: string; up: string; down: string; selected: boolean; onPick: () => void;
+}) {
+  // (rising and falling candles, as [body top, body height, wick top, wick height] in px)
+  const bars: [number, number, number, number, boolean][] = [[26, 14, 22, 22, false], [20, 12, 16, 20, true], [14, 12, 10, 20, true], [18, 10, 14, 18, false], [10, 14, 6, 22, true], [6, 10, 3, 16, true]];
+  return (
+    <button type="button" role="radio" aria-checked={selected} aria-label={`${name} theme`} data-name="site-theme" data-value={name} onClick={onPick}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 6, padding: 4, borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
+        border: `2px solid ${selected ? '#2962ff' : 'transparent'}`, background: 'transparent', color: c.text }}>
+      <span aria-hidden style={{ position: 'relative', display: 'block', width: 112, height: 66, borderRadius: 5, overflow: 'hidden', background: bg, border: `1px solid ${c.border}` }}>
+        <span style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 9, background: panel }} />
+        <span style={{ position: 'absolute', left: 6, top: 3, width: 18, height: 3, borderRadius: 2, background: text, opacity: 0.6 }} />
+        <span style={{ position: 'absolute', right: 6, top: 2, width: 14, height: 5, borderRadius: 3, background: accent }} />
+        {bars.map(([top, h, wt, wh, rise], i) => (
+          <React.Fragment key={i}>
+            <span style={{ position: 'absolute', left: 14 + i * 15 + 3, top: 12 + wt, width: 1, height: wh, background: rise ? up : down }} />
+            <span style={{ position: 'absolute', left: 14 + i * 15, top: 12 + top, width: 7, height: h, borderRadius: 1, background: rise ? up : down }} />
+          </React.Fragment>
+        ))}
+      </span>
+      <span style={{ fontSize: 13, textAlign: 'center', fontWeight: selected ? 600 : 400 }}>{name}</span>
+    </button>
   );
 }
 
@@ -536,6 +563,19 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
     {row(173, 'Top', <NumberInput key="mt" c={c} label="Top margin" value={s.marginTop} min={0} onChange={v => set({ marginTop: Math.min(80, v) })} />, <span key="u1" style={{ fontSize: 14 }}>%</span>)}
     {row(173, 'Bottom', <NumberInput key="mb" c={c} label="Bottom margin" value={s.marginBottom} min={0} onChange={v => set({ marginBottom: Math.min(80, v) })} />, <span key="u2" style={{ fontSize: 14 }}>%</span>)}
     {row(173, 'Right', <NumberInput key="mr" c={c} label="Right margin" value={s.marginRight} min={0} onChange={v => set({ marginRight: Math.round(v) })} />, <span key="u3" style={{ fontSize: 14 }}>bars</span>)}
+    {section('Site theme')}
+    <div style={{ fontSize: 13, color: c.muted, margin: '0 0 8px', lineHeight: '18px', maxWidth: 420 }}>Colours for the whole site: panels, toolbars, the chart canvas and the candles. Any colour can still be changed above after picking one</div>
+    <div role="radiogroup" aria-label="Site theme" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(124px, 1fr))', gap: 4, marginTop: 4 }}>
+      {(['light', 'dark'] as SiteThemeBase[]).map(base => {
+        const v = CLASSIC_PREVIEW[base];
+        const on = (!s.siteTheme || s.siteTheme === CLASSIC_ID) && s.colorsTheme === base;
+        return <ThemeCard key={base} c={c} {...v} selected={on} onPick={() => set(themeSettings(CLASSIC_ID, base, chartSettings.get(), themeCanvas))} />;
+      })}
+      {SITE_THEMES.map(t => (
+        <ThemeCard key={t.id} c={c} name={t.name} bg={t.palette.bg} panel={t.palette.panel} text={t.palette.text} accent={t.palette.accent}
+          up={t.candle.up} down={t.candle.down} selected={s.siteTheme === t.id} onPick={() => set(themeSettings(t.id, t.base, chartSettings.get(), themeCanvas))} />
+      ))}
+    </div>
   </>);
 
   const tradingTab = (<>
