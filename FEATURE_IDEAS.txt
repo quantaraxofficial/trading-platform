@@ -81,6 +81,83 @@ PLATFORM
     auto-trading or copying around news.
 
 
+PROP FIRM CHALLENGES
+--------------------
+16. Prop firm rule guard (L)
+    The trader picks their prop firm, the program (1-step / 2-step / instant) and the
+    account size they bought. Before each trade the site warns them against that firm's
+    rules ("today's loss limit leaves $340; this trade risks $410 at its stop loss -
+    think again"), including the hidden rules buried in the terms and FAQ, so they never
+    have to look the rules up again. Builds on Risk guard (#7) and the economic calendar
+    (#15, for news-trading windows).
+
+    There's no public API for prop firm rules: we gather them ourselves from each firm's
+    own pages, as numbers the warnings can calculate with (not as text).
+
+    a) What to store, per firm -> program -> account size
+       Visible rules:
+       - Profit target per phase, minimum trading days, time limit
+       - Daily loss: the %, balance or equity based, whether floating losses count,
+         reset time and timezone (firms differ most here; it fails the most traders)
+       - Max loss: static or trailing; trails balance, equity or end of day; whether it
+         stops trailing at the starting balance
+       - Leverage per asset class, platform, price
+       Hidden rules (mostly in the terms of service and the FAQ, not the sales page):
+       - News trading: banned or not, the window (e.g. 2 or 5 minutes either side),
+         which events, funded accounts only or not
+       - Consistency: e.g. best day no more than X% of total profit
+       - Max risk per trade or a lot-size cap
+       - Stop loss required, or required within X minutes
+       - Minimum trade duration (no trades closed within seconds)
+       - Weekend / overnight holding
+       - Bans on EAs, copy trading, high-frequency trading, hedging across accounts
+       - "Gambling" clauses (e.g. all-in on one trade)
+       - Inactivity limit, IP / VPN rules, payout conditions
+       With every rule: the source link, the quoted source text, the date it took
+       effect and the date it was last checked. The app shows the date and the link,
+       so traders can trust the warning and check it themselves.
+
+    b) Where it comes from
+       - The firm's help centre / FAQ: most of the hidden rules, in tidy articles
+       - The terms of service / trader agreement (often a PDF): the strictest rules
+         (gambling, max risk, payout refusal)
+       - The checkout page: account sizes, prices, programs on offer
+       - The firm's Discord and emails: rule changes often appear there first
+       - Our users: "this rule changed" reports, into a review queue
+       - Comparison sites (PropFirmMatch and the like): to cross-check only; copying
+         their database would likely break their terms
+
+    c) How to keep it up to date (semi-automatic, never fully automatic)
+       1. Start with about 10 of the most popular forex firms (FTMO, FundedNext,
+          The5ers, FundingPips, E8 and similar), not every firm
+       2. A scheduled job saves a copy of each firm's FAQ and terms pages and flags
+          any page that changed
+       3. Claude reads the changed page and fills in the fields above, quoting the
+          source text for each one
+       4. A person approves each change before it goes live: a wrong rule can cost a
+          trader an account they paid for
+       5. Prices and account sizes checked again every month
+
+    d) What the trader adds
+       - Firm, program, size and current phase
+       - Starting balance and start date
+       - Balance / equity at the daily limit's last reset
+       Live equity comes from the linked MT5 account automatically; on paper trading
+       the site already knows everything.
+
+    e) The warnings
+       Before a trade: the money at risk if the stop loss is hit, against what's left
+       of today's loss limit (floating losses included where the firm counts them),
+       what's left of the max loss, and the firm's risk-per-trade or lot caps.
+       Also flagged: no stop loss, a news event inside the firm's window, a trade
+       closed too quickly, the consistency limit getting close.
+       Each warning notes that firms change their rules and links the firm's page.
+
+    First step: draft the data structure and fill it in for 2-3 firms by reading
+    their help centres and terms, to see how much of the hidden-rule detail can be
+    captured reliably before building the warnings.
+
+
 TOP PICKS, IN ORDER
 -------------------
 1. Subscriptions (#1) and paid channels (#2) - turn what's built into revenue.
