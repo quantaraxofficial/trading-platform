@@ -45,6 +45,7 @@ import KeyboardShortcutsDialog from "./components/KeyboardShortcutsDialog";
 import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
 import BacktestSessionBar from "./components/BacktestSessionBar";
 import BacktestSessionsPanel from "./components/BacktestSessionsPanel";
+import VoicePanel from "./components/VoicePanel";
 import { saveReplay, setSavedReplayUser } from "./lib/savedReplay";
 import { ADD_SCRIPT_EVENT, getScript } from "./community/social";
 import { layoutStore, layouts, ensureLayout, readSharedLayout, newLayout } from "./lib/layoutStore";
@@ -211,6 +212,24 @@ function AppLayout() {
     if (cur.open) pineDock.set({ collapsed: false }); else openPine();
   };
   const closePineEditor = () => pineDock.set({ open: false, collapsed: false, maximized: false });
+  // The voice assistant (lib/voice/assistant) opens and closes the Pine Editor, and opens a
+  // right-hand panel, through these events
+  const setShowPineEditorRef = useRef(setShowPineEditor);
+  setShowPineEditorRef.current = setShowPineEditor;
+  useEffect(() => {
+    // (open: as the toolbar's Pine button, restoring a collapsed editor; close: closed, not collapsed)
+    const onPine = (e: Event) => { if ((e as CustomEvent).detail?.open) setShowPineEditorRef.current(true); else closePineEditor(); };
+    const onPanel = (e: Event) => {
+      const id = (e as CustomEvent).detail?.id;
+      if (typeof id !== "string" || !id) return;
+      setActiveSidebarPanel(id);
+      setRightPanel(true);
+    };
+    window.addEventListener("tv:pine-editor", onPine);
+    window.addEventListener("tv:open-panel", onPanel);
+    return () => { window.removeEventListener("tv:pine-editor", onPine); window.removeEventListener("tv:open-panel", onPanel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // The layout's own width (narrower than the window in split view), for the header's compact rules
   const [winW, setWinW] = useState(1440);
   useEffect(() => {
@@ -1176,6 +1195,8 @@ function AppLayout() {
             <NotificationsPanel />
           ) : activeSidebarPanel === "backtest_sessions" ? (
             <BacktestSessionsPanel />
+          ) : activeSidebarPanel === "voice" ? (
+            <VoicePanel />
           ) : (
             <RightToolbar symbol={symbol} onSymbolChange={setSymbol} />
           )}

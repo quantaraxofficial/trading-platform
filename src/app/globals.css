@@ -639,3 +639,8 @@ ul {
   color: var(--tv-sub-text);
   border-color: var(--tv-sub-border);
 }
+
+/* Voice assistant: the microphone pulses while it's listening */
+.tv-voice-mic.on { animation: tv-voice-pulse 1.4s ease-out infinite; }
+@keyframes tv-voice-pulse { 0% { box-shadow: 0 0 0 0 rgba(242, 54, 69, 0.5); } 70% { box-shadow: 0 0 0 12px rgba(242, 54, 69, 0); } 100% { box-shadow: 0 0 0 0 rgba(242, 54, 69, 0); } }
+@media (prefers-reduced-motion: reduce) { .tv-voice-mic.on { animation: none; } }

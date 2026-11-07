@@ -374,7 +374,26 @@ Posting signals out
     encrypted and never sent back to the browser
 
 ======================================================================
-16. RUNNING IT (SETUP NOTES)
+16. VOICE ASSISTANT
+======================================================================
+  - Right toolbar -> microphone icon: talk to the site. Phase 1 commands:
+    open a chart by name, nickname or code ("open gold chart", "open euro dollar",
+    "x a u u s d", "xau usd"), with a timeframe ("on the 15 minute"), change the
+    timeframe ("switch to daily"), open / close the Pine Editor, create a backtest
+    session (new tab), open panels (watchlist, alerts, object tree, chats,
+    notifications, backtest sessions), "what's the price", hello / help / stop listening
+  - Answers spoken aloud and shown as subtitles in the panel's chat, each word lighting up
+    as it's said; what you're saying shows live while you speak
+  - Keeps listening while another panel is open (a red dot on the icon); pauses while it
+    speaks so it doesn't hear itself; spoken answers can be turned off (subtitles only)
+  - Language: English (US / India / UK); commands can also be typed
+  - Uses the browser's own speech recognition: Chrome, Edge and Safari (not Firefox; Brave
+    blocks it). Unknown names go through the symbol search
+  - Next: free conversation with the trader through Claude, more commands (drawing,
+    indicators, orders, alerts, replay)
+
+======================================================================
+17. RUNNING IT (SETUP NOTES)
 ======================================================================
   - Database: run "python manage.py migrate" (migrations up to 0036)
   - Live collab / chats: the backend runs under daphne (Django Channels)
