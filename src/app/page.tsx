@@ -902,6 +902,24 @@ function AppLayout() {
   const handleRemoveIndicator = (id: string) => {
     setActiveIndicators(prev => prev.filter(i => i.id !== id));
   };
+  // The voice assistant adds / removes an indicator by name (tv:add-indicator, tv:remove-indicator
+  // { name }: removes every one of that name), and takes the chart image (tv:snapshot { action })
+  const handleIndicatorSelectRef = useRef<(name: string) => void>(() => {});
+  handleIndicatorSelectRef.current = (name: string) => handleIndicatorSelect(name);
+  useEffect(() => {
+    const onAdd = (e: Event) => { const n = (e as CustomEvent).detail?.name; if (typeof n === "string" && n) handleIndicatorSelectRef.current(n); };
+    const onRemove = (e: Event) => { const n = (e as CustomEvent).detail?.name; if (typeof n === "string" && n) setActiveIndicators(prev => prev.filter(i => i.name !== n)); };
+    const onSnapshot = (e: Event) => { const a = (e as CustomEvent).detail?.action; runSnapshotRef.current(a === "copy" ? "copy-image" : "download"); };
+    window.addEventListener("tv:add-indicator", onAdd);
+    window.addEventListener("tv:remove-indicator", onRemove);
+    window.addEventListener("tv:snapshot", onSnapshot);
+    return () => {
+      window.removeEventListener("tv:add-indicator", onAdd);
+      window.removeEventListener("tv:remove-indicator", onRemove);
+      window.removeEventListener("tv:snapshot", onSnapshot);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // An indicator's inputs / visibility, kept on its entry so they save with the layout
   const handleUpdateIndicator = (id: string, patch: { inputs?: Record<string, any>; visible?: boolean; config?: Record<string, any> }) => {
     setActiveIndicators(prev => prev.map(i => (i.id === id ? { ...i, ...patch } : i)));

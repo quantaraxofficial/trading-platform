@@ -117,3 +117,78 @@ class CleanActionTests(TestCase):
         self.assertIsNone(clean_action({"type": "symbol", "symbol": "<script>"}))
         self.assertEqual(clean_action({"type": "symbol", "symbol": "eur/usd", "interval": "2min"}), {"type": "symbol", "symbol": "EUR/USD"})
         self.assertIsNone(clean_action("open gold"))
+
+
+class ComplexActionTests(TestCase):
+    def test_marks(self):
+        self.assertEqual(clean_action({"type": "mark", "what": ["order_blocks", "fvg", "fvg", "hack"]}), {"type": "mark", "what": ["order_blocks", "fvg"]})
+        self.assertIsNone(clean_action({"type": "mark", "what": ["nothing"]}))
+        self.assertEqual(clean_action({"type": "clear_marks"}), {"type": "clear_marks", "what": []})
+
+    def test_indicators_chart_types_themes(self):
+        self.assertEqual(clean_action({"type": "indicator", "name": "MACD"}), {"type": "indicator", "name": "MACD", "remove": False})
+        self.assertIsNone(clean_action({"type": "indicator", "name": "Secret Sauce"}))
+        self.assertEqual(clean_action({"type": "chart_type", "chart_type": "ha"}), {"type": "chart_type", "chart_type": "ha", "label": "Heikin Ashi"})
+        self.assertIsNone(clean_action({"type": "chart_type", "chart_type": "3d"}))
+        self.assertEqual(clean_action({"type": "theme", "theme": "sepia"}), {"type": "theme", "id": "sepia", "base": "light", "label": "Sepia"})
+        self.assertEqual(clean_action({"type": "theme", "theme": "classic-dark"})["base"], "dark")
+        self.assertIsNone(clean_action({"type": "theme", "theme": "neon"}))
+
+    def test_replay_and_alert(self):
+        self.assertEqual(clean_action({"type": "replay", "date": "2024-03-01"}), {"type": "replay", "date": "2024-03-01"})
+        # a future or impossible date isn't a replay date
+        self.assertEqual(clean_action({"type": "replay", "date": "2999-01-01"}), {"type": "replay", "random": False})
+        self.assertEqual(clean_action({"type": "replay", "date": "2024-02-31"}), {"type": "replay", "random": False})
+        self.assertEqual(clean_action({"type": "alert", "price": 2650.5}), {"type": "alert", "price": 2650.5})
+        self.assertEqual(clean_action({"type": "alert", "price": "lots"}), {"type": "alert"})
+
+    def test_backtest_session(self):
+        a = clean_action({"type": "backtest_new", "symbol": "xau/usd", "interval": "15min", "start_date": "2024-03-01", "balance": 10000,
+                          "length": {"value": 2, "unit": "weeks"}})
+        self.assertEqual(a, {"type": "backtest_new", "symbol": "XAU/USD", "interval": "15min", "start_date": "2024-03-01", "balance": 10000.0,
+                             "length": {"value": 2, "unit": "weeks"}})
+        # anything out of range is left out, not passed on
+        b = clean_action({"type": "backtest_new", "interval": "3min", "start_date": "2999-01-01", "balance": -5, "length": {"value": 2, "unit": "eons"}})
+        self.assertEqual(b, {"type": "backtest_new"})
+
+
+class BusyAndLengthTests(TestCase):
+    def test_length_in_other_forms(self):
+        a = clean_action({"type": "backtest_new", "start_date": "2024-03-01", "length": {"value": "1", "unit": "month"}})
+        self.assertEqual(a["length"], {"value": 1, "unit": "months"})
+
+
+@override_settings(GROQ_API_KEY="groq-key", GROQ_MODEL="openai/gpt-oss-120b", GEMINI_API_KEY="", VOICE_AI_DAILY_LIMIT=5)
+class BusyTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        me = TraderProfile.objects.create(uid="u1", name="A", email="a@example.com")
+        UserSession.objects.create(user=me, session_key="sk1")
+        self.bodies = []
+
+    def test_rate_limited_is_busy_and_gpt_oss_thinks_less(self):
+        def post(url, headers=None, json=None, timeout=None):
+            self.bodies.append(json)
+            return FakeResponse(429, {"error": "rate limited"})
+        with mock.patch("core.voice.requests.post", side_effect=post):
+            r = APIClient().post("/api/users/voice/ask/u1/?session_key=sk1", {"text": "hello"}, format="json")
+        self.assertEqual(r.status_code, 429)
+        self.assertEqual(r.data["error"], "busy")
+        self.assertEqual(self.bodies[0]["reasoning_effort"], "low")
+
+
+@override_settings(GROQ_API_KEY="groq-key", GROQ_MODEL="g", GEMINI_API_KEY="", VOICE_AI_DAILY_LIMIT=5)
+class SeveralActionsTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        me = TraderProfile.objects.create(uid="u1", name="A", email="a@example.com")
+        UserSession.objects.create(user=me, session_key="sk1")
+
+    def test_up_to_three_checked_actions(self):
+        content = {"reply": "Done.", "actions": [{"type": "chart_type", "chart_type": "ha"}, {"type": "theme", "theme": "sepia"},
+                                                  {"type": "nonsense"}, {"type": "reset_view"}, {"type": "price"}]}
+        with mock.patch("core.voice.requests.post", return_value=answer(content)):
+            r = APIClient().post("/api/users/voice/ask/u1/?session_key=sk1", {"text": "x"}, format="json")
+        # the first three looked at, the unknown one dropped
+        self.assertEqual([a["type"] for a in r.data["actions"]], ["chart_type", "theme"])
+        self.assertEqual(r.data["action"]["type"], "chart_type")

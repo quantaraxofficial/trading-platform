@@ -317,6 +317,7 @@ import { useChartTick } from "./drawing/core/useChartTick";
 import { chartObjects, sameObjects, type ChartObject, type DataWindowData, type DataWindowSection, type DataWindowRow } from "../lib/chartObjects";
 import { sideOfPlacement, applyScaleSide, mainPriceScale, paneGeometry, onPriceAxis, mainScaleSide } from "../lib/priceScaleSide";
 import { applyChartWheel, stopChartGlide } from "../lib/chartWheel";
+import { registerChartBars, registerChartInfo } from "../lib/chartBars";
 import { easedAutoscale } from "../lib/easedAutoscale";
 import { computeEma, normalizeEma, savedEmaDefaults, emaVisibleOnInterval, emaInputsText, type EmaConfig } from "../lib/emaCalc";
 import { BandFill } from "./chartPrimitives/BandFill";
@@ -1352,6 +1353,16 @@ export default function ChartContainer({
 
   // Pine-based built-in indicators (VWAP, Ichimoku, Pivot Points, RSI…) and the visible-range
   // volume profile: one instance per indicator entry, on the bars the chart shows (replay-clipped)
+  // The bars for code outside the chart (lib/chartBars: the voice assistant's analysis)
+  useEffect(() => {
+    registerChartBars(() => {
+      const d = fullDataRef.current || [];
+      return modeRef.current !== 'idle' && replayIndexRef.current >= 0 && replayIndexRef.current < d.length ? d.slice(0, replayIndexRef.current + 1) : d;
+    });
+    registerChartInfo(() => ({ symbol: symbolRef.current, interval: intervalRef.current }));
+    return () => { registerChartBars(null); registerChartInfo(null); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const pineIndicators = usePineIndicators({
     chart,
     mainSeries: () => candleSeriesRef.current as any,

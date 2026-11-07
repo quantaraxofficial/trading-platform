@@ -20,7 +20,7 @@ export function VoiceAssistantIcon({ size = 28 }: { size?: number }) {
   );
 }
 
-const EXAMPLES = ["Open gold chart", "Open euro dollar on the 1 hour", "Switch to daily", "Open the Pine Editor", "Create a backtesting session", "What's the price?"];
+const EXAMPLES = ["Open gold on the 15 minute", "Mark order blocks", "Mark fair value gaps", "Mark support and resistance", "Add RSI", "Backtest gold from 1 March 2024 with 10k", "Start replay from 1 March 2024", "Switch to Heikin Ashi"];
 
 // An answer as a subtitle: what's been said so far in full colour, the rest still faint
 function Subtitle({ m }: { m: VoiceMessage }) {
@@ -68,7 +68,7 @@ export default function VoicePanel() {
       <div ref={scroll} data-name="voice-chat" style={{ flex: 1, overflowY: "auto", padding: "4px 12px 8px", display: "flex", flexDirection: "column", gap: 8 }}>
         {v.messages.length === 0 && !v.hearing && (
           <div style={{ padding: "12px 4px", fontSize: 13, lineHeight: "20px", color: "var(--tv-color-text-muted)" }}>
-            Talk to the site: open charts, change the timeframe, open the Pine Editor, start a backtest session. Try:
+            Talk to the site: open charts, mark order blocks, FVGs and levels, add indicators, start replays and backtest sessions, or ask anything. Try:
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
               {EXAMPLES.map(x => (
                 <button key={x} type="button" onClick={() => send(x)} data-name="voice-example"

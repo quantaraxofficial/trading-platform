@@ -31,36 +31,44 @@ MAX_HISTORY = 8
 INTERVALS = {"1min", "5min", "15min", "30min", "45min", "1h", "2h", "4h", "1day", "1week", "1month"}
 PANELS = {"watchlist", "alerts", "object_tree", "collab", "chats", "notifications", "backtest_sessions"}
 SYMBOL = re.compile(r"^[A-Z0-9][A-Z0-9./:-]{0,19}$")
+DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# What the chart can mark (src/app/lib/analysis/smc.ts), add, switch to: the same lists as the browser
+MARKS = {"order_blocks", "fvg", "ifvg", "support_resistance"}
+INDICATORS = {"Relative Strength Index", "MACD", "Average True Range", "Moving Average Exponential", "Moving Average Simple",
+              "Volume Weighted Average Price", "Ichimoku Cloud", "Pivot Points Standard", "Volume Profile Visible Range",
+              "Donchian Channels", "Momentum", "Williams %R", "Awesome Oscillator", "Bull Bear Power", "Rate Of Change",
+              "Price Channel", "FXN - Asian Session Range", "Volume"}
+CHART_TYPES = {"candle": "candles", "hollowCandle": "hollow candles", "volCandles": "volume candles", "bar": "bars", "line": "line",
+               "lineWithMarkers": "line with markers", "stepline": "step line", "area": "area", "hlcArea": "HLC area",
+               "baseline": "baseline", "column": "columns", "hilo": "high-low", "ha": "Heikin Ashi", "renko": "Renko",
+               "pb": "line break", "kagi": "Kagi", "pnf": "point and figure", "range": "range"}
+THEMES = {"classic-light": ("classic", "light", "Classic light"), "classic-dark": ("classic", "dark", "Classic dark"),
+          "midnight": ("midnight", "dark", "Midnight"), "ocean": ("ocean", "dark", "Ocean"), "forest": ("forest", "dark", "Forest"),
+          "sunset": ("sunset", "dark", "Sunset"), "graphite": ("graphite", "dark", "Graphite"), "contrast": ("contrast", "dark", "High contrast"),
+          "sepia": ("sepia", "light", "Sepia"), "arctic": ("arctic", "light", "Arctic")}
+LENGTH_UNITS = {"hours", "days", "weeks", "months", "years"}
 
-SYSTEM_PROMPT = """You are the voice assistant of TradePilot, a charting and trading website like TradingView. \
-Traders talk to you; your reply is spoken aloud and shown as subtitles.
-
-Reply with JSON only: {"reply": "...", "action": null or an action}.
-- "reply": what to say. One or two short sentences, plain spoken English: no markdown, lists, \
-emoji or symbols that don't read aloud. Friendly and direct.
-- "action": when the trader asks for something the site can do, exactly one of:
-  {"type": "symbol", "symbol": "XAU/USD", "interval": "15min"}   open a chart (interval optional)
-  {"type": "interval", "interval": "1h"}                          change the chart's timeframe
-  {"type": "pine", "open": true}                                  open (true) or close (false) the Pine Editor
-  {"type": "backtest_new"}                                        start a new backtest session
-  {"type": "panel", "panel": "alerts"}                            open a panel on the right
-  {"type": "price"}                                               read the current chart's price
-  Otherwise null.
-- Symbols: forex, metals and crypto as BASE/QUOTE (XAU/USD for gold, EUR/USD, BTC/USD); stocks \
-and ETFs by ticker (AAPL, SPY).
-- Intervals: 1min 5min 15min 30min 45min 1h 2h 4h 1day 1week 1month.
-- Panels: watchlist alerts object_tree collab chats notifications backtest_sessions.
-
-You can't place orders, draw on the chart or read the trader's account yet: say so plainly when \
-asked. Trading questions: explain clearly and briefly; never promise profits or tell the trader \
-what to buy or sell. If you don't know something current (news, prices other than the chart's), \
-say you don't have it rather than guessing."""
+# (kept short: the free tier counts tokens per minute and per day, and this goes with every request)
+SYSTEM_PROMPT = """You are the voice assistant of TradePilot, a TradingView-like charting site. Your reply is spoken aloud and subtitled.
+Answer with JSON only: {"reply": "...", "actions": [{"type": ..., fields}, ...]} (no actions: []; at most 3, done in order).
+reply: one or two short plain spoken sentences, no markdown or emoji. With an action, say what you're doing ("Marking the order blocks.").
+Actions:
+symbol {symbol, interval?} open a chart | interval {interval} | mark {what: [kinds]} analyse the bars and mark them | clear_marks {what?: [kinds]} remove your marks (no what: all) | indicator {name, remove?} | chart_type {chart_type} | theme {theme} | replay {date} or {random: true} | alert {price} opens a new alert to confirm | backtest_new {symbol?, interval?, start_date?, balance?, length?: {value, unit}} creates and opens a session (no start_date: opens the new-session page) | snapshot {copy?} chart image | reset_view | pine {open} Pine Editor | panel {panel} | price reads the chart's price
+kinds: order_blocks fvg ifvg support_resistance (the site works them out from the bars: never state levels yourself). Order block: the last opposite candle before a move that breaks structure. FVG: a three-candle gap where candle 1 and 3 don't overlap. IFVG: an FVG that price closed through, now acting the other way (a bullish gap broken below becomes resistance).
+symbol: BASE/QUOTE for forex, metals, crypto (gold XAU/USD); ticker for stocks (AAPL)
+interval: 1min 5min 15min 30min 45min 1h 2h 4h 1day 1week 1month
+indicator name, exactly one of: """ + "; ".join(sorted(INDICATORS)) + """
+chart_type: """ + " ".join(k if v.lower() == k.lower() else f"{k} ({v})" for k, v in CHART_TYPES.items()) + """
+theme: """ + " ".join(THEMES) + """
+panel: watchlist alerts object_tree collab chats notifications backtest_sessions
+length unit: hours days weeks months years. Dates YYYY-MM-DD, in the past; today is {today}.
+You can't place orders or see the trader's account. Explain trading briefly; never promise profits or say what to buy or sell; don't guess news or prices you don't have."""
 
 
 class ProviderError(Exception):
-    def __init__(self, message, retry_other=True):
+    def __init__(self, message, busy=False):
         super().__init__(message)
-        self.retry_other = retry_other
+        self.busy = busy          # rate limited: try again in a minute
 
 
 def _providers():
@@ -73,13 +81,16 @@ def _providers():
 
 
 def _complete(url, key, model, messages):
+    body = {"model": model, "messages": messages, "temperature": 0.3, "max_tokens": 500, "response_format": {"type": "json_object"}}
+    # (gpt-oss thinks before it answers, and the thinking counts against the free tier's tokens)
+    if "gpt-oss" in model:
+        body["reasoning_effort"] = "low"
     try:
-        r = requests.post(url, headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                          json={"model": model, "messages": messages, "temperature": 0.3, "max_tokens": 400,
-                                "response_format": {"type": "json_object"}},
-                          timeout=TIMEOUT)
+        r = requests.post(url, headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, json=body, timeout=TIMEOUT)
     except requests.RequestException as e:
         raise ProviderError(f"unreachable ({e.__class__.__name__})")
+    if r.status_code == 429:
+        raise ProviderError("HTTP 429", busy=True)
     if r.status_code != 200:
         raise ProviderError(f"HTTP {r.status_code}")
     try:
@@ -119,11 +130,67 @@ def clean_action(a):
         return {"type": "interval", "interval": a["interval"]}
     if t == "pine":
         return {"type": "pine", "open": bool(a.get("open", True))}
-    if t in ("backtest_new", "price"):
+    if t in ("price", "reset_view"):
         return {"type": t}
     if t == "panel" and a.get("panel") in PANELS:
         return {"type": "panel", "panel": a["panel"]}
+    if t in ("mark", "clear_marks"):
+        what = [w for w in (a.get("what") if isinstance(a.get("what"), list) else []) if w in MARKS]
+        if t == "mark" and not what:
+            return None
+        return {"type": t, "what": list(dict.fromkeys(what))}
+    if t == "indicator" and a.get("name") in INDICATORS:
+        return {"type": "indicator", "name": a["name"], "remove": bool(a.get("remove", False))}
+    if t == "chart_type" and a.get("chart_type") in CHART_TYPES:
+        return {"type": "chart_type", "chart_type": a["chart_type"], "label": CHART_TYPES[a["chart_type"]]}
+    if t == "theme" and a.get("theme") in THEMES:
+        tid, base, label = THEMES[a["theme"]]
+        return {"type": "theme", "id": tid, "base": base, "label": label}
+    if t == "replay":
+        if _past_date(a.get("date")):
+            return {"type": "replay", "date": a["date"]}
+        return {"type": "replay", "random": bool(a.get("random", False))}
+    if t == "alert":
+        price = a.get("price")
+        ok = isinstance(price, (int, float)) and not isinstance(price, bool) and 0 < price < 1e9
+        return {"type": "alert", "price": float(price)} if ok else {"type": "alert"}
+    if t == "snapshot":
+        return {"type": "snapshot", "copy": bool(a.get("copy", False))}
+    if t == "backtest_new":
+        out = {"type": "backtest_new"}
+        sym = str(a.get("symbol") or "").strip().upper()
+        if SYMBOL.match(sym):
+            out["symbol"] = sym
+        if a.get("interval") in INTERVALS:
+            out["interval"] = a["interval"]
+        if _past_date(a.get("start_date")):
+            out["start_date"] = a["start_date"]
+        bal = a.get("balance")
+        if isinstance(bal, (int, float)) and not isinstance(bal, bool) and 0 < bal <= 1e9:
+            out["balance"] = float(bal)
+        ln = a.get("length")
+        if isinstance(ln, dict):
+            try:
+                value = int(str(ln.get("value")).strip())
+            except ValueError:
+                value = 0
+            unit = str(ln.get("unit") or "").strip().lower()
+            unit = unit if unit.endswith("s") else unit + "s"
+            if 0 < value <= 1000 and unit in LENGTH_UNITS:
+                out["length"] = {"value": value, "unit": unit}
+        return out
     return None
+
+
+def _past_date(v):
+    """A real YYYY-MM-DD date before today"""
+    if not isinstance(v, str) or not DATE.match(v):
+        return False
+    try:
+        from datetime import date
+        return date.fromisoformat(v) < timezone.now().date()
+    except ValueError:
+        return False
 
 
 def _clean_history(history):
@@ -161,20 +228,26 @@ def ask(request, uid):
     context_line = "The chart now: symbol {sym}, timeframe {tf}{price}.".format(
         sym=str(ctx.get("symbol") or "unknown")[:20], tf=str(ctx.get("interval") or "unknown")[:10],
         price=f", last price {ctx['price']}" if isinstance(ctx.get("price"), (int, float)) else "")
-    messages = [{"role": "system", "content": SYSTEM_PROMPT + "\n\n" + context_line}, *_clean_history(request.data.get("history")),
+    prompt = SYSTEM_PROMPT.replace("{today}", timezone.now().date().isoformat())
+    messages = [{"role": "system", "content": prompt + "\n\n" + context_line}, *_clean_history(request.data.get("history")),
                 {"role": "user", "content": text}]
 
     failures = []
+    busy = []
     for name, url, key, model in providers:
         try:
             data = _parse(_complete(url, key, model, messages))
         except ProviderError as e:
             failures.append(f"{name}: {e}")
+            busy.append(e.busy)
             continue
         reply = str(data.get("reply") or "").strip()[:600]
-        action = clean_action(data.get("action"))
-        if not reply and not action:
+        raw = data.get("actions") if isinstance(data.get("actions"), list) else [data.get("action")]
+        actions = [x for x in (clean_action(r) for r in raw[:3]) if x]
+        if not reply and not actions:
             failures.append(f"{name}: empty answer")
             continue
-        return Response({"reply": reply, "action": action, "provider": name, "remaining": max(0, settings.VOICE_AI_DAILY_LIMIT - used - 1)})
+        return Response({"reply": reply, "actions": actions, "action": actions[0] if actions else None, "provider": name, "remaining": max(0, settings.VOICE_AI_DAILY_LIMIT - used - 1)})
+    if busy and all(busy):
+        return Response({"error": "busy", "detail": "; ".join(failures)}, status=status.HTTP_429_TOO_MANY_REQUESTS)
     return Response({"error": "unavailable", "detail": "; ".join(failures)}, status=status.HTTP_502_BAD_GATEWAY)

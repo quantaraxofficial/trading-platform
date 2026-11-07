@@ -439,6 +439,30 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     return () => { window.removeEventListener('pagehide', flush); flush(); };
   }, [scopeKey]);
 
+  // Drawings added or removed from outside the chart's tools, each as one undo step (the voice
+  // assistant's marks, lib/voice/marks): tv:add-drawings { drawings, replaceGroup? } adds them
+  // (first removing the drawings of group `replaceGroup`); tv:remove-drawings { groupPrefix }
+  // removes the drawings whose group id starts with it
+  const externalEditRef = useRef<(next: BaseDrawing[]) => void>(() => {});
+  externalEditRef.current = (next: BaseDrawing[]) => { commitDrawings(next); pushToHistory(next); };
+  useEffect(() => {
+    const onAdd = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      const add: BaseDrawing[] = Array.isArray(d.drawings) ? d.drawings : [];
+      const keep = typeof d.replaceGroup === "string" ? drawingsRef.current.filter(x => x.group?.id !== d.replaceGroup) : drawingsRef.current;
+      externalEditRef.current([...keep, ...add.map(x => ({ ...x, modifiedAt: Date.now() }))]);
+    };
+    const onRemove = (e: Event) => {
+      const prefix = (e as CustomEvent).detail?.groupPrefix;
+      if (typeof prefix !== "string" || !prefix) return;
+      const next = drawingsRef.current.filter(x => !x.group?.id?.startsWith(prefix));
+      if (next.length !== drawingsRef.current.length) externalEditRef.current(next);
+    };
+    window.addEventListener("tv:add-drawings", onAdd);
+    window.addEventListener("tv:remove-drawings", onRemove);
+    return () => { window.removeEventListener("tv:add-drawings", onAdd); window.removeEventListener("tv:remove-drawings", onRemove); };
+  }, []);
+
   // Push to history when drawings change meaningfully (refs written at once, so an undo
   // straight after sees the entry)
   const historyRef = useRef(history);

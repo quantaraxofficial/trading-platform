@@ -395,7 +395,23 @@ Posting signals out
     XAUUSD on 1h). It knows the chart's symbol and price and the last few lines of the chat.
     Its actions are checked against the site's own command list; the keys stay on the
     server; each user gets a daily number of AI answers. The plain commands never use it
-  - Next: more commands (drawing, indicators, orders, alerts, replay)
+  - Chart analysis by voice: "mark order blocks", "mark fair value gaps", "mark inverse FVGs",
+    "mark support and resistance" (or several at once): worked out from the chart's own bars
+    (what's on screen plus 150 bars back) and drawn as labelled zones running to the latest bar;
+    only zones still in play (a filled gap or broken block isn't drawn). Each kind is one Object
+    tree group; marking again replaces it, "clear the FVGs" / "remove the marks" take them off,
+    Ctrl+Z undoes a whole marking
+  - More voice commands: add / remove indicators (RSI, MACD, ATR, EMA, SMA, VWAP, Ichimoku,
+    pivots, volume profile and more), chart type (Heikin Ashi, line, Renko...), site theme,
+    bar replay from a date or a random one, a new alert at a price (opened to confirm), chart
+    image, reset view
+  - Backtest sessions by voice: "backtest gold 15 minute from 1 March 2024 with 10k for 2
+    weeks" creates the session and opens it on the chart (symbol and timeframe default to the
+    chart's, balance to 10,000)
+  - The AI understands other ways of asking ("where are the key levels price keeps bouncing
+    off", "set up a backtest on cable 4 hour from the start of this year with 25k") and can
+    do up to three things at once; every action is checked on the server
+  - Next: orders, drawing tools by voice
 
 ======================================================================
 17. RUNNING IT (SETUP NOTES)
