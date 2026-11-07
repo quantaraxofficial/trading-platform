@@ -376,41 +376,35 @@ Posting signals out
 ======================================================================
 16. VOICE ASSISTANT
 ======================================================================
-  - Right toolbar -> microphone icon: talk to the site. Phase 1 commands:
-    open a chart by name, nickname or code ("open gold chart", "open euro dollar",
-    "x a u u s d", "xau usd"), with a timeframe ("on the 15 minute"), change the
-    timeframe ("switch to daily"), open / close the Pine Editor, create a backtest
-    session (new tab), open panels (watchlist, alerts, object tree, chats,
-    notifications, backtest sessions), "what's the price", hello / help / stop listening
-  - Answers spoken aloud and shown as subtitles in the panel's chat, each word lighting up
-    as it's said; what you're saying shows live while you speak
+  - Right toolbar -> microphone icon: talk to the site (signed in). Everything said goes to an
+    AI on the server (Groq, or Gemini as backup), which answers, asks when it needs to know
+    more, and tells the site what to do; no fixed phrases. It knows the chart's symbol,
+    timeframe and price and the conversation so far
+  - It asks instead of guessing: "create a backtesting session" -> "From which date should it
+    start?"; "mark the zones" -> "Which zones?"; the answer carries on the same request
+  - Bigger actions wait for a yes: creating a backtest session ("Create a backtest on XAUUSD
+    15m from 1 March 2024 with 10,000 dollars? Say yes or no") and clearing all the marks; say
+    yes / no or press the Yes / No buttons
+  - What it can do: open charts and timeframes; mark order blocks, fair value gaps, inverse
+    FVGs, support and resistance (worked out from the chart's own bars, what's on screen plus
+    150 bars back, drawn as labelled zones running to the latest bar, only zones still in play;
+    one Object tree group per kind, marking again replaces it, Ctrl+Z undoes a marking) and
+    clear them; add / remove indicators (RSI, MACD, ATR, EMA, SMA, VWAP, Ichimoku, pivots,
+    volume profile...); chart type; site theme; bar replay from a date or a random one; a new
+    alert at a price (opened to confirm); backtest sessions with symbol, timeframe, start
+    date, balance and length, opened on the chart; chart image; reset view; Pine Editor;
+    the right-hand panels; the price; stop listening. Up to three at once
+  - Every action is checked on the server against the site's own lists (symbols, timeframes,
+    indicators, chart types, themes, past dates); it can't place orders
+  - Answers spoken aloud and shown as subtitles in the panel's chat, each word lighting up as
+    it's said; what you're saying shows live while you speak
   - Keeps listening while another panel is open (a red dot on the icon); pauses while it
     speaks so it doesn't hear itself; spoken answers can be turned off (subtitles only)
-  - Language: English (US / India / UK); commands can also be typed
+  - Language: English (US / India / UK); requests can also be typed
   - Uses the browser's own speech recognition: Chrome, Edge and Safari (not Firefox; Brave
-    blocks it). Unknown names go through the symbol search
-  - AI for everything else (signed in): what the plain commands don't understand goes to an AI
-    on the server (Groq, or Gemini as backup): it answers questions and chats ("what is a
-    pip"), and understands other ways of asking ("bring up the yellow metal hourly" opens
-    XAUUSD on 1h). It knows the chart's symbol and price and the last few lines of the chat.
-    Its actions are checked against the site's own command list; the keys stay on the
-    server; each user gets a daily number of AI answers. The plain commands never use it
-  - Chart analysis by voice: "mark order blocks", "mark fair value gaps", "mark inverse FVGs",
-    "mark support and resistance" (or several at once): worked out from the chart's own bars
-    (what's on screen plus 150 bars back) and drawn as labelled zones running to the latest bar;
-    only zones still in play (a filled gap or broken block isn't drawn). Each kind is one Object
-    tree group; marking again replaces it, "clear the FVGs" / "remove the marks" take them off,
-    Ctrl+Z undoes a whole marking
-  - More voice commands: add / remove indicators (RSI, MACD, ATR, EMA, SMA, VWAP, Ichimoku,
-    pivots, volume profile and more), chart type (Heikin Ashi, line, Renko...), site theme,
-    bar replay from a date or a random one, a new alert at a price (opened to confirm), chart
-    image, reset view
-  - Backtest sessions by voice: "backtest gold 15 minute from 1 March 2024 with 10k for 2
-    weeks" creates the session and opens it on the chart (symbol and timeframe default to the
-    chart's, balance to 10,000)
-  - The AI understands other ways of asking ("where are the key levels price keeps bouncing
-    off", "set up a backtest on cable 4 hour from the start of this year with 25k") and can
-    do up to three things at once; every action is checked on the server
+    blocks it)
+  - Limits: each user gets VOICE_AI_DAILY_LIMIT answers a day; Groq's free tier allows the
+    whole site about 9 a minute and 240 a day ("busy, try again in a minute" past that)
   - Next: orders, drawing tools by voice
 
 ======================================================================
@@ -423,6 +417,6 @@ Posting signals out
     waits these out automatically)
   - Voice assistant AI: set GROQ_API_KEY (free at console.groq.com) and / or GEMINI_API_KEY (free
     at aistudio.google.com) in backend/quantarax_backend/.env; optional GROQ_MODEL,
-    GEMINI_MODEL, VOICE_AI_DAILY_LIMIT (default 100 per user per day). Without keys only the
-    plain voice commands work
+    GEMINI_MODEL, VOICE_AI_DAILY_LIMIT (default 100 per user per day). Without a key the
+    voice assistant can't answer
   - Feature ideas for later are listed in FEATURE_IDEAS.txt

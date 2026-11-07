@@ -1,27 +1,28 @@
 "use client";
 
-// The voice assistant (right toolbar → Voice assistant). Phase 1: spoken commands that drive the
-// site, and a voice that answers, its words shown as subtitles in the panel's chat.
+// The voice assistant (right toolbar → Voice assistant): talk to the site, and a voice that answers,
+// its words shown as subtitles in the panel's chat. Everything said goes to the AI on the server
+// (core/voice.py: Groq, or Gemini), which replies in words, asks when it needs to know more, and
+// sends back actions for the site to do (lib/voice/commands: open charts, mark order blocks and
+// FVGs, indicators, replays, backtest sessions…). Signed-in users only (the AI is per account).
 //   Listening:  the browser's speech recognition (Chrome, Edge, Safari; not Firefox, and Brave
 //               blocks it), continuous while the mic is on. It pauses while the assistant
-//               speaks, so it doesn't hear itself. Typing in the panel runs the same commands.
+//               speaks, so it doesn't hear itself. Typing in the panel does the same.
 //   Speaking:   the browser's speech synthesis; each word lights up in the chat as it's said.
 //   Doing:      the page's own events (tv:set-symbol, tv:set-interval, tv:pine-editor,
-//               tv:open-panel), so a command does what the matching click does.
+//               tv:open-panel…), so an action does what the matching click does. Creating a
+//               backtest session and clearing all the marks wait for a yes.
 // The state lives here, not in the panel: listening carries on while another panel is open.
-// What the plain rules (./commands) don't understand goes to the AI on the server (core/voice.py:
-// Groq, or Gemini): it answers in words, or with one of the same actions the rules produce.
 
 import { useSyncExternalStore } from "react";
-import { parseCommand, aliasSymbol, lettersToPair, intervalByValue, type Intent, type Interval, type MarkKind } from "./commands";
-import { markOnChart, clearMarks, MARK_NAMES } from "./marks";
+import { intervalByValue, type Intent, type Interval, type MarkKind } from "./commands";
+import { markOnChart, clearMarks, countMarks, MARK_NAMES } from "./marks";
 import { getChartInfo } from "../chartBars";
 import { setChartType, type ChartType } from "../chartType";
 import { chartSettings, themeCanvas } from "../chartSettings";
 import { themeSettings } from "../siteThemes";
 import { createSession, freshAccount, endOf, OPEN_SESSION_EVENT } from "../../analytics/sessions";
 import { backendFetch } from "@/lib/backend";
-import { watchlists, listSymbols } from "../../components/watchlist/store";
 import { tradingUi } from "../../trading/store";
 import { displaySymbol } from "../symbolDisplay";
 
@@ -40,6 +41,8 @@ export type VoiceState = {
   hearing: string;         // what's being said right now (not final yet)
   speaking: boolean;
   thinking: boolean;       // waiting for the AI's answer
+  // a question waiting for the trader's answer, and quick answers for it (the panel's buttons)
+  pending: { question: string; options: string[] } | null;
   replies: boolean;        // answers are spoken (off: subtitles only)
   lang: string;
   messages: VoiceMessage[];
@@ -61,7 +64,7 @@ const recognitionClass = (): any =>
   typeof window === "undefined" ? null : (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
 
 let state: VoiceState = {
-  supported: false, canSpeak: false, listening: false, hearing: "", speaking: false, thinking: false, replies: true, lang: "en-US", messages: [], error: null,
+  supported: false, canSpeak: false, listening: false, hearing: "", speaking: false, thinking: false, pending: null, replies: true, lang: "en-US", messages: [], error: null,
 };
 let initialised = false;
 const listeners = new Set<() => void>();
@@ -241,7 +244,7 @@ export function startListening() {
   startRecognition();
   if (!greeted) {
     greeted = true;
-    say("I'm listening. Try saying: open gold chart, switch to the 15 minute, or open the Pine Editor.");
+    say("I'm listening. Ask me anything, or tell me what to do: open gold on the 15 minute, mark the order blocks, or backtest gold from 1 March 2024.");
   }
 }
 export function stopListening() {
@@ -253,31 +256,6 @@ export function toggleListening() { (state.listening ? stopListening : startList
 
 // ---- doing ----------------------------------------------------------------------------------
 const fire = (name: string, detail?: any) => window.dispatchEvent(new CustomEvent(name, { detail }));
-const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
-
-// What was said → a symbol the chart can open (null: nothing found)
-async function resolveSymbol(query: string, exact = false): Promise<{ symbol: string; name?: string } | null> {
-  if (exact) return { symbol: query };
-  const direct = aliasSymbol(query) ?? lettersToPair(query);
-  if (direct) return { symbol: direct };
-  const q = norm(query);
-  if (!q) return null;
-  // the watchlists' symbols ("open tesla" when TSLA is on a list is caught above; "eurjpy" here)
-  try {
-    const own = watchlists.get().lists.flatMap(l => listSymbols(l)).find(s => norm(s) === q);
-    if (own) return { symbol: own };
-  } catch { /* no lists */ }
-  // the data provider's search
-  try {
-    const d = await (await fetch(`/api/symbol-search?q=${encodeURIComponent(query)}`)).json();
-    const hits: { symbol: string; name: string }[] = Array.isArray(d?.data) ? d.data : [];
-    const exact = hits.find(h => norm(h.symbol) === q);
-    const named = hits.find(h => norm(h.name).includes(q));
-    const hit = exact ?? named ?? null;
-    if (hit) return { symbol: hit.symbol, name: hit.name };
-  } catch { /* offline */ }
-  return null;
-}
 
 function currentPrice(): { symbol: string; price: number } | null {
   try {
@@ -290,29 +268,57 @@ function currentPrice(): { symbol: string; price: number } | null {
   } catch { return null; }
 }
 
-// Numbers read out naturally ("2,650.45" rather than "2650.4500")
+// Numbers read out naturally ("2,650.45" rather than "2650.4500"), dates as "1 March 2024"
 const spokenNumber = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: n >= 100 ? 2 : n >= 1 ? 4 : 6 });
+const spokenDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 
-// Does what was asked; `reply` (from the AI) is said instead of the usual confirmation, and
-// `quiet` (the AI's second and third actions) says nothing when it worked
-async function run(intent: Intent, heard: string, reply?: string, quiet = false) {
+// ---- bigger actions wait for a yes -------------------------------------------------------------
+// Creating a backtest session and clearing all the marks are asked first ("… Say yes or no"). The
+// answer is read here, not by the AI: a yes runs it (and any actions the AI asked for after it),
+// a no drops it, anything else drops it and goes to the AI as usual.
+type Confirm = { intent: Intent; then: Intent[]; at: number };
+let confirmPending: Confirm | null = null;
+const CONFIRM_MS = 120_000;
+const YES = /^(yes|yeah|yep|yup|sure|ok|okay|do it|go ahead|confirm|please do|correct|go for it|create it|absolutely)\b/;
+const NO = /^(no|nope|nah|don'?t|cancel|stop|never ?mind|forget it|abort|wait)\b/;
+function askConfirm(question: string, intent: Intent) {
+  confirmPending = { intent, then: [], at: Date.now() };
+  set({ pending: { question, options: ["Yes", "No"] } });
+  say(question);
+}
+function clearConfirm() {
+  confirmPending = null;
+  if (state.pending) set({ pending: null });
+}
+
+// A backtest session's details: the AI's, else the chart's symbol and timeframe, 10,000 balance
+type BacktestPlan = { symbol: string; interval: string; label: string; start: number; startIso: string; balance: number; length: { value: number; unit: any } | null; name: string };
+function backtestPlan(intent: Extract<Intent, { kind: "backtest_new" }>): BacktestPlan | string {
+  const chart = getChartInfo();
+  const symbol = intent.symbol || chart?.symbol;
+  if (!symbol) return "Which symbol should it be on?";
+  const iv: Interval | undefined = intent.interval ?? intervalByValue(chart?.interval);
+  const interval = iv?.value ?? chart?.interval ?? "15min";
+  const label = iv?.label ?? interval;
+  const start = Math.floor(Date.parse(`${intent.start}T00:00:00Z`) / 1000);
+  if (!(start > 0) || start * 1000 > Date.now()) return "The start date has to be in the past. From which date should it start?";
+  const length = intent.length ?? null;
+  if (length && endOf(start, length) * 1000 > Date.now()) return `${length.value} ${length.unit} from ${spokenDate(intent.start!)} runs past today. Start earlier, or test less?`;
+  const balance = intent.balance && intent.balance > 0 ? intent.balance : 10000;
+  return { symbol, interval, label, start, startIso: intent.start!, balance, length, name: `${displaySymbol(symbol)} ${label} backtest` };
+}
+
+// Does an action the AI asked for. `reply` (the AI's) is said instead of the usual confirmation;
+// `quiet` (its second and third actions) says nothing when it worked; `confirmed`: the trader
+// has said yes to it
+async function run(intent: Intent, reply?: string, quiet = false, confirmed = false) {
   const confirm = (usual: string, extra?: Partial<VoiceMessage>) => (quiet ? Promise.resolve() : say(reply || usual, extra));
   switch (intent.kind) {
-    case "symbol": {
-      const found = await resolveSymbol(intent.query, intent.exact);
-      if (!found) {
-        // Not a name the rules know ("the yellow metal"): the AI may understand it (once — not
-        // for a symbol the AI itself sent, nor when signed out)
-        if (!intent.exact && voiceUid) { await askAI(heard); return; }
-        say(`I couldn't find a symbol called "${intent.query}". Try its code, like X A U U S D, or a name like gold.`);
-        return;
-      }
-      fire("tv:set-symbol", { symbol: found.symbol });
+    case "symbol":
+      fire("tv:set-symbol", { symbol: intent.symbol });
       if (intent.interval) fire("tv:set-interval", { interval: intent.interval.value });
-      const shown = displaySymbol(found.symbol);
-      confirm(`Opening ${shown}${found.name && norm(found.name) !== norm(found.symbol) ? `, ${found.name}` : ""}${intent.interval ? ` on the ${intent.interval.spoken} chart` : ""}.`);
+      confirm(`Opening ${displaySymbol(intent.symbol)}${intent.interval ? ` on the ${intent.interval.spoken} chart` : ""}.`);
       return;
-    }
     case "interval":
       fire("tv:set-interval", { interval: intent.interval.value });
       confirm(`Switched to the ${intent.interval.spoken} chart.`);
@@ -322,18 +328,15 @@ async function run(intent: Intent, heard: string, reply?: string, quiet = false)
       confirm(intent.open ? "Here's the Pine Editor." : "Closed the Pine Editor.");
       return;
     case "backtest_new": {
-      // With a start date: the session is made here and opened on this chart
-      if (intent.start) { await createBacktest(intent, reply); return; }
-      // Details but no date: ask for it
-      if (intent.symbol || intent.interval || intent.balance) {
-        say("From which date should it start? Say for example: create a backtest on gold 15 minute from 1 March 2024.");
+      // (the AI should have asked for a start date; if not, ask: the answer goes back to it)
+      if (!intent.start) { say("From which date should the backtest start? For example: 1 March 2024."); return; }
+      const plan = backtestPlan(intent);
+      if (typeof plan === "string") { say(plan); return; }
+      if (!confirmed) {
+        askConfirm(`Create a backtest on ${displaySymbol(plan.symbol)} ${plan.label} from ${spokenDate(plan.startIso)} with ${spokenNumber(plan.balance)} dollars${plan.length ? `, for ${plan.length.value} ${plan.length.unit}` : ""}? Say yes or no.`, intent);
         return;
       }
-      const href = "/analytics?view=backtests";
-      // (a tab opened from a voice command may be blocked: there's no click behind it. With
-      // "noopener" the browser doesn't say whether it opened, so the link is offered either way)
-      try { window.open(href, "_blank", "noopener"); } catch { /* blocked */ }
-      confirm("Opening a new backtest session in a new tab. Choose the symbol and start date there, or tell me them, like: backtest gold 15 minute from 1 March 2024.", { link: { label: "Open new backtest session", href } });
+      await createBacktest(plan);
       return;
     }
     case "mark": {
@@ -343,19 +346,26 @@ async function run(intent: Intent, heard: string, reply?: string, quiet = false)
         const r = markOnChart(k);
         if (!r.ok) { say("The chart has no bars to look at yet."); return; }
         if (!r.count) { none.push(MARK_NAMES[k]); continue; }
-        const sides = k === "support_resistance"
-          ? `${r.bull} support, ${r.bear} resistance`
-          : `${r.bull} bullish, ${r.bear} bearish`;
+        const sides = k === "support_resistance" ? `${r.bull} support, ${r.bear} resistance` : `${r.bull} bullish, ${r.bear} bearish`;
         done.push(`${r.count} ${r.count === 1 ? MARK_NAMES[k].replace(/s$/, "").replace(/levels$/, "level") : MARK_NAMES[k]} (${sides})`);
       }
-      const usual = (done.length ? `Marked ${done.join(" and ")} on the visible bars.` : "")
+      // (the counts are the site's, so they're said even when the AI gave its own reply)
+      const result = (done.length ? `Marked ${done.join(" and ")} on the visible bars.` : "")
         + (none.length ? ` I found no ${none.join(" or ")} still in play there; zoom out to look further back.` : "");
-      confirm(usual.trim());
+      if (!quiet) say(result.trim());
       return;
     }
     case "clear_marks": {
-      if (intent.what?.length) intent.what.forEach(k => clearMarks(k)); else clearMarks();
-      confirm(intent.what?.length ? `Cleared the ${intent.what.map(k => MARK_NAMES[k]).join(" and ")}.` : "Cleared everything I marked.");
+      if (intent.what?.length) {
+        intent.what.forEach(k => clearMarks(k));
+        confirm(`Cleared the ${intent.what.map(k => MARK_NAMES[k]).join(" and ")}.`);
+        return;
+      }
+      const n = countMarks();
+      if (!n) { say("There are no marks of mine on the chart."); return; }
+      if (!confirmed) { askConfirm(`Remove all ${n} marks I made? Say yes or no.`, intent); return; }
+      clearMarks();
+      say("Cleared everything I marked.");
       return;
     }
     case "indicator":
@@ -379,7 +389,7 @@ async function run(intent: Intent, heard: string, reply?: string, quiet = false)
         fire("tv:replay-start", { kind: "random" });
         confirm("Starting bar replay from a random date.");
       } else {
-        say("From which date? Say for example: start replay from 1 March 2024. Or say: replay a random date.");
+        say("From which date? For example: 1 March 2024. Or say: a random date.");
       }
       return;
     case "alert": {
@@ -405,35 +415,24 @@ async function run(intent: Intent, heard: string, reply?: string, quiet = false)
       say(p ? `${displaySymbol(p.symbol)} is at ${spokenNumber(p.price)}.` : "I can't read the price right now: the chart has no data yet.");
       return;
     }
-    case "greeting":
-      say("Hi! Tell me what to open, for example: open gold chart, or open the Pine Editor.");
-      return;
-    case "thanks":
-      say("You're welcome.");
-      return;
-    case "help":
-      say("You can say: open gold on the 15 minute, mark order blocks, mark fair value gaps, mark support and resistance, add RSI, switch to Heikin Ashi, start replay from 1 March 2024, set an alert at 2650, backtest gold from 1 March 2024 with 10k, open the Pine Editor, or ask me anything. Say stop listening to turn me off.");
-      return;
     case "stop":
-      await say("Okay, I've stopped listening.");
+      await say(reply || "Okay, I've stopped listening.");
       stopListening();
       return;
-    default:
-      await askAI(heard);
   }
 }
 
-// ---- the AI (what the rules don't understand) -----------------------------------------------
+// ---- the AI ------------------------------------------------------------------------------------
 let voiceUid: string | null = null;
-// The signed-in user (the AI is per account: its requests are counted per user)
+// The signed-in user (the AI answers per account: its requests are counted per user)
 export function setVoiceUser(uid: string | null) { voiceUid = uid; }
 
 const PANEL_LABELS: Record<string, string> = { watchlist: "watchlist", alerts: "alerts", object_tree: "object tree", collab: "collabs", chats: "chats", notifications: "notifications", backtest_sessions: "backtest sessions" };
 
-// An action the AI sent back (already checked on the server) → the same intents the rules make
+// An action the AI sent back (already checked on the server) → what run() does
 function intentOf(a: any): Intent | null {
   switch (a?.type) {
-    case "symbol": return { kind: "symbol", query: String(a.symbol), interval: intervalByValue(a.interval), exact: true };
+    case "symbol": return typeof a.symbol === "string" ? { kind: "symbol", symbol: a.symbol, interval: intervalByValue(a.interval) } : null;
     case "interval": { const i = intervalByValue(a.interval); return i ? { kind: "interval", interval: i } : null; }
     case "pine": return { kind: "pine", open: !!a.open };
     case "backtest_new": return {
@@ -451,43 +450,24 @@ function intentOf(a: any): Intent | null {
     case "alert": return { kind: "alert", price: typeof a.price === "number" ? a.price : undefined };
     case "snapshot": return { kind: "snapshot", copy: !!a.copy };
     case "reset_view": return { kind: "reset_view" };
+    case "stop": return { kind: "stop" };
     default: return null;
   }
 }
 
 // ---- backtest sessions, made by voice ----------------------------------------------------------
-const spokenDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
-
-async function createBacktest(intent: Extract<Intent, { kind: "backtest_new" }>, reply?: string) {
+async function createBacktest(plan: BacktestPlan) {
   if (!voiceUid) { say("Sign in to create backtest sessions: they're saved to your account."); return; }
-  const chart = getChartInfo();
-  // the symbol: the one named (found as for "open …"), else the chart's
-  let symbol = chart?.symbol ?? null;
-  if (intent.symbol) {
-    const found = await resolveSymbol(intent.symbol, /[/]/.test(intent.symbol) || /^[A-Z0-9.]+$/.test(intent.symbol));
-    if (!found) { say(`I couldn't find a symbol called "${intent.symbol}".`); return; }
-    symbol = found.symbol;
-  }
-  if (!symbol) { say("Which symbol? Say for example: backtest gold from 1 March 2024."); return; }
-  const iv: Interval | undefined = intent.interval ?? intervalByValue(chart?.interval);
-  const interval = iv?.value ?? chart?.interval ?? "15min";
-  const label = iv?.label ?? interval;
-  const start = Math.floor(Date.parse(`${intent.start}T00:00:00Z`) / 1000);
-  if (!(start > 0) || start * 1000 > Date.now()) { say("The start date has to be in the past."); return; }
-  const length = intent.length ?? null;
-  if (length && endOf(start, length) * 1000 > Date.now()) { say(`${length.value} ${length.unit} from ${spokenDate(intent.start!)} runs past today: start earlier or test less.`); return; }
-  const balance = intent.balance && intent.balance > 0 ? intent.balance : 10000;
-  const name = `${displaySymbol(symbol)} ${label} backtest`;
   set({ thinking: true });
   try {
     const s = await createSession(voiceUid, {
-      name, symbol, interval, interval_label: label, start_time: start, initial_balance: balance,
-      account: freshAccount(`Backtest · ${name}`, balance), book: {} as any, length,
+      name: plan.name, symbol: plan.symbol, interval: plan.interval, interval_label: plan.label, start_time: plan.start, initial_balance: plan.balance,
+      account: freshAccount(`Backtest · ${plan.name}`, plan.balance), book: {} as any, length: plan.length,
     });
     set({ thinking: false });
     // (opened on this chart, as the replay menu's sessions are)
     fire(OPEN_SESSION_EVENT, { id: s.id });
-    say(reply || `Created "${name}" from ${spokenDate(intent.start!)} with ${spokenNumber(balance)} dollars${length ? ` for ${length.value} ${length.unit}` : ""}, and opened it.`);
+    say(`Created the ${plan.name} and opened it.`);
   } catch (e: any) {
     set({ thinking: false });
     say(`I couldn't create the session${e?.message ? `: ${e.message}` : ""}.`);
@@ -495,47 +475,64 @@ async function createBacktest(intent: Extract<Intent, { kind: "backtest_new" }>,
 }
 
 async function askAI(text: string) {
-  if (!voiceUid) {
-    say(`I didn't get a command in "${text}". Sign in to talk with me freely; the basic commands work without it. Say help to hear them.`);
-    return;
-  }
+  if (!voiceUid) { say("Sign in to use the voice assistant: it answers through your account."); return; }
   const p = currentPrice();
-  const chartSymbol = tradingUi.get().chartSymbol;
+  const chart = getChartInfo();
+  const chartSymbol = chart?.symbol || tradingUi.get().chartSymbol;
+  // (the conversation so far, so it can follow up on its own questions)
   const history = state.messages.slice(0, -1).slice(-8).map(m => ({ from: m.from, text: m.text }));
   set({ thinking: true });
   try {
     const res = await backendFetch(`http://localhost:8000/api/users/voice/ask/${voiceUid}/`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, history, context: { symbol: chartSymbol ? displaySymbol(chartSymbol) : null, price: p?.price ?? null } }),
+      // (the symbol as the site writes it, "XAU/USD", so the AI answers in the same form)
+      body: JSON.stringify({ text, history, context: { symbol: chartSymbol || null, interval: chart?.interval ?? null, price: p?.price ?? null } }),
     });
     const data = await res.json().catch(() => ({}));
     set({ thinking: false });
     if (!res.ok) {
-      say(data?.error === "not_configured" ? "My AI isn't set up on the server yet, so I only understand the basic commands. Say help to hear them."
-        : data?.error === "daily_limit" ? "You've used today's AI answers. The basic commands still work; say help to hear them."
-        : data?.error === "busy" ? "My AI is busy right now; try again in a minute. The basic commands still work."
-        : "I couldn't reach my AI just now. The basic commands still work.");
+      say(data?.error === "not_configured" ? "My AI isn't set up on the server yet."
+        : data?.error === "daily_limit" ? "You've used today's voice assistant answers. Try again tomorrow."
+        : data?.error === "busy" ? "I'm getting too many requests right now. Try again in a minute."
+        : "I couldn't reach my AI just now. Try again in a moment.");
       return;
     }
-    // up to three actions, in order: the reply is said with the first, the others quietly
+    // up to three actions, in order: the reply is said with the first, the others quietly. One
+    // that needs a yes stops there; the rest wait for the answer
     const intents = (Array.isArray(data.actions) ? data.actions : [data.action]).map(intentOf).filter((x: Intent | null): x is Intent => !!x);
     const reply = typeof data.reply === "string" && data.reply ? data.reply : undefined;
     if (!intents.length) { say(reply ?? "Sorry, I don't have an answer for that."); return; }
-    for (let i = 0; i < intents.length; i++) await run(intents[i], text, i === 0 ? reply : undefined, i > 0);
+    for (let i = 0; i < intents.length; i++) {
+      await run(intents[i], i === 0 ? reply : undefined, i > 0);
+      if (confirmPending) { confirmPending.then = intents.slice(i + 1); break; }
+    }
   } catch {
     set({ thinking: false });
-    say("I couldn't reach my AI just now. The basic commands still work.");
+    say("I couldn't reach my AI just now. Try again in a moment.");
   }
 }
 
-// What was heard (or typed) → the chat, then the command
+// What was heard (or typed) → the chat, then the AI (or the answer to a yes / no question)
 export function handleText(text: string) {
   init();
   const t = text.trim();
   if (!t) return;
   push({ from: "user", text: t });
   set({ error: null });
-  run(parseCommand(t), t).catch(() => say("Something went wrong doing that."));
+  if (confirmPending && Date.now() - confirmPending.at > CONFIRM_MS) clearConfirm();
+  if (confirmPending) {
+    const c = confirmPending;
+    const low = t.toLowerCase().replace(/[.!?,]+/g, " ").trim();
+    if (YES.test(low)) {
+      clearConfirm();
+      (async () => { await run(c.intent, undefined, false, true); for (const i of c.then) await run(i, undefined, true); })()
+        .catch(() => say("Something went wrong doing that."));
+      return;
+    }
+    clearConfirm();
+    if (NO.test(low)) { say("Okay, I won't."); return; }
+  }
+  askAI(t).catch(() => say("Something went wrong doing that."));
 }
 
-export function clearVoiceChat() { set({ messages: [] }); }
+export function clearVoiceChat() { clearConfirm(); set({ messages: [] }); }

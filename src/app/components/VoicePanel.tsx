@@ -91,6 +91,18 @@ export default function VoicePanel() {
             )}
           </div>
         ))}
+        {/* a yes / no question waiting: its answers as buttons (saying them works too) */}
+        {v.pending && !v.thinking && (
+          <div data-name="voice-answers" role="group" aria-label="Answer" style={{ alignSelf: "flex-end", display: "flex", gap: 6 }}>
+            {v.pending.options.map(o => (
+              <button key={o} type="button" onClick={() => send(o)} data-name="voice-answer"
+                style={{ height: 28, padding: "0 14px", borderRadius: 14, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+                  border: "1px solid var(--tv-color-accent)", background: o === "Yes" ? "var(--tv-color-accent)" : "transparent", color: o === "Yes" ? "#fff" : "var(--tv-color-accent)" }}>
+                {o}
+              </button>
+            ))}
+          </div>
+        )}
         {v.thinking && (
           <div data-name="voice-thinking" aria-label="Thinking" style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 10, borderBottomLeftRadius: 3, background: "var(--tv-color-item-hover)", color: "var(--tv-color-text-muted)", fontSize: 13, letterSpacing: 2 }}>•••</div>
         )}

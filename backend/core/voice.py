@@ -31,6 +31,15 @@ MAX_HISTORY = 8
 INTERVALS = {"1min", "5min", "15min", "30min", "45min", "1h", "2h", "4h", "1day", "1week", "1month"}
 PANELS = {"watchlist", "alerts", "object_tree", "collab", "chats", "notifications", "backtest_sessions"}
 SYMBOL = re.compile(r"^[A-Z0-9][A-Z0-9./:-]{0,19}$")
+# Forex, metals and crypto are BASE/QUOTE on the site; "EURUSD" from the AI becomes "EUR/USD"
+CURRENCIES = {"USD", "EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF", "XAU", "XAG", "BTC", "ETH", "SGD", "HKD", "INR", "CNH", "ZAR", "MXN", "TRY", "SEK", "NOK"}
+
+
+def _site_symbol(raw):
+    sym = str(raw or "").strip().upper()
+    if len(sym) == 6 and sym[:3] in CURRENCIES and sym[3:] in CURRENCIES:
+        sym = f"{sym[:3]}/{sym[3:]}"
+    return sym if SYMBOL.match(sym) else None
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # What the chart can mark (src/app/lib/analysis/smc.ts), add, switch to: the same lists as the browser
 MARKS = {"order_blocks", "fvg", "ifvg", "support_resistance"}
@@ -52,8 +61,9 @@ LENGTH_UNITS = {"hours", "days", "weeks", "months", "years"}
 SYSTEM_PROMPT = """You are the voice assistant of TradePilot, a TradingView-like charting site. Your reply is spoken aloud and subtitled.
 Answer with JSON only: {"reply": "...", "actions": [{"type": ..., fields}, ...]} (no actions: []; at most 3, done in order).
 reply: one or two short plain spoken sentences, no markdown or emoji. With an action, say what you're doing ("Marking the order blocks.").
+You are the site's only way of understanding the trader: every request comes to you. If something you need is missing or could mean different things, ask one short question instead of guessing: put it in reply, actions [], and "question": true; their answer comes next with this conversation, so then do what they asked. Don't ask about what has a default: the chart's symbol and timeframe, a 10,000 balance, a backtest without an end. A backtest needs a start date: ask for it. Asked what you can do: name a few things briefly.
 Actions:
-symbol {symbol, interval?} open a chart | interval {interval} | mark {what: [kinds]} analyse the bars and mark them | clear_marks {what?: [kinds]} remove your marks (no what: all) | indicator {name, remove?} | chart_type {chart_type} | theme {theme} | replay {date} or {random: true} | alert {price} opens a new alert to confirm | backtest_new {symbol?, interval?, start_date?, balance?, length?: {value, unit}} creates and opens a session (no start_date: opens the new-session page) | snapshot {copy?} chart image | reset_view | pine {open} Pine Editor | panel {panel} | price reads the chart's price
+symbol {symbol, interval?} open a chart | interval {interval} | mark {what: [kinds]} analyse the bars and mark them | clear_marks {what?: [kinds]} remove your marks (no what: all) | indicator {name, remove?} | chart_type {chart_type} | theme {theme} | replay {date} or {random: true} | alert {price} opens a new alert to confirm | backtest_new {symbol?, interval?, start_date, balance?, length?: {value, unit}} creates and opens a session (the site asks the trader to confirm) | snapshot {copy?} chart image | reset_view | pine {open} Pine Editor | panel {panel} | price reads the chart's price | stop stops listening
 kinds: order_blocks fvg ifvg support_resistance (the site works them out from the bars: never state levels yourself). Order block: the last opposite candle before a move that breaks structure. FVG: a three-candle gap where candle 1 and 3 don't overlap. IFVG: an FVG that price closed through, now acting the other way (a bullish gap broken below becomes resistance).
 symbol: BASE/QUOTE for forex, metals, crypto (gold XAU/USD); ticker for stocks (AAPL)
 interval: 1min 5min 15min 30min 45min 1h 2h 4h 1day 1week 1month
@@ -119,8 +129,8 @@ def clean_action(a):
         return None
     t = a.get("type")
     if t == "symbol":
-        sym = str(a.get("symbol") or "").strip().upper()
-        if not SYMBOL.match(sym):
+        sym = _site_symbol(a.get("symbol"))
+        if not sym:
             return None
         out = {"type": "symbol", "symbol": sym}
         if a.get("interval") in INTERVALS:
@@ -130,7 +140,7 @@ def clean_action(a):
         return {"type": "interval", "interval": a["interval"]}
     if t == "pine":
         return {"type": "pine", "open": bool(a.get("open", True))}
-    if t in ("price", "reset_view"):
+    if t in ("price", "reset_view", "stop"):
         return {"type": t}
     if t == "panel" and a.get("panel") in PANELS:
         return {"type": "panel", "panel": a["panel"]}
@@ -158,8 +168,8 @@ def clean_action(a):
         return {"type": "snapshot", "copy": bool(a.get("copy", False))}
     if t == "backtest_new":
         out = {"type": "backtest_new"}
-        sym = str(a.get("symbol") or "").strip().upper()
-        if SYMBOL.match(sym):
+        sym = _site_symbol(a.get("symbol"))
+        if sym:
             out["symbol"] = sym
         if a.get("interval") in INTERVALS:
             out["interval"] = a["interval"]
@@ -247,7 +257,9 @@ def ask(request, uid):
         if not reply and not actions:
             failures.append(f"{name}: empty answer")
             continue
-        return Response({"reply": reply, "actions": actions, "action": actions[0] if actions else None, "provider": name, "remaining": max(0, settings.VOICE_AI_DAILY_LIMIT - used - 1)})
+        # (a question waits for the trader's answer: no actions with it)
+        question = bool(data.get("question")) and not actions
+        return Response({"reply": reply, "actions": actions, "action": actions[0] if actions else None, "question": question, "provider": name, "remaining": max(0, settings.VOICE_AI_DAILY_LIMIT - used - 1)})
     if busy and all(busy):
         return Response({"error": "busy", "detail": "; ".join(failures)}, status=status.HTTP_429_TOO_MANY_REQUESTS)
     return Response({"error": "unavailable", "detail": "; ".join(failures)}, status=status.HTTP_502_BAD_GATEWAY)

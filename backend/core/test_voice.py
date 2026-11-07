@@ -192,3 +192,37 @@ class SeveralActionsTests(TestCase):
         # the first three looked at, the unknown one dropped
         self.assertEqual([a["type"] for a in r.data["actions"]], ["chart_type", "theme"])
         self.assertEqual(r.data["action"]["type"], "chart_type")
+
+
+@override_settings(GROQ_API_KEY="groq-key", GROQ_MODEL="g", GEMINI_API_KEY="", VOICE_AI_DAILY_LIMIT=5)
+class QuestionTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        me = TraderProfile.objects.create(uid="u1", name="A", email="a@example.com")
+        UserSession.objects.create(user=me, session_key="sk1")
+
+    def ask(self, content):
+        with mock.patch("core.voice.requests.post", return_value=answer(content)) as post:
+            r = APIClient().post("/api/users/voice/ask/u1/?session_key=sk1", {"text": "x", "context": {"symbol": "XAUUSD", "interval": "15min"}}, format="json")
+        return r, post.call_args.kwargs["json"]["messages"][0]["content"]
+
+    def test_a_question_comes_back_as_one(self):
+        r, prompt = self.ask({"reply": "From which date should it start?", "actions": [], "question": True})
+        self.assertTrue(r.data["question"])
+        self.assertEqual(r.data["actions"], [])
+        # the prompt tells it to ask, and the chart's timeframe goes along
+        self.assertIn('"question": true', prompt)
+        self.assertIn("timeframe 15min", prompt)
+
+    def test_with_actions_it_isnt_a_question(self):
+        r, _ = self.ask({"reply": "Okay.", "actions": [{"type": "stop"}], "question": True})
+        self.assertFalse(r.data["question"])
+        self.assertEqual(r.data["actions"], [{"type": "stop"}])
+
+
+class SiteSymbolTests(TestCase):
+    def test_pairs_get_their_slash(self):
+        self.assertEqual(clean_action({"type": "symbol", "symbol": "eurusd"})["symbol"], "EUR/USD")
+        self.assertEqual(clean_action({"type": "backtest_new", "symbol": "XAUUSD", "start_date": "2024-03-01"})["symbol"], "XAU/USD")
+        self.assertEqual(clean_action({"type": "symbol", "symbol": "AAPL"})["symbol"], "AAPL")
+        self.assertEqual(clean_action({"type": "symbol", "symbol": "NVDAUS"})["symbol"], "NVDAUS")   # not two currencies

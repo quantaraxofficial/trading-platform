@@ -61,6 +61,12 @@ export function markOnChart(kind: MarkKind): MarkResult {
   return { ok: true, count: zones.length, bull: zones.filter(z => z.side === "bull").length, bear: zones.filter(z => z.side === "bear").length };
 }
 
+// How many of the assistant's marks are on the chart (one kind, or all)
+export function countMarks(kind?: MarkKind): number {
+  const prefix = kind ? groupId(kind) : GROUP_PREFIX;
+  try { return ((window as any).__drawings || []).filter((d: any) => d.group?.id?.startsWith(prefix)).length; } catch { return 0; }
+}
+
 // Removes the assistant's marks: one kind, or all of them
 export function clearMarks(kind?: MarkKind) {
   fire("tv:remove-drawings", { groupPrefix: kind ? groupId(kind) : GROUP_PREFIX });
