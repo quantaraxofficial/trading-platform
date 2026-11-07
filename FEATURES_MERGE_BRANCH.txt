@@ -92,6 +92,9 @@ Chart interactions
   - Smooth zoom and pan, as on openmarket.xyz: wheel zoom / pan glide to where the wheel is
     taking them (eased ~140 ms, TradingView's anchoring and step), the price axis glides to its
     new range instead of snapping, and a released drag keeps sliding (momentum)
+  - Wheel zoom after the price axis was dragged (autoscale off) still follows the bars: the
+    axis keeps its stretch and shift against the visible high / low instead of freezing
+    (normal scale; a log scale keeps its range)
   - Symbol info dialog: exchange, currency, tick size, today's session on a 24-hour bar
 
 Layouts
