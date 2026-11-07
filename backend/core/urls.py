@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, analytics, broker_algo, broker_mt5, copy_api, copy_share, optimizer_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github
+from . import voice, views, analytics, broker_algo, broker_mt5, copy_api, copy_share, optimizer_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -18,6 +18,8 @@ urlpatterns = [
     path('agent/insights/<str:uid>/', views.get_agent_insights, name='get_agent_insights'),
     path('agent/strategy-note/<str:uid>/', views.submit_strategy_note, name='submit_strategy_note'),
     path('track-failure/', views.track_failure, name='track_failure'),
+    # Voice assistant: what the plain command rules don't understand, answered by an AI (core/voice.py)
+    path('voice/ask/<str:uid>/', voice.ask, name='voice_ask'),
     # Broker accounts: MetaTrader 5 (core/broker_mt5.py)
     path('broker/<str:uid>/mt5/', broker_mt5.mt5_account, name='broker_mt5_account'),
     path('broker/<str:uid>/mt5/live/', broker_mt5.mt5_live, name='broker_mt5_live'),

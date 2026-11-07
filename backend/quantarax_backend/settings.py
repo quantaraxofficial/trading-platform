@@ -189,3 +189,12 @@ MT5_TERMINAL_PATH = env('MT5_TERMINAL_PATH', default='')
 MT5_FAKE = env.bool('MT5_FAKE', default=False)
 # Trade copier (core/copier_service.py, manage.py run_copier): where each subscriber's own MT5 terminal folder goes
 COPIER_TERMINALS_DIR = env('COPIER_TERMINALS_DIR', default=str(BASE_DIR / 'copier_terminals'))
+
+# Voice assistant's AI (core/voice.py): what the plain command rules don't understand goes to
+# Groq (fast; free tier), or to Gemini when Groq has no key or is out of requests. Both keys are
+# optional: without either, only the plain commands work. Requests per user per day are capped.
+GROQ_API_KEY = env('GROQ_API_KEY', default='')
+GROQ_MODEL = env('GROQ_MODEL', default='openai/gpt-oss-120b')
+GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
+GEMINI_MODEL = env('GEMINI_MODEL', default='gemini-2.5-flash')
+VOICE_AI_DAILY_LIMIT = env.int('VOICE_AI_DAILY_LIMIT', default=100)

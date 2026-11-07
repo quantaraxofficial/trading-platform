@@ -36,7 +36,7 @@ export default function VoicePanel() {
   useEffect(() => { scroll.current?.scrollTo({ top: scroll.current.scrollHeight }); }, [v.messages, v.hearing]);
 
   const send = (t: string) => { if (t.trim()) { handleText(t); setText(""); } };
-  const status = v.speaking ? "Speaking…" : v.listening ? (v.hearing ? "Hearing you…" : "Listening… say a command") : v.supported ? "Click the microphone and speak" : "Type a command below";
+  const status = v.thinking ? "Thinking…" : v.speaking ? "Speaking…" : v.listening ? (v.hearing ? "Hearing you…" : "Listening… say a command") : v.supported ? "Click the microphone and speak" : "Type a command below";
 
   const iconBtn: React.CSSProperties = { width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, border: "none", background: "transparent", color: "var(--tv-color-text)", cursor: "pointer", padding: 0 };
 
@@ -91,6 +91,9 @@ export default function VoicePanel() {
             )}
           </div>
         ))}
+        {v.thinking && (
+          <div data-name="voice-thinking" aria-label="Thinking" style={{ alignSelf: "flex-start", padding: "7px 12px", borderRadius: 10, borderBottomLeftRadius: 3, background: "var(--tv-color-item-hover)", color: "var(--tv-color-text-muted)", fontSize: 13, letterSpacing: 2 }}>•••</div>
+        )}
         {v.hearing && (
           <div data-name="voice-hearing" style={{ alignSelf: "flex-end", maxWidth: "88%", padding: "7px 10px", borderRadius: 10, fontSize: 13, lineHeight: "19px", fontStyle: "italic",
             border: "1px dashed var(--tv-color-accent)", color: "var(--tv-color-text-muted)" }}>{v.hearing}…</div>

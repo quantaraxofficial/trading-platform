@@ -4,7 +4,7 @@
 // last of all through the data provider's symbol search.
 
 export type Intent =
-  | { kind: "symbol"; query: string; interval?: Interval }
+  | { kind: "symbol"; query: string; interval?: Interval; exact?: boolean }   // exact: already the app's symbol (from the AI)
   | { kind: "interval"; interval: Interval }
   | { kind: "pine"; open: boolean }
   | { kind: "backtest_new" }
@@ -43,6 +43,11 @@ const HOURS: Record<number, Interval> = {
 const DAY: Interval = { value: "1day", label: "D", spoken: "daily" };
 const WEEK: Interval = { value: "1week", label: "W", spoken: "weekly" };
 const MONTH: Interval = { value: "1month", label: "M", spoken: "monthly" };
+
+// An interval by its value ("15min" → 15 minute), for actions the AI sends back
+export function intervalByValue(v: string | undefined): Interval | undefined {
+  return [...Object.values(MINUTES), ...Object.values(HOURS), DAY, WEEK, MONTH].find(i => i.value === v);
+}
 
 export function findInterval(t: string): Interval | null {
   if (/\b(daily|1 day|one day|day chart|d1)\b/.test(t)) return DAY;

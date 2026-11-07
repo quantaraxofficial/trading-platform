@@ -21,7 +21,8 @@ import { useDms } from "../lib/collab/dms";
 import { useNotifications } from "../community/NotificationsPanel";
 import { BacktestSessionsIcon } from "./BacktestSessionsPanel";
 import { VoiceAssistantIcon } from "./VoicePanel";
-import { useVoice } from "../lib/voice/assistant";
+import { useVoice, setVoiceUser } from "../lib/voice/assistant";
+import { useAuth } from "@/context/AuthContext";
 
 // Trading Agent — a small chat-bubble-with-spark glyph (1px lines like the TradingView icons)
 function TVAgentIcon({ size = 28, ...props }: any) {
@@ -64,6 +65,9 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
   const voiceLive = collabState.peers.some(p => p.voice);
   // The voice assistant: a red dot while it's listening (it carries on with its panel closed)
   const voiceState = useVoice();
+  // (the AI behind it answers per account)
+  const { user } = useAuth();
+  useEffect(() => { setVoiceUser(user?.uid ?? null); }, [user?.uid]);
   const productsRef = useRef<HTMLButtonElement>(null);
   const helpRef = useRef<HTMLButtonElement>(null);
 

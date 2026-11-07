@@ -389,8 +389,13 @@ Posting signals out
   - Language: English (US / India / UK); commands can also be typed
   - Uses the browser's own speech recognition: Chrome, Edge and Safari (not Firefox; Brave
     blocks it). Unknown names go through the symbol search
-  - Next: free conversation with the trader through Claude, more commands (drawing,
-    indicators, orders, alerts, replay)
+  - AI for everything else (signed in): what the plain commands don't understand goes to an AI
+    on the server (Groq, or Gemini as backup): it answers questions and chats ("what is a
+    pip"), and understands other ways of asking ("bring up the yellow metal hourly" opens
+    XAUUSD on 1h). It knows the chart's symbol and price and the last few lines of the chat.
+    Its actions are checked against the site's own command list; the keys stay on the
+    server; each user gets a daily number of AI answers. The plain commands never use it
+  - Next: more commands (drawing, indicators, orders, alerts, replay)
 
 ======================================================================
 17. RUNNING IT (SETUP NOTES)
@@ -400,4 +405,8 @@ Posting signals out
   - Copy trading: run "python manage.py run_copier" on the copier server (MT5 installed)
   - Market data: TWELVEDATA_API_KEY (8 requests a minute on the free plan; the optimizer
     waits these out automatically)
+  - Voice assistant AI: set GROQ_API_KEY (free at console.groq.com) and / or GEMINI_API_KEY (free
+    at aistudio.google.com) in backend/quantarax_backend/.env; optional GROQ_MODEL,
+    GEMINI_MODEL, VOICE_AI_DAILY_LIMIT (default 100 per user per day). Without keys only the
+    plain voice commands work
   - Feature ideas for later are listed in FEATURE_IDEAS.txt

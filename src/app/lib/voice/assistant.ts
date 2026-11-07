@@ -9,9 +9,12 @@
 //   Doing:      the page's own events (tv:set-symbol, tv:set-interval, tv:pine-editor,
 //               tv:open-panel), so a command does what the matching click does.
 // The state lives here, not in the panel: listening carries on while another panel is open.
+// What the plain rules (./commands) don't understand goes to the AI on the server (core/voice.py:
+// Groq, or Gemini): it answers in words, or with one of the same actions the rules produce.
 
 import { useSyncExternalStore } from "react";
-import { parseCommand, aliasSymbol, lettersToPair, type Intent } from "./commands";
+import { parseCommand, aliasSymbol, lettersToPair, intervalByValue, type Intent } from "./commands";
+import { backendFetch } from "@/lib/backend";
 import { watchlists, listSymbols } from "../../components/watchlist/store";
 import { tradingUi } from "../../trading/store";
 import { displaySymbol } from "../symbolDisplay";
@@ -30,6 +33,7 @@ export type VoiceState = {
   listening: boolean;      // the mic is on
   hearing: string;         // what's being said right now (not final yet)
   speaking: boolean;
+  thinking: boolean;       // waiting for the AI's answer
   replies: boolean;        // answers are spoken (off: subtitles only)
   lang: string;
   messages: VoiceMessage[];
@@ -51,7 +55,7 @@ const recognitionClass = (): any =>
   typeof window === "undefined" ? null : (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
 
 let state: VoiceState = {
-  supported: false, canSpeak: false, listening: false, hearing: "", speaking: false, replies: true, lang: "en-US", messages: [], error: null,
+  supported: false, canSpeak: false, listening: false, hearing: "", speaking: false, thinking: false, replies: true, lang: "en-US", messages: [], error: null,
 };
 let initialised = false;
 const listeners = new Set<() => void>();
@@ -246,7 +250,8 @@ const fire = (name: string, detail?: any) => window.dispatchEvent(new CustomEven
 const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 // What was said → a symbol the chart can open (null: nothing found)
-async function resolveSymbol(query: string): Promise<{ symbol: string; name?: string } | null> {
+async function resolveSymbol(query: string, exact = false): Promise<{ symbol: string; name?: string } | null> {
+  if (exact) return { symbol: query };
   const direct = aliasSymbol(query) ?? lettersToPair(query);
   if (direct) return { symbol: direct };
   const q = norm(query);
@@ -282,36 +287,44 @@ function currentPrice(): { symbol: string; price: number } | null {
 // Numbers read out naturally ("2,650.45" rather than "2650.4500")
 const spokenNumber = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: n >= 100 ? 2 : n >= 1 ? 4 : 6 });
 
-async function run(intent: Intent, heard: string) {
+// Does what was asked; `reply` (from the AI) is said instead of the usual confirmation
+async function run(intent: Intent, heard: string, reply?: string) {
+  const confirm = (usual: string, extra?: Partial<VoiceMessage>) => say(reply || usual, extra);
   switch (intent.kind) {
     case "symbol": {
-      const found = await resolveSymbol(intent.query);
-      if (!found) { say(`I couldn't find a symbol called "${intent.query}". Try its code, like X A U U S D, or a name like gold.`); return; }
+      const found = await resolveSymbol(intent.query, intent.exact);
+      if (!found) {
+        // Not a name the rules know ("the yellow metal"): the AI may understand it (once — not
+        // for a symbol the AI itself sent, nor when signed out)
+        if (!intent.exact && voiceUid) { await askAI(heard); return; }
+        say(`I couldn't find a symbol called "${intent.query}". Try its code, like X A U U S D, or a name like gold.`);
+        return;
+      }
       fire("tv:set-symbol", { symbol: found.symbol });
       if (intent.interval) fire("tv:set-interval", { interval: intent.interval.value });
       const shown = displaySymbol(found.symbol);
-      say(`Opening ${shown}${found.name && norm(found.name) !== norm(found.symbol) ? `, ${found.name}` : ""}${intent.interval ? ` on the ${intent.interval.spoken} chart` : ""}.`);
+      confirm(`Opening ${shown}${found.name && norm(found.name) !== norm(found.symbol) ? `, ${found.name}` : ""}${intent.interval ? ` on the ${intent.interval.spoken} chart` : ""}.`);
       return;
     }
     case "interval":
       fire("tv:set-interval", { interval: intent.interval.value });
-      say(`Switched to the ${intent.interval.spoken} chart.`);
+      confirm(`Switched to the ${intent.interval.spoken} chart.`);
       return;
     case "pine":
       fire("tv:pine-editor", { open: intent.open });
-      say(intent.open ? "Here's the Pine Editor." : "Closed the Pine Editor.");
+      confirm(intent.open ? "Here's the Pine Editor." : "Closed the Pine Editor.");
       return;
     case "backtest_new": {
       const href = "/analytics?view=backtests";
       // (a tab opened from a voice command may be blocked: there's no click behind it. With
       // "noopener" the browser doesn't say whether it opened, so the link is offered either way)
       try { window.open(href, "_blank", "noopener"); } catch { /* blocked */ }
-      say("Opening a new backtest session in a new tab. Choose the symbol and start date there.", { link: { label: "Open new backtest session", href } });
+      confirm("Opening a new backtest session in a new tab. Choose the symbol and start date there.", { link: { label: "Open new backtest session", href } });
       return;
     }
     case "panel":
       fire("tv:open-panel", { id: intent.panel });
-      say(`Here's the ${intent.label} panel.`);
+      confirm(`Here's the ${intent.label} panel.`);
       return;
     case "price": {
       const p = currentPrice();
@@ -332,7 +345,58 @@ async function run(intent: Intent, heard: string) {
       stopListening();
       return;
     default:
-      say(`Sorry, I didn't get a command in "${heard}". Say help to hear what I can do.`);
+      await askAI(heard);
+  }
+}
+
+// ---- the AI (what the rules don't understand) -----------------------------------------------
+let voiceUid: string | null = null;
+// The signed-in user (the AI is per account: its requests are counted per user)
+export function setVoiceUser(uid: string | null) { voiceUid = uid; }
+
+const PANEL_LABELS: Record<string, string> = { watchlist: "watchlist", alerts: "alerts", object_tree: "object tree", collab: "collabs", chats: "chats", notifications: "notifications", backtest_sessions: "backtest sessions" };
+
+// An action the AI sent back (already checked on the server) → the same intents the rules make
+function intentOf(a: any): Intent | null {
+  switch (a?.type) {
+    case "symbol": return { kind: "symbol", query: String(a.symbol), interval: intervalByValue(a.interval), exact: true };
+    case "interval": { const i = intervalByValue(a.interval); return i ? { kind: "interval", interval: i } : null; }
+    case "pine": return { kind: "pine", open: !!a.open };
+    case "backtest_new": return { kind: "backtest_new" };
+    case "panel": return PANEL_LABELS[a.panel] ? { kind: "panel", panel: a.panel, label: PANEL_LABELS[a.panel] } : null;
+    case "price": return { kind: "price" };
+    default: return null;
+  }
+}
+
+async function askAI(text: string) {
+  if (!voiceUid) {
+    say(`I didn't get a command in "${text}". Sign in to talk with me freely; the basic commands work without it. Say help to hear them.`);
+    return;
+  }
+  const p = currentPrice();
+  const chartSymbol = tradingUi.get().chartSymbol;
+  const history = state.messages.slice(0, -1).slice(-8).map(m => ({ from: m.from, text: m.text }));
+  set({ thinking: true });
+  try {
+    const res = await backendFetch(`http://localhost:8000/api/users/voice/ask/${voiceUid}/`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, history, context: { symbol: chartSymbol ? displaySymbol(chartSymbol) : null, price: p?.price ?? null } }),
+    });
+    const data = await res.json().catch(() => ({}));
+    set({ thinking: false });
+    if (!res.ok) {
+      say(data?.error === "not_configured" ? "My AI isn't set up on the server yet, so I only understand the basic commands. Say help to hear them."
+        : data?.error === "daily_limit" ? "You've used today's AI answers. The basic commands still work; say help to hear them."
+        : "I couldn't reach my AI just now. The basic commands still work.");
+      return;
+    }
+    const intent = intentOf(data.action);
+    if (intent) await run(intent, text, typeof data.reply === "string" ? data.reply : undefined);
+    else say(typeof data.reply === "string" && data.reply ? data.reply : "Sorry, I don't have an answer for that.");
+  } catch {
+    set({ thinking: false });
+    say("I couldn't reach my AI just now. The basic commands still work.");
   }
 }
 
