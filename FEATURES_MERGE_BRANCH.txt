@@ -394,6 +394,20 @@ Posting signals out
     alert at a price (opened to confirm); backtest sessions with symbol, timeframe, start
     date, balance and length, opened on the chart; chart image; reset view; Pine Editor;
     the right-hand panels; the price; stop listening. Up to three at once
+  - Collabs by voice: "start a collab" asks for its name and who to invite (editor or viewer),
+    or "defaults" (named after the symbol, nobody invited, people may ask to join, everyone's
+    mic on); a name that matches several people is asked about ("Which Rahul?"); then a yes /
+    no, and it's created, opened and the people invited. Also: invite people to the open
+    collab (asked first), copy its link
+  - The whole site by voice: every Quick search (Ctrl+K) function and the site's other controls
+    register with the assistant (lib/voice/registry) and go to the AI with each request: replay
+    play / pause / step / skip / exit / speed, the date ranges (1D ... All), new / save layout,
+    redesign, every settings tab, paper trading, chart data download, the collab dialog, the
+    other pages (Analytics, Backtest sessions, Copy trading, Community, Pricing), undo / redo,
+    lock / unlock / hide / show / remove all drawings (asked first), magnet modes, indicator
+    templates, market buy / sell (opens the order ticket), go to date, time zone, hide panels,
+    keyboard shortcuts... New features register there too
+  - Any drawing tool by name ("pick the fib retracement tool")
   - Every action is checked on the server against the site's own lists (symbols, timeframes,
     indicators, chart types, themes, past dates); it can't place orders
   - Answers spoken aloud and shown as subtitles in the panel's chat, each word lighting up as

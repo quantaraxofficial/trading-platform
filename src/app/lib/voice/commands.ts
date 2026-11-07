@@ -23,7 +23,19 @@ export type Intent =
   | { kind: "reset_view" }
   | { kind: "panel"; panel: PanelId; label: string }
   | { kind: "price" }
-  | { kind: "stop" };
+  | { kind: "stop" }
+  // any of the site's registered controls (lib/voice/registry: Quick search's functions, replay,
+  // date ranges, layouts, settings tabs, pages, drawings…)
+  | { kind: "command"; id: string }
+  // a drawing tool, by name ("trend line", "fib retracement"): matched to the tool catalog
+  | { kind: "drawing_tool"; name: string }
+  // collabs: start one (asked for a name and who to invite first, or the defaults), invite people
+  // to the open one, copy its link
+  | { kind: "collab_start"; name?: string; invite?: Invitee[]; allowRequests?: boolean; allowVoice?: boolean }
+  | { kind: "collab_invite"; invite: Invitee[] }
+  | { kind: "collab_link" };
+
+export type Invitee = { who: string; role: "editor" | "viewer" };
 
 // The chart's timeframes, as values ("15min"), toolbar labels ("15m") and spoken names
 const INTERVALS: Interval[] = [

@@ -226,3 +226,54 @@ class SiteSymbolTests(TestCase):
         self.assertEqual(clean_action({"type": "backtest_new", "symbol": "XAUUSD", "start_date": "2024-03-01"})["symbol"], "XAU/USD")
         self.assertEqual(clean_action({"type": "symbol", "symbol": "AAPL"})["symbol"], "AAPL")
         self.assertEqual(clean_action({"type": "symbol", "symbol": "NVDAUS"})["symbol"], "NVDAUS")   # not two currencies
+
+
+class SiteCommandTests(TestCase):
+    def test_commands_must_be_the_pages_own(self):
+        cmds = ["replay-play", "layout-save"]
+        self.assertEqual(clean_action({"type": "command", "id": "replay-play"}, cmds), {"type": "command", "id": "replay-play"})
+        self.assertIsNone(clean_action({"type": "command", "id": "delete-account"}, cmds))
+        self.assertIsNone(clean_action({"type": "command", "id": "replay-play"}))
+
+    def test_drawing_tools_and_collabs(self):
+        self.assertEqual(clean_action({"type": "drawing_tool", "name": "Fib retracement <b>"}), {"type": "drawing_tool", "name": "Fib retracement b"})
+        a = clean_action({"type": "collab_start", "name": "Gold scalping", "invite": [{"who": "Rahul", "role": "viewer"}, {"who": "priya@x.com", "role": "admin"}, {"who": ""}],
+                          "ask_to_join": False})
+        self.assertEqual(a, {"type": "collab_start", "name": "Gold scalping", "invite": [{"who": "Rahul", "role": "viewer"}, {"who": "priya@x.com", "role": "editor"}], "ask_to_join": False})
+        self.assertIsNone(clean_action({"type": "collab_invite", "invite": []}))
+        self.assertEqual(clean_action({"type": "collab_link"}), {"type": "collab_link"})
+
+
+@override_settings(GROQ_API_KEY="groq-key", GROQ_MODEL="g", GEMINI_API_KEY="", VOICE_AI_DAILY_LIMIT=5)
+class CommandContextTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        me = TraderProfile.objects.create(uid="u1", name="A", email="a@example.com")
+        UserSession.objects.create(user=me, session_key="sk1")
+
+    def test_the_pages_commands_go_to_the_ai_grouped(self):
+        content = {"reply": "Playing.", "actions": [{"type": "command", "id": "replay-play"}, {"type": "command", "id": "rm-rf"}]}
+        with mock.patch("core.voice.requests.post", return_value=answer(content)) as post:
+            r = APIClient().post("/api/users/voice/ask/u1/?session_key=sk1", {"text": "play", "context": {
+                "symbol": "XAU/USD", "commands": ["replay-play", "replay-pause", "range-1d", "indicators"], "collab": {"name": "Gold", "role": "owner"}}}, format="json")
+        system = post.call_args.kwargs["json"]["messages"][0]["content"]
+        self.assertIn("Site commands (use the id exactly): replay-play replay-pause range-1d indicators", system)
+        self.assertIn("In the collab 'Gold' as owner.", system)
+        self.assertEqual(r.data["actions"], [{"type": "command", "id": "replay-play"}])
+
+
+class ShortCommandIdTests(TestCase):
+    def test_a_unique_ending_is_enough(self):
+        cmds = ["replay-speed-3x", "replay-play", "range-1d", "drawings-lock-all", "drawings-unlock-all"]
+        self.assertEqual(clean_action({"type": "command", "id": "speed-3x"}, cmds)["id"], "replay-speed-3x")
+        self.assertEqual(clean_action({"type": "command", "id": "lock-all"}, cmds)["id"], "drawings-lock-all")
+        # "all" ends two of them: not guessed
+        self.assertIsNone(clean_action({"type": "command", "id": "all"}, cmds))
+
+
+class CommandAsTypeTests(TestCase):
+    def test_a_command_written_as_the_type(self):
+        cmds = ["drawings-lock-all", "magnet-strong"]
+        self.assertEqual(clean_action({"type": "drawings-lock-all"}, cmds), {"type": "command", "id": "drawings-lock-all"})
+        self.assertEqual(clean_action({"type": "strong"}, cmds), {"type": "command", "id": "magnet-strong"})
+        self.assertIsNone(clean_action({"type": "format-disk"}, cmds))

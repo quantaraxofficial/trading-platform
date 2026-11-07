@@ -46,6 +46,8 @@ import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
 import BacktestSessionBar from "./components/BacktestSessionBar";
 import BacktestSessionsPanel from "./components/BacktestSessionsPanel";
 import VoicePanel from "./components/VoicePanel";
+import { registerVoiceCommands, setVoiceContext } from "./lib/voice/registry";
+import { DATE_RANGES } from "./components/BottomPanel";
 import { saveReplay, setSavedReplayUser } from "./lib/savedReplay";
 import { ADD_SCRIPT_EVENT, getScript } from "./community/social";
 import { layoutStore, layouts, ensureLayout, readSharedLayout, newLayout } from "./lib/layoutStore";
@@ -983,6 +985,54 @@ function AppLayout() {
     { id: 'theme', label: theme === 'dark' ? 'Light theme' : 'Dark theme', section: 'SETTINGS', keywords: ['theme', 'color', 'mode', 'appearance'], icon: <SunMoon {...icon18} />, run: toggleTheme },
     { id: 'timezone', label: 'Time zone', section: 'SETTINGS', keywords: ['timezone', 'clock', 'utc'], icon: <Globe {...icon18} />, run: () => window.dispatchEvent(new CustomEvent('tv:open-timezone-menu')) },
   ];
+
+  // The voice assistant can do all of these (lib/voice/registry): Quick search's functions, and the
+  // rest of the site's controls. Re-registered every render: they use the latest state.
+  const replayApi = useReplay();
+  useEffect(() => {
+    const ev = (name: string, detail?: any) => () => { window.dispatchEvent(new CustomEvent(name, { detail })); };
+    const tab = (href: string) => () => { try { window.open(href, "_blank", "noopener"); } catch { /* blocked */ } };
+    registerVoiceCommands("page", [
+      // (not the ones the assistant has its own action for: theme, alert, replay, Pine Editor,
+      // reset view, chart image, the watchlist panel)
+      ...quickActions.filter(a => !["theme", "alert", "replay", "pine-editor", "reset-view", "download-image", "copy-image", "open-watchlist"].includes(a.id))
+        .map(a => ({ id: a.id, run: () => { a.run(); } })),
+      { id: "theme-toggle-light-dark", run: toggleTheme },
+      { id: "indicators-remove-all", run: () => setActiveIndicators([]),
+        confirm: () => (activeIndicators.length ? `Remove all ${activeIndicators.length} indicators from the chart? Say yes or no.` : null) },
+      // bar replay
+      { id: "replay-select-bar", run: handleReplayClick },
+      { id: "replay-play", run: () => { if (!replayApi.isPlaying) replayApi.togglePlay(); } },
+      { id: "replay-pause", run: () => { if (replayApi.isPlaying) replayApi.togglePlay(); } },
+      { id: "replay-step-forward", run: replayApi.stepForward },
+      { id: "replay-step-back", run: replayApi.stepBack },
+      { id: "replay-skip-to-end", run: replayApi.skipToEnd },
+      { id: "replay-exit", run: () => leaveReplay(false) },
+      { id: "replay-exit-and-save", run: () => leaveReplay(true) },
+      ...[10, 7, 5, 3, 1, 0.5, 0.3, 0.2, 0.1].map(x => ({ id: `replay-speed-${x}x`, run: () => replayApi.setSpeed(x) })),
+      // date ranges (the bottom bar's 1D … All)
+      ...DATE_RANGES.map(r => ({ id: `range-${r.key.toLowerCase()}`, run: ev("tv:apply-date-range", { interval: r.interval, span: r.span }) })),
+      // layouts and the site's own layout
+      { id: "layout-new", run: ev("tv:layout-create") },
+      { id: "layout-save", run: ev("tv:save-chart") },
+      { id: "layout-redesign", run: ev("tv:redesign") },
+      // settings
+      ...["symbol", "legend", "scales", "canvas", "layout", "trading", "alerts", "events"].map(t => ({ id: `settings-${t}`, run: ev("tv:open-chart-settings", { tab: t }) })),
+      // trading, data, collabs
+      { id: "paper-trading-panel", run: ev("tv:open-trading-panel") },
+      { id: "download-chart-data", run: ev("tv:download-chart-data") },
+      { id: "collab-dialog", run: () => setShowCollabDialog(true) },
+      // the site's other pages (in a new tab)
+      { id: "page-analytics", run: tab("/analytics") },
+      { id: "page-backtest-sessions", run: tab("/analytics?view=backtests") },
+      { id: "page-copy-trading", run: tab("/analytics?view=copy") },
+      { id: "page-community", run: tab("/community") },
+      { id: "page-pricing", run: tab("/pricing") },
+    ]);
+    setVoiceContext("indicators", () => activeIndicators);
+    setVoiceContext("interval-label", () => intervalLabel);
+  });
+  useEffect(() => () => { registerVoiceCommands("page", null); setVoiceContext("indicators", null); setVoiceContext("interval-label", null); }, []);
 
   // ---- The site's layout: the default grid, or the widgets where Redesign put them (lib/widgetLayout)
   const lay = widgetLayout.useValue();

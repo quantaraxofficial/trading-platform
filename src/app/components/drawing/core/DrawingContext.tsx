@@ -1,5 +1,6 @@
 "use client";
 
+import { registerVoiceCommands, registerToolPicker } from '@/app/lib/voice/registry';
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 
 export type DrawingType =
@@ -685,6 +686,26 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     }
   };
   
+  // The voice assistant can do these (lib/voice/registry; re-registered every render, so they
+  // use the latest drawings)
+  useEffect(() => {
+    registerVoiceCommands("drawings", [
+      { id: "drawings-undo", run: undo },
+      { id: "drawings-redo", run: redo },
+      { id: "drawings-remove-all", run: clearDrawings,
+        confirm: () => (drawings.length ? `Remove all ${drawings.length} drawings from the chart? Say yes or no.` : null) },
+      { id: "drawings-lock-all", run: () => { if (!allDrawingsLocked) toggleLockAllDrawings(); } },
+      { id: "drawings-unlock-all", run: () => { if (allDrawingsLocked) toggleLockAllDrawings(); } },
+      { id: "drawings-hide-all", run: () => { if (!allDrawingsHidden) toggleHideAllDrawings(); } },
+      { id: "drawings-show-all", run: () => { if (allDrawingsHidden) toggleHideAllDrawings(); } },
+      { id: "magnet-weak", run: () => setMagnetMode("weak") },
+      { id: "magnet-strong", run: () => setMagnetMode("strong") },
+      { id: "magnet-off", run: () => setMagnetMode("off") },
+    ]);
+    registerToolPicker(t => setActiveTool(t as DrawingType));
+  });
+  useEffect(() => () => { registerVoiceCommands("drawings", null); registerToolPicker(null); }, []);
+
   const shiftDrawings = (shift: number) => {
     if (shift === 0) return;
     setDrawings(prev => prev.map(d => ({

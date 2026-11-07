@@ -15,7 +15,11 @@
 // The state lives here, not in the panel: listening carries on while another panel is open.
 
 import { useSyncExternalStore } from "react";
-import { intervalByValue, type Intent, type Interval, type MarkKind } from "./commands";
+import { intervalByValue, type Intent, type Interval, type MarkKind, type Invitee } from "./commands";
+import { voiceCommand, voiceCommands, voiceContext, pickTool } from "./registry";
+import { DRAWING_TOOLS } from "../../components/drawing/toolCatalog";
+import { collab, collabApi, collabLink, type Person, type RoomInfo, type Member } from "../collab/session";
+import { openCollab } from "../../components/collab/CollabController";
 import { markOnChart, clearMarks, countMarks, MARK_NAMES } from "./marks";
 import { getChartInfo } from "../chartBars";
 import { setChartType, type ChartType } from "../chartType";
@@ -276,7 +280,7 @@ const spokenDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateStr
 // Creating a backtest session and clearing all the marks are asked first ("… Say yes or no"). The
 // answer is read here, not by the AI: a yes runs it (and any actions the AI asked for after it),
 // a no drops it, anything else drops it and goes to the AI as usual.
-type Confirm = { intent: Intent; then: Intent[]; at: number };
+type Confirm = { intent: Intent; then: Intent[]; at: number; reply?: string };   // reply: the AI's words, said once it's done
 let confirmPending: Confirm | null = null;
 const CONFIRM_MS = 120_000;
 const YES = /^(yes|yeah|yep|yup|sure|ok|okay|do it|go ahead|confirm|please do|correct|go for it|create it|absolutely)\b/;
@@ -419,7 +423,154 @@ async function run(intent: Intent, reply?: string, quiet = false, confirmed = fa
       await say(reply || "Okay, I've stopped listening.");
       stopListening();
       return;
+    case "command":
+      await runCommand(intent, confirmed, usual => { confirm(usual); });
+      return;
+    case "drawing_tool": {
+      const tool = findTool(intent.name);
+      if (!tool) { say(`I don't have a drawing tool called ${intent.name}.`); return; }
+      if (!pickTool(tool.type)) { say("Open the chart to draw."); return; }
+      confirm(`Picked the ${tool.label} tool. Click on the chart to draw.`);
+      return;
+    }
+    case "collab_start":
+      await startCollab(intent, confirmed);
+      return;
+    case "collab_invite":
+      await inviteToCollab(intent, confirmed);
+      return;
+    case "collab_link":
+      copyCollabLink();
+      return;
   }
+}
+
+// ---- the site's registered controls, drawing tools ----------------------------------------------
+async function runCommand(intent: Extract<Intent, { kind: "command" }>, confirmed: boolean, done: (usual: string) => void) {
+  const c = voiceCommand(intent.id);
+  if (!c) { say("I can't do that here right now."); return; }
+  if (c.confirm && !confirmed) {
+    const q = c.confirm();
+    if (q) { askConfirm(q, intent); return; }
+  }
+  await c.run();
+  done("Done.");
+}
+
+// A tool by what it was called: its name, then its keywords, then the most words in common
+function findTool(name: string): { type: string; label: string } | null {
+  const n = name.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\b(tool|drawing|the|a)\b/g, " ").replace(/\s+/g, " ").trim();
+  if (!n) return null;
+  const tools = DRAWING_TOOLS.map(t => ({ type: String(t.type), label: t.label, words: [t.label, ...(t.keywords || [])].join(" ").toLowerCase() }));
+  const exact = tools.find(t => t.label.toLowerCase() === n);
+  if (exact) return exact;
+  const inLabel = tools.find(t => t.label.toLowerCase().includes(n));
+  if (inLabel) return inLabel;
+  const want = n.split(" ");
+  let best: (typeof tools)[number] | null = null, score = 0;
+  for (const t of tools) {
+    const s = want.filter(w => t.words.includes(w)).length;
+    if (s > score) { best = t; score = s; }
+  }
+  return score > 0 ? best : null;
+}
+
+// ---- collabs ----------------------------------------------------------------------------------
+type Found = { label: string; query: string; role: "editor" | "viewer" };
+
+// The people named, found as the Collaborate dialog finds them. A name that matches nobody, or
+// several people, comes back as a question (the answer goes to the AI with the conversation)
+async function findPeople(list: Invitee[]): Promise<Found[] | string> {
+  const out: Found[] = [];
+  for (const p of list) {
+    const who = p.who.trim();
+    if (!who) continue;
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(who)) { out.push({ label: who, query: who, role: p.role }); continue; }
+    let people: Person[] = [];
+    try { people = (await collabApi<{ people: Person[] }>(voiceUid!, `people/?q=${encodeURIComponent(who)}`)).people || []; } catch { people = []; }
+    const exact = people.filter(x => x.name.toLowerCase() === who.toLowerCase());
+    const pick = exact.length === 1 ? exact : people;
+    if (pick.length === 1) { out.push({ label: pick[0].name, query: pick[0].email || pick[0].uid, role: p.role }); continue; }
+    if (!pick.length) return `I couldn't find anyone called ${who}. What's their email, or their name as it shows on the site?`;
+    return `Which ${who}? ${pick.slice(0, 4).map(x => `${x.name}${x.email ? `, ${x.email}` : ""}`).join("; or ")}.`;
+  }
+  return out;
+}
+const peopleText = (found: Found[]) => found.map(f => `${f.label} as ${f.role}`).join(", ");
+
+async function startCollab(intent: Extract<Intent, { kind: "collab_start" }>, confirmed: boolean) {
+  if (!voiceUid) { say("Sign in to start a collab."); return; }
+  if (collab.get().room && collab.get().status !== "idle" && collab.get().status !== "ended") {
+    say("You're already in a collab. Leave it first to start another, or ask me to invite people to this one.");
+    return;
+  }
+  const chart = getChartInfo();
+  if (!chart?.symbol) { say("Open a chart first: a collab shares it."); return; }
+  const found = intent.invite?.length ? await findPeople(intent.invite) : [];
+  if (typeof found === "string") { say(found); return; }
+  const name = (intent.name || "").trim() || `${displaySymbol(chart.symbol)} analysis`;
+  const allowRequests = intent.allowRequests ?? true, allowVoice = intent.allowVoice ?? true;
+  const label = voiceContext<string>("interval-label") || chart.interval;
+  if (!confirmed) {
+    askConfirm(`Start a collab called ${name} on ${displaySymbol(chart.symbol)} ${label}${found.length ? `, inviting ${peopleText(found)}` : ", with nobody invited yet"}? `
+      + `${allowRequests ? "People with the link can ask to join" : "Nobody can ask to join"}, and ${allowVoice ? "everyone can use their mic" : "only you can talk"}. Say yes or no.`, intent);
+    return;
+  }
+  set({ thinking: true });
+  try {
+    const drawings = ((window as any).__drawings || []).filter((d: any) => d.type !== "measure");
+    const room = await collabApi<RoomInfo>(voiceUid, "rooms/", { method: "POST", body: {
+      name, symbol: chart.symbol, interval: chart.interval, indicators: voiceContext<any[]>("indicators") || [], drawings,
+      pine: (window as any).__pineScript ?? null, link_access: "edit", allow_requests: allowRequests, allow_voice: allowVoice,
+    } });
+    await openCollab(room.token, voiceUid);
+    const invited = found.length ? await invitePeople(room.token, found) : { added: [] as string[], failed: [] as string[] };
+    set({ thinking: false });
+    say(`Started the collab ${name}.`
+      + (invited.added.length ? ` Invited ${invited.added.join(", ")}: they'll see it when they open the site.` : "")
+      + (invited.failed.length ? ` I couldn't invite ${invited.failed.join(", ")}.` : "")
+      + (found.length ? "" : " Say invite and a name to add people, or copy the link to share it."));
+  } catch (e: any) {
+    set({ thinking: false });
+    say(`I couldn't start the collab${e?.message ? `: ${e.message}` : ""}.`);
+  }
+}
+
+// Invites people to a collab, those for each role together (as the dialog does)
+async function invitePeople(token: string, found: Found[]): Promise<{ added: string[]; failed: string[] }> {
+  const added: string[] = [], failed: string[] = [];
+  for (const role of ["editor", "viewer"] as const) {
+    const group = found.filter(f => f.role === role);
+    if (!group.length) continue;
+    try {
+      const res = await collabApi<{ added: Member[]; errors: { query: string; error: string }[] }>(voiceUid!, `room/${token}/invite/`, { method: "POST", body: { people: group.map(g => g.query), role } });
+      res.added.forEach(m => added.push(m.name));
+      res.errors.forEach(e => failed.push(group.find(g => g.query === e.query)?.label ?? e.query));
+    } catch { group.forEach(g => failed.push(g.label)); }
+  }
+  return { added, failed };
+}
+
+async function inviteToCollab(intent: Extract<Intent, { kind: "collab_invite" }>, confirmed: boolean) {
+  if (!voiceUid) { say("Sign in first."); return; }
+  const room = collab.get().room;
+  if (!room) { say("You're not in a collab. Shall I start one?"); return; }
+  if (room.role !== "owner" && !room.perms?.invite) { say("Only the collab's owner, or someone they allow, can invite people to it."); return; }
+  const found = await findPeople(intent.invite);
+  if (typeof found === "string") { say(found); return; }
+  if (!found.length) { say("Who should I invite?"); return; }
+  if (!confirmed) { askConfirm(`Invite ${peopleText(found)} to ${room.name}? Say yes or no.`, intent); return; }
+  set({ thinking: true });
+  const r = await invitePeople(room.token, found);
+  set({ thinking: false });
+  say((r.added.length ? `Invited ${r.added.join(", ")}.` : "") + (r.failed.length ? ` I couldn't invite ${r.failed.join(", ")}.` : ""));
+}
+
+function copyCollabLink() {
+  const room = collab.get().room;
+  if (!room) { say("You're not in a collab."); return; }
+  const link = collabLink(room.token);
+  navigator.clipboard?.writeText(link).then(() => say("Copied the collab's link. Paste it to anyone you want to share it with."), () => say(`The link is ${link}`));
 }
 
 // ---- the AI ------------------------------------------------------------------------------------
@@ -451,9 +602,21 @@ function intentOf(a: any): Intent | null {
     case "snapshot": return { kind: "snapshot", copy: !!a.copy };
     case "reset_view": return { kind: "reset_view" };
     case "stop": return { kind: "stop" };
+    case "command": return typeof a.id === "string" ? { kind: "command", id: a.id } : null;
+    case "drawing_tool": return typeof a.name === "string" ? { kind: "drawing_tool", name: a.name } : null;
+    case "collab_start": return {
+      kind: "collab_start", name: typeof a.name === "string" ? a.name : undefined, invite: invitees(a.invite),
+      allowRequests: typeof a.ask_to_join === "boolean" ? a.ask_to_join : undefined, allowVoice: typeof a.everyone_mic === "boolean" ? a.everyone_mic : undefined,
+    };
+    case "collab_invite": { const inv = invitees(a.invite); return inv.length ? { kind: "collab_invite", invite: inv } : null; }
+    case "collab_link": return { kind: "collab_link" };
     default: return null;
   }
 }
+
+const invitees = (list: any): Invitee[] => (Array.isArray(list) ? list : [])
+  .filter((x: any) => x && typeof x.who === "string" && x.who.trim())
+  .map((x: any) => ({ who: x.who.trim(), role: x.role === "viewer" ? "viewer" : "editor" }));
 
 // ---- backtest sessions, made by voice ----------------------------------------------------------
 async function createBacktest(plan: BacktestPlan) {
@@ -486,7 +649,11 @@ async function askAI(text: string) {
     const res = await backendFetch(`http://localhost:8000/api/users/voice/ask/${voiceUid}/`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       // (the symbol as the site writes it, "XAU/USD", so the AI answers in the same form)
-      body: JSON.stringify({ text, history, context: { symbol: chartSymbol || null, interval: chart?.interval ?? null, price: p?.price ?? null } }),
+      body: JSON.stringify({ text, history, context: {
+        symbol: chartSymbol || null, interval: chart?.interval ?? null, price: p?.price ?? null,
+        commands: voiceCommands().map(c => c.id),
+        collab: collab.get().room ? { name: collab.get().room!.name, role: collab.get().room!.role } : null,
+      } }),
     });
     const data = await res.json().catch(() => ({}));
     set({ thinking: false });
@@ -504,7 +671,7 @@ async function askAI(text: string) {
     if (!intents.length) { say(reply ?? "Sorry, I don't have an answer for that."); return; }
     for (let i = 0; i < intents.length; i++) {
       await run(intents[i], i === 0 ? reply : undefined, i > 0);
-      if (confirmPending) { confirmPending.then = intents.slice(i + 1); break; }
+      if (confirmPending) { confirmPending.then = intents.slice(i + 1); if (i === 0) confirmPending.reply = reply; break; }
     }
   } catch {
     set({ thinking: false });
@@ -525,7 +692,7 @@ export function handleText(text: string) {
     const low = t.toLowerCase().replace(/[.!?,]+/g, " ").trim();
     if (YES.test(low)) {
       clearConfirm();
-      (async () => { await run(c.intent, undefined, false, true); for (const i of c.then) await run(i, undefined, true); })()
+      (async () => { await run(c.intent, c.intent.kind === "command" ? c.reply : undefined, false, true); for (const i of c.then) await run(i, undefined, true); })()
         .catch(() => say("Something went wrong doing that."));
       return;
     }
