@@ -30,6 +30,7 @@ import type { IndicatorTemplate } from "@/app/utils/indicatorTemplates";
 import AccountMenu from "./AccountMenu";
 import TradeButton from "../trading/TradeButton";
 import { displaySymbol } from "@/app/lib/symbolDisplay";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 interface TopBarProps {
   theme: string;
@@ -629,7 +630,7 @@ function TimeframeDropdown({
               backgroundColor: "transparent", color: "var(--tv-color-text)", outline: "none"
             }}
           />
-          <select
+          <TvSelect
             value={customUnit}
             onChange={e => setCustomUnit(e.target.value as "min" | "h")}
             style={{
@@ -639,7 +640,7 @@ function TimeframeDropdown({
           >
             <option value="min">minutes</option>
             <option value="h">hours</option>
-          </select>
+          </TvSelect>
           <button
             onClick={handleAddCustom}
             style={{

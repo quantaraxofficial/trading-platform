@@ -39,11 +39,14 @@ function hexToHsv(hex: string) {
 interface HSVColorPickerPopupProps {
   hex: string;
   onApply: (hex: string) => void;
+  // Each colour as it's picked (the shade square, the hue bar, a typed hex, the eyedropper), so
+  // what it's for changes live; Add then keeps it as a swatch
+  onPick?: (hex: string) => void;
   isDark?: boolean;
 }
 
 // Full HSV picker: hex input + Add button, saturation/value square, vertical hue slider.
-export function HSVColorPickerPopup({ hex, onApply, isDark }: HSVColorPickerPopupProps) {
+export function HSVColorPickerPopup({ hex, onApply, onPick, isDark }: HSVColorPickerPopupProps) {
   const initial = hexToHsv(hex);
   const [h, setH] = useState(initial.h);
   const [s, setS] = useState(initial.s);
@@ -67,8 +70,10 @@ export function HSVColorPickerPopup({ hex, onApply, isDark }: HSVColorPickerPopu
     const newV = (1 - y) * 100;
     setS(newS);
     setV(newV);
-    setHexInput(hsvToHex(h, newS, newV));
-  }, [h]);
+    const picked = hsvToHex(h, newS, newV);
+    setHexInput(picked);
+    onPick?.(picked);
+  }, [h, onPick]);
 
   const updateFromHue = useCallback((clientY: number) => {
     const rect = hueRef.current?.getBoundingClientRect();
@@ -76,26 +81,29 @@ export function HSVColorPickerPopup({ hex, onApply, isDark }: HSVColorPickerPopu
     const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
     const newH = y * 360;
     setH(newH);
-    setHexInput(hsvToHex(newH, s, v));
-  }, [s, v]);
+    const picked = hsvToHex(newH, s, v);
+    setHexInput(picked);
+    onPick?.(picked);
+  }, [s, v, onPick]);
 
   const dragging = useRef<'sv' | 'hue' | null>(null);
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (dragging.current === 'sv') updateFromSV(e.clientX, e.clientY);
-    else if (dragging.current === 'hue') updateFromHue(e.clientY);
-  }, [updateFromSV, updateFromHue]);
-
-  const handleMouseUp = useCallback(() => {
-    dragging.current = null;
-    window.removeEventListener('mousemove', handleMouseMove);
-    window.removeEventListener('mouseup', handleMouseUp);
-  }, [handleMouseMove]);
-
+  // (the listeners added for a drag are the ones removed at its end, whatever re-renders meanwhile)
+  const updaters = useRef({ updateFromSV, updateFromHue });
+  updaters.current = { updateFromSV, updateFromHue };
   const startDrag = (type: 'sv' | 'hue') => {
     dragging.current = type;
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    const move = (e: MouseEvent) => {
+      if (dragging.current === 'sv') updaters.current.updateFromSV(e.clientX, e.clientY);
+      else if (dragging.current === 'hue') updaters.current.updateFromHue(e.clientY);
+    };
+    const up = () => {
+      dragging.current = null;
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
   };
 
   const handleHexInputChange = (val: string) => {
@@ -105,6 +113,7 @@ export function HSVColorPickerPopup({ hex, onApply, isDark }: HSVColorPickerPopu
       setH(parsed.h);
       setS(parsed.s);
       setV(parsed.v);
+      onPick?.(val);
     }
   };
 

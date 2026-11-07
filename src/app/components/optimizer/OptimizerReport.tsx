@@ -16,6 +16,7 @@ import { useEscapeClose } from "../../lib/useEscapeClose";
 import { MaximizeIcon, MinimizeIcon, RestoreIcon, Tip } from "../../trading/ui";
 import { PANEL_ROW_HEIGHT } from "../../trading/TradingPanel";
 import type { ScriptLanguage } from "../../lib/scripting";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 const STATUS_LABEL: Record<string, string> = { ready: "Ready", running: "Running", interrupted: "Stopped (its window closed)", paused: "Paused", done: "Done" };
 const TABLE_METRICS = ["netProfit", "netProfitPct", "profitFactor", "winRate", "totalTrades", "maxDrawdownPct", "returnToDrawdown", "sharpe", "sortino", "profitableMonthsPct", "avgTrade"];
@@ -311,9 +312,9 @@ function AllResults({ run, ranking, onRanking, paramText, onApply, applied }: {
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 20px 12px", flexWrap: "wrap", fontSize: 13 }}>
         <span style={{ color: "var(--st-text-secondary)" }}>Best by</span>
-        <select className="st-input" value={sort} onChange={e => sortBy(e.target.value)} data-name="optimizer-sort" style={{ width: 190, height: 28, appearance: "auto" }}>
+        <TvSelect className="st-input" value={sort} onChange={e => sortBy(e.target.value)} data-name="optimizer-sort" style={{ width: 190, height: 28, appearance: "auto" }}>
           {METRIC_INFO.map(x => <option key={x.key} value={x.key}>{x.label}</option>)}
-        </select>
+        </TvSelect>
         <button type="button" className="st-pill" onClick={() => onRanking({ ...r, dir: dir === "desc" ? "asc" : "desc" })}>{dir === "desc" ? "Highest first" : "Lowest first"}</button>
         <span style={{ color: "var(--st-text-secondary)" }}>at least</span>
         <NumIn value={r.min_trades} onChange={v => onRanking({ ...r, min_trades: v })} name="optimizer-min-trades" />

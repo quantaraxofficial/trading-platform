@@ -14,6 +14,7 @@ import {
   type ChatFont, type ChatTheme,
 } from "../../lib/collab/chatTheme";
 import { CloseIcon } from "./icons";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 const PaletteIcon = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden>
@@ -136,13 +137,13 @@ export function ThemeEditor({ initial, isNew, onClose, onSave, title }: { initia
             {error && <div className="tv-co-error">{error}</div>}
             <div className="tv-co-label" style={{ marginTop: 16 }}>Font</div>
             <div className="tv-co-row">
-              <select className="tv-co-select" style={{ flex: 1, minWidth: 0, fontFamily: CHAT_FONTS[t.font || "default"].css || undefined }} value={t.font || "default"}
+              <TvSelect className="tv-co-select" style={{ flex: 1, minWidth: 0, fontFamily: CHAT_FONTS[t.font || "default"].css || undefined }} value={t.font || "default"}
                 onChange={e => set({ font: e.target.value as ChatFont })} aria-label="Font" data-name="chat-theme-font">
                 {(Object.keys(CHAT_FONTS) as ChatFont[]).map(f => <option key={f} value={f} style={{ fontFamily: CHAT_FONTS[f].css || undefined }}>{CHAT_FONTS[f].label}</option>)}
-              </select>
-              <select className="tv-co-select" value={t.fontSize || 14} onChange={e => set({ fontSize: Number(e.target.value) })} aria-label="Text size" data-name="chat-theme-size">
+              </TvSelect>
+              <TvSelect className="tv-co-select" value={t.fontSize || 14} onChange={e => set({ fontSize: Number(e.target.value) })} aria-label="Text size" data-name="chat-theme-size">
                 {CHAT_FONT_SIZES.map(n => <option key={n} value={n}>{n}px</option>)}
-              </select>
+              </TvSelect>
             </div>
             <div className="tv-co-label" style={{ marginTop: 16 }}>Text and bubbles</div>
             {color("Text colour", "text")}

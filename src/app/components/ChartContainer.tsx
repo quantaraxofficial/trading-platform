@@ -289,9 +289,9 @@ interface ChartContainerProps {
   interval: string;
   intervalLabel?: string;
   symbol?: string;
-  activeIndicators?: {id: string, name: string, visible?: boolean, inputs?: Record<string, any>}[];
+  activeIndicators?: {id: string, name: string, visible?: boolean, inputs?: Record<string, any>, config?: Record<string, any>}[];
   // Changes one indicator entry (its inputs or visibility), saved with the layout
-  onUpdateIndicator?: (id: string, patch: { inputs?: Record<string, any>; visible?: boolean }) => void;
+  onUpdateIndicator?: (id: string, patch: { inputs?: Record<string, any>; visible?: boolean; config?: Record<string, any> }) => void;
   onRemoveIndicator?: (id: string) => void;
   onOpenOrderPanel?: (side: "buy" | "sell") => void;
   initialTargetTimestamp?: number | null;
@@ -2079,7 +2079,8 @@ export default function ChartContainer({
   }, []);
 
   // An EMA's settings (with everything an older saved config lacks filled in)
-  const emaCfg = (id: string): EmaConfig => normalizeEma(emaConfigsRef.current[id] ?? savedEmaDefaults());
+  // (an EMA's settings as saved with the chart's indicators, until changed here)
+  const emaCfg = (id: string): EmaConfig => normalizeEma(emaConfigsRef.current[id] ?? activeIndicatorsRef.current?.find(i => i.id === id)?.config ?? savedEmaDefaults());
   // Smoothing adds plots: the "EMA-based MA", and for "SMA + Bollinger Bands" the two bands and
   // the fill between them — series created / removed as the smoothing type needs them
   const emaExtrasRef = useRef<Record<string, { ma?: ISeriesApi<"Line">; upper?: ISeriesApi<"Line">; lower?: ISeriesApi<"Line">; fill?: BandFill }>>({});
@@ -3212,11 +3213,22 @@ export default function ChartContainer({
         startIdx = firstOnOrAfter < 0 ? data.length - 1 : Math.max(0, firstOnOrAfter - 1);
       }
 
-      startReplayAtRef.current(startIdx, data, candleSeries, newChart);
       // Keep the bar spacing (or a backtest session's own zoom), with the start bar near the right edge
       const vr = newChart.timeScale().getVisibleLogicalRange();
       const width = detail.visibleBars && detail.visibleBars > 5 ? detail.visibleBars : vr ? Math.max(20, vr.to - vr.from) : 120;
-      newChart.timeScale().setVisibleLogicalRange({ from: startIdx - width * 0.85, to: startIdx + width * 0.15 });
+      startReplayAtRef.current(startIdx, data, candleSeries, newChart);
+      // Placed on the replay's last bar (the one it starts from), and again once the chart has
+      // settled: entering replay resizes the chart and cuts the series, which moved the view by
+      // whole weeks (a session left on 14 July opened showing June)
+      const place = () => {
+        const shown = (candleSeries as any).data?.() || [];
+        if (!shown.length || !(window as any).__replayActive) return;   // (set as the replay starts: React's mode follows later)
+        const i = shown.length - 1;
+        try { newChart.timeScale().setVisibleLogicalRange({ from: i - width * 0.85, to: i + width * 0.15 }); } catch { /* chart removed */ }
+      };
+      place();
+      setTimeout(place, 60);
+      setTimeout(place, 300);
     };
     const onReplayStart = (e: Event) => { replayFrom((e as CustomEvent).detail); };
     // How many bars the chart shows across (a backtest session keeps its zoom)
@@ -3386,6 +3398,8 @@ export default function ChartContainer({
           // Scales → "Save chart left edge position when changing interval"
           let leftEdgeTime: number | null = null;
           let leftEdgeBars: number | null = null;
+          // In a replay: where across the chart its bar was (0 left edge .. 1 right edge)
+          let replayAt: number | null = null;
           // Save replay timestamp BEFORE we overwrite fullDataRef
           let savedReplayTime: number | null = null;
           // A bottom-bar date range always ends at the newest bar, so it fetches the latest
@@ -3404,6 +3418,15 @@ export default function ChartContainer({
                 targetTimestamp = rTime;
                 savedReplayTime = rTime; // Save for later use after data swap
               }
+              // The candle size, and where across the chart the replay's bar sits
+              try {
+                const vr = chartRef.current.timeScale().getVisibleLogicalRange();
+                const shownLast = (((series as any).data?.() as any[]) || []).length - 1;
+                if (vr && vr.to > vr.from && shownLast >= 0) {
+                  preservedBars = vr.to - vr.from;
+                  replayAt = Math.max(0.05, Math.min(1, (shownLast - vr.from) / preservedBars));
+                }
+              } catch { /* chart removed */ }
             } else {
               const timeScale = chartRef.current.timeScale();
               const visibleRange = timeScale.getVisibleLogicalRange();
@@ -3429,7 +3452,9 @@ export default function ChartContainer({
               const forwardPaddingBars = modeRef.current !== 'idle' ? 4500 : 500;
               const paddingMs = forwardPaddingBars * getIntervalMs(interval);
               
-              if (Date.now() - (targetTimestamp * 1000) > paddingMs) {
+              // (the newest bar was on screen: the newest bars, or e.g. 1h → 1m would end days
+              // back, at the old view's middle plus the padding, with only the live bar after it)
+              if (liveEdgeGap === null && Date.now() - (targetTimestamp * 1000) > paddingMs) {
                 const fetchEndTimestamp = (targetTimestamp * 1000) + paddingMs;
                 const d = new Date(fetchEndTimestamp);
                 const pad = (n: number) => n.toString().padStart(2, '0');
@@ -3595,7 +3620,18 @@ export default function ChartContainer({
                   }
                 }
               }
-              startReplayAt(closestIdx, stockData, candleSeriesRef.current, chartRef.current);
+
+              {
+                startReplayAt(closestIdx, stockData, candleSeriesRef.current, chartRef.current);
+                // Cutting the bars back to the replay's keeps the old distance from the last bar
+                // (thousands of bars on the full data), which parked the view at the far left:
+                // place it again, the candle size and the replay bar's spot as before
+                if (preservedBars && preservedBars > 0) {
+                  const w = preservedBars, f = replayAt ?? 0.85, ch = chartRef.current;
+                  const place = () => { try { ch?.timeScale().setVisibleLogicalRange({ from: closestIdx - f * w, to: closestIdx + (1 - f) * w }); } catch { /* chart removed */ } };
+                  place(); requestAnimationFrame(place);
+                }
+              }
             } else {
               stopReplay(stockData);
             }
@@ -3890,7 +3926,7 @@ export default function ChartContainer({
     const remove = () => onRemoveIndicator?.(ind.id);
     if (ind.name === 'Volume') addObject(ind.id, 'indicator', 'Vol', 'Volume', volumeVisible, { toggle: () => setVolumeVisible(v => !v), settings: () => setShowVolumeSettings(true), remove });
     else if (ind.name === 'Moving Average Exponential') {
-      const cfg = normalizeEma(emaConfigs[ind.id] ?? savedEmaDefaults());
+      const cfg = normalizeEma(emaConfigs[ind.id] ?? ind.config ?? savedEmaDefaults());
       const vis = (emaVisibilities[ind.id] ?? true) && emaVisibleOnInterval(cfg, interval);
       addObject(ind.id, 'indicator', `EMA (${emaInputsText(cfg).split(' ').join(', ')})`, 'Moving Average Exponential', vis, {
         toggle: () => setEmaVisibilities(prev => ({ ...prev, [ind.id]: !(prev[ind.id] ?? true) })), settings: () => setShowEmaSettingsFor(ind.id), remove,
@@ -3937,7 +3973,7 @@ export default function ChartContainer({
       let rows: DataWindowRow[] = [];
       if (ind?.name === 'Volume') rows = [{ label: 'Volume', value: o.visible && (bar as any).volume != null ? formatVolume((bar as any).volume) : '∅', color: barColor }];
       else if (ind?.name === 'Moving Average Exponential') {
-        const cfg = normalizeEma(emaConfigs[ind.id] ?? savedEmaDefaults());
+        const cfg = normalizeEma(emaConfigs[ind.id] ?? ind.config ?? savedEmaDefaults());
         const prec = cfg.precision === 'Default' ? pricePrecision : Number(cfg.precision);
         const v = (key: string, sr: any) => { const pt = hoverIdx >= 0 ? h.emas[key] : lastSeriesPoint(sr); return o.visible && pt && typeof pt.value === 'number' ? pt.value.toLocaleString('en-US', { minimumFractionDigits: prec, maximumFractionDigits: prec }) : '∅'; };
         const x = emaExtrasRef.current[ind.id];
@@ -4098,7 +4134,7 @@ export default function ChartContainer({
               />
             );
           } else if (ind.name === "Moving Average Exponential") {
-            const cfg = normalizeEma(emaConfigs[ind.id] ?? savedEmaDefaults());
+            const cfg = normalizeEma(emaConfigs[ind.id] ?? ind.config ?? savedEmaDefaults());
             const isVis = emaVisibilities[ind.id] ?? true;
             const prec = cfg.precision === "Default" ? pricePrecision : Number(cfg.precision);
             const fmtE = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: prec, maximumFractionDigits: prec });
@@ -4260,7 +4296,8 @@ export default function ChartContainer({
               refreshEma(id, emaBars(fullDataRef.current));
               emaAppliedRef.current.cfgs[id] = JSON.stringify(emaCfg(id));
             }
-            startTransition(() => setEmaConfigs(prev => ({ ...prev, [id]: newConfig })));
+            // (kept on the indicator's entry too: it's saved with the chart, so a reload keeps it)
+            startTransition(() => { setEmaConfigs(prev => ({ ...prev, [id]: newConfig })); onUpdateIndicator?.(id, { config: newConfig }); });
           }}
         />
       )}

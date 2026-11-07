@@ -19,6 +19,7 @@ import { displaySymbol } from "@/app/lib/symbolDisplay";
 import { ThemeEditor } from "./ChatThemeMenu";
 import { seenText } from "../../lib/collab/presence";
 import { PRESET_THEMES, chatAreaStyle, roomTheme, type ChatTheme } from "../../lib/collab/chatTheme";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 const ACCESS_LABEL: Record<LinkAccess, string> = {
   restricted: "Only people added",
@@ -211,9 +212,9 @@ function StartRoom({ uid, symbol, interval, indicators, onClose, mode, pine }: {
           <div className="tv-co-access">
             <span className="tv-co-access-icon">{access === "restricted" ? <LockIcon /> : <GlobeIcon />}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <select className="tv-co-select" value={access} onChange={e => setAccess(e.target.value as LinkAccess)} style={{ width: "100%" }}>
+              <TvSelect className="tv-co-select" value={access} onChange={e => setAccess(e.target.value as LinkAccess)} style={{ width: "100%" }}>
                 {(Object.keys(ACCESS_LABEL) as LinkAccess[]).map(a => <option key={a} value={a}>{ACCESS_LABEL[a]}</option>)}
-              </select>
+              </TvSelect>
               <div className="tv-co-hint">{ACCESS_HINT[access]}</div>
             </div>
           </div>
@@ -476,10 +477,10 @@ function ManageRoom({ uid, room, onClose, setRoom, live = false, onLeft }: {
                   </div>
                 )}
               </div>
-              <select className="tv-co-select" value={inviteRole} onChange={e => setInviteRole(e.target.value as any)} aria-label="Access for the people added">
+              <TvSelect className="tv-co-select" value={inviteRole} onChange={e => setInviteRole(e.target.value as any)} aria-label="Access for the people added">
                 {isOwner && <option value="editor">Can edit</option>}
                 <option value="viewer">Can view</option>
-              </select>
+              </TvSelect>
             </div>
             <div className="tv-co-row" style={{ marginTop: 8 }}>
               <span className="tv-co-hint" style={{ marginTop: 0, flex: 1 }}>Press Enter after each email or name. They need an account on this site.</span>
@@ -567,9 +568,9 @@ function ManageRoom({ uid, room, onClose, setRoom, live = false, onLeft }: {
             <span className="tv-co-access-icon">{room.link_access === "restricted" ? <LockIcon /> : <GlobeIcon />}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               {isOwner ? (
-                <select className="tv-co-select" value={room.link_access} onChange={e => patchRoom({ link_access: e.target.value })} style={{ width: "100%" }}>
+                <TvSelect className="tv-co-select" value={room.link_access} onChange={e => patchRoom({ link_access: e.target.value })} style={{ width: "100%" }}>
                   {(Object.keys(ACCESS_LABEL) as LinkAccess[]).map(a => <option key={a} value={a}>{ACCESS_LABEL[a]}</option>)}
-                </select>
+                </TvSelect>
               ) : (
                 <div style={{ lineHeight: "34px" }}>{ACCESS_LABEL[room.link_access]}</div>
               )}

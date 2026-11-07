@@ -17,6 +17,7 @@ import Backtests from "./Backtests";
 import CopyTrading from "./CopyTrading";
 import { profileUrl, putMyStats, updateMySettings } from "../community/social";
 import type { Stats } from "./stats";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 type View = "performance" | "trades" | "backtests" | "copy";
 const NAV: { id: View; label: string; icon: React.ReactNode; hint: string }[] = [
@@ -168,13 +169,13 @@ export default function AnalyticsApp() {
               <p className="text-purple-300/80 text-sm">{nav.hint}{view !== "backtests" && view !== "copy" && current ? ` · ${current.label}` : ""}</p>
             </div>
             <div className="md:hidden w-full">
-              <select value={view} onChange={e => setView(e.target.value as View)} className="w-full bg-gray-900/60 border border-purple-700/50 rounded-lg px-3 py-2 text-sm">
+              <TvSelect value={view} onChange={e => setView(e.target.value as View)} className="w-full bg-gray-900/60 border border-purple-700/50 rounded-lg px-3 py-2 text-sm">
                 {NAV.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
-              </select>
+              </TvSelect>
               {view !== "backtests" && view !== "copy" && accounts.length > 1 && (
-                <select value={current?.id} onChange={e => setAccount(e.target.value)} className="mt-2 w-full bg-gray-900/60 border border-purple-700/50 rounded-lg px-3 py-2 text-sm">
+                <TvSelect value={current?.id} onChange={e => setAccount(e.target.value)} className="mt-2 w-full bg-gray-900/60 border border-purple-700/50 rounded-lg px-3 py-2 text-sm">
                   {accounts.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
-                </select>
+                </TvSelect>
               )}
             </div>
             {source === "mt5" && view !== "backtests" && view !== "copy" && (

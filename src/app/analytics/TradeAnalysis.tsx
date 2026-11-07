@@ -11,6 +11,7 @@ import { downloadTradesCsv } from "./exporters";
 import { CHECKLIST, saveJournal, clearJournal, type ATrade, type Journal, type Source } from "./data";
 import { computeStats, duration, isLoss, isWin, money, periodStart, pnlClass, tradeQuality, type Period, type Stats } from "./stats";
 import { Card, Empty, Label, Pills, Ring } from "./ui";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 type OutcomeTab = "all" | "winners" | "losers" | "be";
 type Sort = "date" | "pnl" | "symbol";
@@ -69,12 +70,12 @@ export default function TradeAnalysis({ uid, source, trades, journals, onJournal
             {q && <button aria-label="Clear search" onClick={() => setQ("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-purple-400 hover:text-white"><X size={14} /></button>}
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <select value={period} onChange={e => setPeriod(e.target.value)} aria-label="Time period" className="bg-gray-900/50 border border-purple-700/50 rounded-lg px-2 py-1.5 text-sm text-purple-100 focus:outline-none">
+            <TvSelect value={period} onChange={e => setPeriod(e.target.value)} aria-label="Time period" className="bg-gray-900/50 border border-purple-700/50 rounded-lg px-2 py-1.5 text-sm text-purple-100 focus:outline-none">
               {PERIOD_OPTS.map(o => <option key={o.id} value={o.id} className="bg-gray-900">{o.label}</option>)}
-            </select>
-            <select value={sort} onChange={e => setSort(e.target.value as Sort)} aria-label="Sort by" className="bg-gray-900/50 border border-purple-700/50 rounded-lg px-2 py-1.5 text-sm text-purple-100 focus:outline-none">
+            </TvSelect>
+            <TvSelect value={sort} onChange={e => setSort(e.target.value as Sort)} aria-label="Sort by" className="bg-gray-900/50 border border-purple-700/50 rounded-lg px-2 py-1.5 text-sm text-purple-100 focus:outline-none">
               <option value="date" className="bg-gray-900">Date</option><option value="pnl" className="bg-gray-900">P&L</option><option value="symbol" className="bg-gray-900">Symbol</option>
-            </select>
+            </TvSelect>
           </div>
         </div>
         <div className="mt-3 max-h-[64vh] overflow-y-auto px-2 pb-2" data-testid="ta-list">

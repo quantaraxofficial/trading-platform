@@ -16,6 +16,7 @@ import {
   chartUrlForChat, followList, followPerson, getProfile, inviteOptions, invitePerson, messagePerson, mySettings, profileUrl,
   unpublishScript, updateMySettings, updateScript, deleteMyStats, type CodeAccess, type MySettings, type Person, type Privacy, type Profile, type PublishedScript,
 } from "./social";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 const btn = "px-3 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white disabled:opacity-50 inline-flex items-center gap-1.5";
 const ghost = "px-3 py-2 rounded-lg text-sm border border-purple-700/50 text-purple-100 hover:bg-purple-800/30 disabled:opacity-50 inline-flex items-center gap-1.5";
@@ -190,12 +191,12 @@ function CodeAccessControl({ uid, s, onChange }: { uid: string; s: PublishedScri
     <div className="px-1 space-y-1.5" data-testid="code-access">
       <div className="flex items-center gap-2 text-xs">
         <span className="text-purple-300/70">Code:</span>
-        <select value={s.code_access} onChange={e => save(e.target.value as CodeAccess)} data-script-code={s.id}
+        <TvSelect value={s.code_access} onChange={e => save(e.target.value as CodeAccess)} data-script-code={s.id}
           className="bg-gray-900/60 border border-purple-700/50 rounded-md px-2 py-1 text-xs text-purple-100 focus:outline-none">
           <option value="open" className="bg-gray-900">Open to everyone who can use it</option>
           <option value="hidden" className="bg-gray-900">Hidden (only me)</option>
           <option value="allowed" className="bg-gray-900">Only people I choose</option>
-        </select>
+        </TvSelect>
       </div>
       {s.code_access === "allowed" && (
         <div className="flex gap-2" onKeyDown={e => e.stopPropagation()}>
@@ -220,9 +221,9 @@ function EditProfile({ uid, onSaved }: { uid: string; onSaved: (username: string
   };
   const privacy = (key: "allow_messages" | "allow_invites", label: string) => (
     <label><Label>{label}</Label>
-      <select className={`${field} mt-1`} value={m[key]} onChange={e => setM({ ...m, [key]: e.target.value as Privacy })} data-testid={`edit-${key}`}>
+      <TvSelect className={`${field} mt-1`} value={m[key]} onChange={e => setM({ ...m, [key]: e.target.value as Privacy })} data-testid={`edit-${key}`}>
         <option value="everyone" className="bg-gray-900">Everyone</option><option value="following" className="bg-gray-900">People I follow</option><option value="nobody" className="bg-gray-900">Nobody</option>
-      </select></label>
+      </TvSelect></label>
   );
   const toggle = (key: "show_trading_stats" | "show_backtests" | "show_sessions", label: string) => (
     <button onClick={() => setM({ ...m, [key]: !m[key] })} data-testid={`edit-${key}`}

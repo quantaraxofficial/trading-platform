@@ -16,6 +16,7 @@ import {
 import { ConfirmDialog, Frame, PineButton, type PinePalette } from "./PineDialogs";
 import { applyToChart } from "../optimizer/OptimizerReport";
 import { showOptimizerReport } from "../../lib/optimizer/dock";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 const PACES: { id: OptimizerConfig["pace"]; label: string; hint: string }[] = [
   { id: "gentle", label: "Gentle", hint: "rests 3× as long as each test: the PC stays cool" },
@@ -205,13 +206,13 @@ export default function OptimizerDialog({ p, uid, scriptKey, scriptName, languag
     <Frame p={p} title="Strategy optimizer" onClose={onClose} width={1240} height={820} testId="optimizer-dialog"
       titleExtra={<span style={{ fontSize: 14, fontWeight: 400, color: p.muted, marginLeft: 6 }}>{scriptName}</span>}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 20px 12px", borderBottom: `1px solid ${p.border}`, flexWrap: "wrap" }}>
-        <select value={String(selected)} onChange={e => { picked.current = true; setSelected(e.target.value === "new" ? "new" : Number(e.target.value)); }} data-testid="opt-run-select"
+        <TvSelect value={String(selected)} onChange={e => { picked.current = true; setSelected(e.target.value === "new" ? "new" : Number(e.target.value)); }} data-testid="opt-run-select"
           style={{ ...fieldStyle(p), width: 320 }}>
           <option value="new">New optimization…</option>
           {(runs || []).map((r, i) => (
             <option key={r.id} value={r.id}>{r.name || `Optimization ${runs!.length - i}`} · {r.cursor.toLocaleString()}/{r.total.toLocaleString()} · {STATUS_LABEL[r.status] || r.status}</option>
           ))}
-        </select>
+        </TvSelect>
         {selected !== "new" && <PineButton p={p} onClick={() => { picked.current = true; setSelected("new"); }}>New</PineButton>}
         <span style={{ flex: 1 }} />
         {err && <span style={{ color: p.danger, fontSize: 13 }} data-testid="opt-error">{err}</span>}
@@ -400,7 +401,7 @@ function Settings({ p, cfg, onChange, locked, onOutput, files }: {
       })}
 
       <H p={p}>Testing period</H>
-      <select value={period.kind} data-testid="opt-period" style={{ ...fieldStyle(p), width: "100%" }}
+      <TvSelect value={period.kind} data-testid="opt-period" style={{ ...fieldStyle(p), width: "100%" }}
         onChange={e => {
           const k = e.target.value as Period["kind"];
           setPeriod(k === "days" ? { kind: "days", days: 365 } : k === "custom" ? { kind: "custom", from: now - 365 * 86400, to: now } : { kind: k } as Period);
@@ -409,7 +410,7 @@ function Settings({ p, cfg, onChange, locked, onOutput, files }: {
         <option value="days">The last … days</option>
         <option value="custom">From a date to a date</option>
         <option value="history">The whole history (slow to load)</option>
-      </select>
+      </TvSelect>
       {period.kind === "days" && (
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 13 }}>
           Last <NumberField p={p} value={period.days} onChange={v => setPeriod({ kind: "days", days: v ?? 0 })} testId="opt-days" /> days

@@ -137,7 +137,7 @@ export function ArrowMarkerSettingsModal({ onClose }: ArrowMarkerSettingsModalPr
   const tabs = ['Style', 'Text', 'Coordinates', 'Visibility'];
 
   return (
-    <div
+    <div data-tv-settings-dialog
       style={{
         position: 'fixed', left: position.x, top: position.y, width: '370px',
         backgroundColor: 'var(--tv-sub-bg)', borderRadius: '8px',

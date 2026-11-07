@@ -81,7 +81,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       }
 
-      setUser(activeUser);
+      // Without a session key yet (a first sign-in, or a browser whose data was cleared) they count
+      // as signed in only once the server has issued one: everything that loads with `user`
+      // (drawings, chart state, templates) asked without it, was refused (401) and showed an empty
+      // chart, drawings gone until the next reload, and nothing drawn meanwhile was saved
+      const waitForKey = false;   // (here the browser makes its own session key at once: it's never missing)
+      if (!waitForKey) setUser(activeUser);
 
       if (activeUser && sessionKey) {
         try {
@@ -132,12 +137,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             }
           }
         }
+          if (waitForKey) setUser(activeUser);
           
         // Fetch full profile from Django
           const profileRes = await backendFetch(`http://localhost:8000/api/users/user/${activeUser.uid}/`);
           const profileData = await profileRes.json();
           setUserData(profileData);
         } catch (error) {
+          if (waitForKey) setUser(activeUser);
           console.error("Error syncing with Django", error);
         }
       } else {

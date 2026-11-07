@@ -8,6 +8,7 @@ import React, { useEffect, useState } from "react";
 import { Check, Megaphone, Send, Trash2, X } from "lucide-react";
 import { addConnection, removeConnection, shareTargets, testConnection, updateConnection, type Connection, type ConnectionKind, type ShareTarget } from "./copy";
 import { Card, Label, Pills } from "./ui";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 const field = "w-full bg-gray-900/50 border border-purple-700/50 rounded-lg px-3 py-2 text-sm text-white placeholder-purple-500/70 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20";
 const btn = "px-3 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white disabled:opacity-60";
@@ -162,14 +163,14 @@ function ConnectForm({ uid, channelId, existing, onDone, onCancel }: { uid: stri
         </>}
         {kind === "here" && <>
           <label><Label>Chat or collab</Label>
-            <select className={`${field} mt-1`} value={f.target} onChange={set("target")} data-testid="here-target">
+            <TvSelect className={`${field} mt-1`} value={f.target} onChange={set("target")} data-testid="here-target">
               <option value="">{targets === null ? "Loading…" : targets.length ? "Pick one" : "You're not in any chats or collabs yet"}</option>
               {[["Groups", groups], ["Personal chats", personal], ["Collabs", collabs]].map(([title, list]) => (list as ShareTarget[]).length > 0 && (
                 <optgroup key={title as string} label={title as string}>
                   {(list as ShareTarget[]).map(t => <option key={`${t.kind}:${t.token}`} value={`${t.kind}:${t.token}`} disabled={taken.has(`${t.kind}:${t.token}`)}>{t.name}{taken.has(`${t.kind}:${t.token}`) ? " (already)" : ""}</option>)}
                 </optgroup>
               ))}
-            </select></label>
+            </TvSelect></label>
           <p className={help}>Each signal appears in the chat as a card from you, with a <b>Copy this channel</b> button that follows it (people then switch copying on with their own risk).</p>
         </>}
       </div>

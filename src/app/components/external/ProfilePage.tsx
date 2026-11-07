@@ -7,6 +7,7 @@ import TestingDashboard from './TestingDashboard';
 
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
+import TvSelect from "@/app/components/ui/TvSelect";
 
 export default function ProfilePage() {
   const { user, logout } = useAuth();
@@ -378,7 +379,7 @@ export default function ProfilePage() {
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm text-purple-400 mb-2">Default Risk Level</label>
-                        <select 
+                        <TvSelect 
                           value={riskLevel} 
                           onChange={(e) => setRiskLevel(e.target.value)}
                           className="w-full bg-purple-900/50 border border-purple-700/50 rounded-lg px-4 py-2 outline-none"
@@ -386,7 +387,7 @@ export default function ProfilePage() {
                           <option>Conservative (1-3)</option>
                           <option>Moderate (4-6)</option>
                           <option>Aggressive (7-10)</option>
-                        </select>
+                        </TvSelect>
                       </div>
                       <div>
                         <label className="block text-sm text-purple-400 mb-2">Max Position Size</label>

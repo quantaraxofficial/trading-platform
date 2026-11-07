@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Info, Search, Clock3, RotateCcw, ListPlus, Download, Copy, Link2, Maximize, Bot, SunMoon, Globe, ArrowUpCircle, ArrowDownCircle, CloudUpload, Folder, Keyboard } from "lucide-react";
 import styles from "./page.module.css";
+import { installDialogFit } from "./lib/fitDialogs";
 import TopBar from "./components/TopBar";
 import LeftToolbar from "./components/LeftToolbar";
 import RightSidebar from "./components/RightSidebar";
@@ -93,7 +94,7 @@ function AppLayout() {
   const viewBarSpacingRef = useRef<number | null>(null);
   const [triggerSettings, setTriggerSettings] = useState(0);
   const [isStateLoaded, setIsStateLoaded] = useState(false);
-  const [activeIndicators, setActiveIndicators] = useState<{id: string, name: string, visible?: boolean, inputs?: Record<string, any>}[]>([]);
+  const [activeIndicators, setActiveIndicators] = useState<{id: string, name: string, visible?: boolean, inputs?: Record<string, any>, config?: Record<string, any>}[]>([]);
   const [isBotActive, setIsBotActive] = useState(false);
   // The order ticket docked in the right column (floating otherwise)
   const tradingUiState = useTradingUi();
@@ -314,6 +315,13 @@ function AppLayout() {
   const intervalLabelRef = useRef(intervalLabel);
   intervalLabelRef.current = intervalLabel;
   const hasLoadedOnce = useRef(false);
+  // Whose saved chart state (symbol, timeframe, view, indicators) has been read from the server:
+  // nothing of it is saved for a user before that. On a browser whose data was cleared, the chart
+  // first shows the (empty) local copy; saving that before the account's state had loaded wiped the
+  // account's indicators
+  const [stateOwner, setStateOwner] = useState<string | null>(null);
+  const stateOwnerRef = useRef<string | null>(null);
+  stateOwnerRef.current = stateOwner;
 
   // The URL mirrors the symbol. It's written synchronously: an async router round-trip could
   // land after a newer pick and flip the chart back to the older symbol, over and over.
@@ -586,6 +594,9 @@ function AppLayout() {
   }, [user?.uid]);
   const { logAction } = useTelemetry();
 
+  // Shape settings dialogs shrink to fit a small window (lib/fitDialogs)
+  useEffect(() => installDialogFit(), []);
+
   const { runSnapshot, toastElement: snapshotToast } = useChartSnapshot({ symbol, intervalLabel, theme });
   const runSnapshotRef = useRef(runSnapshot);
   runSnapshotRef.current = runSnapshot;
@@ -635,15 +646,30 @@ function AppLayout() {
     else if (!params.has("session")) restoreLocalView();   // a session places the chart itself
   };
 
-  // Load Chart State from Django Backend
+  // Load Chart State from Django Backend (a failed read is tried again a few times; until it's
+  // read, nothing is saved over it)
   useEffect(() => {
     if (user) {
-      backendFetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`)
-        .then(res => {
-          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-          return res.json();
-        })
+      let gone = false;
+      setStateOwner(null);
+      const read = async () => {
+        let lastErr: any = null;
+        for (const wait of [0, 1500, 4000, 10000]) {
+          if (wait) await new Promise(r => setTimeout(r, wait));
+          if (gone) throw new Error("superseded");
+          try {
+            const res = await backendFetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`);
+            if (res.ok) return res.json();
+            lastErr = new Error(`HTTP error! status: ${res.status}`);
+          } catch (e) { lastErr = e; }
+          // (meanwhile the chart opens with this browser's copy)
+          if (!wait) { restoreLocalIndicators(); restoreView(); setIsStateLoaded(true); }
+        }
+        throw lastErr;
+      };
+      read()
         .then(data => {
+          if (gone) return;
           // (a backtest session being opened picks its own symbol and timeframe; so does a collab
           // link: the room's chart where this user last was in that collab — their own chart's
           // view doesn't carry into it)
@@ -666,10 +692,13 @@ function AppLayout() {
           if (data.indicators && Array.isArray(data.indicators) && data.indicators.length > 0) {
             setActiveIndicators(data.indicators);
           }
+          setStateOwner(user.uid);
         })
         // the backend being down or failing just means the chart opens with what this browser kept
-        .catch(err => { console.warn("Chart state not loaded, using this browser's:", err.message); restoreLocalIndicators(); restoreView(); })
-        .finally(() => setIsStateLoaded(true));
+        // (and none of it is saved to the account)
+        .catch(err => { if (!gone) console.warn("Chart state not loaded, using this browser's:", err?.message); })
+        .finally(() => { if (!gone) setIsStateLoaded(true); });
+      return () => { gone = true; };
     } else {
       restoreLocalIndicators();
       restoreView();
@@ -686,7 +715,7 @@ function AppLayout() {
   // Save chart state when symbol or interval changes (skip initial load)
   useEffect(() => {
     // (in a collab the chart is the room's: nothing of it is saved as this user's own chart)
-    if (user && isStateLoaded && !collab.chartActive) {
+    if (user && isStateLoaded && stateOwner === user.uid && !collab.chartActive) {
       // Skip the very first fire (when isStateLoaded transitions to true with loaded values)
       if (!hasLoadedOnce.current) {
         hasLoadedOnce.current = true;
@@ -709,11 +738,11 @@ function AppLayout() {
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [symbol, selectedInterval, user, isStateLoaded]);
+  }, [symbol, selectedInterval, user, isStateLoaded, stateOwner]);
 
   // Save indicators when they change
   useEffect(() => {
-    if (user && isStateLoaded && hasLoadedOnce.current && !collab.chartActive) {
+    if (user && isStateLoaded && stateOwner === user.uid && hasLoadedOnce.current && !collab.chartActive) {
       const timer = setTimeout(() => {
         console.log(`[Page] Saving indicators: ${activeIndicators.length} indicators`);
         backendFetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
@@ -728,7 +757,7 @@ function AppLayout() {
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [activeIndicators, user, isStateLoaded]);
+  }, [activeIndicators, user, isStateLoaded, stateOwner]);
 
   // Save chart state on page unload (beforeunload) so the last state is always captured
   useEffect(() => {
@@ -736,6 +765,7 @@ function AppLayout() {
     const handleBeforeUnload = () => {
       // the room's chart isn't this user's own: kept as that collab's view instead
       if (collab.chartActive) { saveCollabView(viewTimestampRef.current, viewBarSpacingRef.current); return; }
+      if (stateOwnerRef.current !== user.uid) return;   // (their saved state hasn't been read yet)
       const payload = JSON.stringify({
         symbol,
         interval: selectedInterval,
@@ -829,7 +859,7 @@ function AppLayout() {
     setActiveIndicators(prev => prev.filter(i => i.id !== id));
   };
   // An indicator's inputs / visibility, kept on its entry so they save with the layout
-  const handleUpdateIndicator = (id: string, patch: { inputs?: Record<string, any>; visible?: boolean }) => {
+  const handleUpdateIndicator = (id: string, patch: { inputs?: Record<string, any>; visible?: boolean; config?: Record<string, any> }) => {
     setActiveIndicators(prev => prev.map(i => (i.id === id ? { ...i, ...patch } : i)));
   };
 
@@ -849,7 +879,7 @@ function AppLayout() {
       symbol: template.symbol && template.symbol !== symbol ? template.symbol : undefined,
       interval: template.interval && template.interval !== selectedInterval ? template.interval : undefined,
     };
-    setActiveIndicators(next.map(({ config, ...rest }) => rest));
+    setActiveIndicators(next);
     logAction('INDICATOR_TEMPLATE_APPLIED', { name: template.name });
   };
 
@@ -1011,7 +1041,7 @@ function AppLayout() {
       />
 
       {!panelsHidden && drawingsPanelVisible && (
-        <aside className={styles.leftToolbar} data-widget="left" style={widgetStyle("left")}>
+        <aside className={styles.leftToolbar} data-widget="left" style={widgetStyle("left")} data-left-toolbar>
           <LeftToolbar indicatorCount={activeIndicators.length} onRemoveIndicators={() => setActiveIndicators([])} />
         </aside>
       )}
@@ -1066,14 +1096,18 @@ function AppLayout() {
               // Keep local state in sync so beforeunload can persist latest values
               viewTimestampRef.current = newTimestamp;
               viewBarSpacingRef.current = newBarSpacing;
-              if (user) {
+              try { localStorage.setItem('tv:chartView', JSON.stringify({ timestamp: newTimestamp, bar_spacing: newBarSpacing })); } catch { /* full */ }
+              // (the chart keeps the first copy of this function, made before sign-in may have
+              // finished: the user is read from the ref, or a signed-in view would never be saved)
+              const u = userRef.current;
+              if (u && stateOwnerRef.current === u.uid) {
                 // Debounced save — use refs to always read latest symbol/interval
                 clearTimeout((window as any).__saveChartStateTimer);
                 (window as any).__saveChartStateTimer = setTimeout(() => {
                   const currentSymbol = symbolRef.current;
                   const currentInterval = intervalRef.current;
                   console.log(`[Page] Saving state to DB: sym=${currentSymbol}, int=${currentInterval}, ts=${newTimestamp}, bs=${newBarSpacing}`);
-                  backendFetch(`http://localhost:8000/api/users/chart_state/${user.uid}/`, {
+                  backendFetch(`http://localhost:8000/api/users/chart_state/${u.uid}/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 

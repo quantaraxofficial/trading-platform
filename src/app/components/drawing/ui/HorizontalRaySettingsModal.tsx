@@ -4,6 +4,7 @@ import { useDrawing, useSettingsSession } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
 import { ColorPickerPopup } from './ColorPickerPopup';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 interface HorizontalRaySettingsModalProps {
   onClose: () => void;
@@ -133,7 +134,7 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
   });
 
   return (
-    <div
+    <div data-tv-settings-dialog
       style={{
         position: 'fixed', left: position.x, top: position.y, width: '380px',
         backgroundColor: 'var(--tv-sub-bg)', borderRadius: '8px',
@@ -190,14 +191,14 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
                     />
                   )}
                 </div>
-                <select value={drawing.strokeWidth || 2} onChange={e => updateProp('strokeWidth', parseInt(e.target.value))} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
+                <TvSelect value={drawing.strokeWidth || 2} onChange={e => updateProp('strokeWidth', parseInt(e.target.value))} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
                   {[1, 2, 3, 4].map(w => <option key={w} value={w}>{w}px</option>)}
-                </select>
-                <select value={drawing.lineStyle || 'solid'} onChange={e => updateProp('lineStyle', e.target.value)} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
+                </TvSelect>
+                <TvSelect value={drawing.lineStyle || 'solid'} onChange={e => updateProp('lineStyle', e.target.value)} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
                   <option value="solid">Line</option>
                   <option value="dashed">Dashed line</option>
                   <option value="dotted">Dotted line</option>
-                </select>
+                </TvSelect>
               </div>
             </div>
 
@@ -227,9 +228,9 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
                   />
                 )}
               </div>
-              <select value={drawing.fontSize || 14} onChange={e => updateProp('fontSize', parseInt(e.target.value))} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
+              <TvSelect value={drawing.fontSize || 14} onChange={e => updateProp('fontSize', parseInt(e.target.value))} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
                 {[10, 12, 14, 16, 18, 20, 24, 28, 32].map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              </TvSelect>
               <button
                 onClick={() => updateProp('bold', !drawing.bold)}
                 style={{ width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: drawing.bold ? 'var(--tv-sub-text)' : 'var(--tv-sub-bg)', color: drawing.bold ? '#fff' : 'var(--tv-sub-text)', fontWeight: 700, cursor: 'pointer' }}
@@ -249,16 +250,16 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Text alignment</span>
-              <select value={drawing.textVAlign || 'Bottom'} onChange={e => updateProp('textVAlign', e.target.value)} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
+              <TvSelect value={drawing.textVAlign || 'Bottom'} onChange={e => updateProp('textVAlign', e.target.value)} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
                 <option value="Top">Top</option>
                 <option value="Middle">Middle</option>
                 <option value="Bottom">Bottom</option>
-              </select>
-              <select value={drawing.textHAlign || 'Center'} onChange={e => updateProp('textHAlign', e.target.value)} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
+              </TvSelect>
+              <TvSelect value={drawing.textHAlign || 'Center'} onChange={e => updateProp('textHAlign', e.target.value)} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
                 <option value="Left">Left</option>
                 <option value="Center">Center</option>
                 <option value="Right">Right</option>
-              </select>
+              </TvSelect>
             </div>
           </div>
         )}

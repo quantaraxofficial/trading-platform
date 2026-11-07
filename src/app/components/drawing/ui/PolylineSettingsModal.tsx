@@ -98,7 +98,7 @@ export function PolylineSettingsModal({ onClose }: PolylineSettingsModalProps) {
   const tabs = ['Style', 'Visibility'];
 
   return (
-    <div
+    <div data-tv-settings-dialog
       style={{
         position: 'fixed', left: position.x, top: position.y, width: '380px',
         backgroundColor: 'var(--tv-sub-bg)', borderRadius: '8px',

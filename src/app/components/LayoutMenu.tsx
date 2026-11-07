@@ -12,6 +12,7 @@ import { useEscapeClose } from "../lib/useEscapeClose";
 import { layoutStore, layouts, isDirty, shareLink, type SavedLayout } from "../lib/layoutStore";
 import { isTypingTarget } from "../lib/isTypingTarget";
 import { Copy, Pencil, Download, Plus, FolderOpen, Search, Trash2, ArrowDownAZ, ArrowUpAZ, Link2 } from "lucide-react";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 export function readLayoutName(): string {
   try { return layoutStore.get().working?.name || localStorage.getItem("tv:layoutName") || "Unnamed"; } catch { return "Unnamed"; }
@@ -185,10 +186,10 @@ function DownloadDialog({ onClose }: { onClose: () => void }) {
         <div style={{ fontSize: 13, color: C.faint, marginBottom: 6 }}>Chart</div>
         <div style={field}>{cell ? `${cell.symbol.replace("/", "")}, ${MINUTES[cell.interval] || cell.interval}` : "Chart"}</div>
         <div style={{ fontSize: 13, color: C.faint, margin: "14px 0 6px" }}>Time format ({offset})</div>
-        <select aria-label="Time format" value={format} onChange={e => setFormat(e.target.value as any)} style={{ ...field, cursor: "pointer" }}>
+        <TvSelect aria-label="Time format" value={format} onChange={e => setFormat(e.target.value as any)} style={{ ...field, cursor: "pointer" }}>
           <option value="iso">ISO time</option>
           <option value="unix">UNIX timestamp</option>
-        </select>
+        </TvSelect>
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, padding: "24px 40px 28px" }}>
         <button type="button" onClick={onClose} style={btn(false)}>Cancel</button>

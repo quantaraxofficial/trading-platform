@@ -60,6 +60,21 @@ Text, notes and content
 
 All tools share one multi-point shell (select, move, snapping handles) and feed the toolbar
 flyouts and quick search.
+  - Shapes can be selected, moved and middle-click deleted in Brave (and other browsers that
+    add noise to canvas pixels): the shape under the pointer is found by its nearest colour
+  - Clicking the middle of a line selects it (a second click on its label adds text)
+  - Each tool's last-used style is saved in full to the account, so a reload keeps it
+  - TradingView's Fib retracement as the new-user default (levels 0 to 4.236 in their
+    colours, shaded); "Apply Default Drawing Template" in the Fib dialog and toolbar
+  - Fixed range / anchored volume profile: TradingView's toolbar and settings (rows, volume
+    up/down / total / delta, value area, width, placement, colours, VAH / VAL / POC,
+    developing POC and VA)
+  - Changing a rectangle's (circle's, ellipse's, arc's) border keeps its background colour
+  - Highlighter: uncrowded toolbar, no dotted ring when selected; brush / highlighter
+    strokes show in the last-used colour while drawn
+  - Favourites bar: drag its tools to reorder them; it never covers the drawing toolbar
+  - Colour palettes close on an outside click and apply shades as they're picked
+  - Shape settings dialogs shrink to fit small windows; toolbar menus open where they fit
 
 ======================================================================
 2. CHART, LAYOUTS AND CHART TYPES
@@ -111,6 +126,12 @@ Redesign (the site's own layout)
     (save, apply, rename, delete; also "Save as template" in Redesign), and each widget's
     colour; applied live, Cancel reverts
 
+Small screens and browsers
+  - Drawing toolbar and right toolbar scroll on their own on short windows (the page
+    doesn't); their flyout menus stay visible and fit the window
+  - TradingView-style dropdowns in place of the browser's native lists, everywhere
+  - Tested in Chrome, Edge, Firefox, Brave and Safari's engine (WebKit)
+
 ======================================================================
 3. BAR REPLAY
 ======================================================================
@@ -119,6 +140,7 @@ Redesign (the site's own layout)
   - Changing timeframe during replay keeps the replay's date
   - Fixed React crashes when a drawing leaves the loaded bars and comes back
   - "Save this replay" is kept in the account (not just the browser)
+  - Switching timeframe in a replay keeps the candle size and the replay bar's place
 
 ======================================================================
 4. TRADING: PAPER TRADING AND METATRADER 5
@@ -276,6 +298,8 @@ Backtest sessions
     follows it live
   - Backtest sessions panel in the right toolbar: every session with its status, bar, P&L,
     trades, time spent and time left; one clicked opens in a new tab and carries on
+  - A reopened backtest session shows its last played candle
+  - New session: the symbol is a dropdown by market (plus your watchlists, or type one)
 
 ======================================================================
 12. COPY TRADING
@@ -326,6 +350,9 @@ Posting signals out
   - TradingView's colour palette replaces the browser's colour pickers; dark mode throughout;
     theme kept across reloads
   - Reset chart view as TradingView does
+  - EMA settings are saved with the chart's indicators, so a reload keeps them
+  - Nothing of a user's chart state is saved before it has loaded (a cleared browser
+    can't wipe the account's indicators); drawings and chart state retry a failed load
 
 ======================================================================
 15. SECURITY AND ADMIN

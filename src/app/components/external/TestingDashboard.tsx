@@ -1,6 +1,7 @@
 'use client';
 import React, { useState } from 'react';
 import { Play, Clock, Activity, TrendingUp, BarChart3, Settings, Trash2, Plus, Info, LayoutDashboard, Calendar, X } from 'lucide-react';
+import TvSelect from "@/app/components/ui/TvSelect";
 
 export default function TestingDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -428,12 +429,12 @@ export default function TestingDashboard() {
 
               <div>
                 <label className="flex items-center gap-2 text-sm font-bold text-purple-200 mb-2">Assets * <span className="text-purple-400 text-xs font-normal">Request asset</span></label>
-                <select className="w-full bg-purple-900/20 border border-purple-800/50 rounded-xl px-4 py-3 text-white appearance-none focus:outline-none focus:border-purple-500 transition-colors">
+                <TvSelect className="w-full bg-purple-900/20 border border-purple-800/50 rounded-xl px-4 py-3 text-white appearance-none focus:outline-none focus:border-purple-500 transition-colors">
                   <option>Type to search for assets</option>
                   <option>OANDA:XAUUSD</option>
                   <option>OANDA:EURUSD</option>
                   <option>OANDA:GBPUSD</option>
-                </select>
+                </TvSelect>
               </div>
 
               <div>

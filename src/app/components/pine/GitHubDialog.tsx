@@ -13,6 +13,7 @@ import {
   github, GitHubApiError, fileNameFor, languageOfPath,
   type GitHubAccount, type GitHubFile, type GitHubLink, type GitHubRepo, type PulledFile, type PushResult,
 } from "../../lib/github";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 export const GitHubIcon = ({ size = 22 }: { size?: number }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width={size} height={size} aria-hidden fill="currentColor">
@@ -125,19 +126,19 @@ function RepoBranch({ p, rb, extraBranch }: { p: PinePalette; rb: ReturnType<typ
     <div style={{ display: "flex", gap: 10 }}>
       <div style={{ flex: 3, minWidth: 0 }}>
         <label style={label(p)} htmlFor="gh-repo">Repository</label>
-        <select id="gh-repo" value={rb.repo} onChange={e => rb.setRepo(e.target.value)} disabled={!rb.repos?.length} style={field(p)} data-testid="github-repo">
+        <TvSelect id="gh-repo" value={rb.repo} onChange={e => rb.setRepo(e.target.value)} disabled={!rb.repos?.length} style={field(p)} data-testid="github-repo">
           {!rb.repos && <option>Loading…</option>}
           {rb.repos?.length === 0 && <option value="">No repositories</option>}
           {rb.repos?.map(r => <option key={r.full_name} value={r.full_name}>{r.full_name}{r.private ? " 🔒" : ""}</option>)}
-        </select>
+        </TvSelect>
       </div>
       <div style={{ flex: 2, minWidth: 0 }}>
         <label style={label(p)} htmlFor="gh-branch">Branch</label>
         {extraBranch ?? (
-          <select id="gh-branch" value={rb.branch} onChange={e => rb.setBranch(e.target.value)} disabled={!rb.branches?.length} style={field(p)} data-testid="github-branch">
+          <TvSelect id="gh-branch" value={rb.branch} onChange={e => rb.setBranch(e.target.value)} disabled={!rb.branches?.length} style={field(p)} data-testid="github-branch">
             {!rb.branches && <option>Loading…</option>}
             {rb.branches?.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
+          </TvSelect>
         )}
       </div>
     </div>
@@ -254,12 +255,12 @@ function Push({ p, uid, link, language, scriptName, code, onClose, onPushed, onP
         <RepoBranch p={p} rb={rb} extraBranch={
           <div style={{ display: "flex", gap: 6 }}>
             {newBranch === null ? (
-              <select id="gh-branch" value={rb.branch} onChange={e => { if (e.target.value === "__new") setNewBranch(""); else rb.setBranch(e.target.value); }}
+              <TvSelect id="gh-branch" value={rb.branch} onChange={e => { if (e.target.value === "__new") setNewBranch(""); else rb.setBranch(e.target.value); }}
                 disabled={!rb.branches} style={field(p)} data-testid="github-branch">
                 {!rb.branches && <option>Loading…</option>}
                 {rb.branches?.map(b => <option key={b} value={b}>{b}</option>)}
                 {rb.branches && <option value="__new">New branch…</option>}
-              </select>
+              </TvSelect>
             ) : (
               <>
                 <input id="gh-branch" autoFocus value={newBranch} onChange={e => setNewBranch(e.target.value)} onKeyDown={e => e.stopPropagation()}

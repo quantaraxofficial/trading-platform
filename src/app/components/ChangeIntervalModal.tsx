@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Info, X } from "lucide-react";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 interface ChangeIntervalModalProps {
   initialDigit: string;

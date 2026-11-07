@@ -16,6 +16,20 @@ import Performance from "./Performance";
 import TradeAnalysis from "./TradeAnalysis";
 import { Card, Empty, Kpi, Label, Pills } from "./ui";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import { watchlists, listSymbols, sameSymbol } from "../components/watchlist/store";
+import TvSelect from "@/app/components/ui/TvSelect";
+
+// The symbols a session can be made on, by market (gold first: its bars are our own server's);
+// the user's watchlist symbols are added under "Your watchlists", and "Other symbol…" types one in
+const SESSION_SYMBOLS: [string, string[]][] = [
+  ["Metals", ["XAU/USD"]],
+  ["Forex", ["EUR/USD", "GBP/USD", "USD/JPY"]],
+  ["Crypto", ["BTC/USD", "ETH/USD"]],
+  ["Stocks", ["AAPL", "TSLA", "NFLX", "NVDA", "MSFT", "AMZN", "GOOGL"]],
+  ["Funds", ["SPY"]],
+];
+const OTHER_SYMBOL = "__other__";
+
 
 type Opened = { kind: "session"; s: BacktestSession } | { kind: "strategy"; b: SavedBacktest };
 const INTERVALS: [string, string][] = [["1min", "1m"], ["5min", "5m"], ["15min", "15m"], ["30min", "30m"], ["1h", "1h"], ["4h", "4h"], ["1day", "1D"], ["1week", "1W"]];
@@ -290,6 +304,18 @@ function NewSessionDialog({ uid, onClose, onCreated }: { uid: string; onClose: (
   useEscapeClose(onClose);
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("XAU/USD");
+  // (typing a symbol that isn't in the list)
+  const [otherSymbol, setOtherSymbol] = useState(false);
+  const watchlistSymbols = useMemo(() => {
+    const listed = SESSION_SYMBOLS.flatMap(([, list]) => list);
+    const out: string[] = [];
+    try {
+      for (const l of watchlists.get().lists) for (const sym of listSymbols(l)) {
+        if (!listed.some(x => sameSymbol(x, sym)) && !out.some(x => sameSymbol(x, sym))) out.push(sym.toUpperCase());
+      }
+    } catch { /* no watchlists here */ }
+    return out;
+  }, []);
   const [interval, setInterval] = useState("15min");
   const [date, setDate] = useState(() => new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10));
   const [time, setTime] = useState("00:00");
@@ -351,11 +377,32 @@ function NewSessionDialog({ uid, onClose, onCreated }: { uid: string; onClose: (
           <label className="col-span-2"><span className="block text-purple-300 text-sm font-medium mb-1.5">Name</span>
             <input className={field} value={name} onChange={e => setName(e.target.value)} placeholder={`${symbol || "XAU/USD"} ${label} backtest`} data-testid="ns-name" /></label>
           <label><span className="block text-purple-300 text-sm font-medium mb-1.5">Symbol</span>
-            <input className={field} value={symbol} onChange={e => setSymbol(e.target.value)} placeholder="XAU/USD" data-testid="ns-symbol" /></label>
+            {otherSymbol ? (
+              <div className="flex gap-2">
+                <input className={field} value={symbol} onChange={e => setSymbol(e.target.value)} placeholder="e.g. AMD or EUR/GBP" autoFocus data-testid="ns-symbol" />
+                <button type="button" onClick={() => { setOtherSymbol(false); setSymbol("XAU/USD"); }} title="Back to the list"
+                  className="px-2 rounded-lg border border-purple-700/50 text-purple-200 hover:bg-purple-800/30 text-sm">List</button>
+              </div>
+            ) : (
+              <TvSelect className={field} value={symbol} data-testid="ns-symbol"
+                onChange={e => { if (e.target.value === OTHER_SYMBOL) { setOtherSymbol(true); setSymbol(""); } else setSymbol(e.target.value); }}>
+                {SESSION_SYMBOLS.map(([group, list]) => (
+                  <optgroup key={group} label={group} className="bg-gray-900">
+                    {list.map(sym => <option key={sym} value={sym} className="bg-gray-900">{sym}</option>)}
+                  </optgroup>
+                ))}
+                {watchlistSymbols.length > 0 && (
+                  <optgroup label="Your watchlists" className="bg-gray-900">
+                    {watchlistSymbols.map(sym => <option key={sym} value={sym} className="bg-gray-900">{sym}</option>)}
+                  </optgroup>
+                )}
+                <option value={OTHER_SYMBOL} className="bg-gray-900">Other symbol…</option>
+              </TvSelect>
+            )}</label>
           <label><span className="block text-purple-300 text-sm font-medium mb-1.5">Timeframe</span>
-            <select className={field} value={interval} onChange={e => setInterval(e.target.value)} data-testid="ns-interval">
+            <TvSelect className={field} value={interval} onChange={e => setInterval(e.target.value)} data-testid="ns-interval">
               {INTERVALS.map(([id, l]) => <option key={id} value={id} className="bg-gray-900">{l}</option>)}
-            </select></label>
+            </TvSelect></label>
           <label><span className="block text-purple-300 text-sm font-medium mb-1.5">Start date</span>
             <input type="date" className={field} value={date} onChange={e => setDate(e.target.value)} data-testid="ns-date" style={{ colorScheme: "dark" }} /></label>
           <label><span className="block text-purple-300 text-sm font-medium mb-1.5">Start time {daily ? "(daily bars)" : ""}</span>
@@ -364,9 +411,9 @@ function NewSessionDialog({ uid, onClose, onCreated }: { uid: string; onClose: (
             <div className="flex gap-2">
               <input className={field} style={{ flex: 1 }} value={lengthValue} onChange={e => setLengthValue(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric"
                 placeholder="e.g. 3" aria-label="How much to backtest" data-testid="ns-length" />
-              <select className={field} style={{ flex: 1 }} value={lengthUnit} onChange={e => setLengthUnit(e.target.value as LengthUnit)} aria-label="Unit" data-testid="ns-length-unit">
+              <TvSelect className={field} style={{ flex: 1 }} value={lengthUnit} onChange={e => setLengthUnit(e.target.value as LengthUnit)} aria-label="Unit" data-testid="ns-length-unit">
                 {LENGTH_UNITS.map(u => <option key={u} value={u} className="bg-gray-900">{u[0].toUpperCase() + u.slice(1)}</option>)}
-              </select>
+              </TvSelect>
             </div>
             <span className="block text-purple-400/70 text-xs mt-1">{lengthValue ? `The session covers ${lengthText({ value: Number(lengthValue) || 1, unit: lengthUnit })} of market time from the start; the side panel shows what's left.` : "Leave empty to backtest as long as you like."}</span>
           </div>

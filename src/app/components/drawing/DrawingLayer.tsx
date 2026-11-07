@@ -4,6 +4,13 @@ import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { applyChartWheel } from '../../lib/chartWheel';
 import { Stage, Layer, Group, Rect as KonvaRect } from 'react-konva';
 import Konva from 'konva';
+import { installNoisyCanvasHit } from '../../lib/konvaNoisyHit';
+import { installSubbarPopupPlacement } from '../../lib/subbarPopups';
+
+// Shapes found under the pointer even where the browser adds noise to canvas pixels (Brave)
+installNoisyCanvasHit();
+// The shape toolbars' menus open to the side of the toolbar where they fit
+installSubbarPopupPlacement();
 import { useDrawing } from './core/DrawingContext';
 import { pixelToLogical, pixelToPrice, logicalToPixel, priceToPixel } from './core/coordinates';
 import { snapToChart, effectiveMagnet } from './core/snap';
@@ -17,7 +24,7 @@ import { MultiPointTool } from './tools/advanced/MultiPointTool';
 import { ADVANCED_TOOLS } from './tools/advanced/registry';
 import { TextTool } from './tools/Text';
 import { FibonacciTool } from './tools/Fibonacci';
-import { DEFAULT_FIB_LEVELS } from './ui/FibonacciSettingsModal';
+import { DEFAULT_FIB_STYLE } from './ui/FibonacciSettingsModal';
 import { BrushTool } from './tools/BrushTool';
 import { MeasureTool } from './tools/MeasureTool';
 import { RotatedRectangleTool } from './tools/RotatedRectangleTool';
@@ -417,6 +424,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
           if (activeTool === 'eraser') {
             deleteDrawing(foundId);
           } else {
+            const wasSelected = selectedIdRef.current === foundId;
             setSelectedShapeId(foundId);
             // A real Konva click never reaches a shape's own onClick handlers while it's
             // only hovered (not yet selected) — the wrapper div's pointer-events stay
@@ -426,9 +434,12 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
             // silently do nothing on the very first click. Since this manual hit-test
             // already found the exact Konva node, open the text editor directly for it
             // when that node is specifically a Text label on a type that supports one.
+            // Only on a shape that's already selected: the first click on it selects it. A line's
+            // text label sits on its middle, so clicking the middle of an unselected line opened the
+            // editor instead (no toolbar, and the editor's layer then took every click on the chart)
             const textEditableTypes = [...TEXT_LINE_TYPES, 'rectangle', 'circle', 'ellipse', 'text'];
             const clickedDrawing = drawingsRef.current.find(d => d.id === foundId);
-            if (shape.className === 'Text' && clickedDrawing && textEditableTypes.includes(clickedDrawing.type)) {
+            if (wasSelected && shape.className === 'Text' && clickedDrawing && textEditableTypes.includes(clickedDrawing.type)) {
               setEditingTextId(foundId);
             }
           }
@@ -902,10 +913,13 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
       const newId = `${activeTool}-${Date.now()}`;
       setActivelyDrawingId(newId);
       setActiveStrokePoints([{ logical, price, time }]);
+      // The stroke shows as it will be kept: the tool's last-used colour and width (addDrawing
+      // puts those on the finished stroke), not a fixed colour that changed on release
+      const last = ((defaultSettings as any)[activeTool] || {}) as { stroke?: string; strokeWidth?: number };
       setActiveStrokeConfig({
         type: activeTool as string,
-        stroke: activeTool === 'highlighter' ? 'rgba(255, 235, 59, 1)' : '#2962ff',
-        strokeWidth: activeTool === 'highlighter' ? 20 : 2
+        stroke: last.stroke || (activeTool === 'highlighter' ? 'rgba(255, 235, 59, 1)' : '#2962ff'),
+        strokeWidth: last.strokeWidth || (activeTool === 'highlighter' ? 20 : 2)
       });
       return;
     }
@@ -1438,7 +1452,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     if (tool === 'arrow_mark_up' || tool === 'arrow_mark_down') style.stroke = '#009688';
     if (tool === 'horizontal_ray' || TOOL_CONFIG[tool]?.type === 'N-point') style.stroke = '#2962ff';
     if (['ray', 'info_line', 'extended_line', 'trend_angle', 'horizontal_line', 'vertical_line', 'cross_line'].includes(tool)) style.stroke = '#2962ff';
-    if (tool === 'fibonacci') style.fibLevels = DEFAULT_FIB_LEVELS;
+    if (tool === 'fibonacci') Object.assign(style, DEFAULT_FIB_STYLE);
     if (ADVANCED_TOOLS[tool]) { style.stroke = ADVANCED_TOOLS[tool].stroke; Object.assign(style, ADVANCED_TOOLS[tool].extra || {}); }
     if (tool === 'arc') style.fill = 'rgba(233, 30, 99, 0.2)';
     if (tool === 'path') style.lineEndStyle = 'Arrow';

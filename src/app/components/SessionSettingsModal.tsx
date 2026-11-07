@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { X, ChevronDown } from "lucide-react";
 import { DualRangeSlider } from "./drawing/ui/DualRangeSlider";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 const TV_COLORS = [
   ["#ffffff", "#f0f3fa", "#e0e3eb", "#b2b5be", "#787b86", "#434651", "#2a2e39", "#1e222d", "#131722", "#000000"],
@@ -202,7 +203,7 @@ function SelectDropdown({ value, options, onChange, style, theme }: any) {
   const isDark = theme === "dark";
   return (
     <div style={{ position: "relative", width: "100%", ...style }}>
-      <select
+      <TvSelect
         value={value}
         onChange={(e) => onChange(e.target.value)}
         style={{
@@ -224,7 +225,7 @@ function SelectDropdown({ value, options, onChange, style, theme }: any) {
             {opt.label || opt}
           </option>
         ))}
-      </select>
+      </TvSelect>
       <ChevronDown 
         size={14} 
         color={isDark ? "#787b86" : "#787b86"} 

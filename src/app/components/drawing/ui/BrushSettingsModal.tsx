@@ -169,7 +169,7 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
   const checkeredBg = `url("data:image/svg+xml,%3Csvg width='8' height='8' viewBox='0 0 8 8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h4v4H0zm4 4h4v4H4z' fill='%23d1d4dc' fill-opacity='0.4' fill-rule='evenodd'/%3E%3C/svg%3E")`;
 
   return (
-    <div 
+    <div data-tv-settings-dialog
       style={{
         position: 'absolute',
         left: position.x,

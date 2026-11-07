@@ -9,6 +9,7 @@ import { ColorPickerPopup, stopAll } from './ColorPickerPopup';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
 import { PaletteInput } from "./PaletteInput";
 import { backendFetch } from "@/lib/backend";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 interface FibonacciSettingsModalProps {
   onClose: () => void;
@@ -156,35 +157,49 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
   );
 }
 
-// Left/right column pairs, interleaved so the 2-column grid (row-major) lays out
-// exactly as: left = 0, 0.34, 0.68, 1, 2.618, 4.236, 1.414, 2.414, 3, 3.414, 4.272, 4.618
-//             right = 0.236, 0.5, 0.6, 0.9, 3.618, 1.272, 2.272, 2, 3.272, 4, 4.414, 4.764
+// TradingView's Fib retracement as it comes: 0 … 4.236 shown, the extension levels hidden, each
+// level in its own colour. Left/right column pairs, interleaved so the 2-column grid (row-major)
+// lays out as TradingView's dialog does:
+//   left  = 0, 0.382, 0.618, 1, 2.618, 4.236, 1.414, 2.414, 3, 3.414, 4.272, 4.618
+//   right = 0.236, 0.5, 0.786, 1.618, 3.618, 1.272, 2.272, 2, 3.272, 4, 4.414, 4.764
 export const DEFAULT_FIB_LEVELS = [
-  { id: '0', enabled: true, value: 0, color: '#000000' },
-  { id: '0.236', enabled: false, value: 0.236, color: '#787b86' },
-  { id: '0.34', enabled: true, value: 0.34, color: '#000000' },
-  { id: '0.5', enabled: true, value: 0.5, color: '#000000' },
-  { id: '0.68', enabled: true, value: 0.68, color: '#000000' },
-  { id: '0.6', enabled: true, value: 0.6, color: '#000000' },
-  { id: '1', enabled: true, value: 1, color: '#000000' },
-  { id: '0.9', enabled: true, value: 0.9, color: '#000000' },
-  { id: '2.618', enabled: false, value: 2.618, color: '#787b86' },
-  { id: '3.618', enabled: false, value: 3.618, color: '#787b86' },
-  { id: '4.236', enabled: false, value: 4.236, color: '#787b86' },
-  { id: '1.272', enabled: false, value: 1.272, color: '#787b86' },
-  { id: '1.414', enabled: false, value: 1.414, color: '#787b86' },
-  { id: '2.272', enabled: false, value: 2.272, color: '#787b86' },
-  { id: '2.414', enabled: false, value: 2.414, color: '#787b86' },
-  { id: '2', enabled: false, value: 2, color: '#787b86' },
-  { id: '3', enabled: false, value: 3, color: '#787b86' },
+  { id: '0', enabled: true, value: 0, color: '#787b86' },
+  { id: '0.236', enabled: true, value: 0.236, color: '#f23645' },
+  { id: '0.382', enabled: true, value: 0.382, color: '#ff9800' },
+  { id: '0.5', enabled: true, value: 0.5, color: '#4caf50' },
+  { id: '0.618', enabled: true, value: 0.618, color: '#089981' },
+  { id: '0.786', enabled: true, value: 0.786, color: '#00bcd4' },
+  { id: '1', enabled: true, value: 1, color: '#787b86' },
+  { id: '1.618', enabled: true, value: 1.618, color: '#2962ff' },
+  { id: '2.618', enabled: true, value: 2.618, color: '#f23645' },
+  { id: '3.618', enabled: true, value: 3.618, color: '#9c27b0' },
+  { id: '4.236', enabled: true, value: 4.236, color: '#e91e63' },
+  { id: '1.272', enabled: false, value: 1.272, color: '#ff9800' },
+  { id: '1.414', enabled: false, value: 1.414, color: '#f23645' },
+  { id: '2.272', enabled: false, value: 2.272, color: '#ff9800' },
+  { id: '2.414', enabled: false, value: 2.414, color: '#4caf50' },
+  { id: '2', enabled: false, value: 2, color: '#089981' },
+  { id: '3', enabled: false, value: 3, color: '#00bcd4' },
   { id: '3.272', enabled: false, value: 3.272, color: '#787b86' },
-  { id: '3.414', enabled: false, value: 3.414, color: '#787b86' },
-  { id: '4', enabled: false, value: 4, color: '#787b86' },
-  { id: '4.272', enabled: false, value: 4.272, color: '#787b86' },
-  { id: '4.414', enabled: false, value: 4.414, color: '#787b86' },
-  { id: '4.618', enabled: false, value: 4.618, color: '#787b86' },
-  { id: '4.764', enabled: false, value: 4.764, color: '#787b86' },
+  { id: '3.414', enabled: false, value: 3.414, color: '#2962ff' },
+  { id: '4', enabled: false, value: 4, color: '#f23645' },
+  { id: '4.272', enabled: false, value: 4.272, color: '#9c27b0' },
+  { id: '4.414', enabled: false, value: 4.414, color: '#e91e63' },
+  { id: '4.618', enabled: false, value: 4.618, color: '#ff9800' },
+  { id: '4.764', enabled: false, value: 4.764, color: '#089981' },
 ];
+
+// The whole default style of a new Fib (what "Apply Default Drawing Template" puts back): the
+// grey dashed trend line, 1px levels in their own colours with the background between them, and
+// "level (price)" labels on the left
+export const DEFAULT_FIB_STYLE = {
+  fibLevels: DEFAULT_FIB_LEVELS,
+  showTrendLine: true, trendLineColor: '#787b86', trendLineStyle: 'dashed' as const, trendLineWidth: 1,
+  levelsLineWidth: 1, levelsLineStyle: 'solid' as const, useOneColor: false,
+  showBackground: true, backgroundOpacity: 0.2, extendLeft: false, extendRight: false, fibReverse: false,
+  fibShowLevels: true, fibLevelFormat: 'Values' as const, fibPrices: true, fibShowText: true,
+  fibLabelHAlign: 'Left' as const, fibLabelVAlign: 'Middle' as const,
+};
 
 // TradingView's coordinate box: 100x34, selects its text on focus, applies on Enter or on
 // leaving the field (a value that isn't a number is dropped)
@@ -346,7 +361,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
   };
 
   return (
-    <div 
+    <div data-tv-settings-dialog 
       style={{
         position: 'fixed', left: position.x, top: position.y, width: '400px',
         backgroundColor: 'var(--tv-sub-bg)', borderRadius: '8px',
@@ -531,58 +546,58 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CheckBox checked={drawing.fibShowLevels !== false} onChange={v => updateProp('fibShowLevels', v)} />
               <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', width: '80px' }}>Levels</span>
-              <select value={drawing.fibLevelFormat || 'Values'} onChange={e => updateProp('fibLevelFormat', e.target.value)}
+              <TvSelect value={drawing.fibLevelFormat || 'Values'} onChange={e => updateProp('fibLevelFormat', e.target.value)}
                 style={{ height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', background: 'var(--tv-sub-bg)', cursor: 'pointer', minWidth: '100px' }}>
                 <option value="Values">Values</option>
                 <option value="Percent">Percent</option>
                 <option value="Values & Percent">Values & Percent</option>
-              </select>
+              </TvSelect>
             </div>
 
             {/* Labels */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', width: '96px' }}>Labels</span>
-              <select value={drawing.fibLabelHAlign || 'Left'} onChange={e => updateProp('fibLabelHAlign', e.target.value)}
+              <TvSelect value={drawing.fibLabelHAlign || 'Left'} onChange={e => updateProp('fibLabelHAlign', e.target.value)}
                 style={{ height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', background: 'var(--tv-sub-bg)', cursor: 'pointer', flex: 1 }}>
                 <option value="Left">Left</option>
                 <option value="Center">Center</option>
                 <option value="Right">Right</option>
-              </select>
-              <select value={drawing.fibLabelVAlign || 'Middle'} onChange={e => updateProp('fibLabelVAlign', e.target.value)}
+              </TvSelect>
+              <TvSelect value={drawing.fibLabelVAlign || 'Middle'} onChange={e => updateProp('fibLabelVAlign', e.target.value)}
                 style={{ height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', background: 'var(--tv-sub-bg)', cursor: 'pointer', flex: 1 }}>
                 <option value="Top">Top</option>
                 <option value="Middle">Middle</option>
                 <option value="Bottom">Bottom</option>
-              </select>
+              </TvSelect>
             </div>
 
             {/* Text */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CheckBox checked={drawing.fibShowText !== false} onChange={v => updateProp('fibShowText', v)} />
               <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', width: '80px' }}>Text</span>
-              <select value={drawing.fibTextHAlign || 'Center'} onChange={e => updateProp('fibTextHAlign', e.target.value)}
+              <TvSelect value={drawing.fibTextHAlign || 'Center'} onChange={e => updateProp('fibTextHAlign', e.target.value)}
                 style={{ height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', background: 'var(--tv-sub-bg)', cursor: 'pointer', flex: 1 }}>
                 <option value="Left">Left</option>
                 <option value="Center">Center</option>
                 <option value="Right">Right</option>
-              </select>
-              <select value={drawing.fibTextVAlign || 'Middle'} onChange={e => updateProp('fibTextVAlign', e.target.value)}
+              </TvSelect>
+              <TvSelect value={drawing.fibTextVAlign || 'Middle'} onChange={e => updateProp('fibTextVAlign', e.target.value)}
                 style={{ height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', background: 'var(--tv-sub-bg)', cursor: 'pointer', flex: 1 }}>
                 <option value="Top">Top</option>
                 <option value="Middle">Middle</option>
                 <option value="Bottom">Bottom</option>
-              </select>
+              </TvSelect>
             </div>
 
             {/* Font size */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', width: '96px' }}>Font size</span>
-              <select value={drawing.fibFontSize || 11} onChange={e => updateProp('fibFontSize', parseInt(e.target.value))}
+              <TvSelect value={drawing.fibFontSize || 11} onChange={e => updateProp('fibFontSize', parseInt(e.target.value))}
                 style={{ height: '32px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px', color: 'var(--tv-sub-text)', background: 'var(--tv-sub-bg)', cursor: 'pointer', minWidth: '80px' }}>
                 {[8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32].map(s => (
                   <option key={s} value={s}>{s}</option>
                 ))}
-              </select>
+              </TvSelect>
             </div>
 
             {/* Fib levels based on log scale */}
@@ -674,6 +689,9 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
             }}>
               <button onClick={() => { setShowTemplateDropdown(false); setShowSaveModal(true); }} style={{ padding: '10px 16px', background: 'transparent', border: 'none', color: 'var(--tv-sub-text)', cursor: 'pointer', textAlign: 'left', fontSize: '14px' }} onMouseEnter={(e) => e.currentTarget.style.background = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
                 Save As...
+              </button>
+              <button onClick={() => { updateDrawing(drawing.id, DEFAULT_FIB_STYLE as any); setShowTemplateDropdown(false); }} style={{ padding: '10px 16px', background: 'transparent', border: 'none', color: 'var(--tv-sub-text)', cursor: 'pointer', textAlign: 'left', fontSize: '14px' }} onMouseEnter={(e) => e.currentTarget.style.background = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                Apply Default Drawing Template
               </button>
               {templates.length > 0 && <div style={{ height: '1px', backgroundColor: 'var(--tv-sub-border)', margin: '4px 0' }} />}
               {templates.map(t => (

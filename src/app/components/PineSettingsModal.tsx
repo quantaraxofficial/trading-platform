@@ -5,6 +5,7 @@ import { X, Info } from "lucide-react";
 import type { PineInputMeta } from "../lib/pineScriptEngine";
 import { useEscapeClose } from "../lib/useEscapeClose";
 import { PaletteInput } from "./drawing/ui/PaletteInput";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 interface PineSettingsModalProps {
   theme?: string;
@@ -88,18 +89,18 @@ export default function PineSettingsModal({
       case "timeframe": {
         const known = TIMEFRAME_OPTIONS.some((o) => o.value === v);
         return (
-          <select value={v} onChange={(e) => set(m.varName, e.target.value)} style={inputStyle}>
+          <TvSelect value={v} onChange={(e) => set(m.varName, e.target.value)} style={inputStyle}>
             {!known && <option value={v}>{v}</option>}
             {TIMEFRAME_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          </TvSelect>
         );
       }
       case "string":
         if (m.options && m.options.length) {
           return (
-            <select value={v} onChange={(e) => set(m.varName, e.target.value)} style={inputStyle}>
+            <TvSelect value={v} onChange={(e) => set(m.varName, e.target.value)} style={inputStyle}>
               {m.options.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
+            </TvSelect>
           );
         }
         return <input type="text" value={v ?? ""} onChange={(e) => set(m.varName, e.target.value)} style={inputStyle} />;

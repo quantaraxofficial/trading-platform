@@ -6,7 +6,60 @@ import { useDrawing } from "./drawing/core/DrawingContext";
 import { DRAWING_TOOL_BY_TYPE } from "./drawing/toolCatalog";
 
 export default function FavoritesToolbar() {
-  const { favoriteTools, activeTool, setActiveTool, isFavoritesToolbarVisible } = useDrawing();
+  const { favoriteTools, activeTool, setActiveTool, isFavoritesToolbarVisible, reorderFavoriteTools } = useDrawing();
+
+  // Reordering, as on TradingView: press a tool and drag it along the bar; the others slide out
+  // of its way and the new order is kept on release (a press without a drag is a click)
+  const [reorder, setReorder] = useState<{ from: number; to: number; dx: number } | null>(null);
+  const reorderRef = useRef<{ from: number; startX: number; centers: number[]; width: number; moved: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
+  const startReorder = (e: React.PointerEvent, index: number) => {
+    if (e.button !== 0) return;
+    const items = Array.from(toolbarRef.current?.querySelectorAll<HTMLElement>("[data-fav-item]") ?? []);
+    const rects = items.map(el => el.getBoundingClientRect());
+    reorderRef.current = { from: index, startX: e.clientX, centers: rects.map(r => r.left + r.width / 2), width: rects[index]?.width ?? 32, moved: false };
+  };
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const r = reorderRef.current;
+      if (!r) return;
+      const dx = e.clientX - r.startX;
+      if (!r.moved && Math.abs(dx) < 5) return;
+      r.moved = true;
+      // where the dragged button's centre now is, among the others' centres
+      const c = r.centers[r.from] + dx;
+      let to = 0;
+      r.centers.forEach((cc, i) => { if (i !== r.from && c > cc) to++; });
+      setReorder({ from: r.from, to, dx });
+    };
+    const onUp = () => {
+      const r = reorderRef.current;
+      reorderRef.current = null;
+      if (!r || !r.moved) return;
+      suppressClickRef.current = true;   // (the click that ends the drag doesn't pick the tool)
+      setReorder(cur => {
+        if (cur && cur.to !== cur.from) {
+          const next = [...favoriteTools];
+          const [moved] = next.splice(cur.from, 1);
+          next.splice(cur.to, 0, moved);
+          reorderFavoriteTools(next);
+        }
+        return null;
+      });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); };
+  }, [favoriteTools, reorderFavoriteTools]);
+  // How far each button sits off its place while one is dragged
+  const shiftOf = (i: number) => {
+    if (!reorder) return 0;
+    const w = reorderRef.current?.width ?? 32;
+    if (i === reorder.from) return reorder.dx;
+    if (reorder.from < reorder.to && i > reorder.from && i <= reorder.to) return -w;
+    if (reorder.from > reorder.to && i < reorder.from && i >= reorder.to) return w;
+    return 0;
+  };
   const [position, setPosition] = useState({ x: 100, y: 80 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
@@ -16,21 +69,30 @@ export default function FavoritesToolbar() {
   // The toolbar floats over the whole page (as on TradingView): window coordinates, kept
   // inside the window. Positions saved before were relative to the chart area.
   const [mounted, setMounted] = useState(false);
+  // (and off the drawing toolbar and the header: over them it took their clicks, e.g. a position
+  // saved at the window's left edge covered the Trend line button)
   const clamp = useCallback((p: { x: number; y: number }) => {
     const w = toolbarRef.current?.offsetWidth ?? 120, h = toolbarRef.current?.offsetHeight ?? 36;
-    return { x: Math.max(0, Math.min(window.innerWidth - w, p.x)), y: Math.max(0, Math.min(window.innerHeight - h, p.y)) };
+    const lt = document.querySelector('[data-left-toolbar]')?.getBoundingClientRect();
+    const hd = document.querySelector('header')?.getBoundingClientRect();
+    const minX = lt && lt.width > 0 ? lt.right + 4 : 0;
+    const minY = hd && hd.height > 0 ? hd.bottom + 4 : 0;
+    return {
+      x: Math.max(minX, Math.min(window.innerWidth - w, p.x)),
+      y: Math.max(minY, Math.min(window.innerHeight - h, p.y)),
+    };
   }, []);
   useEffect(() => {
     setMounted(true);
     try {
       const saved = localStorage.getItem("tv_favorites_toolbar_pos2");
-      if (saved) { setPosition(JSON.parse(saved)); return; }
+      if (saved) { setPosition(JSON.parse(saved)); requestAnimationFrame(() => setPosition(p => clamp(p))); return; }
       const old = localStorage.getItem("tv_favorites_toolbar_pos");
       const main = document.querySelector("main")?.getBoundingClientRect();
       const p = old ? JSON.parse(old) : { x: 100, y: 80 };
       setPosition({ x: (main?.left ?? 0) + p.x, y: (main?.top ?? 0) + p.y });
     } catch {}
-  }, []);
+  }, [clamp]);
   // Back inside the window when it shrinks
   useEffect(() => {
     const onResize = () => setPosition(p => { const c = clamp(p); return c.x === p.x && c.y === p.y ? p : c; });
@@ -137,14 +199,24 @@ export default function FavoritesToolbar() {
       />
 
       {/* Favorite tool buttons */}
-      {favoriteTools.map((toolType) => {
+      {favoriteTools.map((toolType, index) => {
         const tool = DRAWING_TOOL_BY_TYPE[toolType];
         const isActive = activeTool === toolType;
         if (!tool) return null;
         const name = tool.label;
+        const dragged = reorder?.from === index;
 
         return (
-          <div key={toolType} className="tv-tooltip-container" style={{ position: "relative" }}>
+          <div key={toolType} data-fav-item className="tv-tooltip-container"
+            onPointerDown={e => startReorder(e, index)}
+            onClickCapture={e => { if (suppressClickRef.current) { suppressClickRef.current = false; e.stopPropagation(); e.preventDefault(); } }}
+            style={{
+              position: "relative",
+              transform: reorder ? `translateX(${shiftOf(index)}px)` : undefined,
+              transition: reorder && !dragged ? "transform 0.15s ease" : undefined,
+              zIndex: dragged ? 1 : undefined,
+              cursor: dragged ? "grabbing" : undefined,
+            }}>
             <button
               className={`tv-icon-btn ${isActive ? "active" : ""}`}
               style={{

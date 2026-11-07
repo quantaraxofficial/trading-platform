@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { HSVColorPickerPopup } from '../../HSVColorPicker';
 import { useEscapeClose } from '../../../lib/useEscapeClose';
 
@@ -71,8 +71,27 @@ interface ColorPickerPopupProps {
 // picker with an editable hex input, not the browser's native OS color dialog) and
 // optional thickness/line-style rows. Shared by every tool's "Line Color"/"Text Color"
 // buttons so they all get the same picker instead of each rolling its own.
+// The element last pressed: the popup's own button, when it opens (see the outside-click below)
+let lastPressed: Element | null = null;
+if (typeof document !== 'undefined') document.addEventListener('pointerdown', e => { lastPressed = e.target as Element; }, true);
+
 export function ColorPickerPopup({ colorStr, onChange, onClose, thickness, onThicknessChange, lineStyle, onLineStyleChange, style }: ColorPickerPopupProps) {
   useEscapeClose(onClose);
+  // A press anywhere outside closes it. The button that opened it is left to its own toggle
+  // (closing here first would have that click open it again)
+  const rootRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    const opener = lastPressed?.closest('button, [role="button"]') ?? lastPressed;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t) || (opener && opener.contains(t))) return;
+      onCloseRef.current();
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    return () => document.removeEventListener('pointerdown', onDown, true);
+  }, []);
   const { hex: initHex, opacity: initOpacity } = parseColorInput(colorStr);
   const [hex, setHex] = useState(initHex);
   const [opacity, setOpacity] = useState(initOpacity);
@@ -128,6 +147,7 @@ export function ColorPickerPopup({ colorStr, onChange, onClose, thickness, onThi
 
   return (
     <div
+      ref={rootRef}
       style={{
         position: 'absolute', backgroundColor: 'var(--tv-sub-bg)', borderRadius: 6, boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)', zIndex: 100000,
         padding: '12px 13px', width: showCustomPicker ? 236 : GRID_W, boxSizing: 'content-box', overflow: 'hidden', ...style,
@@ -139,6 +159,7 @@ export function ColorPickerPopup({ colorStr, onChange, onClose, thickness, onThi
           hex={hex}
           isDark={typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark'}
           onApply={(newHex) => { addCustomColor(newHex); applyColor(newHex, opacity); setShowCustomPicker(false); }}
+          onPick={(newHex) => applyColor(newHex, opacity)}
         />
       ) : (
         <>
