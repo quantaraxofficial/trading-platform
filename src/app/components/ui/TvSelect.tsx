@@ -15,7 +15,9 @@ type Opt = { value: string; label: React.ReactNode; text: string; disabled?: boo
 
 type Props = Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "onChange" | "value"> & {
   value?: string | number | readonly string[];
-  onChange?: (e: { target: { value: string }; currentTarget: { value: string } }) => void;
+  // (called with { target: { value }, currentTarget: { value } }; typed loosely so handlers written
+  // for a native <select> fit)
+  onChange?: (e: any) => void;
   children?: React.ReactNode;
 };
 
