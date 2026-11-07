@@ -83,8 +83,8 @@ class ClickHouse:
                  f"{symbol}\t{day}\t{bars}\t{ticks}\n".encode())
 
 
-def bars_from_ticks(ticks, offset_h: int) -> list[tuple]:
-    """30-second bars (UTC bar-open ms, o, h, l, c, count) from MT5 ticks (bid prices)"""
+def bars_from_ticks(ticks, offset_h: int, bar_ms: int = BAR_MS) -> list[tuple]:
+    """30-second (or bar_ms) bars (UTC bar-open ms, o, h, l, c, count) from MT5 ticks (bid prices)"""
     import numpy as np
     t = ticks["time_msc"].astype("int64") - offset_h * 3_600_000
     bid = ticks["bid"].astype("float64")
@@ -94,7 +94,7 @@ def bars_from_ticks(ticks, offset_h: int) -> list[tuple]:
         return []
     order = np.argsort(t, kind="stable")
     t, bid = t[order], bid[order]
-    b = (t // BAR_MS) * BAR_MS
+    b = (t // bar_ms) * bar_ms
     starts = np.flatnonzero(np.r_[True, b[1:] != b[:-1]])
     ends = np.r_[starts[1:], len(b)]
     out = []

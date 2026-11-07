@@ -110,7 +110,8 @@ export function SubLineStyleIcon({ style }: { style?: string }) {
 export function SubWidthLabel({ width }: { width: number }) {
   return (
     <span style={{ display: "flex", alignItems: "center", gap: "8px", padding: "0 2px" }}>
-      <span style={{ width: "18px", height: `${width}px`, backgroundColor: "currentColor", flexShrink: 0 }} />
+      {/* (capped: a 20px highlighter showed a 20px block that crowded the toolbar) */}
+      <span style={{ width: "18px", height: `${Math.min(width, 8)}px`, backgroundColor: "currentColor", flexShrink: 0 }} />
       <span style={{ fontSize: "14px", fontWeight: 400 }}>{width}px</span>
     </span>
   );

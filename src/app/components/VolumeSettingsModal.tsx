@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { X, ChevronDown, BarChart2, Activity, Plus } from "lucide-react";
 import { DualRangeSlider } from "./drawing/ui/DualRangeSlider";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -210,9 +211,9 @@ export default function VolumeSettingsModal({ onClose, theme, config, onChangeCo
               
               <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
                 <span style={{ width: "80px" }}>Precision</span>
-                <select style={{ flex: 1, padding: "6px 8px", borderRadius: "4px", border: `1px solid ${borderColor}`, backgroundColor: isDark ? "#131722" : "#ffffff", color: textColor }}>
+                <TvSelect style={{ flex: 1, padding: "6px 8px", borderRadius: "4px", border: `1px solid ${borderColor}`, backgroundColor: isDark ? "#131722" : "#ffffff", color: textColor }}>
                   <option>Default</option>
-                </select>
+                </TvSelect>
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>

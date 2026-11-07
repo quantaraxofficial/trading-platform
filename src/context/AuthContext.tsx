@@ -94,7 +94,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       }
 
-      setUser(activeUser);
+      // Without a session key yet (a first sign-in, or a browser whose data was cleared) they count
+      // as signed in only once the server has issued one: everything that loads with `user`
+      // (drawings, chart state, templates) asked without it, was refused (401) and showed an empty
+      // chart, drawings gone until the next reload, and nothing drawn meanwhile was saved
+      const waitForKey = !!activeUser && !storedKey();
+      if (!waitForKey) setUser(activeUser);
 
       if (activeUser && sessionKey !== null) {
         try {
@@ -147,6 +152,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             }
           }
         }
+          if (waitForKey) setUser(activeUser);
           
         // Fetch full profile from Django
           const profileRes = await backendFetch(`${BACKEND_URL}/api/users/user/${activeUser.uid}/`);
@@ -155,6 +161,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           // The server answered without their profile (e.g. a refused session): the free plan
           if (profileData?.access) setAccess(profileData.access); else setNotPremium();
         } catch (error) {
+          if (waitForKey) setUser(activeUser);
           console.error("Error syncing with Django", error);
           setAccess(null);   // not known: nothing limited rather than a premium user held to the free plan
         }

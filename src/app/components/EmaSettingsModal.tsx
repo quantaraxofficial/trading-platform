@@ -18,6 +18,7 @@ import {
   EMA_SOURCES, SMOOTHING_TYPES, EMA_TIMEFRAMES, EMA_DEFAULTS, saveEmaDefaults, normalizeEma,
   type EmaConfig, type PlotStyle, type VisRange,
 } from "../lib/emaCalc";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 interface EmaSettingsModalProps {
   onClose: () => void;
@@ -72,11 +73,11 @@ function Select({ value, options, onChange, width = 120, disabled, colors, label
 }) {
   return (
     <div style={{ position: "relative", width }}>
-      <select aria-label={label} value={value} disabled={disabled} onChange={e => onChange(e.target.value)}
+      <TvSelect aria-label={label} value={value} disabled={disabled} onChange={e => onChange(e.target.value)}
         style={{ width: "100%", height: 34, appearance: "none", border: `1px solid ${colors.border}`, borderRadius: 6, background: disabled ? colors.disabledBg : colors.bg,
           color: colors.text, fontSize: 14, padding: "0 28px 0 10px", outline: "none", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.6 : 1 }}>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
+      </TvSelect>
       <ChevronDown size={14} color="#787b86" style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
     </div>
   );

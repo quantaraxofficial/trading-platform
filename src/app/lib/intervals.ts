@@ -92,13 +92,13 @@ export function sectionOf(v: string): SectionId | null {
 
 // Whether this app's data can draw the interval. Bars come from TwelveData (any length of minutes,
 // hours, days, weeks or months, resampled on the server from its native bars) and the MT5 feed
-// (30-second bars); there is no tick-by-tick feed, so tick and range bars and the other second
-// intervals can't be built.
+// (30- and 15-second bars: 15s, 30s, 45s); there is no tick-by-tick feed, so tick and range bars
+// and the other second intervals can't be built.
 export function isIntervalAvailable(v: string): boolean {
   const p = parseInterval(v);
   if (!p) return false;
   if (p.unit === "t" || p.unit === "r") return false;
-  if (p.unit === "s") return p.n === 30;
+  if (p.unit === "s") return p.n === 15 || p.n === 30 || p.n === 45;
   return true;
 }
 

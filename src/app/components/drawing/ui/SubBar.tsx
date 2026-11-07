@@ -10,7 +10,7 @@ import { isImported, renameDrawingTemplate } from './drawingTemplates';
 import { TrendlineSettingsModal } from './TrendlineSettingsModal';
 import { HorizontalRaySettingsModal } from './HorizontalRaySettingsModal';
 import { BrushSettingsModal } from './BrushSettingsModal';
-import { FibonacciSettingsModal } from './FibonacciSettingsModal';
+import { FibonacciSettingsModal, DEFAULT_FIB_STYLE } from './FibonacciSettingsModal';
 import { TextSettingsModal } from './TextSettingsModal';
 import { TriangleSettingsModal } from './TriangleSettingsModal';
 import { ArrowMarkupSettingsModal } from './ArrowMarkupSettingsModal';
@@ -20,6 +20,7 @@ import { RectangleSettingsModal } from './RectangleSettingsModal';
 import { RotatedRectangleSettingsModal } from './RotatedRectangleSettingsModal';
 import { PathSettingsModal } from './PathSettingsModal';
 import { HighlighterSettingsModal } from './HighlighterSettingsModal';
+import { VolumeProfileSettingsModal } from './VolumeProfileSettingsModal';
 import { CircleSettingsModal } from './CircleSettingsModal';
 import { EllipseSettingsModal } from './EllipseSettingsModal';
 import { PolylineSettingsModal } from './PolylineSettingsModal';
@@ -573,6 +574,12 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
   };
 
   const applyDefaultTemplate = () => {
+    // (a Fib's default is TradingView's whole Fib: its levels, colours and background)
+    if (selectedShapeType === 'fibonacci' && selectedShapeId) {
+      updateDrawing(selectedShapeId, DEFAULT_FIB_STYLE as any);
+      setShowTemplateDropdown(false);
+      return;
+    }
     const defaults = {
       stroke: '#2962ff',
       strokeWidth: 2,
@@ -1704,6 +1711,9 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             style={{ 
               display: 'flex', 
               alignItems: 'center', 
+              width: 'auto',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
               height: '34px', 
               padding: '0 8px', 
               gap: '6px', 
@@ -1718,7 +1728,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 12 C5 9, 7 15, 9 12 S 13 9, 15 12 S 19 15, 21 12"></path>
             </svg>
-            <SubWidthLabel width={currentWidth} />
+            <span style={{ fontSize: '14px' }}>{currentWidth}px</span>
             
           </button>
           
@@ -4418,6 +4428,36 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
       {isFibonacciSettingsOpen && (
         <FibonacciSettingsModal onClose={() => setIsFibonacciSettingsOpen(false)} />
       )}
+      {renderSaveTemplateModal()}</>
+    );
+  }
+
+  // Fixed range / Anchored volume profile: TradingView's bar has no colour or width buttons (its
+  // colours are the profile's own, in its settings)
+  if (selectedShapeType === 'fixed_range_volume_profile' || selectedShapeType === 'anchored_volume_profile') {
+    const btn = { width: '34px', height: '34px', color: 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' } as const;
+    const hover = { onMouseEnter: (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'; }, onMouseLeave: (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.backgroundColor = 'transparent'; } };
+    return (
+      <>
+      <div
+        data-subbar="true"
+        style={{
+          position: 'absolute', left: position.x, top: position.y, backgroundColor: 'var(--tv-sub-bg)', borderRadius: '6px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center',
+          padding: '2px 4px', gap: '4px', zIndex: 80, pointerEvents: 'auto', userSelect: 'none',
+        }}
+        onClick={handleSubBarClick}
+      >
+        <div onMouseDown={handleGripMouseDown} style={{ cursor: 'grab', padding: '0 6px', display: 'flex', alignItems: 'center', height: '34px' }}>
+          <SubGripIcon />
+        </div>
+        <TemplateButton />
+        <button className="tv-icon-btn" title="Settings" onClick={handleSettingsClick} style={btn} {...hover}><SubSettingsIcon /></button>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ ...btn, color: isLocked ? '#2962ff' : 'var(--tv-sub-text)' }} {...hover}><SubLockIcon locked={isLocked} /></button>
+        <button className="tv-icon-btn" title="Remove" onClick={handleDelete} style={btn} {...hover}><SubTrashIcon /></button>
+        <MoreMenu />
+      </div>
+      {isSettingsOpen && <VolumeProfileSettingsModal onClose={() => setIsSettingsOpen(false)} />}
       {renderSaveTemplateModal()}</>
     );
   }

@@ -146,7 +146,7 @@ export function EmojiSettingsModal({ onClose }: EmojiSettingsModalProps) {
   }, [selectedShape]);
 
   return (
-    <div
+    <div data-tv-settings-dialog
       style={{
         position: 'fixed',
         left: position.x,

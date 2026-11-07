@@ -4,6 +4,7 @@ import { useDrawing, useSettingsSession } from '../core/DrawingContext';
 import { DualRangeSlider } from './DualRangeSlider';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
 import { PaletteInput } from "./PaletteInput";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 interface TrendlineSettingsModalProps {
   onClose: () => void;
@@ -102,7 +103,7 @@ export function TrendlineSettingsModal({ onClose, initialPosition }: TrendlineSe
   const tabs = ['Style', 'Text', 'Coordinates', 'Visibility'];
 
   return (
-    <div 
+    <div data-tv-settings-dialog 
       style={{
         position: 'fixed', left: position.x, top: position.y, width: '380px',
         backgroundColor: 'var(--tv-sub-bg)', borderRadius: '8px',
@@ -149,9 +150,9 @@ export function TrendlineSettingsModal({ onClose, initialPosition }: TrendlineSe
                    <div style={{ width: '100%', height: '100%', backgroundColor: drawing.stroke || '#2962ff', borderRadius: '2px' }} />
                    <PaletteInput value={drawing.stroke || '#2962ff'} onChange={e => updateProp('stroke', e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
                 </div>
-                <select value={drawing.strokeWidth || 1} onChange={e => updateProp('strokeWidth', parseInt(e.target.value))} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
+                <TvSelect value={drawing.strokeWidth || 1} onChange={e => updateProp('strokeWidth', parseInt(e.target.value))} style={{ height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', padding: '0 8px', fontSize: '13px' }}>
                   {[1, 2, 3, 4].map(w => <option key={w} value={w}>{w}px</option>)}
-                </select>
+                </TvSelect>
               </div>
             </div>
 

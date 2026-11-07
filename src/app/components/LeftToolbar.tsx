@@ -173,6 +173,11 @@ export default function LeftToolbar({ indicatorCount = 0, onRemoveIndicators }: 
   const buttonElsRef = useRef<Record<string, HTMLDivElement | null>>({});
   const closeDropdown = React.useCallback(() => setOpenDropdown(null), []);
   const toolbarTop = () => toolbarRef.current?.getBoundingClientRect().top ?? 8;
+  // The button a flyout belongs to: its own toolbar item (it's rendered inside it). Not looked up
+  // in buttonElsRef: React clears that item's ref callback on every render and sets it again only
+  // after the flyout's own ref has run, so the flyout found no button, was never fixed to the window
+  // and stayed absolute inside the toolbar, which (scrolling now) clipped it out of sight
+  const itemOf = (el: HTMLElement | null) => (el?.closest('.tv-lt-item') as HTMLElement | null) ?? null;
   useCloseOnAnchorScroll(toolbarRef, openDropdown !== null, closeDropdown);
   useEscapeClose(closeDropdown, openDropdown !== null);
 
@@ -376,20 +381,20 @@ export default function LeftToolbar({ indicatorCount = 0, onRemoveIndicators }: 
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
   return (
-    <div ref={toolbarRef} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', height: '100%', padding: '4px 0', gap: '4px', color: 'var(--tv-hdr-text)' }}>
+    <div ref={toolbarRef} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', minHeight: '100%', flexShrink: 0, padding: '4px 0', gap: '4px', color: 'var(--tv-hdr-text)' }}>
       {toolGroups.map((group) => {
         const hasDropdown = !!(group.items && group.items.length > 0);
         const currentItem = getGroupCurrentItem(group);
         const menu = group.id === 'icons' ? (
           <EmojiGridPicker
-            popupRef={el => placeBeside(el, buttonElsRef.current[group.id], 4, toolbarTop())}
+            popupRef={el => placeBeside(el, itemOf(el), 4, toolbarTop())}
             onSelect={(emoji) => {
               setActiveEmoji(emoji);
               setActiveTool('emoji');
             }}
           />
         ) : group.items ? (
-          <div role="menu" ref={el => placeBeside(el, buttonElsRef.current[group.id], 2, toolbarTop())} style={{ ...menuStyle, width: group.id === 'patterns' || group.id === 'prediction' || group.id === 'trendlines' ? '320px' : group.id === 'shapes' ? '270px' : '250px' }}>
+          <div role="menu" ref={el => placeBeside(el, itemOf(el), 2, toolbarTop())} style={{ ...menuStyle, width: group.id === 'patterns' || group.id === 'prediction' || group.id === 'trendlines' ? '320px' : group.id === 'shapes' ? '270px' : '250px' }}>
             {group.items.map((item, idx) => item.isHeader ? (
               item.label
                 ? <div key={idx} style={{ padding: '8px 14px 4px', fontSize: '11px', fontWeight: 600, color: 'var(--tv-color-text-muted)', letterSpacing: '0.4px' }}>{item.label}</div>
@@ -462,7 +467,7 @@ export default function LeftToolbar({ indicatorCount = 0, onRemoveIndicators }: 
         flyout: true,
         label: 'Magnet',
       }, (
-        <div role="menu" ref={el => placeBeside(el, buttonElsRef.current['magnet'], 2, toolbarTop())} style={{ ...menuStyle, width: '200px' }}>
+        <div role="menu" ref={el => placeBeside(el, itemOf(el), 2, toolbarTop())} style={{ ...menuStyle, width: '200px' }}>
           {([['weak', 'Weak magnet'], ['strong', 'Strong magnet']] as const).map(([mode, label]) => menuRow(
             `magnet-${mode}`,
             magnetMode === mode,
@@ -502,7 +507,7 @@ export default function LeftToolbar({ indicatorCount = 0, onRemoveIndicators }: 
         flyout: true,
         label: 'Remove objects',
       }, (
-        <div role="menu" ref={el => placeBeside(el, buttonElsRef.current['remove'], 2, toolbarTop())} style={{ ...menuStyle, width: '270px' }}>
+        <div role="menu" ref={el => placeBeside(el, itemOf(el), 2, toolbarTop())} style={{ ...menuStyle, width: '270px' }}>
           {menuRow('rm-drawings', false, (e) => { e.stopPropagation(); clearDrawings(); setOpenDropdown(null); },
             <><TVTrashIcon size={menuIcon} /><span>Remove {plural(drawingCount, 'drawing')}</span></>)}
           {menuRow('rm-indicators', false, (e) => { e.stopPropagation(); onRemoveIndicators?.(); setOpenDropdown(null); },

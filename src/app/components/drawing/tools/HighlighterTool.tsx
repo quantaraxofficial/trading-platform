@@ -100,19 +100,7 @@ export function HighlighterTool({
         hitStrokeWidth={Math.max(strokeWidth + 10, 20)}
       />
 
-      {/* Selection highlight ring */}
-      {isSelected && (
-        <Line
-          points={flattenedPoints}
-          stroke="#2962ff"
-          strokeWidth={1.5}
-          tension={0.4}
-          lineCap="round"
-          lineJoin="round"
-          dash={[5, 4]}
-          listening={false}
-        />
-      )}
+      {/* (no dotted ring over the stroke when it's selected: its end handles show that) */}
 
       {/* Endpoint handles */}
       {(isSelected || isHovering) && x1 !== null && y1 !== null && (

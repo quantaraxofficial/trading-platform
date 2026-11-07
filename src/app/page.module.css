@@ -1,7 +1,9 @@
 .layout {
   display: grid;
   grid-template-columns: var(--tv-left-toolbar-width) 1fr var(--tv-right-toolbar-width) var(--tv-right-sidebar-width);
-  grid-template-rows: var(--tv-header-height) 1fr var(--tv-bottom-toolbar-height);
+  /* (minmax(0, …): a toolbar taller than the window scrolls inside itself; with 1fr it made the
+     row grow, and the whole page scrolled) */
+  grid-template-rows: var(--tv-header-height) minmax(0, 1fr) var(--tv-bottom-toolbar-height);
   width: 100vw;
   height: 100vh;
   /* The 4px between panels (inside the grid tracks) shows this colour, as TradingView's does */
@@ -35,8 +37,11 @@
   align-items: center;
   padding-top: 4px;
   gap: 1px;
-  overflow-y: visible; /* Changed from auto so dropdowns can overflow visually, though this shouldn't affect stacking */
-  overflow-x: visible;
+  /* Taller than the window: it scrolls on its own (wheel / swipe), with no scrollbar shown. Its
+     flyouts and tooltips are fixed to the window, so the scrolling doesn't clip them */
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
   /* One above the bottom bar, so a tall tool dropdown can overlay it (as TradingView's do) */
   z-index: 2001;
 }
@@ -69,7 +74,13 @@
   align-items: center;
   padding-top: 4px;
   gap: 2px;
+  /* as the drawing toolbar: scrolls on its own when the window is short, no scrollbar */
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
 }
+.leftToolbar::-webkit-scrollbar,
+.rightSidebar::-webkit-scrollbar { display: none; }
 
 .bottomPanel {
   grid-column: 2 / 3;
@@ -110,13 +121,3 @@
   }
 }
 
-/* Short touch screens: the drawing toolbar scrolls instead of running off the bottom.
-   (Touch only — scrolling would clip its hover tooltips, which touch screens don't use.) */
-@media (max-height: 760px) and (pointer: coarse) {
-  .leftToolbar {
-    overflow-y: auto;
-    overflow-x: hidden;
-    scrollbar-width: none;
-  }
-  .leftToolbar::-webkit-scrollbar { display: none; }
-}

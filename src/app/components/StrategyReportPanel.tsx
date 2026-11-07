@@ -27,6 +27,7 @@ import {
 import { PerformanceChart, CategoryBarChart, Donut, ChartLegend, type PerfVisibility, type PerfChartHandle } from "./strategy/charts";
 import { strategyDock, strategyPresence, STRATEGY_HOST_ID, TRADE_COLUMNS, DEFAULT_COLUMNS, type TradeColumn } from "./strategy/strategyStore";
 import { PANEL_ROW_HEIGHT } from "../trading/TradingPanel";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 export type BacktestRange = { kind: "all" | "days" | "custom" | "history"; days?: number; from?: number; to?: number };
 
@@ -340,9 +341,9 @@ function Toolbar({ p, view, setView }: { p: StrategyReportPanelProps; view: "met
               onChange={(e) => setCapDraft(e.target.value.replace(/[^0-9.,]/g, ""))}
               onKeyDown={(e) => { if (e.key === "Enter") { applyCapital(); close(); } }} />
             <Tip text="Account currency: this chart's prices are in USD">
-              <select className="st-input" aria-label="Currency" value={CURRENCY} onChange={() => {}} style={{ width: 126, appearance: "auto" }}>
+              <TvSelect className="st-input" aria-label="Currency" value={CURRENCY} onChange={() => {}} style={{ width: 126, appearance: "auto" }}>
                 <option value="USD">USD</option>
-              </select>
+              </TvSelect>
             </Tip>
           </div>
         </Popover>

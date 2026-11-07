@@ -146,6 +146,7 @@ interface DrawingContextType {
   setSymbol: (symbol: string) => void;
   favoriteTools: DrawingType[];
   toggleFavoriteTool: (tool: DrawingType) => void;
+  reorderFavoriteTools: (next: DrawingType[]) => void;
   isFavoritesToolbarVisible: boolean;
   setIsFavoritesToolbarVisible: (visible: boolean) => void;
   magnetMode: 'off' | 'weak' | 'strong';
@@ -241,28 +242,49 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
+  // The tool's whole last-used style is saved, not just the change: the server replaces the
+  // "default" template's settings, so sending one change wiped the others (after a reload only the
+  // last thing changed was kept). Saved a moment after the last change, so typing in a settings
+  // field doesn't send one request per key.
+  const defaultSettingsRef = useRef(defaultSettings);
+  defaultSettingsRef.current = defaultSettings;
+  const defaultSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const updateDefaultSettings = (type: DrawingType, newSettings: Partial<BaseDrawing>) => {
-    setDefaultSettings(prev => ({ ...prev, [type]: { ...(prev[type] || {}), ...newSettings } }));
-    
-    if (user) {
-      const settingsToSave = { ...newSettings };
-      delete settingsToSave.id;
-      delete settingsToSave.type;
-      delete settingsToSave.points;
-      delete settingsToSave.visible;
-      delete settingsToSave.locked;
+    const settingsToSave: any = { ...(defaultSettingsRef.current[type] || {}), ...newSettings };
+    for (const k of ['id', 'type', 'points', 'visible', 'locked', 'modifiedAt', 'group', 'text']) delete settingsToSave[k];
+    defaultSettingsRef.current = { ...defaultSettingsRef.current, [type]: settingsToSave };
+    setDefaultSettings(prev => ({ ...prev, [type]: settingsToSave }));
 
-      backendFetch(`${BACKEND_URL}/api/users/templates/${user.uid}/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: 'default',
-          tool_type: type,
-          settings: settingsToSave
-        })
-      }).catch(err => console.warn("Failed to save default settings", err));
+    if (user) {
+      const uid = user.uid;
+      clearTimeout(defaultSaveTimers.current[type]);
+      defaultSaveTimers.current[type] = setTimeout(() => {
+        delete defaultSaveTimers.current[type];
+        backendFetch(`${BACKEND_URL}/api/users/templates/${uid}/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'default', tool_type: type, settings: defaultSettingsRef.current[type] || settingsToSave }),
+        }).catch(err => console.warn("Failed to save default settings", err));
+      }, 600);
     }
   };
+  // (a save still waiting when the page goes is sent at once)
+  useEffect(() => {
+    const flush = () => {
+      if (!user) return;
+      for (const [type, t] of Object.entries(defaultSaveTimers.current)) {
+        clearTimeout(t);
+        delete defaultSaveTimers.current[type];
+        backendFetch(`${BACKEND_URL}/api/users/templates/${user.uid}/`, {
+          method: 'POST', keepalive: true,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'default', tool_type: type, settings: defaultSettingsRef.current[type as DrawingType] || {} }),
+        }).catch(() => {});
+      }
+    };
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
+  }, [user]);
 
   // Load favorites: from backend if logged in, else from localStorage
   useEffect(() => {
@@ -300,18 +322,25 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
       const newFavs = prev.includes(tool) 
         ? prev.filter(t => t !== tool)
         : [...prev, tool];
-      // Always save to localStorage
-      localStorage.setItem('tv_favorite_tools', JSON.stringify(newFavs));
-      // Save to backend if logged in (fire-and-forget)
-      if (user) {
-        backendFetch(`${BACKEND_URL}/api/users/favorites/${user.uid}/`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ favorites: newFavs })
-        }).catch(err => console.warn("Failed to save favorites to backend", err));
-      }
+      saveFavorites(newFavs);
       return newFavs;
     });
+  };
+  // Kept in this browser and, signed in, in the account (in their order)
+  const saveFavorites = (newFavs: DrawingType[]) => {
+    try { localStorage.setItem('tv_favorite_tools', JSON.stringify(newFavs)); } catch { /* full */ }
+    if (user) {
+      backendFetch(`${BACKEND_URL}/api/users/favorites/${user.uid}/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ favorites: newFavs })
+      }).catch(err => console.warn("Failed to save favorites to backend", err));
+    }
+  };
+  // The favourites in a new order (dragged in the favourites toolbar)
+  const reorderFavoriteTools = (next: DrawingType[]) => {
+    setFavoriteTools(next);
+    saveFavorites(next);
   };
 
   // Whose drawings the chart shows: the symbol's, or — while a backtest session is open — that
@@ -346,16 +375,28 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
         .catch(error => { console.error("Error loading the session's drawings:", error); if (!gone) clearShown(); })
         .finally(() => { if (!gone) setIsInitialLoad(false); });
     } else if (user && symbol) {
+      // A failed load (the server refusing a session key not issued yet, the network) is tried
+      // again a few times: until it loads the chart stays empty and nothing is saved over the
+      // real ones
       const loadDrawings = async () => {
-        let ok = false;
-        try {
-          const res = await backendFetch(`${BACKEND_URL}/api/users/drawings/${user.uid}/?symbol=${symbol}`);
-          if (res.ok) { show(cleanDrawings<BaseDrawing>(await res.json()), `symbol:${symbol}`); ok = true; }
-        } catch (error) {
-          console.error("Error loading drawings:", error);
-        } finally {
-          if (!gone && !ok) clearShown();
-          if (!gone) setIsInitialLoad(false);
+        for (const wait of [0, 1500, 4000, 10000]) {
+          if (wait) await new Promise(r => setTimeout(r, wait));
+          if (gone) return;
+          try {
+            const res = await backendFetch(`${BACKEND_URL}/api/users/drawings/${user.uid}/?symbol=${encodeURIComponent(symbol)}`);
+            if (res.ok) {
+              const loaded = cleanDrawings<BaseDrawing>(await res.json());
+              // (anything drawn while it was still loading is kept, and saved with them)
+              const drawnMeanwhile = wait ? drawingsNowRef.current.filter(d => !loaded.some(x => x.id === d.id)) : [];
+              show([...loaded, ...drawnMeanwhile], `symbol:${symbol}`);
+              if (!gone) setIsInitialLoad(false);
+              return;
+            }
+            console.warn(`[Drawings] load refused (${res.status}); trying again`);
+          } catch (error) {
+            console.error("Error loading drawings:", error);
+          }
+          if (!gone && !wait) { clearShown(); setIsInitialLoad(false); }
         }
       };
       loadDrawings();
@@ -478,11 +519,20 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     logAction('DRAWING_ADDED', { id: drawing.id, type: drawing.type, points: drawing.points });
   };
 
+  // Shapes whose background, until one is picked, is their border colour faded (the tools draw it
+  // as stroke + '33'): a border change keeps the background they showed, as on TradingView, instead
+  // of recolouring the whole shape (the fallback colour is each tool's own)
+  const DERIVED_FILL: Record<string, string> = { rectangle: '#9b59b6', circle: '#9b59b6', ellipse: '#2962ff', arc: '#2962ff', rotated_rectangle: '#4caf50' };
+  const keepFill = (d: BaseDrawing, updates: Partial<BaseDrawing>): Partial<BaseDrawing> =>
+    'stroke' in updates && !('fill' in updates) && DERIVED_FILL[d.type] && !(d as any).fill
+      ? { fill: ((d as any).stroke || DERIVED_FILL[d.type]) + '33' } as any
+      : {};
+
   const updateDrawing = (id: string, updates: Partial<BaseDrawing>) => {
     markEdited();
     setDrawings(prev => prev.map(d => {
       if (d.id === id) {
-        const newDrawing = { ...d, ...updates, modifiedAt: Date.now() };
+        const newDrawing = { ...d, ...keepFill(d, updates), ...updates, modifiedAt: Date.now() };
         // Intercept style updates to save as new default
         const nonStyleKeys = ['id', 'type', 'points', 'visible', 'locked', 'scaleX', 'scaleY', 'rotation', 'text', 'group', 'modifiedAt'];
         const styleKeysChanged = Object.keys(updates).filter(k => !nonStyleKeys.includes(k));
@@ -502,7 +552,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
 
   const updateMultipleDrawings = (ids: string[], updates: Partial<BaseDrawing>) => {
     markEdited();
-    setDrawings(prev => prev.map(d => ids.includes(d.id) ? { ...d, ...updates, modifiedAt: Date.now() } : d));
+    setDrawings(prev => prev.map(d => ids.includes(d.id) ? { ...d, ...keepFill(d, updates), ...updates, modifiedAt: Date.now() } : d));
     logAction('DRAWINGS_BATCH_MODIFIED', { ids, updates });
   };
 
@@ -752,7 +802,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     undo, redo, canUndo: historyIndex > 0, canRedo: historyIndex < history.length - 1,
     shiftDrawings,
     symbol, setSymbol,
-    favoriteTools, toggleFavoriteTool,
+    favoriteTools, toggleFavoriteTool, reorderFavoriteTools,
     isFavoritesToolbarVisible, setIsFavoritesToolbarVisible,
     magnetMode, setMagnetMode,
     keepDrawing, setKeepDrawing,

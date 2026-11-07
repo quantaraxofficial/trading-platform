@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Info } from "lucide-react";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 // Maps a chart interval value to the short label TradingView's "Change interval"
 // dialog pre-fills: "1day" → "1d", "5min" → "5m", "4h" → "4h", "1month" → "1m".
@@ -36,6 +37,9 @@ interface ChangeIntervalModalProps {
 }
 
 type IntervalUnit = "s" | "min" | "h" | "day" | "week" | "month";
+
+// Seconds come from the stored 15- and 30-second bars: 15s, 30s or 45s (others go to the nearest)
+const secondsInterval = (n: number) => `${Math.min(45, Math.max(15, Math.round(n / 15) * 15))}s`;
 
 export default function ChangeIntervalModal({ initialDigit, currentInterval, startInCustomForm, onApply, onClose, theme }: ChangeIntervalModalProps) {
   const [value, setValue] = useState(initialDigit ? initialDigit : currentInterval ? toShortLabel(currentInterval) : "");
@@ -104,9 +108,8 @@ export default function ChangeIntervalModal({ initialDigit, currentInterval, sta
       const n = customParsed!;
       switch (customUnit) {
         case "s": {
-          // Sub-minute intervals only come from the MT5/ClickHouse 30-second feed;
-          // anything else is clamped to the 30-second bar.
-          onApply(n === 30 ? "30s" : "30s", "30s");
+          const v = secondsInterval(n);
+          onApply(v, v);
           return;
         }
         case "min": {
@@ -143,10 +146,8 @@ export default function ChangeIntervalModal({ initialDigit, currentInterval, sta
     const { num, unit } = parsed;
 
     if (unit === "s") {
-      // Sub-minute intervals only come from the MT5/ClickHouse 30-second feed;
-      // anything else is clamped to the 30-second bar.
-      const v = num === 30 ? "30s" : "30s";
-      onApply(v, "30s");
+      const v = secondsInterval(num);
+      onApply(v, v);
       return;
     }
     if (unit === "h") {
@@ -277,7 +278,7 @@ export default function ChangeIntervalModal({ initialDigit, currentInterval, sta
                   outline: "none", fontWeight: 500,
                 }}
               />
-              <select
+              <TvSelect
                 value={customUnit}
                 onChange={e => {
                   const u = e.target.value as IntervalUnit;
@@ -294,7 +295,7 @@ export default function ChangeIntervalModal({ initialDigit, currentInterval, sta
                 {(Object.keys(UNIT_NAMES) as IntervalUnit[]).map(u => (
                   <option key={u} value={u}>{UNIT_NAMES[u]}</option>
                 ))}
-              </select>
+              </TvSelect>
             </div>
             <button
               type="button"

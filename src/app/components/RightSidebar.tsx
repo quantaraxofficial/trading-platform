@@ -83,12 +83,21 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     { icon: <Keyboard {...i18} />, label: "Keyboard shortcuts", hint: "Ctrl + /", onClick: () => onOpenShortcuts?.() },
   ];
 
+  // The strip scrolls when the window is short, which would clip a tooltip beside it: the hovered
+  // button's tooltip is fixed to the window instead
+  const placeTip = (e: React.MouseEvent) => {
+    const box = (e.target as HTMLElement).closest<HTMLElement>(".tv-tooltip-container");
+    const tip = box?.querySelector<HTMLElement>(".tv-tooltip");
+    if (!box || !tip) return;
+    const r = box.getBoundingClientRect();
+    Object.assign(tip.style, { position: "fixed", top: `${r.top + r.height / 2}px`, left: `${r.left - 6}px`, right: "auto", marginRight: "0", transform: "translate(-100%, -50%)" });
+  };
   const tooltip = (text: string, hidden = false) => !hidden && (
     <div className="tv-tooltip" style={{ right: "100%", top: "50%", transform: "translateY(-50%)", marginRight: "6px" }}>{text}</div>
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%", height: "100%", padding: "2px 0" }}>
+    <div onMouseOver={placeTip} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%", minHeight: "100%", flexShrink: 0, padding: "2px 0" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
         {panels.map(p => (
           <div key={p.id} className="tv-tooltip-container">

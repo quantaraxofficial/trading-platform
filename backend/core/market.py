@@ -9,6 +9,10 @@ months are calendar months.
 
 The bar being built right now (inside the current 30 seconds) lives in memory only: closed
 30-second bars go to ClickHouse, and each candles reply adds the open one on top.
+
+15 and 45 seconds can't be made from 30-second bars: the collector also stores 15-second bars, in
+tick_bars_15s (from when it started doing so, plus the week it catches up on), and those charts
+are built from them.
 """
 import hmac
 import json
@@ -73,8 +77,8 @@ def parse_interval(interval: str):
         return None
     if unit in ("s", "min", "h"):
         secs = n * {"s": 1, "min": 60, "h": 3600}[unit]
-        # Built from 30-second bars: shorter or uneven lengths can't be made from them
-        if secs % 30 or secs > 86400:
+        # Built from 30-second bars, or 15-second ones for 15 s / 45 s: other lengths can't be made
+        if secs % 15 or secs > 86400:
             return None
         return ("intraday", secs)
     return (unit, n)
@@ -113,6 +117,30 @@ def bucket_of(kind: str, n: int, t_ms: int) -> int:
     return int(datetime(mon // 12, mon % 12 + 1, 1, tzinfo=timezone.utc).timestamp())
 
 
+def _table(kind: str, n: int) -> str:
+    """The stored bars a timeframe is built from"""
+    return "tick_bars_15s" if kind == "intraday" and n % 30 else "tick_bars"
+
+
+_bars15_ready = False
+
+
+def _ensure_bars15(ch) -> None:
+    """The 15-second bars' table (made the first time it's needed), like tick_bars"""
+    global _bars15_ready
+    if _bars15_ready:
+        return
+    from pipeline.config import CONFIG
+    sql = (f"CREATE TABLE IF NOT EXISTS {_db()}.tick_bars_15s ("
+           " symbol LowCardinality(String), ts DateTime64(3, 'UTC') CODEC(Delta, ZSTD(3)),"
+           " open Float64, high Float64, low Float64, close Float64, ticks UInt32)"
+           " ENGINE = ReplacingMergeTree() ORDER BY (symbol, ts)"
+           f" TTL toDateTime(ts) + toIntervalDay({CONFIG.DATA_TTL_DAYS}) SETTINGS index_granularity = 8192")
+    r = ch._session.post(f"{ch._base}/", params={"database": _db()}, data=sql.encode(), timeout=30)
+    r.raise_for_status()
+    _bars15_ready = True
+
+
 def _span(kind: str, n: int) -> int:
     return {"intraday": n, "day": 86400 * n, "week": 7 * 86400 * n, "month": 31 * 86400 * n}[kind]
 
@@ -148,11 +176,13 @@ def query_bars(symbol: str, kind: str, n: int, end: int | None, start: int | Non
         "sum(ticks) AS v FROM ("
         f"SELECT ts, open, high, low, close, ticks, toUnixTimestamp(ts) AS u, "
         f"u + {SERVER_SHIFT} + timeZoneOffset(toTimeZone(ts, 'America/New_York')) AS s, "
-        f"{_bucket_sql(kind, n)} AS k FROM {_db()}.tick_bars WHERE {' AND '.join(where)}"
+        f"{_bucket_sql(kind, n)} AS k FROM {_db()}.{_table(kind, n)} WHERE {' AND '.join(where)}"
         f") GROUP BY k {'HAVING ' + ' AND '.join(having) if having else ''} "
         f"ORDER BY k DESC LIMIT {limit} FORMAT JSONCompact"
     )
     ch = _ch()
+    if _table(kind, n) == "tick_bars_15s":
+        _ensure_bars15(ch)
     r = ch._session.post(f"{ch._base}/", params={"database": _db()}, data=sql.encode(), timeout=20)
     r.raise_for_status()
     rows = json.loads(r.text)["data"]
@@ -162,9 +192,11 @@ def query_bars(symbol: str, kind: str, n: int, end: int | None, start: int | Non
 
 def _with_live(symbol: str, kind: str, n: int, bars: list) -> list:
     live = LIVE.get(symbol)
-    if not live or not live.get("bar"):
+    # (the open 15-second bar for timeframes built from 15-second bars)
+    open_bar = live and live.get("bar15" if _table(kind, n) == "tick_bars_15s" else "bar")
+    if not open_bar:
         return bars
-    t, o, h, l, c, cnt = live["bar"]
+    t, o, h, l, c, cnt = open_bar
     k = bucket_of(kind, n, t)
     if bars and bars[-1][0] == k:
         last = bars[-1]
@@ -267,9 +299,11 @@ def _bar(row) -> list:
 @throttle_classes([])
 def ingest(request):
     """The MT5 collector's endpoint (header X-Ingest-Token).
-    GET ?symbol= -> {"last_ts": ms of the newest stored 30-second bar} (where to resume from).
+    GET ?symbol=[&res=15] -> {"last_ts": ms of the newest stored 30-second (15-second) bar}
+    (where to resume from).
     POST {"symbol", "ticks": [[t_ms, bid, ask], …], "bar": [t_ms, o, h, l, c, n] (open bar),
-          "closed": [[t_ms, o, h, l, c, n], …]} -> closed bars to ClickHouse, ticks to the charts."""
+          "closed": [[t_ms, o, h, l, c, n], …], "bar15", "closed15" (the same for 15-second bars)}
+    -> closed bars to ClickHouse, ticks to the charts."""
     if not _authorized(request):
         return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
     if request.method == "GET":
@@ -277,7 +311,11 @@ def ingest(request):
         if not SYMBOL_RE.match(sym):
             return Response({"error": "bad symbol"}, status=status.HTTP_400_BAD_REQUEST)
         ch = _ch()
-        rows = ch.query(f"SELECT toUnixTimestamp64Milli(max(ts)) AS t FROM {_db()}.tick_bars WHERE symbol = '{sym}'")
+        table = "tick_bars"
+        if request.query_params.get("res") == "15":
+            _ensure_bars15(ch)
+            table = "tick_bars_15s"
+        rows = ch.query(f"SELECT toUnixTimestamp64Milli(max(ts)) AS t FROM {_db()}.{table} WHERE symbol = '{sym}'")
         return Response({"last_ts": int(rows[0]["t"]) if rows and rows[0].get("t") not in (None, "") else 0})
 
     d = request.data if isinstance(request.data, dict) else {}
@@ -288,13 +326,19 @@ def ingest(request):
         ticks = [(int(t), _num(b), _num(a)) for t, b, a in (d.get("ticks") or [])[:MAX_TICKS_PER_POST]]
         closed = [_bar(r) for r in (d.get("closed") or [])[:MAX_CLOSED_PER_POST]]
         bar = _bar(d["bar"]) if d.get("bar") else None
+        closed15 = [_bar(r) for r in (d.get("closed15") or [])[:MAX_CLOSED_PER_POST]]
+        bar15 = _bar(d["bar15"]) if d.get("bar15") else None
     except (TypeError, ValueError, KeyError):
         return Response({"error": "bad payload"}, status=status.HTTP_400_BAD_REQUEST)
 
-    if closed:
-        body = "\n".join(f"{sym}\t{t / 1000:.3f}\t{o}\t{h}\t{l}\t{c}\t{n}" for t, o, h, l, c, n in closed) + "\n"
+    for table, rows in (("tick_bars", closed), ("tick_bars_15s", closed15)):
+        if not rows:
+            continue
+        body = "\n".join(f"{sym}\t{t / 1000:.3f}\t{o}\t{h}\t{l}\t{c}\t{n}" for t, o, h, l, c, n in rows) + "\n"
         ch = _ch()
-        r = ch._session.post(f"{ch._base}/", params={"database": _db(), "query": f"INSERT INTO {_db()}.tick_bars FORMAT TabSeparated"},
+        if table == "tick_bars_15s":
+            _ensure_bars15(ch)
+        r = ch._session.post(f"{ch._base}/", params={"database": _db(), "query": f"INSERT INTO {_db()}.{table} FORMAT TabSeparated"},
                              data=body.encode(), timeout=30)
         if r.status_code // 100 != 2:
             return Response({"error": "store failed"}, status=status.HTTP_502_BAD_GATEWAY)
@@ -305,6 +349,8 @@ def ingest(request):
         live["rx"] = time.time()
         if bar:
             live["bar"] = bar
+        if bar15:
+            live["bar15"] = bar15
         if ticks:
             t, bid, ask = ticks[-1]
             live.update(t=t, bid=bid, ask=ask)
@@ -315,4 +361,4 @@ def ingest(request):
         layer = get_channel_layer()
         if layer is not None:
             async_to_sync(layer.group_send)(group_of(sym), {"type": "tick.message", "data": msg})
-    return Response({"ok": True, "stored": len(closed)})
+    return Response({"ok": True, "stored": len(closed), "stored15": len(closed15)})

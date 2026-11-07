@@ -5,6 +5,7 @@ import { DualRangeSlider } from './DualRangeSlider';
 import { NumberInput as GlobalNumberInput } from './NumberInput';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
 import { PaletteInput } from "./PaletteInput";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 interface PositionSettingsModalProps {
   type: 'long' | 'short';
@@ -82,7 +83,7 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
 function Select({ options, value, onChange, style }: { options: string[]; value: string; onChange?: (val: string) => void; style?: React.CSSProperties }) {
   return (
     <div style={{ position: 'relative', ...style }}>
-      <select
+      <TvSelect
         value={value}
         onChange={(e) => onChange && onChange(e.target.value)}
         style={{
@@ -100,7 +101,7 @@ function Select({ options, value, onChange, style }: { options: string[]; value:
         }}
       >
         {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-      </select>
+      </TvSelect>
       <div style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
         <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="var(--tv-sub-text)" strokeWidth="1.2"><path d="M1 1L5 5L9 1"></path></svg>
       </div>
@@ -267,7 +268,7 @@ export function PositionSettingsModal({ type, onClose }: PositionSettingsModalPr
   const tabs = ['Inputs', 'Style', 'Visibility'];
 
   return (
-    <div
+    <div data-tv-settings-dialog
       style={{
         position: 'fixed',
         left: position.x,

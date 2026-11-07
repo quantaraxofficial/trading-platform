@@ -5,6 +5,7 @@ import { DualRangeSlider } from './DualRangeSlider';
 import { ColorPickerPopup } from './ColorPickerPopup';
 import { useEscapeClose } from "../../../lib/useEscapeClose";
 import { PaletteInput } from "./PaletteInput";
+import TvSelect from "@/app/components/ui/TvSelect";
 
 interface RectangleSettingsModalProps {
   onClose: () => void;
@@ -138,7 +139,7 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
   const tabs = ['Style', 'Text', 'Coordinates', 'Visibility'];
 
   return (
-    <div
+    <div data-tv-settings-dialog
       style={{
         position: 'fixed', left: position.x, top: position.y, width: '380px',
         backgroundColor: 'var(--tv-sub-bg)', borderRadius: '8px',
@@ -195,7 +196,7 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
             {/* Extend */}
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <div style={{ width: '100px', fontSize: '13px', color: 'var(--tv-sub-text)' }}>Extend</div>
-              <select 
+              <TvSelect 
                 value={selectedShape?.extendLeft && selectedShape?.extendRight ? 'Both' : selectedShape?.extendRight ? 'Right' : selectedShape?.extendLeft ? 'Left' : 'None'}
                 onChange={(e) => {
                   const val = e.target.value;
@@ -210,7 +211,7 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
                 <option value="Right">Extend Right</option>
                 <option value="Left">Extend Left</option>
                 <option value="Both">Extend Both</option>
-              </select>
+              </TvSelect>
             </div>
 
             {/* Border */}

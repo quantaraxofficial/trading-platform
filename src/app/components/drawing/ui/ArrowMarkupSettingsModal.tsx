@@ -137,7 +137,7 @@ export function ArrowMarkupSettingsModal({ onClose, type }: ArrowMarkupSettingsM
   const title = type === 'arrow_mark_up' ? 'Arrow mark up' : 'Arrow mark down';
 
   return (
-    <div
+    <div data-tv-settings-dialog
       style={{
         position: 'fixed', left: position.x, top: position.y, width: '370px',
         backgroundColor: 'var(--tv-sub-bg)', borderRadius: '8px',

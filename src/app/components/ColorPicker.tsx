@@ -120,6 +120,7 @@ export default function ColorPicker({ color, onChange, onClose, theme = 'light',
           hex={baseHex}
           isDark={isDark}
           onApply={(hex) => { handleColorClick(hex); setShowCustomPicker(false); }}
+          onPick={handleColorClick}
         />
       ) : (
         <>

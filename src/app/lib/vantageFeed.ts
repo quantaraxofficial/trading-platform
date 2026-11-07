@@ -19,7 +19,7 @@ export const isVantageSymbol = (symbol: string) => VANTAGE_SYMBOLS.has(norm(symb
 type Spec = { kind: "intraday" | "day" | "week" | "month"; n: number };
 
 // "30s", "15min", "4h", "1day", "1week", "3month" → how the backend builds it; null when it can't
-// be made from 30-second bars (seconds below 30, range / tick charts)
+// be made from the stored 30- or 15-second bars (other seconds, range / tick charts)
 export function vantageInterval(interval: string): Spec | null {
   const m = /^(\d+)(s|min|h|day|week|month)$/.exec(interval);
   if (!m) return null;
@@ -27,7 +27,8 @@ export function vantageInterval(interval: string): Spec | null {
   if (!(n > 0)) return null;
   if (m[2] === "s" || m[2] === "min" || m[2] === "h") {
     const secs = n * (m[2] === "s" ? 1 : m[2] === "min" ? 60 : 3600);
-    return secs % 30 === 0 && secs <= 86400 ? { kind: "intraday", n: secs } : null;
+    // (15 s / 45 s come from the 15-second bars the server keeps too)
+    return secs % 15 === 0 && secs <= 86400 ? { kind: "intraday", n: secs } : null;
   }
   return { kind: m[2] as Spec["kind"], n };
 }

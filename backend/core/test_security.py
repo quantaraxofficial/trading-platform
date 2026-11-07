@@ -103,7 +103,7 @@ class LiveDataInjectionTests(TestCase):
             for evil in ["XAUUSD' OR 1=1 --", "x\\' UNION SELECT", 'A"B', "AAPL;DROP TABLE x", "a" * 40]:
                 r = self.c.get("/api/users/live/candles/", {"symbol": evil, "interval": "1min"})
                 self.assertEqual(r.status_code, 400, evil)
-            for evil in ["1min' OR 1=1", "7x", "45s"]:
+            for evil in ["1min' OR 1=1", "7x", "20s"]:
                 r = self.c.get("/api/users/live/candles/", {"symbol": "XAUUSD", "interval": evil})
                 self.assertEqual(r.status_code, 400, evil)
             self.assertEqual(ch._session.post.call_count, 0)
