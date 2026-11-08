@@ -184,13 +184,13 @@ class SeveralActionsTests(TestCase):
         me = TraderProfile.objects.create(uid="u1", name="A", email="a@example.com")
         UserSession.objects.create(user=me, session_key="sk1")
 
-    def test_up_to_three_checked_actions(self):
+    def test_several_checked_actions_in_order(self):
         content = {"reply": "Done.", "actions": [{"type": "chart_type", "chart_type": "ha"}, {"type": "theme", "theme": "sepia"},
                                                   {"type": "nonsense"}, {"type": "reset_view"}, {"type": "price"}]}
         with mock.patch("core.voice.requests.post", return_value=answer(content)):
             r = APIClient().post("/api/users/voice/ask/u1/?session_key=sk1", {"text": "x"}, format="json")
-        # the first three looked at, the unknown one dropped
-        self.assertEqual([a["type"] for a in r.data["actions"]], ["chart_type", "theme"])
+        # all done in order, the unknown one dropped
+        self.assertEqual([a["type"] for a in r.data["actions"]], ["chart_type", "theme", "reset_view", "price"])
         self.assertEqual(r.data["action"]["type"], "chart_type")
 
 
@@ -312,3 +312,17 @@ class FunctionAsTypeTests(TestCase):
         fns = ["watchlist_add", "go_to_date"]
         self.assertEqual(clean_action({"type": "watchlist_add", "symbol": "EUR/USD"}, (), fns), {"type": "call", "fn": "watchlist_add", "args": {"symbol": "EUR/USD"}})
         self.assertEqual(clean_action({"type": "go_to_date", "args": {"date": "2025-03-03", "time": "14:00"}}, (), fns)["args"], {"date": "2025-03-03", "time": "14:00"})
+
+
+@override_settings(GROQ_API_KEY="groq-key", GROQ_MODEL="g", GEMINI_API_KEY="", VOICE_AI_DAILY_LIMIT=5)
+class EightActionsTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        me = TraderProfile.objects.create(uid="u1", name="A", email="a@example.com")
+        UserSession.objects.create(user=me, session_key="sk1")
+
+    def test_up_to_eight(self):
+        content = {"reply": "On it.", "actions": [{"type": "price"}] * 10}
+        with mock.patch("core.voice.requests.post", return_value=answer(content)):
+            r = APIClient().post("/api/users/voice/ask/u1/?session_key=sk1", {"text": "x"}, format="json")
+        self.assertEqual(len(r.data["actions"]), 8)

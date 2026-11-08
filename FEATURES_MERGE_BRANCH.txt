@@ -430,6 +430,11 @@ Posting signals out
     on screen; emoji by name or the emoji; the AI writes the text; brush loop / underline / line /
     zigzag; the highlighter as a band as tall as the zone; size and colour. Made exactly as clicks
     would make them, so they're ordinary drawings
+  - Several instructions in one go (up to 8: "switch to euro dollar hourly, mark the order
+    blocks, add RSI and go ocean"), done one after another; after a symbol, timeframe, date
+    range or layout change the next waits for the new chart's bars (so the marks are the new
+    symbol's); a question ("which one?") stops the rest, a yes / no keeps them for after the
+    yes; requests said or typed one after another are answered in order
   - Writing with the brush by voice ("write Rahul with the brush", "write Gold 2650 big at the
     top"): a single-stroke handwriting font (capitals, digits, . , ! ? - ' / : +; lowercase
     written in capitals) laid out at any spot, size and colour, its letters keeping their shape

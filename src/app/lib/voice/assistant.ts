@@ -16,12 +16,12 @@
 
 import { useSyncExternalStore } from "react";
 import { intervalByValue, type Intent, type Interval, type MarkKind, type Invitee } from "./commands";
-import { voiceCommand, voiceCommands, voiceContext, pickTool, voiceFunction, voiceFunctions } from "./registry";
+import { voiceCommand, voiceCommands, voiceContext, pickTool, voiceFunction, voiceFunctions, VoiceQuestion } from "./registry";
 import { findTool } from "./tools";
 import { collab, collabApi, collabLink, type Person, type RoomInfo, type Member } from "../collab/session";
 import { openCollab } from "../../components/collab/CollabController";
 import { markOnChart, clearMarks, countMarks, MARK_NAMES } from "./marks";
-import { getChartInfo } from "../chartBars";
+import { getChartInfo, getChartBars } from "../chartBars";
 import { setChartType, type ChartType } from "../chartType";
 import { chartSettings, themeCanvas } from "../chartSettings";
 import { themeSettings } from "../siteThemes";
@@ -333,7 +333,7 @@ async function run(intent: Intent, reply?: string, quiet = false, confirmed = fa
       return;
     case "backtest_new": {
       // (the AI should have asked for a start date; if not, ask: the answer goes back to it)
-      if (!intent.start) { say("From which date should the backtest start? For example: 1 March 2024."); return; }
+      if (!intent.start) { chainStop = true; say("From which date should the backtest start? For example: 1 March 2024."); return; }
       const plan = backtestPlan(intent);
       if (typeof plan === "string") { say(plan); return; }
       if (!confirmed) {
@@ -393,6 +393,7 @@ async function run(intent: Intent, reply?: string, quiet = false, confirmed = fa
         fire("tv:replay-start", { kind: "random" });
         confirm("Starting bar replay from a random date.");
       } else {
+        chainStop = true;
         say("From which date? For example: 1 March 2024. Or say: a random date.");
       }
       return;
@@ -461,6 +462,8 @@ async function callFunction(intent: Extract<Intent, { kind: "call" }>, confirmed
     const out = await f.run(intent.args);
     if (out || !quiet) say(out || reply || "Done.");
   } catch (e: any) {
+    // (a question back to the trader: the actions after this one wait for their answer)
+    if (e instanceof VoiceQuestion) chainStop = true;
     say(e?.message || "Something went wrong doing that.");
   }
 }
@@ -673,10 +676,7 @@ async function askAI(text: string) {
     const intents = (Array.isArray(data.actions) ? data.actions : [data.action]).map(intentOf).filter((x: Intent | null): x is Intent => !!x);
     const reply = typeof data.reply === "string" && data.reply ? data.reply : undefined;
     if (!intents.length) { say(reply ?? "Sorry, I don't have an answer for that."); return; }
-    for (let i = 0; i < intents.length; i++) {
-      await run(intents[i], i === 0 ? reply : undefined, i > 0);
-      if (confirmPending) { confirmPending.then = intents.slice(i + 1); if (i === 0) confirmPending.reply = reply; break; }
-    }
+    await runChain(intents, reply);
   } catch {
     set({ thinking: false });
     say("I couldn't reach my AI just now. Try again in a moment.");
@@ -696,14 +696,63 @@ export function handleText(text: string) {
     const low = t.toLowerCase().replace(/[.!?,]+/g, " ").trim();
     if (YES.test(low)) {
       clearConfirm();
-      (async () => { await run(c.intent, c.intent.kind === "command" ? c.reply : undefined, false, true); for (const i of c.then) await run(i, undefined, true); })()
-        .catch(() => say("Something went wrong doing that."));
+      queue(() => runChain([c.intent, ...c.then], c.intent.kind === "command" ? c.reply : undefined, true));
       return;
     }
     clearConfirm();
     if (NO.test(low)) { say("Okay, I won't."); return; }
   }
-  askAI(t).catch(() => say("Something went wrong doing that."));
+  queue(() => askAI(t));
+}
+
+// One request at a time, in the order they came (speech can split a sentence into two)
+let queueTail: Promise<void> = Promise.resolve();
+function queue(job: () => Promise<void>) {
+  queueTail = queueTail.then(job).catch(() => { say("Something went wrong doing that."); });
+}
+
+// ---- several actions in one go -------------------------------------------------------------------
+// One after another. After one that changes what the chart shows (symbol, timeframe, date range,
+// layout) the next waits until the chart has its new bars, so "switch to EUR/USD and mark the order
+// blocks" marks EUR/USD's. A question (a function asking which one…) stops there: the rest would
+// guess; a yes / no question keeps them for after the yes.
+let chainStop = false;
+async function runChain(intents: Intent[], reply?: string, firstConfirmed = false) {
+  chainStop = false;
+  for (let i = 0; i < intents.length; i++) {
+    const before = getChartInfo();
+    const barsBefore = getChartBars().length;
+    await run(intents[i], i === 0 ? reply : undefined, i > 0, firstConfirmed && i === 0);
+    if (confirmPending) { confirmPending.then = intents.slice(i + 1); if (i === 0) confirmPending.reply = reply; return; }
+    if (chainStop) return;
+    if (i < intents.length - 1 && changesChart(intents[i])) await chartSettled(intents[i], before, barsBefore);
+  }
+}
+function changesChart(it: Intent): boolean {
+  return it.kind === "symbol" || it.kind === "interval" || it.kind === "replay"
+    || (it.kind === "command" && /^(range-|layout-|replay-)/.test(it.id))
+    || (it.kind === "call" && (it.fn === "layout_open" || it.fn === "go_to_date"));
+}
+async function chartSettled(it: Intent, before: { symbol: string; interval: string } | null, barsBefore: number) {
+  const norm = (s?: string) => (s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const want = (info: { symbol: string; interval: string } | null) => {
+    if (!info) return false;
+    if (it.kind === "symbol") return norm(info.symbol) === norm(it.symbol) && (!it.interval || info.interval === it.interval.value);
+    if (it.kind === "interval") return info.interval === it.interval.value;
+    return true;
+  };
+  const start = Date.now();
+  let stable = 0, lastCount = -1;
+  while (Date.now() - start < 8000) {
+    await new Promise(r => setTimeout(r, 150));
+    const n = getChartBars().length;
+    const info = getChartInfo();
+    // (a switch: the chart says the new symbol / timeframe, its bars have changed and stopped changing)
+    const switched = want(info) && (it.kind !== "symbol" && it.kind !== "interval" ? true : norm(info?.symbol) !== norm(before?.symbol) || info?.interval !== before?.interval || n !== barsBefore);
+    stable = n > 0 && n === lastCount ? stable + 1 : 0;
+    lastCount = n;
+    if (switched && stable >= 3 && Date.now() - start > 450) return;
+  }
 }
 
 export function clearVoiceChat() { clearConfirm(); set({ messages: [] }); }

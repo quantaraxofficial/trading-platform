@@ -27,6 +27,7 @@ from .auth import require_session
 TIMEOUT = 20
 MAX_TEXT = 500
 MAX_HISTORY = 8
+MAX_ACTIONS = 8          # instructions given in one go, done one after another
 
 INTERVALS = {"1min", "5min", "15min", "30min", "45min", "1h", "2h", "4h", "1day", "1week", "1month"}
 PANELS = {"watchlist", "alerts", "object_tree", "collab", "chats", "notifications", "backtest_sessions"}
@@ -59,7 +60,7 @@ LENGTH_UNITS = {"hours", "days", "weeks", "months", "years"}
 
 # (kept short: the free tier counts tokens per minute and per day, and this goes with every request)
 SYSTEM_PROMPT = """You are the voice assistant of TradePilot, a TradingView-like charting site. Your reply is spoken aloud and subtitled.
-Answer with JSON only: {"reply": "...", "actions": [{"type": ..., fields}, ...]} (no actions: []; at most 3, done in order).
+Answer with JSON only: {"reply": "...", "actions": [{"type": ..., fields}, ...]} (no actions: []; up to 8, done in order: do every instruction given, in the order given).
 reply: one or two short plain spoken sentences, no markdown or emoji. With an action, say what you're doing ("Marking the order blocks.").
 You are the site's only way of understanding the trader: every request comes to you. If something you need is missing or could mean different things, ask one short question instead of guessing: put it in reply, actions [], and "question": true; their answer comes next with this conversation, so then do what they asked. Don't ask about what has a default: the chart's symbol and timeframe, a 10,000 balance, a backtest without an end. A backtest needs a start date: ask for it. Asked what you can do: name a few things briefly.
 Actions:
@@ -340,7 +341,7 @@ def ask(request, uid):
             continue
         reply = str(data.get("reply") or "").strip()[:600]
         raw = data.get("actions") if isinstance(data.get("actions"), list) else [data.get("action")]
-        actions = [x for x in (clean_action(r, commands, functions) for r in raw[:3]) if x]
+        actions = [x for x in (clean_action(r, commands, functions) for r in raw[:MAX_ACTIONS]) if x]
         if not reply and not actions:
             failures.append(f"{name}: empty answer")
             continue
