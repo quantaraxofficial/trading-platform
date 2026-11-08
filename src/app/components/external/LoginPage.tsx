@@ -39,7 +39,7 @@ export default function LoginPage() {
       } else {
         try { localStorage.setItem('tv_keep_me', '1'); } catch { /* ignore */ }
       }
-      router.push('/');
+      router.push('/chart');
     } catch (err: any) {
       setError(err.message || 'Sign-in failed');
     } finally {
@@ -52,7 +52,7 @@ export default function LoginPage() {
     setError('');
     setBusy(true);
     try {
-      if (await signInWithGoogle()) router.push('/');
+      if (await signInWithGoogle()) router.push('/chart');
     } catch (err: any) {
       setError(err.message || 'Google sign-in failed');
     } finally {

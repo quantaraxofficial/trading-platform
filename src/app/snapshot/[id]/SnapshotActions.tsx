@@ -27,7 +27,7 @@ export default function SnapshotActions({ symbol }: { symbol: string }) {
         {copied ? 'Link copied' : 'Copy link'}
       </button>
       <a
-        href={`/?symbol=${encodeURIComponent(symbol)}`}
+        href={`/chart?symbol=${encodeURIComponent(symbol)}`}
         style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', color: '#131722', fontSize: 15, fontWeight: 500, padding: '10px 18px', borderRadius: 6, textDecoration: 'none' }}
       >
         <ChartNoAxesCombined size={18} />
