@@ -122,13 +122,17 @@
   --tv-trade-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
+/* Only the page itself scrolls: when html and body both had overflow-y: auto (and body
+   overflow-x: hidden, which turns body into a scroll box of its own), a tall page such as
+   About showed two scroll bars. body clips sideways overflow without becoming a scroller */
+html { overflow-x: hidden; overflow-y: auto; }
+body { overflow-x: clip; }
+
 html, body {
   margin: 0;
   padding: 0;
   width: 100%;
   min-height: 100vh;
-  overflow-x: hidden;
-  overflow-y: auto;
   background-color: var(--tv-color-bg);
   color: var(--tv-color-text);
   font-family: -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif;

@@ -12,7 +12,7 @@ export default function AboutPage() {
       backgroundColor: '#0f172a', 
       color: 'white', 
       position: 'relative', 
-      overflowX: 'hidden',
+      overflow: 'clip', // clips the glows without a second scroll bar (hidden would scroll)
       fontFamily: 'Inter, sans-serif'
     }}>
       {/* Abstract Background Gradients */}

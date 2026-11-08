@@ -1,8 +1,10 @@
-// "Coming soon": what's built on the next version of the site (the merge branch) and not here yet.
-// On the home page (the full cards), About (the cards) and Contact (one compact line).
+// "Coming soon": what's built on the next version of the site (the merge branch) and not here yet,
+// and "On the roadmap": what's planned and not built anywhere yet (FEATURE_IDEAS.txt). On the home
+// page (the full cards), About (the cards) and Contact (one compact line).
 
 import React from 'react';
-import { Mic, Copy, Bot, Users, MessagesSquare, SlidersHorizontal, Code2, Palette, LayoutDashboard } from 'lucide-react';
+import { Mic, Copy, Bot, Users, MessagesSquare, SlidersHorizontal, Code2, Palette, LayoutDashboard, ShieldCheck, ShieldAlert, Brain,
+  CalendarClock, Send, PlayCircle, NotebookPen, BadgeCheck, Trophy, Lightbulb, KeyRound, Smartphone, Gem } from 'lucide-react';
 
 export const COMING_SOON: { icon: React.ReactNode; title: string; description: string }[] = [
   { icon: <Mic className="w-7 h-7" />, title: 'Voice assistant',
@@ -25,8 +27,27 @@ export const COMING_SOON: { icon: React.ReactNode; title: string; description: s
     description: 'Drag the toolbars and panels anywhere on the screen and save the layouts you like.' },
 ];
 
-const Badge = () => (
-  <span className="text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-purple-700/40 text-purple-200 border border-purple-600/50">Coming soon</span>
+// Planned: not built yet
+export const ROADMAP: { icon: React.ReactNode; title: string; description: string }[] = [
+  { icon: <ShieldCheck className="w-6 h-6" />, title: 'Prop firm rule guard', description: "Pick your prop firm and account; get warned before a trade breaks its drawdown or hidden rules." },
+  { icon: <ShieldAlert className="w-6 h-6" />, title: 'Risk guard', description: 'Daily loss and position limits on your own account, enforced before an order goes out.' },
+  { icon: <Brain className="w-6 h-6" />, title: 'AI trade coach', description: 'Reads your journal and results, and points out the patterns that cost you.' },
+  { icon: <CalendarClock className="w-6 h-6" />, title: 'Economic calendar', description: 'High-impact news on the chart, with an option to pause trading around it.' },
+  { icon: <Send className="w-6 h-6" />, title: 'Alerts to Telegram', description: 'Your price alerts sent to Telegram and to your own webhooks.' },
+  { icon: <PlayCircle className="w-6 h-6" />, title: 'Trade replay', description: 'Replay any trade from your journal bar by bar, right in Trade Analysis.' },
+  { icon: <NotebookPen className="w-6 h-6" />, title: 'Journal reminders', description: 'A weekly review of your trades, and reminders to journal the ones you missed.' },
+  { icon: <BadgeCheck className="w-6 h-6" />, title: 'Verified track records', description: 'A verified badge for results that come straight from your broker history.' },
+  { icon: <Trophy className="w-6 h-6" />, title: 'Leaderboards', description: 'Top traders, scripts and signal channels by verified performance.' },
+  { icon: <Lightbulb className="w-6 h-6" />, title: 'Ideas feed', description: 'Publish chart ideas and follow the ones from traders you like.' },
+  { icon: <KeyRound className="w-6 h-6" />, title: 'Two-factor sign-in', description: 'A second step at sign-in, and a list of the devices signed in to your account.' },
+  { icon: <Smartphone className="w-6 h-6" />, title: 'Mobile layout', description: 'The chart, positions and alerts laid out for your phone.' },
+  { icon: <Gem className="w-6 h-6" />, title: 'Paid channels and scripts', description: 'Charge a monthly price for your signal channel or private scripts.' },
+];
+
+const Badge = ({ planned = false }: { planned?: boolean }) => (
+  <span className={`text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${planned ? 'bg-indigo-900/40 text-indigo-200 border-indigo-600/50' : 'bg-purple-700/40 text-purple-200 border-purple-600/50'}`}>
+    {planned ? 'Planned' : 'Coming soon'}
+  </span>
 );
 
 // The cards (home page, About)
@@ -53,6 +74,27 @@ export default function ComingSoon({ heading = true }: { heading?: boolean }) {
           </div>
         ))}
       </div>
+
+      {/* Planned: not built yet */}
+      <div className="text-center mt-16 mb-8">
+        <h3 className="text-2xl md:text-3xl font-bold mb-2">
+          <span className="bg-gradient-to-r from-indigo-300 to-purple-400 bg-clip-text text-transparent">On the roadmap</span>
+        </h3>
+        <p className="text-purple-400">Planned next, after what&apos;s above.</p>
+      </div>
+      {/* rows of four, the last row centred */}
+      <div className="flex flex-wrap justify-center gap-4" data-name="roadmap">
+        {ROADMAP.map(f => (
+          <div key={f.title} className="w-full sm:w-[calc(50%-0.5rem)] lg:w-[calc(25%-0.75rem)] bg-black/40 backdrop-blur-sm border border-indigo-900/60 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-indigo-400">{f.icon}</span>
+              <Badge planned />
+            </div>
+            <h4 className="font-bold text-white mb-1">{f.title}</h4>
+            <p className="text-purple-300 text-sm leading-relaxed">{f.description}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -63,6 +105,8 @@ export function ComingSoonLine() {
     <p className="text-purple-300 text-sm leading-relaxed" data-name="coming-soon-line">
       <span className="font-semibold text-white">Coming soon: </span>
       {COMING_SOON.map(f => f.title).join(' · ')}.{' '}
+      <span className="font-semibold text-white">On the roadmap: </span>
+      {ROADMAP.map(f => f.title).join(' · ')}.{' '}
       <a href="/#coming-soon" className="text-purple-200 underline hover:text-white">See what&apos;s coming</a>
     </p>
   );
