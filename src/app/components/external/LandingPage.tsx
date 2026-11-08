@@ -72,7 +72,7 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="bg-gradient-to-br from-black via-purple-950 to-black text-white overflow-x-hidden">
+    <div data-site-page className="bg-gradient-to-br from-black via-purple-950 to-black text-white overflow-x-hidden">
       {/* Background Blobs */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
         <div className="blob blob-1"></div>

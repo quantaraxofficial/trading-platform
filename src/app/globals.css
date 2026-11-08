@@ -128,6 +128,12 @@
 html { overflow-x: hidden; overflow-y: auto; }
 body { overflow-x: clip; }
 
+/* The site's own pages (home, sign-in, About, Contact; their root has data-site-page) size text
+   in rem, so the chart's 13px base below made them about 80% size. They get a normal 16px
+   base that grows a little on large screens (about 17.6px at 1920 wide, at most 19px) */
+html:has([data-site-page]) { font-size: clamp(16px, calc(0.45vw + 9px), 19px); }
+html:has([data-site-page]) body { font-size: 1rem; }
+
 html, body {
   margin: 0;
   padding: 0;

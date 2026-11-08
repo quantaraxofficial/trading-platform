@@ -60,7 +60,7 @@ export default function LoginPage() {
   const field = "w-full bg-gray-900/50 border border-purple-700/50 rounded-lg py-3 text-white placeholder-purple-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all";
 
   return (
-    <div className="min-h-screen relative bg-gradient-to-br from-black via-purple-950 to-black text-white">
+    <div data-site-page className="min-h-screen relative bg-gradient-to-br from-black via-purple-950 to-black text-white">
       {/* The home page's background blobs */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
         <div className="blob blob-1"></div>

@@ -7,7 +7,7 @@ import Link from 'next/link';
 
 export default function AboutPage() {
   return (
-    <div style={{ 
+    <div data-site-page style={{ 
       minHeight: '100vh', 
       backgroundColor: '#0f172a', 
       color: 'white', 
