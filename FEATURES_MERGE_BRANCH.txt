@@ -430,6 +430,10 @@ Posting signals out
     on screen; emoji by name or the emoji; the AI writes the text; brush loop / underline / line /
     zigzag; the highlighter as a band as tall as the zone; size and colour. Made exactly as clicks
     would make them, so they're ordinary drawings
+  - Writing with the brush by voice ("write Rahul with the brush", "write Gold 2650 big at the
+    top"): a single-stroke handwriting font (capitals, digits, . , ! ? - ' / : +; lowercase
+    written in capitals) laid out at any spot, size and colour, its letters keeping their shape
+    at any zoom; one brush stroke per pen stroke, the word one Object tree group and one undo
   - Alerts by voice: create one straight away (price, crossing / up / down / above / below,
     symbol, once or every time, days; asked first), list, change (asked first), stop, restart,
     delete (asked first), read and clear the triggered log

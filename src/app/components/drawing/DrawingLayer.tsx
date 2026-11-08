@@ -53,6 +53,7 @@ import { registerVoiceFunctions, VoiceQuestion, type VoiceArgs } from '../../lib
 import { findTool, emojiOf, colorOf } from '../../lib/voice/tools';
 import { getChartBars } from '../../lib/chartBars';
 import { analyse } from '../../lib/analysis/smc';
+import { strokesFor } from '../../lib/voice/strokeFont';
 
 interface DrawingLayerProps {
   chart: any;
@@ -1532,6 +1533,31 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     const color = colorOf(s(a.color));
     const pxPerPrice = paneH / Math.max(1e-12, H);
 
+    // Writing with the brush ("write Rahul with the brush"): the text in a single-stroke hand
+    // (lib/voice/strokeFont), laid out in pixels so the letters keep their shape at any zoom, one
+    // brush stroke per pen stroke, all one group and one undo step
+    if (type === "brush" && s(a.text)) {
+      const text = s(a.text);
+      const { strokes, width, skipped } = strokesFor(text);
+      if (!strokes.length) throw new VoiceQuestion(`I can only write letters, numbers and a little punctuation with the brush. Use the text tool for "${text}"?`);
+      const ax = logicalToPixel(chart, x), ay = priceToPixel(series, y);
+      const paneW = chart?.timeScale?.().width?.() ?? 800;
+      if (ax === null || ay === null) throw new VoiceQuestion("That spot isn't on the screen.");
+      const share = /small|tiny/i.test(s(a.size)) ? 0.2 : /large|big|huge/i.test(s(a.size)) ? 0.6 : 0.35;
+      const unit = Math.min((paneW * share) / Math.max(1, width), (paneH * 0.25) / 6);
+      const left = ax - (width * unit) / 2, topPx = ay - 3 * unit;
+      const last2 = ((defaultSettings as any).brush || {}) as { stroke?: string; strokeWidth?: number };
+      const stroke = color || last2.stroke || "#2962ff";
+      const strokeWidth = Math.max(2, Math.min(8, Math.round(unit * 0.4)));
+      const group = { id: `voice-writing-${Date.now().toString(36)}`, name: `Writing: ${text}` };
+      const drawings = strokes.map((st, i) => ({
+        id: `brush-${Date.now()}-${i}`, type: "brush", visible: true, locked: false, group, stroke, strokeWidth,
+        points: st.map(([gx, gy]) => ({ logical: pixelToLogical(chart, left + gx * unit), price: pixelToPrice(series, topPx + gy * unit) }))
+          .filter(p => p.logical !== null && p.price !== null),
+      })).filter(d => d.points.length >= 2);
+      window.dispatchEvent(new CustomEvent("tv:add-drawings", { detail: { drawings } }));
+      return `Wrote "${text}" with the brush ${spot}.${skipped.length ? ` I left out ${skipped.join(" ")}: the brush hand doesn't have ${skipped.length === 1 ? "it" : "them"}.` : ""}`;
+    }
     if (type === "brush" || type === "highlighter") {
       const shape = s(a.stroke).toLowerCase() || (type === "highlighter" ? "band" : zone ? "loop" : "underline");
       let pts: { logical: number; price: number }[] = [];
@@ -1589,7 +1615,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   useEffect(() => {
     registerVoiceFunctions("drawing-layer", [{
       name: "place_drawing",
-      signature: "place_drawing(tool, where?, around?, emoji?, text?, stroke?, price?, date?, size?, color?) puts any drawing tool on the chart: an emoji, text you write, a rectangle, trend line, fib, brush, highlighter…; where center|top|bottom|left|right|top left…|last bar; around order block|fvg|ifvg|support|resistance (the latest on screen); stroke for the brush loop|underline|line|zigzag; size small|medium|large",
+      signature: "place_drawing(tool, where?, around?, emoji?, text?, stroke?, price?, date?, size?, color?) puts any drawing tool on the chart: an emoji, text you write, a rectangle, trend line, fib, brush, highlighter…; where center|top|bottom|left|right|top left…|last bar; around order block|fvg|ifvg|support|resistance (the latest on screen); stroke for the brush loop|underline|line|zigzag; the brush with text writes it by hand; size small|medium|large",
       run: args => placeByVoice(args),
     }]);
   });
