@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Zap, Shield, Globe, Award } from 'lucide-react';
+import ComingSoon from '../components/external/ComingSoon';
 import Link from 'next/link';
 
 export default function AboutPage() {
@@ -63,6 +64,11 @@ export default function AboutPage() {
         </div>
       </div>
       
+      {/* Coming soon: what the next version adds */}
+      <div id="coming-soon" style={{ position: 'relative', zIndex: 10, maxWidth: '1200px', margin: '0 auto', padding: '0 24px 96px' }}>
+        <ComingSoon />
+      </div>
+
       {/* Footer */}
       <footer style={{ position: 'relative', zIndex: 10, borderTop: '1px solid #1e293b', padding: '48px 24px' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '32px', color: '#64748b', fontSize: '14px' }}>

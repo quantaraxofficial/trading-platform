@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Zap, Mail, MessageSquare, MapPin } from 'lucide-react';
+import { ComingSoonLine } from '../components/external/ComingSoon';
 import Link from 'next/link';
 
 export default function ContactPage() {
@@ -104,6 +105,11 @@ export default function ContactPage() {
 
       </div>
       
+      {/* What's coming, in a line */}
+      <div style={{ position: 'relative', zIndex: 10, maxWidth: '1000px', margin: '0 auto', padding: '0 24px 64px' }}>
+        <ComingSoonLine />
+      </div>
+
       {/* Footer */}
       <footer style={{ position: 'relative', zIndex: 10, borderTop: '1px solid #1e293b', padding: '48px 24px' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '32px', color: '#64748b', fontSize: '14px' }}>

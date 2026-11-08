@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, BarChart3, LineChart, Activity, Zap, Shield, Globe, ArrowRight, Menu, X, Target } from 'lucide-react';
 import RollingBitcoin from './RollingBitcoin';
+import ComingSoon from './ComingSoon';
 
 export default function LandingPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -95,6 +96,7 @@ export default function LandingPage() {
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center space-x-8">
               <button onClick={() => scrollToSection('features')} className="text-purple-400 hover:text-white transition-colors">Features</button>
+              <button onClick={() => scrollToSection('coming-soon')} className="text-purple-400 hover:text-white transition-colors">Coming soon</button>
               <a href="/about" className="text-purple-400 hover:text-white transition-colors">About Us</a>
               <a href="/contact" className="text-purple-400 hover:text-white transition-colors">Contact</a>
               <a href="/login" className="text-purple-400 hover:text-white transition-colors">Log in</a>
@@ -113,6 +115,7 @@ export default function LandingPage() {
           {isMenuOpen && (
             <div className="md:hidden mt-4 pb-4 space-y-4">
               <button onClick={() => scrollToSection('features')} className="block text-purple-400 hover:text-white transition-colors">Features</button>
+              <button onClick={() => scrollToSection('coming-soon')} className="block text-purple-400 hover:text-white transition-colors">Coming soon</button>
               <a href="/about" className="block text-purple-400 hover:text-white transition-colors">About Us</a>
               <a href="/contact" className="block text-purple-400 hover:text-white transition-colors">Contact</a>
               <a href="/login" className="block text-purple-400 hover:text-white transition-colors">Log in</a>
@@ -166,6 +169,13 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Coming soon: what the next version adds */}
+      <section id="coming-soon" className="py-20 px-6" style={{ zIndex: 1, position: 'relative' }}>
+        <div className="container mx-auto">
+          <ComingSoon />
         </div>
       </section>
 
