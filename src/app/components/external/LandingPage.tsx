@@ -3,11 +3,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, BarChart3, LineChart, Activity, Zap, Shield, Globe, ArrowRight, Menu, X, Target } from 'lucide-react';
 import RollingBitcoin from './RollingBitcoin';
 import ComingSoon from './ComingSoon';
+import SiteUserMenu from './SiteUserMenu';
+import { useAuth } from '@/context/AuthContext';
 
 export default function LandingPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrollY, setScrollY] = useState(0);
   const [activeFeature, setActiveFeature] = useState(0);
+  // Signed in: the profile icon instead of "Log in" (nav), "Your profile" instead of it (hero);
+  // "Log in" only once the sign-in has been read (no flash for a signed-in visitor)
+  const { user, loading } = useAuth();
 
   useEffect(() => {
     document.title = 'TradePilot | Professional Trading Made Simple';
@@ -99,10 +104,11 @@ export default function LandingPage() {
               <button onClick={() => scrollToSection('coming-soon')} className="text-purple-400 hover:text-white transition-colors">Coming soon</button>
               <a href="/about" className="text-purple-400 hover:text-white transition-colors">About Us</a>
               <a href="/contact" className="text-purple-400 hover:text-white transition-colors">Contact</a>
-              <a href="/login" className="text-purple-400 hover:text-white transition-colors">Log in</a>
+              {!loading && !user && <a href="/login" className="text-purple-400 hover:text-white transition-colors">Log in</a>}
               <a href="/chart" className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 px-6 py-2 rounded-lg font-semibold transition-all transform hover:scale-105">
                 Open the chart
               </a>
+              <SiteUserMenu signedOut={null} />
             </div>
 
             {/* Mobile Menu Button */}
@@ -118,7 +124,7 @@ export default function LandingPage() {
               <button onClick={() => scrollToSection('coming-soon')} className="block text-purple-400 hover:text-white transition-colors">Coming soon</button>
               <a href="/about" className="block text-purple-400 hover:text-white transition-colors">About Us</a>
               <a href="/contact" className="block text-purple-400 hover:text-white transition-colors">Contact</a>
-              <a href="/login" className="block text-purple-400 hover:text-white transition-colors">Log in</a>
+              <SiteUserMenu mobile signedOut={<a href="/login" className="block text-purple-400 hover:text-white transition-colors">Log in</a>} />
               <a href="/chart" className="block text-center w-full bg-gradient-to-r from-purple-700 to-indigo-700 px-6 py-2 rounded-lg font-semibold transition-all">
                 Open the chart
               </a>
@@ -143,8 +149,8 @@ export default function LandingPage() {
               <a href="/chart" className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 px-8 py-4 rounded-lg font-semibold text-lg transition-all transform hover:scale-105 flex items-center justify-center">
                 Open the chart <ArrowRight className="inline-block ml-2 w-5 h-5" />
               </a>
-              <a href="/login" className="border-2 border-purple-600 hover:border-white px-8 py-4 rounded-lg font-semibold text-lg transition-all flex items-center justify-center">
-                Log in
+              <a href={user ? '/profile' : '/login'} className="border-2 border-purple-600 hover:border-white px-8 py-4 rounded-lg font-semibold text-lg transition-all flex items-center justify-center">
+                {user ? 'Your profile' : 'Log in'}
               </a>
             </div>
           </div>

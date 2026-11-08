@@ -122,6 +122,7 @@ export default function AccountMenu({ isDark, onToggleTheme, height, drawingsPan
                   position: "absolute", left: "100%", top: 0, marginLeft: -6, width: 190, padding: "6px 0",
                   background: "var(--tv-color-pane-bg)", border: "1px solid var(--tv-color-border)", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
                 }}>
+                  <button type="button" role="menuitem" className="tv-menu-row" style={{ height: 32 }} onClick={() => go("/profile")}>Your profile</button>
                   <button type="button" role="menuitem" className="tv-menu-row" style={{ height: 32 }} onClick={() => { close(); window.dispatchEvent(new CustomEvent("tv:open-feedback")); }}>Send feedback / report a bug</button>
                   <button type="button" role="menuitem" className="tv-menu-row" style={{ height: 32 }} onClick={() => { close(); logout(); }}>Sign out of this device</button>
                 </div>

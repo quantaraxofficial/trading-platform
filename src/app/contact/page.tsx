@@ -1,5 +1,6 @@
 "use client";
 
+import SiteUserMenu from '../components/external/SiteUserMenu';
 import React from 'react';
 import { Zap, Mail, MessageSquare, MapPin } from 'lucide-react';
 import { ComingSoonLine } from '../components/external/ComingSoon';
@@ -30,7 +31,7 @@ export default function ContactPage() {
           <Link href="/chart" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Chart</Link>
           <Link href="/about" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>About Us</Link>
           <Link href="/contact" style={{ color: 'white', textDecoration: 'none', fontSize: '15px', fontWeight: 600 }}>Contact</Link>
-          <Link href="/login" style={{ padding: '10px 24px', backgroundColor: '#9333ea', borderRadius: '8px', color: 'white', textDecoration: 'none', fontWeight: 600, fontSize: '15px' }}>Sign In</Link>
+          <SiteUserMenu signedOut={<Link href="/login" style={{ padding: '10px 24px', backgroundColor: '#9333ea', borderRadius: '8px', color: 'white', textDecoration: 'none', fontWeight: 600, fontSize: '15px' }}>Sign In</Link>} />
         </div>
       </nav>
 

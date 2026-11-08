@@ -1,5 +1,6 @@
 "use client";
 
+import SiteUserMenu from '../components/external/SiteUserMenu';
 import React from 'react';
 import { Zap, Shield, Globe, Award } from 'lucide-react';
 import ComingSoon from '../components/external/ComingSoon';
@@ -30,7 +31,7 @@ export default function AboutPage() {
           <Link href="/chart" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Chart</Link>
           <Link href="/about" style={{ color: 'white', textDecoration: 'none', fontSize: '15px', fontWeight: 600 }}>About Us</Link>
           <Link href="/contact" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Contact</Link>
-          <Link href="/login" style={{ padding: '10px 24px', backgroundColor: '#9333ea', borderRadius: '8px', color: 'white', textDecoration: 'none', fontWeight: 600, fontSize: '15px' }}>Sign In</Link>
+          <SiteUserMenu signedOut={<Link href="/login" style={{ padding: '10px 24px', backgroundColor: '#9333ea', borderRadius: '8px', color: 'white', textDecoration: 'none', fontWeight: 600, fontSize: '15px' }}>Sign In</Link>} />
         </div>
       </nav>
 
