@@ -3,6 +3,7 @@
 // Community search: people by name or @username, and published indicators / strategies by name,
 // description or author.
 
+import { registerVoiceFunctions, VoiceQuestion } from "../lib/voice/registry";
 import React, { useEffect, useState } from "react";
 import { Code2, Search, Users } from "lucide-react";
 import { Card, Empty, Pills } from "../analytics/ui";
@@ -73,6 +74,29 @@ function SearchView({ uid }: { uid: string }) {
   const [people, setPeople] = useState<SearchPerson[] | null>(null);
   const [scripts, setScripts] = useState<PublishedScript[] | null>(null);
   useEffect(() => { const v = new URLSearchParams(window.location.search).get("q"); if (v) setQ(v); }, []);
+  // The voice assistant: search here, and open someone's profile (lib/voice/registry)
+  useEffect(() => {
+    registerVoiceFunctions("community", [
+      { name: "community_search", signature: "community_search(query, kind?) searches the community; kind people|indicator|strategy",
+        run: a => {
+          const kind = a.kind === "indicator" || a.kind === "strategy" ? a.kind : "people";
+          setTab(kind); setQ(String(a.query || ""));
+          return `Searching ${kind === "people" ? "people" : kind + "s"} for ${String(a.query || "")}.`;
+        } },
+      { name: "open_profile", signature: "open_profile(person) opens someone's community profile",
+        run: async a => {
+          const said = String(a.person || "").trim();
+          const found = await searchPeople(uid, said);
+          const exact = found.filter(p => p.name.toLowerCase() === said.toLowerCase() || p.username.toLowerCase() === said.toLowerCase().replace(/^@/, ""));
+          const pick = exact.length === 1 ? exact : found;
+          if (!pick.length) throw new VoiceQuestion(`I couldn't find anyone called ${said}.`);
+          if (pick.length > 1) throw new VoiceQuestion(`Which one: ${pick.slice(0, 4).map(p => `${p.name} (@${p.username})`).join(", or ")}?`);
+          window.location.href = profileUrl(pick[0].username);
+          return `Opening ${pick[0].name}'s profile.`;
+        } },
+    ]);
+    return () => registerVoiceFunctions("community", null);
+  }, [uid]);
   useEffect(() => {
     let gone = false;
     const t = setTimeout(() => {

@@ -10,7 +10,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useEngineState } from "../trading/store";
 import { setBrokerUser, useBroker } from "../trading/broker";
 import { loadJournal, mt5Trades, paperTrades, type ATrade, type Journal, type Source } from "./data";
-import type { Period } from "./stats";
+import { computeStats, filterTrades, money, profitFactorLabel, PERIODS, type Period } from "./stats";
+import { registerVoiceCommands, registerVoiceFunctions, VoiceQuestion } from "../lib/voice/registry";
 import Performance from "./Performance";
 import TradeAnalysis from "./TradeAnalysis";
 import Backtests from "./Backtests";
@@ -106,6 +107,44 @@ export default function AnalyticsApp() {
   }, [current, engineState, mt5]);
   const currency = current?.id === "mt5" ? mt5?.currency || current.currency : "USD";
   const nav = NAV.find(n => n.id === view)!;
+  // The voice assistant (lib/voice/registry): this page's views, period, account and MT5 refresh,
+  // and the results shown, read out so it can talk about them ("how am I doing this month?")
+  useEffect(() => {
+    registerVoiceCommands("analytics", [
+      ...NAV.map(n => ({ id: `analytics-view-${n.id}`, run: () => setView(n.id) })),
+      ...PERIODS.map(p => ({ id: `analytics-period-${p.id}`, run: () => setPeriod(p.id) })),
+      ...(source === "mt5" ? [{ id: "analytics-refresh-mt5", run: () => fetchMt5(days) }] : []),
+    ]);
+    registerVoiceFunctions("analytics", [
+      { name: "analytics_account", signature: `analytics_account(name) shows another account's results; accounts: ${accounts.map(a => a.label).join(", ") || "none"}`,
+        run: a => {
+          const said = String(a.name || "").toLowerCase().trim();
+          const hit = accounts.find(x => x.label.toLowerCase() === said) ?? accounts.find(x => x.label.toLowerCase().includes(said));
+          if (!hit) throw new VoiceQuestion(`Which account: ${accounts.map(x => x.label).join(", ")}?`);
+          setAccount(hit.id);
+          return `Showing ${hit.label}.`;
+        } },
+      { name: "analytics_summary", signature: "analytics_summary() reads the results shown (account and period): trades, win rate, P&L, profit factor, drawdown, best and worst day, streaks, sides, symbols",
+        run: () => {
+          if (!current) return "There's no account to read yet.";
+          const label = PERIODS.find(p => p.id === period)?.label ?? period;
+          const s = computeStats(filterTrades(trades, period, "all"), source === "paper" ? current.balance || 0 : 0);
+          if (!s.count) return `${current.label}, ${label}: no closed trades${s.openCount ? `, ${s.openCount} open` : ""}.`;
+          const m = (v: number, signed = false) => money(v, currency, signed);
+          const sym = [...s.symbols].sort((x, y) => y.pnl - x.pnl);
+          return [
+            `${current.label}, ${label}: ${s.count} closed trades, ${s.wins} won and ${s.losses} lost, a ${s.winRate.toFixed(0)}% win rate.`,
+            `Net ${m(s.totalPnl, true)}, profit factor ${profitFactorLabel(s.profitFactor, s.count)}, average win ${m(s.avgWin)}, average loss ${m(Math.abs(s.avgLoss))}.`,
+            `Largest drawdown ${m(s.maxDrawdown)}${s.maxDrawdownPct !== null ? ` (${s.maxDrawdownPct.toFixed(1)}%)` : ""}; longest losing streak ${s.maxLossStreak}.`,
+            s.bestDay && s.worstDay ? `Best day ${s.bestDay.day} ${m(s.bestDay.pnl, true)}, worst ${s.worstDay.day} ${m(s.worstDay.pnl, true)}.` : "",
+            `Longs ${s.long.count} trades ${m(s.long.pnl, true)}, shorts ${s.short.count} trades ${m(s.short.pnl, true)}.`,
+            sym.length ? `Best symbol ${sym[0].symbol} ${m(sym[0].pnl, true)}${sym.length > 1 ? `, worst ${sym[sym.length - 1].symbol} ${m(sym[sym.length - 1].pnl, true)}` : ""}.` : "",
+            s.openCount ? `${s.openCount} trades still open.` : "",
+          ].filter(Boolean).join(" ");
+        } },
+    ]);
+  });
+  useEffect(() => () => { registerVoiceCommands("analytics", null); registerVoiceFunctions("analytics", null); }, []);
   // Analytics → "Show on my profile": these stats (headline figures and the equity curve, thinned
   // to 150 points) become the trading stats your public profile shows, and showing them is on
   const showOnProfile = async (s: Stats, label: string) => {

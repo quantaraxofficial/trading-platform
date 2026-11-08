@@ -2,7 +2,7 @@
 
 // The voice assistant's functions with inputs (lib/voice/registry) that need the site's live state:
 // chats, alerts, watchlists, follows, chart settings, layouts, go to a date, writing a Pine
-// script, a paper order ticket. Rendered once on the chart page (always mounted, so they're there
+// script, a paper order ticket, copy trading. Rendered once on the chart page (always mounted, so they're there
 // whichever panel is open). Anything sent to other people, deleted or traded asks first.
 
 import { useEffect } from "react";
@@ -18,6 +18,7 @@ import { FONTS, FONT_KEYS } from "../lib/fonts";
 import { layoutStore } from "../lib/layoutStore";
 import { openTicket } from "../trading/store";
 import { getChartInfo } from "../lib/chartBars";
+import { copyOverview, updateChannel, sendSignal, joinChannel, leaveChannel, updateSubscription } from "../analytics/copy";
 import { displaySymbol } from "../lib/symbolDisplay";
 
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : "");
@@ -98,6 +99,9 @@ export default function VoiceBridge() {
       if (!p.collabs.length) ask(`You and ${p.name} aren't in a collab together, so you can't message them yet.`);
       return p;
     };
+    // Copy trading: a channel you run, or one you follow, by name
+    const ownChannel = async (name: string) => pickByName((await copyOverview(needUid())).channels, c => c.name, name || ask("Which channel?"), "channel of yours");
+    const followed = async (name: string) => pickByName((await copyOverview(needUid())).following, f => f.channel_info.name, name || ask("Which channel?"), "channel you follow");
     const fns: VoiceFunction[] = [
       // ---- chats
       { name: "chat_send", signature: "chat_send(to, text) private message to someone from your collabs",
@@ -165,6 +169,47 @@ export default function VoiceBridge() {
           window.dispatchEvent(new CustomEvent("tv:open-pine-editor", { detail: { code, scriptName: str(a.name) || "Voice script", language: "pine" } }));
           return `I've written ${str(a.name) || "the script"} and opened it in the Pine Editor. Check it, then add it to the chart.`;
         } },
+      // ---- copy trading (signals reach followers' brokers: everything but reading asks first)
+      { name: "copy_status", signature: "copy_status() reads your copy trading: channels you run, channels you follow, the copier",
+        run: async () => {
+          const o = await copyOverview(needUid());
+          const own = o.channels.map(c => `${c.name} (${c.active ? "active" : "paused"}, ${c.subscribers} follower${c.subscribers === 1 ? "" : "s"}, ${c.copying} copying)`);
+          const fol = o.following.map(s => `${s.channel_info.name} by ${s.channel_info.owner} (auto-copy ${s.auto_copy ? "on" : "off"})`);
+          return [
+            own.length ? `You run ${own.join("; ")}.` : "You don't run a channel.",
+            fol.length ? `You follow ${fol.join("; ")}.` : "You don't follow a channel.",
+            `Your MT5 is ${o.mt5_linked ? "linked" : "not linked"}.`,
+          ].join(" ");
+        } },
+      { name: "copy_channel_pause", signature: "copy_channel_pause(channel) stops a channel you run from sending signals",
+        confirm: async a => `Pause your channel ${(await ownChannel(str(a.channel))).name}? Its followers stop getting signals. Say yes or no.`,
+        run: async a => { const c = await ownChannel(str(a.channel)); await updateChannel(needUid(), c.id, { active: false }); return `Paused ${c.name}.`; } },
+      { name: "copy_channel_resume", signature: "copy_channel_resume(channel)",
+        confirm: async a => `Resume your channel ${(await ownChannel(str(a.channel))).name}? Say yes or no.`,
+        run: async a => { const c = await ownChannel(str(a.channel)); await updateChannel(needUid(), c.id, { active: true }); return `Resumed ${c.name}.`; } },
+      { name: "copy_send_signal", signature: "copy_send_signal(channel, symbol, side, sl?, tp?, risk?) sends a trade to a channel you run: followers copy it on their brokers",
+        confirm: async a => {
+          const c = await ownChannel(str(a.channel));
+          const side = /sell|short/i.test(str(a.side)) ? "sell" : /buy|long/i.test(str(a.side)) ? "buy" : ask("Buy or sell?");
+          const sym = str(a.symbol) || ask("Which symbol?");
+          return `Send a ${side} ${displaySymbol(siteSymbol(sym))} signal to ${c.name}${num(a.sl) !== undefined ? `, stop loss ${num(a.sl)}` : ", no stop loss"}${num(a.tp) !== undefined ? `, take profit ${num(a.tp)}` : ""}, risk ${num(a.risk) ?? c.default_risk}%? `
+            + `Its ${c.copying} copying follower${c.copying === 1 ? "" : "s"} will trade it on their brokers. Say yes or no.`;
+        },
+        run: async a => {
+          const c = await ownChannel(str(a.channel));
+          const side = /sell|short/i.test(str(a.side)) ? "sell" : "buy";
+          const sig = await sendSignal(needUid(), c.id, { kind: "open", symbol: siteSymbol(str(a.symbol)), side, sl: num(a.sl), tp: num(a.tp), risk_percent: num(a.risk) });
+          return `Sent the ${side} signal to ${c.name}.${sig.failed ? ` ${sig.failed} follower${sig.failed === 1 ? "" : "s"} couldn't copy it.` : ""}`;
+        } },
+      { name: "copy_join", signature: "copy_join(code) follows a channel with its invite code",
+        confirm: a => `Follow the channel with code ${str(a.code) || ask("What's the channel's code?")}? Say yes or no.`,
+        run: async a => { const s = await joinChannel(needUid(), str(a.code)); return `You're following ${s.channel_info.name}. Auto-copy is ${s.auto_copy ? "on" : "off"}; set your risk on the Copy trading page.`; } },
+      { name: "copy_leave", signature: "copy_leave(channel) stops following a channel",
+        confirm: async a => `Stop following ${(await followed(str(a.channel))).channel_info.name}? Say yes or no.`,
+        run: async a => { const s = await followed(str(a.channel)); await leaveChannel(needUid(), s.id); return `You've left ${s.channel_info.name}.`; } },
+      { name: "copy_auto", signature: "copy_auto(channel, on) turns auto-copy of a channel you follow on or off (trades on your MT5)",
+        confirm: async a => { const s = await followed(str(a.channel)); const on = boolOf(a.on); return `Turn auto-copy ${on ? "on" : "off"} for ${s.channel_info.name}?${on ? " Its signals will be traded on your MT5 account." : ""} Say yes or no.`; },
+        run: async a => { const s = await followed(str(a.channel)); const on = boolOf(a.on); await updateSubscription(needUid(), s.id, { auto_copy: on }); return `Auto-copy is ${on ? "on" : "off"} for ${s.channel_info.name}.`; } },
       // ---- paper trading
       { name: "order_ticket", signature: "order_ticket(side, quantity?, type?, price?) opens a filled-in paper order ticket on the chart's symbol for the trader to place; side buy|sell, type market|limit|stop",
         run: a => {

@@ -15,6 +15,7 @@ import { AlertsProvider } from "@/context/AlertsContext";
 import { PaperTradingProvider } from "@/context/PaperTradingContext";
 import CloudSync from "./components/CloudSync";
 import SiteThemeVars from "./components/SiteThemeVars";
+import VoiceDock from "./components/VoiceDock";
 
 export default function RootLayout({
   children,
@@ -35,6 +36,7 @@ export default function RootLayout({
             <AlertsProvider>
               <TelemetryProvider>
                 {children}
+                <VoiceDock />
               </TelemetryProvider>
             </AlertsProvider>
           </PaperTradingProvider>
