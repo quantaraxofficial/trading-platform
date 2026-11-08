@@ -7,8 +7,8 @@
 
 import { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { useAlerts } from "@/context/AlertsContext";
-import { registerVoiceFunctions, VoiceQuestion, type VoiceFunction } from "../lib/voice/registry";
+import { useAlerts, DEFAULT_NOTIFY, type AlertOperator, type AlertTrigger } from "@/context/AlertsContext";
+import { registerVoiceFunctions, VoiceQuestion, type VoiceFunction, type VoiceArgs } from "../lib/voice/registry";
 import { dmApi, groupApi, useDms } from "../lib/collab/dms";
 import { collab } from "../lib/collab/session";
 import { watchlists, wl, listSymbols, sameSymbol } from "./watchlist/store";
@@ -18,6 +18,8 @@ import { FONTS, FONT_KEYS } from "../lib/fonts";
 import { layoutStore } from "../lib/layoutStore";
 import { openTicket } from "../trading/store";
 import { getChartInfo } from "../lib/chartBars";
+import { BACKEND } from "../lib/collab/session";
+import { sessionKey } from "@/lib/backend";
 import { copyOverview, updateChannel, sendSignal, joinChannel, leaveChannel, updateSubscription } from "../analytics/copy";
 import { displaySymbol } from "../lib/symbolDisplay";
 
@@ -70,26 +72,53 @@ const SETTINGS: Record<string, (v: unknown) => [Record<string, any>, string]> = 
   day_of_week: v => { const b = boolOf(v); return [{ dayOfWeek: b }, `the day of the week on the time scale ${b ? "on" : "off"}`]; },
   time_format: v => { const h = /12/.test(str(v)) ? "12-hours" : "24-hours"; return [{ timeFormat: h }, `the clock to ${h === "12-hours" ? "12" : "24"} hours`]; },
   session_breaks: v => { const b = boolOf(v); return [{ sessionBreaks: b }, `session breaks ${b ? "on" : "off"}`]; },
+  candle_bodies: v => { const b = boolOf(v); const k = chartSettings.get().candle; return [{ candle: { ...k, bodyVisible: b } }, `candle bodies ${b ? "on" : "off"}`]; },
+  candle_borders: v => { const b = boolOf(v); const k = chartSettings.get().candle; return [{ candle: { ...k, borderVisible: b } }, `candle borders ${b ? "on" : "off"}`]; },
+  candle_wicks: v => { const b = boolOf(v); const k = chartSettings.get().candle; return [{ candle: { ...k, wickVisible: b } }, `candle wicks ${b ? "on" : "off"}`]; },
   ticker_watermark: v => { const b = boolOf(v); const w = chartSettings.get().watermark; return [{ watermark: { ...w, ticker: b } }, `the ticker watermark ${b ? "on" : "off"}`]; },
 };
+
+// Alerts: a condition from what was said, and a new alert as the Create alert dialog makes it
+// (once only, a month, its automatic message, the notifications last chosen there)
+function conditionOf(v: unknown): AlertOperator | undefined {
+  const s = low(str(v));
+  if (!s) return undefined;
+  if (/cross(ing)? ?up|rise|rises|breaks? above/.test(s)) return "Crossing Up";
+  if (/cross(ing)? ?down|fall|falls|drops?|breaks? below/.test(s)) return "Crossing Down";
+  if (/greater|above|over|more than/.test(s)) return "Greater Than";
+  if (/less|below|under/.test(s)) return "Less Than";
+  return "Crossing";
+}
+function newAlert(a: VoiceArgs) {
+  const value = num(a.price) ?? ask("At what price?");
+  const symbol = a.symbol ? siteSymbol(str(a.symbol)) : getChartInfo()?.symbol ?? ask("For which symbol?");
+  const condition = conditionOf(a.condition) ?? "Crossing";
+  const trigger: AlertTrigger = /every/i.test(str(a.trigger)) ? "Every time" : "Once only";
+  const days = Math.min(365, Math.max(1, num(a.days) ?? 30));
+  let notify = DEFAULT_NOTIFY;
+  try { notify = { ...DEFAULT_NOTIFY, ...JSON.parse(localStorage.getItem("tv:alert-notify") || "{}") }; } catch { /* storage off */ }
+  const auto = `${symbol.split(":").pop()} ${condition} ${value}`;
+  return { symbol, condition, value, trigger, expiration: Date.now() + days * 864e5, message: str(a.message) || auto, notify };
+}
 
 export default function VoiceBridge() {
   const { user } = useAuth();
   const uid = user?.uid ?? null;
-  const { alerts, removeAlert } = useAlerts();
+  const { alerts, log, addAlert, updateAlert, removeAlert, stopAlert, restartAlert, clearLog } = useAlerts();
   const dms = useDms();
 
   useEffect(() => {
     const needUid = () => uid ?? ask("Sign in first.");
     const alertText = (a: (typeof alerts)[number], i: number) => `${i + 1}: ${displaySymbol(a.symbol)} ${String(a.condition).replace(/_/g, " ")} ${a.value}`;
-    // An alert by what was said: its number in the list, its price, or its symbol
-    const findAlert = (which: string) => {
-      const live = alerts.filter(a => a.status === "active");
+    // An alert by what was said: its number in the list, its price, or its symbol (active ones, or
+    // the stopped ones to restart)
+    const findAlert = (which: string, stopped = false) => {
+      const live = alerts.filter(a => (stopped ? a.status !== "active" : a.status === "active"));
       const n = num(which);
       if (n !== undefined && Number.isInteger(n) && n >= 1 && n <= live.length && !live.some(a => a.value === n)) return live[n - 1];
       const hits = live.filter(a => (n !== undefined && Math.abs(a.value - n) < 1e-9) || sameSymbol(a.symbol, siteSymbol(which)) || low(displaySymbol(a.symbol)) === low(which));
       if (hits.length === 1) return hits[0];
-      if (!hits.length) return ask(`I couldn't find an alert for ${which}. You have: ${live.map(alertText).join("; ") || "no alerts"}.`);
+      if (!hits.length) return ask(`I couldn't find ${stopped ? "a stopped" : "an"} alert for ${which}. You have: ${live.map(alertText).join("; ") || "none"}.`);
       return ask(`Which one: ${hits.map((a, i) => alertText(a, live.indexOf(a))).join("; ")}?`);
     };
     // Someone to message: from the people in your collabs
@@ -119,6 +148,29 @@ export default function VoiceBridge() {
       { name: "alert_delete", signature: "alert_delete(which) which: its number from alerts_list, its price or its symbol",
         confirm: a => { const al = findAlert(str(a.which)); return `Delete the alert ${displaySymbol(al.symbol)} ${String(al.condition).replace(/_/g, " ")} ${al.value}? Say yes or no.`; },
         run: a => { const al = findAlert(str(a.which)); removeAlert(al.id); return "Deleted the alert."; } },
+      { name: "alert_create", signature: "alert_create(price, condition?, symbol?, trigger?, message?, days?) sets a price alert straight away; condition crossing|crossing up|crossing down|greater than|less than (default crossing), symbol default the chart's, trigger once|every time, days until it expires (default 30)",
+        confirm: a => { const d = newAlert(a); return `Set an alert: ${displaySymbol(d.symbol)} ${d.condition.toLowerCase()} ${d.value}, ${d.trigger.toLowerCase()}, for ${Math.round((d.expiration - Date.now()) / 864e5)} days? Say yes or no.`; },
+        run: a => { const d = newAlert(a); addAlert(d); return `Alert set: ${displaySymbol(d.symbol)} ${d.condition.toLowerCase()} ${d.value}.`; } },
+      { name: "alert_edit", signature: "alert_edit(which, price?, condition?) changes an active alert",
+        confirm: a => { const al = findAlert(str(a.which)); return `Change the alert ${displaySymbol(al.symbol)} ${al.condition.toLowerCase()} ${al.value} to ${(conditionOf(a.condition) ?? al.condition).toLowerCase()} ${num(a.price) ?? al.value}? Say yes or no.`; },
+        run: a => {
+          const al = findAlert(str(a.which));
+          const value = num(a.price) ?? al.value, condition = conditionOf(a.condition) ?? al.condition;
+          updateAlert(al.id, { symbol: al.symbol, condition, value, trigger: al.trigger, expiration: al.expiration, notify: al.notify,
+            message: al.message === `${al.symbol.split(":").pop()} ${al.condition} ${al.value}` ? `${al.symbol.split(":").pop()} ${condition} ${value}` : al.message });
+          return `Changed it to ${condition.toLowerCase()} ${value}.`;
+        } },
+      { name: "alert_stop", signature: "alert_stop(which) stops an active alert (it can be restarted)",
+        run: a => { const al = findAlert(str(a.which)); stopAlert(al.id); return `Stopped the ${displaySymbol(al.symbol)} ${al.value} alert.`; } },
+      { name: "alert_restart", signature: "alert_restart(which) restarts a stopped or triggered alert",
+        run: a => { const al = findAlert(str(a.which), true); restartAlert(al.id); return `Restarted the ${displaySymbol(al.symbol)} ${al.value} alert.`; } },
+      { name: "alerts_log", signature: "alerts_log() reads the alerts that went off lately",
+        run: () => log.length
+          ? `The last ${Math.min(5, log.length)} that went off: ${log.slice(0, 5).map(l => `${displaySymbol(l.symbol)}: ${l.message}, ${new Date(l.time).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`).join("; ")}.`
+          : "No alerts have gone off." },
+      { name: "alerts_log_clear", signature: "alerts_log_clear() empties the list of alerts that went off",
+        confirm: () => (log.length ? `Clear the ${log.length} entries of the alerts log? Say yes or no.` : null),
+        run: () => { clearLog(); return "Cleared the alerts log."; } },
       // ---- watchlists
       { name: "watchlist_add", signature: "watchlist_add(symbol?, list?) adds a symbol (default: the chart's) to a watchlist (default: the open one)",
         run: a => {
@@ -210,6 +262,25 @@ export default function VoiceBridge() {
       { name: "copy_auto", signature: "copy_auto(channel, on) turns auto-copy of a channel you follow on or off (trades on your MT5)",
         confirm: async a => { const s = await followed(str(a.channel)); const on = boolOf(a.on); return `Turn auto-copy ${on ? "on" : "off"} for ${s.channel_info.name}?${on ? " Its signals will be traded on your MT5 account." : ""} Say yes or no.`; },
         run: async a => { const s = await followed(str(a.channel)); const on = boolOf(a.on); await updateSubscription(needUid(), s.id, { auto_copy: on }); return `Auto-copy is ${on ? "on" : "off"} for ${s.channel_info.name}.`; } },
+      // ---- feedback (asked first; a picture of the chart along when they say so)
+      { name: "feedback_send", signature: "feedback_send(message, screenshot?) sends feedback or a bug report to the site's team in the trader's words; screenshot true attaches a picture of the chart",
+        confirm: a => `Send this feedback${a.screenshot === true || /^(yes|true)$/i.test(str(a.screenshot)) ? ", with a picture of the chart" : ""}: "${str(a.message) || ask("What would you like to tell the team?")}"? Say yes or no.`,
+        run: async a => {
+          const form = new FormData();
+          const chart = getChartInfo();
+          form.append("message", str(a.message));
+          form.append("symbol", chart?.symbol ?? "");
+          form.append("interval", chart?.interval ?? "");
+          form.append("page_url", window.location.pathname + window.location.search);
+          if (a.screenshot === true || /^(yes|true)$/i.test(str(a.screenshot))) {
+            const canvas: HTMLCanvasElement | undefined = (window as any).__chartInstance?.takeScreenshot?.();
+            const blob = canvas ? await new Promise<Blob | null>(r => canvas.toBlob(r, "image/png")) : null;
+            if (blob) form.append("images", blob, "chart.png");
+          }
+          const res = await fetch(`${BACKEND}/api/users/feedback/?session_key=${encodeURIComponent(sessionKey())}`, { method: "POST", body: form });
+          if (!res.ok) throw new Error(res.status === 429 ? "Too many reports for now; try again later." : "I couldn't send it just now.");
+          return "Sent. Thanks: the team reads every report.";
+        } },
       // ---- paper trading
       { name: "order_ticket", signature: "order_ticket(side, quantity?, type?, price?) opens a filled-in paper order ticket on the chart's symbol for the trader to place; side buy|sell, type market|limit|stop",
         run: a => {

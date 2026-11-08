@@ -198,3 +198,7 @@ GROQ_MODEL = env('GROQ_MODEL', default='openai/gpt-oss-120b')
 GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
 GEMINI_MODEL = env('GEMINI_MODEL', default='gemini-2.5-flash')
 VOICE_AI_DAILY_LIMIT = env.int('VOICE_AI_DAILY_LIMIT', default=100)
+
+# Uploaded files (feedback screenshots)
+MEDIA_URL = "/media/"
+MEDIA_ROOT = env('MEDIA_ROOT', default=str(BASE_DIR / "media"))

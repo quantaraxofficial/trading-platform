@@ -18,6 +18,7 @@ urlpatterns = [
     path('agent/insights/<str:uid>/', views.get_agent_insights, name='get_agent_insights'),
     path('agent/strategy-note/<str:uid>/', views.submit_strategy_note, name='submit_strategy_note'),
     path('track-failure/', views.track_failure, name='track_failure'),
+    path('feedback/', views.submit_feedback, name='submit_feedback'),
     # Voice assistant: what the plain command rules don't understand, answered by an AI (core/voice.py)
     path('voice/ask/<str:uid>/', voice.ask, name='voice_ask'),
     # Broker accounts: MetaTrader 5 (core/broker_mt5.py)

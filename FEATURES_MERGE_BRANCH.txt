@@ -423,6 +423,20 @@ Posting signals out
   - Analytics by voice: the views, the period (today ... all), the account, MT5 refresh, and
     "how am I doing" reads the results shown (trades, win rate, P&L, profit factor, drawdown,
     best / worst day, streaks, longs vs shorts, best / worst symbol)
+  - Put any drawing on the chart by voice ("put a smile emoji in the middle", "a green box on
+    the order block", "highlight the FVG", "circle support with the brush", "write Buy zone at
+    the top left", "a big triangle on the right"): where = centre, an edge or corner, the latest
+    bar, a price or a date, or around the latest order block / FVG / IFVG / support / resistance
+    on screen; emoji by name or the emoji; the AI writes the text; brush loop / underline / line /
+    zigzag; the highlighter as a band as tall as the zone; size and colour. Made exactly as clicks
+    would make them, so they're ordinary drawings
+  - Alerts by voice: create one straight away (price, crossing / up / down / above / below,
+    symbol, once or every time, days; asked first), list, change (asked first), stop, restart,
+    delete (asked first), read and clear the triggered log
+  - Candle bodies, borders and wicks on / off by voice (with the colours and the chart type)
+  - Feedback / bug reports: the chart's Send feedback bubble and panel (brought over from
+    aditya-students: kept in the database, read in the Django admin), and by voice ("report that
+    the replay skips a bar, with a screenshot"): asked first, the chart's picture attached
   - "Close the site": asked first, saves what's waiting to sync, then every open tab of the
     site closes (tabs the browser won't let a page close - ones with a longer history - go
     blank instead, the site no longer running in them)
@@ -448,7 +462,7 @@ Posting signals out
 ======================================================================
 17. RUNNING IT (SETUP NOTES)
 ======================================================================
-  - Database: run "python manage.py migrate" (migrations up to 0036)
+  - Database: run "python manage.py migrate" (migrations up to 0038)
   - Live collab / chats: the backend runs under daphne (Django Channels)
   - Copy trading: run "python manage.py run_copier" on the copier server (MT5 installed)
   - Market data: TWELVEDATA_API_KEY (8 requests a minute on the free plan; the optimizer

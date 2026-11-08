@@ -1,10 +1,14 @@
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import TraderProfile, DrawingTemplate, UserDrawing, UserSession, PineScript, UserStrategyNote, UserSetting, FailedRequest
+from .models import TraderProfile, DrawingTemplate, UserDrawing, UserSession, PineScript, UserStrategyNote, UserSetting, FailedRequest, FeedbackMessage
 from django.utils import timezone
 from django.conf import settings
 from .auth import verified_uid, require_session, session_owner, session_key_of
+from .middleware import get_client_ip
+from django.core.cache import cache
+from django.core.files.storage import default_storage
+import secrets
 from .middleware import get_client_ip
 
 @api_view(['POST'])
@@ -605,3 +609,74 @@ def manage_settings(request, uid):
             current, _ = UserSetting.objects.update_or_create(owner=profile, key=key, defaults={'value': value, 'updated_at': int(updated_at)})
         kept[key] = {"value": current.value, "updated_at": current.updated_at}
     return Response(kept)
+
+
+# --- Feedback / bug reports (from the chart's Send feedback button, or the voice assistant) ---
+
+FEEDBACK_MAX_IMAGES = 5
+FEEDBACK_MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+def _real_image(f):
+    """The image format if the upload really is a picture (decoded, not just named like one)"""
+    try:
+        from PIL import Image
+        f.seek(0)
+        with Image.open(f) as im:
+            fmt = (im.format or '').lower()
+            im.verify()
+        f.seek(0)
+        return fmt if fmt in ('png', 'jpeg', 'webp', 'gif') else None
+    except Exception:
+        return None
+
+
+@api_view(['POST'])
+def submit_feedback(request):
+    """Bug report / feedback from the chart's 'Send feedback' button.
+
+    Signed-in users attribute to their TraderProfile; anonymous ones keep only
+    the session key. `images` is a repeatable multipart file field. Always 200
+    on success — the browser posts it fire-and-forget, same as track_failure."""
+    # (anonymous reports are allowed: at most 10 an hour from one address)
+    ip_key = f"feedback:{get_client_ip(request)}"
+    sent = cache.get(ip_key, 0)
+    if sent >= 10:
+        return Response({"error": "Too many reports; try again later"}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+    cache.set(ip_key, sent + 1, 3600)
+    owner = session_owner(request)
+    session_key = session_key_of(request) or ""
+
+    # Screenshots: a few, not too big, and really pictures (re-checked by decoding), stored under
+    # names the server makes; anything else is dropped without failing the report
+    image_urls = []
+    try:
+        for f in request.FILES.getlist('images')[:FEEDBACK_MAX_IMAGES]:
+            if f.size > FEEDBACK_MAX_IMAGE_BYTES:
+                continue
+            fmt = _real_image(f)
+            if not fmt:
+                continue
+            safe_name = f"fb_{secrets.token_hex(12)}.{'jpg' if fmt == 'jpeg' else fmt}"
+            path = default_storage.save(f"feedback/{safe_name}", f)
+            image_urls.append(f"/media/{path}")
+    except Exception:
+        # Never fail the whole report because of a bad attachment
+        pass
+
+    message = str(request.data.get("message") or "").strip()[:5000]
+    if not message:
+        return Response({"error": "message is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    fb = FeedbackMessage.objects.create(
+        user=owner,
+        session_key=session_key,
+        message=message,
+        images=image_urls,
+        symbol=str(request.data.get("symbol") or "")[:50],
+        interval=str(request.data.get("interval") or "")[:20],
+        page_url=str(request.data.get("page_url") or "")[:500],
+        user_agent=str(request.headers.get("User-Agent", ""))[:300],
+        ip=get_client_ip(request),
+    )
+    return Response({"success": True, "id": fb.id})

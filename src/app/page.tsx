@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Info, Search, Clock3, RotateCcw, ListPlus, Download, Copy, Link2, Maximize, Bot, SunMoon, Globe, ArrowUpCircle, ArrowDownCircle, CloudUpload, Folder, Keyboard } from "lucide-react";
+import { Info, Search, Clock3, RotateCcw, ListPlus, Download, Copy, Link2, Maximize, Bot, SunMoon, Globe, ArrowUpCircle, ArrowDownCircle, CloudUpload, Folder, Keyboard, MessageCircle } from "lucide-react";
 import styles from "./page.module.css";
 import { installDialogFit } from "./lib/fitDialogs";
 import TopBar from "./components/TopBar";
@@ -47,6 +47,7 @@ import BacktestSessionBar from "./components/BacktestSessionBar";
 import BacktestSessionsPanel from "./components/BacktestSessionsPanel";
 import VoicePanel from "./components/VoicePanel";
 import VoiceBridge from "./components/VoiceBridge";
+import FeedbackPanel from "./components/FeedbackPanel";
 import { registerVoiceCommands, setVoiceContext } from "./lib/voice/registry";
 import { DATE_RANGES } from "./components/BottomPanel";
 import { saveReplay, setSavedReplayUser } from "./lib/savedReplay";
@@ -131,6 +132,8 @@ function AppLayout() {
     try { localStorage.setItem(RIGHT_PANEL_KEY, String(open)); } catch { /* ignore */ }
   };
   const [showShortcuts, setShowShortcuts] = useState(false);
+  // Send feedback / report a bug (the bubble on the chart, or the voice assistant)
+  const [showFeedback, setShowFeedback] = useState(false);
   // Collab charts: the Collaborate dialog (from the chart's right-click menu or the group panel)
   const [showCollabDialog, setShowCollabDialog] = useState(false);
   const inCollab = useCollabActive();
@@ -1024,6 +1027,7 @@ function AppLayout() {
       { id: "paper-trading-panel", run: ev("tv:open-trading-panel") },
       { id: "download-chart-data", run: ev("tv:download-chart-data") },
       { id: "collab-dialog", run: () => setShowCollabDialog(true) },
+      { id: "feedback-panel", run: () => setShowFeedback(true) },
       // the site's other pages (in a new tab)
       { id: "page-analytics", run: tab("/analytics") },
       { id: "page-backtest-sessions", run: tab("/analytics?view=backtests") },
@@ -1374,6 +1378,37 @@ function AppLayout() {
       <BacktestSessionBar symbol={symbol} interval={selectedInterval} intervalLabel={intervalLabel}
         onSymbol={setSymbol} onInterval={(iv, label) => handleIntervalChange(iv, label)} />
       {showShortcuts && <KeyboardShortcutsDialog onClose={() => setShowShortcuts(false)} />}
+
+      {showFeedback && (
+        <FeedbackPanel
+          theme={theme}
+          symbol={symbol}
+          interval={intervalLabel}
+          onClose={() => setShowFeedback(false)}
+        />
+      )}
+      {/* The chart's feedback icon: a small bubble above the bottom bar, on the chart's bottom-left
+          corner beside the logo; clicking it opens the bug-report panel. Hidden when panels are
+          hidden or the panel itself is open */}
+      {!panelsHidden && !showFeedback && (
+        <button
+          onClick={() => setShowFeedback(true)}
+          aria-label="Send feedback"
+          title="Send feedback / report a bug"
+          style={{
+            position: "fixed", left: "calc(var(--tv-left-toolbar-width) + 52px)", bottom: "calc(var(--tv-bottom-toolbar-height) + 14px)",
+            width: "36px", height: "36px", borderRadius: "50%",
+            border: "1px solid var(--tv-color-border)",
+            backgroundColor: "var(--tv-color-pane-bg)", color: "var(--tv-color-text)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            // (above the chart, under the toolbars (2001) so their flyout menus open over it)
+            cursor: "pointer", zIndex: 2000,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+          }}
+        >
+          <MessageCircle size={17} strokeWidth={1.5} />
+        </button>
+      )}
 
       {/* Collab charts: opening links and invites, keeping the shared chart in step, others' cursors and trades */}
       <CollabController />

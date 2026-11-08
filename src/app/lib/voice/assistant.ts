@@ -17,7 +17,7 @@
 import { useSyncExternalStore } from "react";
 import { intervalByValue, type Intent, type Interval, type MarkKind, type Invitee } from "./commands";
 import { voiceCommand, voiceCommands, voiceContext, pickTool, voiceFunction, voiceFunctions } from "./registry";
-import { DRAWING_TOOLS } from "../../components/drawing/toolCatalog";
+import { findTool } from "./tools";
 import { collab, collabApi, collabLink, type Person, type RoomInfo, type Member } from "../collab/session";
 import { openCollab } from "../../components/collab/CollabController";
 import { markOnChart, clearMarks, countMarks, MARK_NAMES } from "./marks";
@@ -475,24 +475,6 @@ async function runCommand(intent: Extract<Intent, { kind: "command" }>, confirme
   }
   await c.run();
   done("Done.");
-}
-
-// A tool by what it was called: its name, then its keywords, then the most words in common
-function findTool(name: string): { type: string; label: string } | null {
-  const n = name.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\b(tool|drawing|the|a)\b/g, " ").replace(/\s+/g, " ").trim();
-  if (!n) return null;
-  const tools = DRAWING_TOOLS.map(t => ({ type: String(t.type), label: t.label, words: [t.label, ...(t.keywords || [])].join(" ").toLowerCase() }));
-  const exact = tools.find(t => t.label.toLowerCase() === n);
-  if (exact) return exact;
-  const inLabel = tools.find(t => t.label.toLowerCase().includes(n));
-  if (inLabel) return inLabel;
-  const want = n.split(" ");
-  let best: (typeof tools)[number] | null = null, score = 0;
-  for (const t of tools) {
-    const s = want.filter(w => t.words.includes(w)).length;
-    if (s > score) { best = t; score = s; }
-  }
-  return score > 0 ? best : null;
 }
 
 // ---- collabs ----------------------------------------------------------------------------------
