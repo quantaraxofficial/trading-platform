@@ -33,7 +33,9 @@ export type Intent =
   // to the open one, copy its link
   | { kind: "collab_start"; name?: string; invite?: Invitee[]; allowRequests?: boolean; allowVoice?: boolean }
   | { kind: "collab_invite"; invite: Invitee[] }
-  | { kind: "collab_link" };
+  | { kind: "collab_link" }
+  // a function with inputs (lib/voice/registry: chats, alerts, watchlists, settings, Pine, orders…)
+  | { kind: "call"; fn: string; args: Record<string, string | number | boolean> };
 
 export type Invitee = { who: string; role: "editor" | "viewer" };
 

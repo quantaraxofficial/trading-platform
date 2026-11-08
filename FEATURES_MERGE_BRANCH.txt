@@ -408,6 +408,15 @@ Posting signals out
     templates, market buy / sell (opens the order ticket), go to date, time zone, hide panels,
     keyboard shortcuts... New features register there too
   - Any drawing tool by name ("pick the fib retracement tool")
+  - Functions with inputs (components/VoiceBridge, lib/voice/registry): message someone from
+    your collabs, a group chat or the open collab's chat (asked first); list alerts, delete one
+    (asked first; "which one?" when unclear); add / remove symbols, create / open watchlists;
+    follow / unfollow people (asked first); 17 chart settings by name (grid, countdown,
+    background and candle colours, scale font size, site font, price / previous close / high-low /
+    bid-ask lines, 12 / 24-hour clock, session breaks, watermark); open a saved layout by name;
+    go to a date and time; a paper order ticket filled in (side, quantity, type, price) for the
+    trader to place; the AI writes a Pine Script v6 script and opens it in the editor
+  - In the Pine Editor: add to chart, save, open, new indicator / strategy, optimize, publish
   - Every action is checked on the server against the site's own lists (symbols, timeframes,
     indicators, chart types, themes, past dates); it can't place orders
   - Answers spoken aloud and shown as subtitles in the panel's chat, each word lighting up as

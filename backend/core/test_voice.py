@@ -277,3 +277,38 @@ class CommandAsTypeTests(TestCase):
         self.assertEqual(clean_action({"type": "drawings-lock-all"}, cmds), {"type": "command", "id": "drawings-lock-all"})
         self.assertEqual(clean_action({"type": "strong"}, cmds), {"type": "command", "id": "magnet-strong"})
         self.assertIsNone(clean_action({"type": "format-disk"}, cmds))
+
+
+class FunctionCallTests(TestCase):
+    def test_only_listed_functions_with_clean_inputs(self):
+        fns = ["watchlist_add", "pine_write"]
+        a = clean_action({"type": "call", "fn": "watchlist_add", "args": {"symbol": "XAU/USD", "list": "Gold", "Bad Key": 1, "n": float("nan")}}, (), fns)
+        self.assertEqual(a, {"type": "call", "fn": "watchlist_add", "args": {"symbol": "XAU/USD", "list": "Gold"}})
+        self.assertIsNone(clean_action({"type": "call", "fn": "delete_everything", "args": {}}, (), fns))
+        code = "x" * 9000
+        self.assertEqual(len(clean_action({"type": "call", "fn": "pine_write", "args": {"code": code, "name": "y" * 900}}, (), fns)["args"]["code"]), 8000)
+
+
+@override_settings(GROQ_API_KEY="groq-key", GROQ_MODEL="g", GEMINI_API_KEY="", VOICE_AI_DAILY_LIMIT=5)
+class FunctionContextTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        me = TraderProfile.objects.create(uid="u1", name="A", email="a@example.com")
+        UserSession.objects.create(user=me, session_key="sk1")
+
+    def test_signatures_go_to_the_ai_and_calls_come_back(self):
+        content = {"reply": "Adding it.", "actions": [{"type": "call", "fn": "watchlist_add", "args": {"symbol": "EUR/USD"}}]}
+        with mock.patch("core.voice.requests.post", return_value=answer(content)) as post:
+            r = APIClient().post("/api/users/voice/ask/u1/?session_key=sk1", {"text": "x", "context": {
+                "functions": ["watchlist_add(symbol?, list?) adds a symbol", "not a signature!"]}}, format="json")
+        system = post.call_args.kwargs["json"]["messages"][0]["content"]
+        self.assertIn("Site functions: watchlist_add(symbol?, list?) adds a symbol", system)
+        self.assertNotIn("not a signature", system)
+        self.assertEqual(r.data["actions"], [{"type": "call", "fn": "watchlist_add", "args": {"symbol": "EUR/USD"}}])
+
+
+class FunctionAsTypeTests(TestCase):
+    def test_a_function_written_as_the_type(self):
+        fns = ["watchlist_add", "go_to_date"]
+        self.assertEqual(clean_action({"type": "watchlist_add", "symbol": "EUR/USD"}, (), fns), {"type": "call", "fn": "watchlist_add", "args": {"symbol": "EUR/USD"}})
+        self.assertEqual(clean_action({"type": "go_to_date", "args": {"date": "2025-03-03", "time": "14:00"}}, (), fns)["args"], {"date": "2025-03-03", "time": "14:00"})

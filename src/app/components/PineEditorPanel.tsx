@@ -13,6 +13,7 @@
 // as a commit and pulls script files from one; a script pulled or pushed stays linked to its
 // file, for one-click push / pull.
 
+import { registerVoiceCommands } from "../lib/voice/registry";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
@@ -595,6 +596,19 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
   const panelRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<PineEditorApi | null>(null);
   const keyActions = { run: () => runScript(), save: () => saveScript(), open: () => setDialog("open"), newIndicator: () => createNew("indicator"), newStrategy: () => createNew("strategy") };
+  // The voice assistant can do these while the editor is open (lib/voice/registry)
+  useEffect(() => {
+    registerVoiceCommands("pine-editor", [
+      { id: "pine-add-to-chart", run: keyActions.run },
+      { id: "pine-save", run: keyActions.save },
+      { id: "pine-open-script", run: keyActions.open },
+      { id: "pine-new-indicator", run: keyActions.newIndicator },
+      { id: "pine-new-strategy", run: keyActions.newStrategy },
+      { id: "pine-optimize-strategy", run: () => { if (uid) setShowOptimizer(true); } },
+      { id: "pine-publish", run: () => publish() },
+    ]);
+  });
+  useEffect(() => () => registerVoiceCommands("pine-editor", null), []);
   const keysRef = useRef(keyActions);
   keysRef.current = keyActions;
   useEffect(() => {

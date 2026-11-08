@@ -46,6 +46,7 @@ import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
 import BacktestSessionBar from "./components/BacktestSessionBar";
 import BacktestSessionsPanel from "./components/BacktestSessionsPanel";
 import VoicePanel from "./components/VoicePanel";
+import VoiceBridge from "./components/VoiceBridge";
 import { registerVoiceCommands, setVoiceContext } from "./lib/voice/registry";
 import { DATE_RANGES } from "./components/BottomPanel";
 import { saveReplay, setSavedReplayUser } from "./lib/savedReplay";
@@ -993,9 +994,10 @@ function AppLayout() {
     const ev = (name: string, detail?: any) => () => { window.dispatchEvent(new CustomEvent(name, { detail })); };
     const tab = (href: string) => () => { try { window.open(href, "_blank", "noopener"); } catch { /* blocked */ } };
     registerVoiceCommands("page", [
-      // (not the ones the assistant has its own action for: theme, alert, replay, Pine Editor,
-      // reset view, chart image, the watchlist panel)
-      ...quickActions.filter(a => !["theme", "alert", "replay", "pine-editor", "reset-view", "download-image", "copy-image", "open-watchlist"].includes(a.id))
+      // (not the ones the assistant has its own action or function for: theme, alert, replay, Pine
+      // Editor, reset view, chart image, the watchlist, go to date, symbol, interval, orders)
+      ...quickActions.filter(a => !["theme", "alert", "replay", "pine-editor", "reset-view", "download-image", "copy-image", "open-watchlist",
+        "goto", "watchlist", "symbol", "interval", "market-buy", "market-sell"].includes(a.id))
         .map(a => ({ id: a.id, run: () => { a.run(); } })),
       { id: "theme-toggle-light-dark", run: toggleTheme },
       { id: "indicators-remove-all", run: () => setActiveIndicators([]),
@@ -1312,6 +1314,9 @@ function AppLayout() {
           initialLanguage={pineOpenRequest?.language}
         />
       )}
+
+      {/* the voice assistant's functions with inputs (always mounted) */}
+      <VoiceBridge />
 
       {showAgentChat && (
         <AgentChatPanel theme={theme} onClose={() => setShowAgentChat(false)} />

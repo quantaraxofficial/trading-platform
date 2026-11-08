@@ -16,7 +16,7 @@
 
 import { useSyncExternalStore } from "react";
 import { intervalByValue, type Intent, type Interval, type MarkKind, type Invitee } from "./commands";
-import { voiceCommand, voiceCommands, voiceContext, pickTool } from "./registry";
+import { voiceCommand, voiceCommands, voiceContext, pickTool, voiceFunction, voiceFunctions } from "./registry";
 import { DRAWING_TOOLS } from "../../components/drawing/toolCatalog";
 import { collab, collabApi, collabLink, type Person, type RoomInfo, type Member } from "../collab/session";
 import { openCollab } from "../../components/collab/CollabController";
@@ -442,6 +442,26 @@ async function run(intent: Intent, reply?: string, quiet = false, confirmed = fa
     case "collab_link":
       copyCollabLink();
       return;
+    case "call":
+      await callFunction(intent, confirmed, reply, quiet);
+      return;
+  }
+}
+
+// A function with inputs: asked first when it needs a yes, then run; what it returns is said. A
+// question it raises (a name matching several people…) is said too: the answer goes to the AI
+async function callFunction(intent: Extract<Intent, { kind: "call" }>, confirmed: boolean, reply?: string, quiet = false) {
+  const f = voiceFunction(intent.fn);
+  if (!f) { say("I can't do that here right now."); return; }
+  try {
+    if (f.confirm && !confirmed) {
+      const q = await f.confirm(intent.args);
+      if (q) { askConfirm(q, intent); return; }
+    }
+    const out = await f.run(intent.args);
+    if (out || !quiet) say(out || reply || "Done.");
+  } catch (e: any) {
+    say(e?.message || "Something went wrong doing that.");
   }
 }
 
@@ -610,6 +630,7 @@ function intentOf(a: any): Intent | null {
     };
     case "collab_invite": { const inv = invitees(a.invite); return inv.length ? { kind: "collab_invite", invite: inv } : null; }
     case "collab_link": return { kind: "collab_link" };
+    case "call": return typeof a.fn === "string" ? { kind: "call", fn: a.fn, args: a.args && typeof a.args === "object" ? a.args : {} } : null;
     default: return null;
   }
 }
@@ -652,6 +673,7 @@ async function askAI(text: string) {
       body: JSON.stringify({ text, history, context: {
         symbol: chartSymbol || null, interval: chart?.interval ?? null, price: p?.price ?? null,
         commands: voiceCommands().map(c => c.id),
+        functions: voiceFunctions().map(f => f.signature),
         collab: collab.get().room ? { name: collab.get().room!.name, role: collab.get().room!.role } : null,
       } }),
     });

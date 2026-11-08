@@ -63,7 +63,7 @@ Answer with JSON only: {"reply": "...", "actions": [{"type": ..., fields}, ...]}
 reply: one or two short plain spoken sentences, no markdown or emoji. With an action, say what you're doing ("Marking the order blocks.").
 You are the site's only way of understanding the trader: every request comes to you. If something you need is missing or could mean different things, ask one short question instead of guessing: put it in reply, actions [], and "question": true; their answer comes next with this conversation, so then do what they asked. Don't ask about what has a default: the chart's symbol and timeframe, a 10,000 balance, a backtest without an end. A backtest needs a start date: ask for it. Asked what you can do: name a few things briefly.
 Actions:
-symbol {symbol, interval?} open a chart | interval {interval} | mark {what: [kinds]} analyse the bars and mark them | clear_marks {what?: [kinds]} remove your marks (no what: all) | indicator {name, remove?} | chart_type {chart_type} | theme {theme} | replay {date} or {random: true} | alert {price} opens a new alert to confirm | backtest_new {symbol?, interval?, start_date, balance?, length?: {value, unit}} creates and opens a session (the site asks the trader to confirm) | snapshot {copy?} chart image | reset_view | pine {open} Pine Editor | panel {panel} | price reads the chart's price | stop stops listening | command {id} one of the site's commands listed below | drawing_tool {name} picks a drawing tool by name (\"trend line\", \"fib retracement\") | collab_start {name?, invite?: [{who, role: editor|viewer}], ask_to_join?, everyone_mic?} shares the chart live with others (the site asks the trader to confirm) | collab_invite {invite: [{who, role}]} to the open collab | collab_link copies the open collab's link
+symbol {symbol, interval?} open a chart | interval {interval} | mark {what: [kinds]} analyse the bars and mark them | clear_marks {what?: [kinds]} remove your marks (no what: all) | indicator {name, remove?} | chart_type {chart_type} | theme {theme} | replay {date} or {random: true} | alert {price} opens a new alert to confirm | backtest_new {symbol?, interval?, start_date, balance?, length?: {value, unit}} creates and opens a session (the site asks the trader to confirm) | snapshot {copy?} chart image | reset_view | pine {open} Pine Editor | panel {panel} | price reads the chart's price | stop stops listening | command {id} one of the site's commands listed below | drawing_tool {name} picks a drawing tool by name (\"trend line\", \"fib retracement\") | collab_start {name?, invite?: [{who, role: editor|viewer}], ask_to_join?, everyone_mic?} shares the chart live with others (the site asks the trader to confirm) | collab_invite {invite: [{who, role}]} to the open collab | collab_link copies the open collab's link | call {fn, args} one of the site functions listed below, e.g. {\"type\": \"call\", \"fn\": \"watchlist_add\", \"args\": {\"symbol\": \"EUR/USD\"}} (ask for what it needs)
 kinds: order_blocks fvg ifvg support_resistance (the site works them out from the bars: never state levels yourself). Order block: the last opposite candle before a move that breaks structure. FVG: a three-candle gap where candle 1 and 3 don't overlap. IFVG: an FVG that price closed through, now acting the other way (a bullish gap broken below becomes resistance).
 symbol: BASE/QUOTE for forex, metals, crypto (gold XAU/USD); ticker for stocks (AAPL)
 interval: 1min 5min 15min 30min 45min 1h 2h 4h 1day 1week 1month
@@ -71,7 +71,7 @@ indicator name, exactly one of: """ + "; ".join(sorted(INDICATORS)) + """
 chart_type: """ + " ".join(k if v.lower() == k.lower() else f"{k} ({v})" for k, v in CHART_TYPES.items()) + """
 theme: """ + " ".join(THEMES) + """
 panel: watchlist alerts object_tree collab chats notifications backtest_sessions
-Before collab_start, ask for its name and who to invite (as editor or viewer), saying they can say \"defaults\" (named after the symbol, nobody invited, people may ask to join, everyone's mic on); don't ask what they already said; if they say defaults, send collab_start at once with nothing else. Everything else: do the obvious thing without asking.
+Before collab_start, ask for its name and who to invite (as editor or viewer), saying they can say \"defaults\" (named after the symbol, nobody invited, people may ask to join, everyone's mic on); don't ask what they already said; if they say defaults, send collab_start at once with nothing else. Everything else: do the obvious thing without asking. Asked to write a script or strategy: pine_write with the whole code (Pine Script v6), not just opening the editor.
 length unit: hours days weeks months years. Dates YYYY-MM-DD, in the past; today is {today}.
 You can't place orders or see the trader's account. Explain trading briefly; never promise profits or say what to buy or sell; don't guess news or prices you don't have."""
 
@@ -92,7 +92,7 @@ def _providers():
 
 
 def _complete(url, key, model, messages):
-    body = {"model": model, "messages": messages, "temperature": 0.3, "max_tokens": 500, "response_format": {"type": "json_object"}}
+    body = {"model": model, "messages": messages, "temperature": 0.3, "max_tokens": 1200, "response_format": {"type": "json_object"}}
     # (gpt-oss thinks before it answers, and the thinking counts against the free tier's tokens)
     if "gpt-oss" in model:
         body["reasoning_effort"] = "low"
@@ -126,7 +126,29 @@ def _parse(content):
 
 COMMAND_ID = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,48}$")
 ACTION_TYPES = {"symbol", "interval", "pine", "price", "reset_view", "stop", "panel", "mark", "clear_marks", "indicator", "chart_type", "theme",
-                "replay", "alert", "snapshot", "backtest_new", "command", "drawing_tool", "collab_start", "collab_invite", "collab_link"}
+                "replay", "alert", "snapshot", "backtest_new", "command", "drawing_tool", "collab_start", "collab_invite", "collab_link", "call"}
+FN_NAME = re.compile(r"^[a-z][a-z0-9_]{0,40}$")
+ARG_KEY = re.compile(r"^[a-z][a-z0-9_]{0,24}$")
+
+
+def _fn_name(signature):
+    return signature.split("(", 1)[0].strip()
+
+
+def _args(v):
+    """A function's inputs: a few named values, short text (a script's code may be long)"""
+    out = {}
+    for k, val in (list(v.items()) if isinstance(v, dict) else [])[:8]:
+        if not isinstance(k, str) or not ARG_KEY.match(k) or val is None:
+            continue
+        if isinstance(val, bool):
+            out[k] = val
+        elif isinstance(val, (int, float)):
+            if val == val and abs(val) < 1e12:
+                out[k] = val
+        elif isinstance(val, str):
+            out[k] = val[: 8000 if k == "code" else 500]
+    return out
 ROLES = {"editor", "viewer"}
 
 
@@ -139,14 +161,18 @@ def _invitees(v):
     return out
 
 
-def clean_action(a, commands=()):
+def clean_action(a, commands=(), functions=()):
     """Only the site's own actions, with values from its own lists (anything else is dropped)"""
     if not isinstance(a, dict):
         return None
     t = a.get("type")
-    # (a site command written as the type itself: {"type": "drawings-lock-all"})
+    # (a site function or command written as the type itself, inputs alongside:
+    # {"type": "watchlist_add", "symbol": "EUR/USD"}, {"type": "drawings-lock-all"})
+    if isinstance(t, str) and t not in ACTION_TYPES and t in functions:
+        flat = a.get("args") if isinstance(a.get("args"), dict) else {k: v for k, v in a.items() if k != "type"}
+        return clean_action({"type": "call", "fn": t, "args": flat}, commands, functions)
     if isinstance(t, str) and t not in ACTION_TYPES and commands:
-        return clean_action({"type": "command", "id": t}, commands)
+        return clean_action({"type": "command", "id": t}, commands, functions)
     if t == "symbol":
         sym = _site_symbol(a.get("symbol"))
         if not sym:
@@ -185,6 +211,11 @@ def clean_action(a, commands=()):
     if t == "collab_invite":
         inv = _invitees(a.get("invite"))
         return {"type": "collab_invite", "invite": inv} if inv else None
+    if t == "call":
+        fn = str(a.get("fn") or a.get("name") or "").strip()
+        if not FN_NAME.match(fn) or fn not in functions:
+            return None
+        return {"type": "call", "fn": fn, "args": _args(a.get("args"))}
     if t == "collab_link":
         return {"type": "collab_link"}
     if t in ("price", "reset_view", "stop"):
@@ -283,6 +314,8 @@ def ask(request, uid):
 
     ctx = request.data.get("context") if isinstance(request.data.get("context"), dict) else {}
     commands = [c for c in (ctx.get("commands") if isinstance(ctx.get("commands"), list) else []) if isinstance(c, str) and COMMAND_ID.match(c)][:200]
+    signatures = [sig.strip()[:300] for sig in (ctx.get("functions") if isinstance(ctx.get("functions"), list) else []) if isinstance(sig, str) and FN_NAME.match(_fn_name(sig))][:40]
+    functions = [_fn_name(sig) for sig in signatures]
     room = ctx.get("collab") if isinstance(ctx.get("collab"), dict) else None
     context_line = "The chart now: symbol {sym}, timeframe {tf}{price}.".format(
         sym=str(ctx.get("symbol") or "unknown")[:20], tf=str(ctx.get("interval") or "unknown")[:10],
@@ -290,6 +323,8 @@ def ask(request, uid):
     context_line += " " + (f"In the collab {str(room.get('name'))[:80]!r} as {str(room.get('role'))[:10]}." if room else "Not in a collab.")
     if commands:
         context_line += "\nSite commands (use the id exactly): " + " ".join(commands)
+    if signatures:
+        context_line += "\nSite functions: " + " | ".join(signatures)
     prompt = SYSTEM_PROMPT.replace("{today}", timezone.now().date().isoformat())
     messages = [{"role": "system", "content": prompt + "\n\n" + context_line}, *_clean_history(request.data.get("history")),
                 {"role": "user", "content": text}]
@@ -305,7 +340,7 @@ def ask(request, uid):
             continue
         reply = str(data.get("reply") or "").strip()[:600]
         raw = data.get("actions") if isinstance(data.get("actions"), list) else [data.get("action")]
-        actions = [x for x in (clean_action(r, commands) for r in raw[:3]) if x]
+        actions = [x for x in (clean_action(r, commands, functions) for r in raw[:3]) if x]
         if not reply and not actions:
             failures.append(f"{name}: empty answer")
             continue

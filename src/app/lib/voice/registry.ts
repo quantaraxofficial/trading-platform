@@ -20,6 +20,31 @@ export function voiceCommands(): VoiceCommand[] {
 }
 export const voiceCommand = (id: string) => voiceCommands().find(c => c.id === id) ?? null;
 
+// Functions with inputs ("watchlist_add(symbol, list?)"): the AI gets their signatures and
+// answers {"type": "call", "fn": …, "args": {…}}. `run` returns what to say (or throws an Error
+// whose message is said: a question when it needs to know more). `confirm` returns the yes / no
+// question to ask first, or null.
+export type VoiceArgs = Record<string, string | number | boolean | undefined>;
+export type VoiceFunction = {
+  name: string;
+  signature: string;          // what the AI sees: "watchlist_add(symbol, list?) adds a symbol to a watchlist"
+  run: (args: VoiceArgs) => Promise<string | void> | string | void;
+  confirm?: (args: VoiceArgs) => Promise<string | null> | string | null;
+};
+const fnSources = new Map<string, VoiceFunction[]>();
+export function registerVoiceFunctions(source: string, fns: VoiceFunction[] | null) {
+  if (fns) fnSources.set(source, fns); else fnSources.delete(source);
+}
+export function voiceFunctions(): VoiceFunction[] {
+  const seen = new Set<string>();
+  const out: VoiceFunction[] = [];
+  fnSources.forEach(list => list.forEach(f => { if (!seen.has(f.name)) { seen.add(f.name); out.push(f); } }));
+  return out;
+}
+export const voiceFunction = (name: string) => voiceFunctions().find(f => f.name === name) ?? null;
+// A question back to the trader from a function (said, and their answer goes to the AI)
+export class VoiceQuestion extends Error {}
+
 // Things the assistant reads from the site (the chart's indicators, the open collab…)
 const context = new Map<string, () => unknown>();
 export function setVoiceContext(key: string, get: (() => unknown) | null) { if (get) context.set(key, get); else context.delete(key); }
