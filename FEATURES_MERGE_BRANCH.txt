@@ -423,6 +423,9 @@ Posting signals out
   - Analytics by voice: the views, the period (today ... all), the account, MT5 refresh, and
     "how am I doing" reads the results shown (trades, win rate, P&L, profit factor, drawdown,
     best / worst day, streaks, longs vs shorts, best / worst symbol)
+  - "Close the site": asked first, saves what's waiting to sync, then every open tab of the
+    site closes (tabs the browser won't let a page close - ones with a longer history - go
+    blank instead, the site no longer running in them)
   - Community by voice: search people, indicators or strategies; open someone's profile
     ("which one?" when the name matches several)
   - Copy trading by voice: your channels and the ones you follow read out; pause / resume a

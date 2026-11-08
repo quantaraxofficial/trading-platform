@@ -13,6 +13,7 @@ import VoiceBridge from "./VoiceBridge";
 import { useVoice, setVoiceUser } from "../lib/voice/assistant";
 import { registerVoiceCommands } from "../lib/voice/registry";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import { closeAllSiteTabs, listenForSiteClose } from "../lib/siteClose";
 
 export default function VoiceDock() {
   const pathname = usePathname();
@@ -24,6 +25,16 @@ export default function VoiceDock() {
   useEscapeClose(() => setOpen(false), open && !onChart);
 
   useEffect(() => { if (!onChart) setVoiceUser(user?.uid ?? null); }, [user?.uid, onChart]);
+  // "Close the site": every tab of the site closes (asked first). Every page, the chart's too:
+  // this tab closes when another one says so (lib/siteClose)
+  useEffect(() => {
+    const stop = listenForSiteClose();
+    registerVoiceCommands("site", [
+      { id: "site-close-all-tabs", run: () => { void closeAllSiteTabs(); },
+        confirm: () => "Close all TradePilot tabs? Your work is saved first. Say yes or no." },
+    ]);
+    return () => { stop(); registerVoiceCommands("site", null); };
+  }, []);
   // Moving between the site's pages
   useEffect(() => {
     if (onChart) return;
