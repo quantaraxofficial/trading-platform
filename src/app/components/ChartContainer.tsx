@@ -35,6 +35,7 @@ import { strategyDock } from "./strategy/strategyStore";
 import { fetchPineTimeframeData } from "../lib/pineDataFetch";
 import { runPineScriptAsync, appIntervalToPineTf, getPineInputsMeta, type PineInputMeta } from "../lib/pineScriptEngine";
 import PineSettingsModal from "./PineSettingsModal";
+import { scriptDefault } from "../lib/scriptTemplates";
 import { useAuth } from "@/context/AuthContext";
 import { MultiSelectSubBar } from "./drawing/ui/MultiSelectSubBar";
 import { TVSettingsIcon } from "./icons/TVIcons";
@@ -1485,7 +1486,7 @@ export default function ChartContainer({
   // kept here (not just inside PineEditorPanel, which unmounts when closed)
   // so the strategy report's "Testing period" picker can re-run the exact
   // same script over a different bar range at any time, editor open or not.
-  const lastPineRunRef = useRef<{ code: string; symbol: string; pineTf: string; scriptName: string } | null>(null);
+  const lastPineRunRef = useRef<{ code: string; symbol: string; pineTf: string; scriptName: string; templateKey?: string | null } | null>(null);
   const [backtestRange, setBacktestRange] = useState<{ kind: "all" | "days" | "custom" | "history"; days?: number; from?: number; to?: number }>({ kind: "all" });
   const [backtestBusy, setBacktestBusy] = useState(false);
   const [capitalOverride, setCapitalOverride] = useState<number | null>(null);
@@ -1770,6 +1771,34 @@ export default function ChartContainer({
     if (fullDataRef.current.length) runBacktest({ kind: "all" }, p.capital ?? null, p.overrides || {}, true);
     else { setCapitalOverride(p.capital ?? null); setInputOverrides(p.overrides || {}); }
   };
+  // An indicator template's script (IndicatorTemplatesMenu → applied in ChartApp): put on the chart
+  // with the settings the template saved, keeping its place on the site (templateKey) so its own
+  // settings templates still apply
+  const applyTemplateScriptRef = useRef<(p: any) => void>(() => {});
+  applyTemplateScriptRef.current = (p: any) => {
+    if (!p?.code) return;
+    lastPineRunRef.current = { code: p.code, symbol: symbolRef.current, pineTf: appIntervalToPineTf(intervalRef.current), scriptName: p.scriptName || "Script", templateKey: p.templateKey ?? null };
+    (window as any).__pineScript = { code: p.code, scriptName: p.scriptName || "Script" };
+    setPineInputsMeta(getPineInputsMeta(p.code));
+    plotColorsRef.current = p.plotColors || {};
+    setPlotColorOverrides(p.plotColors || {});
+    setBacktestRange({ kind: "all" });
+    if (fullDataRef.current.length) runBacktest({ kind: "all" }, p.capital ?? null, p.inputs || {});
+    else { setCapitalOverride(p.capital ?? null); setInputOverrides(p.inputs || {}); }
+  };
+  useEffect(() => {
+    const onTemplateScript = (e: Event) => applyTemplateScriptRef.current((e as CustomEvent).detail);
+    window.addEventListener("tv:apply-template-script", onTemplateScript);
+    return () => window.removeEventListener("tv:apply-template-script", onTemplateScript);
+  }, []);
+  // The script on the chart and its current settings, for saving an indicator template
+  useEffect(() => {
+    const last = lastPineRunRef.current;
+    (window as any).__pineScriptState = last && pineLegend
+      ? { templateKey: last.templateKey ?? null, scriptName: last.scriptName, inputs: inputOverrides, capital: capitalOverride, plotColors: plotColorOverrides }
+      : null;
+  });
+
   useEffect(() => {
     const onCollabPine = (e: Event) => applyCollabPineRef.current((e as CustomEvent).detail?.pine ?? null);
     window.addEventListener("tv:collab-pine", onCollabPine);
@@ -1800,9 +1829,18 @@ export default function ChartContainer({
           symbol,
           pineTf: appIntervalToPineTf(interval),
           scriptName,
+          templateKey: e.detail.templateKey ?? null,
         };
         (window as any).__pineScript = { code: e.detail.code, scriptName };
         setPineInputsMeta(getPineInputsMeta(e.detail.code));
+        // The user's saved default settings for this script (its settings → Defaults → Save as
+        // default): applied as it's added, as on TradingView
+        const def = scriptDefault(e.detail.templateKey);
+        if (def) {
+          plotColorsRef.current = def.plotColors || {};
+          setPlotColorOverrides(def.plotColors || {});
+          runBacktest({ kind: "all" }, def.capital ?? null, def.inputs || {}, true);
+        }
       }
     }
     function handleClearPine() {
@@ -4567,6 +4605,7 @@ export default function ChartContainer({
           <PineSettingsModal
             theme={theme}
             scriptName={sp.scriptName}
+            templateKey={sp.templateKey}
             inputsMeta={sp.inputsMeta}
             currentOverrides={sp.currentOverrides}
             initialCapital={0}
@@ -4582,6 +4621,7 @@ export default function ChartContainer({
         <PineSettingsModal
           theme={theme}
           scriptName={pineLegend.name}
+          templateKey={lastPineRunRef.current?.templateKey ?? null}
           inputsMeta={pineInputsMeta}
           currentOverrides={inputOverrides}
           initialCapital={capitalOverride ?? pineDeclMeta.initialCapital}

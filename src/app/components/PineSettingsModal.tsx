@@ -13,6 +13,9 @@ import { useEscapeClose } from "../lib/useEscapeClose";
 import { PaletteInput } from "./drawing/ui/PaletteInput";
 import TvSelect from "@/app/components/ui/TvSelect";
 import { CheckBox, NumberField, Select, Info } from "./EmaSettingsModal";
+import {
+  scriptTemplatesStore, saveScriptTemplate, deleteScriptTemplate, saveScriptDefault, type ScriptTemplateValues,
+} from "../lib/scriptTemplates";
 
 interface PineSettingsModalProps {
   theme?: string;
@@ -27,6 +30,9 @@ interface PineSettingsModalProps {
   onApply: (overrides: Record<string, any>, capital: number, plotColors: Record<string, string>) => void;
   onClose: () => void;
   showProperties?: boolean;   // strategies' Properties tab (initial capital); indicators have none
+  // Where the script lives on the site (lib/scriptTemplates): its settings templates are kept under
+  // this. null = not saved on the site yet, so it can't have templates
+  templateKey?: string | null;
 }
 
 // A curated set of Pine timeframe strings for the dropdown — this is just a
@@ -45,7 +51,7 @@ type Tab = "Inputs" | "Properties" | "Style";
 
 export default function PineSettingsModal({
   theme = "dark", scriptName, inputsMeta, currentOverrides, initialCapital, pyramiding, defaultQtyValue, defaultQtyType, showProperties = true,
-  plots, onApply, onClose,
+  plots, onApply, onClose, templateKey = null,
 }: PineSettingsModalProps) {
   const [tab, setTab] = useState<Tab>("Inputs");
   const [draft, setDraft] = useState<Record<string, any>>(() => {
@@ -205,6 +211,22 @@ export default function PineSettingsModal({
     setPlotColors(c);
   }
 
+  // --- Settings templates (Defaults menu): the current values, a saved set applied, saving
+  const currentValues = (): ScriptTemplateValues => ({ inputs: { ...draft }, capital: showProperties ? capital : undefined, plotColors: { ...plotColors } });
+  function applyValues(v: ScriptTemplateValues) {
+    const d: Record<string, any> = {};
+    for (const m of inputsMeta) d[m.varName] = v.inputs && Object.prototype.hasOwnProperty.call(v.inputs, m.varName) ? v.inputs[m.varName] : m.value;
+    setDraft(d);
+    if (showProperties && typeof v.capital === "number" && v.capital > 0) setCapital(v.capital);
+    if (v.plotColors) setPlotColors((cur) => ({ ...cur, ...v.plotColors }));
+  }
+  const allTemplates = scriptTemplatesStore.useValue().byScript;
+  const entry = templateKey ? allTemplates[templateKey] : undefined;
+  const templates = entry?.templates || [];
+  const [saveAsOpen, setSaveAsOpen] = useState(false);
+  const [savedNote, setSavedNote] = useState<string | null>(null);
+  useEffect(() => { if (!savedNote) return; const t = setTimeout(() => setSavedNote(null), 2200); return () => clearTimeout(t); }, [savedNote]);
+
   const [defaultsOpen, setDefaultsOpen] = useState(false);
   const defaultsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -213,6 +235,14 @@ export default function PineSettingsModal({
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [defaultsOpen]);
+
+  const menuItem = (label: string, run: () => void, disabled = false) => (
+    <button type="button" role="menuitem" disabled={disabled} onClick={() => { if (disabled) return; run(); setDefaultsOpen(false); }}
+      onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = isDark ? "#2a2e39" : "#f0f3fa"; }} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+      style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", border: "none", background: "transparent", color: textColor, fontSize: 14, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1 }}>
+      {label}
+    </button>
+  );
 
   const tabs: Tab[] = showProperties ? ["Inputs", "Properties", "Style"] : ["Inputs", "Style"];
 
@@ -223,7 +253,7 @@ export default function PineSettingsModal({
     <div style={{ position: "fixed", inset: 0, zIndex: 10050, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
       <div role="dialog" aria-label={`${scriptName} settings`}
         style={{ width: 454, maxWidth: "calc(100vw - 32px)", maxHeight: "calc(100vh - 32px)", backgroundColor: bgColor, borderRadius: 8, boxShadow: isDark ? "0 4px 24px rgba(0,0,0,0.5)" : "0 4px 24px rgba(0,0,0,0.18)",
-          border: `1px solid ${borderColor}`, pointerEvents: "auto", display: "flex", flexDirection: "column", color: textColor,
+          border: `1px solid ${borderColor}`, pointerEvents: "auto", display: "flex", flexDirection: "column", color: textColor, position: "relative",
           fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif' }}
         onClick={(e) => e.stopPropagation()}>
         <div style={{ padding: "20px 20px 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
@@ -289,21 +319,70 @@ export default function PineSettingsModal({
               Defaults <ChevronDown size={14} style={{ transform: defaultsOpen ? "rotate(180deg)" : undefined }} />
             </button>
             {defaultsOpen && (
-              <div role="menu" style={{ position: "absolute", bottom: "calc(100% + 4px)", left: 0, minWidth: 160, background: bgColor, border: `1px solid ${borderColor}`, borderRadius: 6, boxShadow: "0 4px 12px rgba(0,0,0,0.2)", padding: "4px 0", zIndex: 2 }}>
-                <button type="button" role="menuitem" onClick={() => { resetSettings(); setDefaultsOpen(false); }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = isDark ? "#2a2e39" : "#f0f3fa")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                  style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", border: "none", background: "transparent", color: textColor, fontSize: 14, cursor: "pointer" }}>
-                  Reset settings
-                </button>
+              <div role="menu" style={{ position: "absolute", bottom: "calc(100% + 4px)", left: 0, width: 260, maxHeight: 360, overflowY: "auto", background: bgColor, border: `1px solid ${borderColor}`, borderRadius: 6, boxShadow: "0 4px 12px rgba(0,0,0,0.2)", padding: "4px 0", zIndex: 2 }}>
+                {menuItem("Reset settings", () => resetSettings())}
+                {menuItem("Save as default", () => { if (templateKey) { saveScriptDefault(templateKey, currentValues()); setSavedNote("Saved as this script's default"); } }, !templateKey)}
+                <div style={{ height: 1, background: borderColor, margin: "4px 0" }} />
+                {menuItem("Save as…", () => setSaveAsOpen(true), !templateKey)}
+                {!templateKey && (
+                  <div style={{ padding: "6px 14px 8px", fontSize: 12, lineHeight: 1.45, color: muted }}>Save this script on the site first (Pine Editor → Save script) to keep settings templates for it.</div>
+                )}
+                {templates.length > 0 && <div style={{ height: 1, background: borderColor, margin: "4px 0" }} />}
+                {templates.map((t) => (
+                  <div key={t.name} role="menuitem" tabIndex={0}
+                    onClick={() => { applyValues(t.values); setDefaultsOpen(false); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { applyValues(t.values); setDefaultsOpen(false); } }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = isDark ? "#2a2e39" : "#f0f3fa")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 8px 8px 14px", cursor: "pointer", fontSize: 14 }}>
+                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</span>
+                    <button type="button" aria-label={`Delete template ${t.name}`} title="Delete"
+                      onClick={(e) => { e.stopPropagation(); if (templateKey) deleteScriptTemplate(templateKey, t.name); }}
+                      style={{ border: "none", background: "transparent", color: muted, cursor: "pointer", display: "flex", padding: 2 }}><X size={14} /></button>
+                  </div>
+                ))}
               </div>
             )}
+            {savedNote && <div role="status" style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, whiteSpace: "nowrap", fontSize: 12, padding: "4px 8px", borderRadius: 4, background: isDark ? "#2a2e39" : "#131722", color: "#ffffff" }}>{savedNote}</div>}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" onClick={cancel} style={{ height: 34, padding: "0 14px", borderRadius: 6, border: `1px solid ${fieldBorder}`, backgroundColor: "transparent", color: textColor, cursor: "pointer", fontSize: 14 }}>Cancel</button>
             <button type="button" onClick={handleOk} style={{ height: 34, padding: "0 18px", borderRadius: 6, border: "none", backgroundColor: isDark ? "#ffffff" : "#131722", color: isDark ? "#131722" : "#ffffff", cursor: "pointer", fontSize: 14 }}>Ok</button>
           </div>
         </div>
+        {saveAsOpen && templateKey && (
+          <SaveAsBox existing={templates.map((t) => t.name)} isDark={isDark} colors={{ bg: bgColor, text: textColor, border: borderColor, field: fieldBorder, muted }}
+            onClose={() => setSaveAsOpen(false)}
+            onSave={(name) => { saveScriptTemplate(templateKey, name, currentValues()); setSaveAsOpen(false); setSavedNote(`Saved "${name.trim()}"`); }} />
+        )}
       </div>
     </div>
   , document.body);
+}
+
+// "Save as…": a name for the current settings (saving under an existing name replaces that template)
+function SaveAsBox({ existing, isDark, colors, onSave, onClose }: {
+  existing: string[]; isDark: boolean; colors: { bg: string; text: string; border: string; field: string; muted: string };
+  onSave: (name: string) => void; onClose: () => void;
+}) {
+  useEscapeClose(onClose);
+  const [name, setName] = useState("");
+  const clean = name.trim();
+  const replaces = !!clean && existing.some((n) => n.toLowerCase() === clean.toLowerCase());
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.25)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 5 }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div role="dialog" aria-label="Save settings template" style={{ width: 320, background: colors.bg, color: colors.text, border: `1px solid ${colors.border}`, borderRadius: 8, padding: 20, boxShadow: isDark ? "0 4px 24px rgba(0,0,0,0.5)" : "0 4px 24px rgba(0,0,0,0.18)" }}>
+        <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 14 }}>Save as</div>
+        <input autoFocus aria-label="Template name" value={name} placeholder="Template name" onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && clean) onSave(clean); }}
+          style={{ width: "100%", height: 34, boxSizing: "border-box", border: `1px solid ${colors.field}`, borderRadius: 6, padding: "0 10px", fontSize: 14, outline: "none", background: colors.bg, color: colors.text }} />
+        {replaces && <div style={{ fontSize: 12, color: colors.muted, marginTop: 6 }}>A template with this name will be replaced.</div>}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+          <button type="button" onClick={onClose} style={{ height: 34, padding: "0 14px", borderRadius: 6, border: `1px solid ${colors.field}`, background: "transparent", color: colors.text, cursor: "pointer", fontSize: 14 }}>Cancel</button>
+          <button type="button" disabled={!clean} onClick={() => clean && onSave(clean)}
+            style={{ height: 34, padding: "0 18px", borderRadius: 6, border: "none", background: isDark ? "#ffffff" : "#131722", color: isDark ? "#131722" : "#ffffff", cursor: clean ? "pointer" : "default", opacity: clean ? 1 : 0.5, fontSize: 14 }}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
 }

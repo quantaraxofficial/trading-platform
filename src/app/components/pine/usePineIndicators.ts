@@ -11,6 +11,7 @@ import { BUILTIN_SCRIPTS } from "./builtinScripts";
 import { getPineInputsMeta, type PineInputMeta, type PineRunResult } from "../../lib/pineScriptEngine";
 import { runPineOffThread } from "../../lib/pineRunner";
 import { VolumeProfileVR, DEFAULT_VP, type VolumeProfileSettings } from "../chartPrimitives/VolumeProfileVR";
+import { builtinScriptKey, scriptDefault } from "../../lib/scriptTemplates";
 
 export const VOLUME_PROFILE_VR = "Volume Profile Visible Range";
 // Indicators the chart draws natively (not through Pine)
@@ -125,6 +126,14 @@ export function usePineIndicators(opts: {
       if (!l) {
         l = { name: ind.name, inputsKey: key, token: 0, visible };
         live.current.set(ind.id, l);
+        // Just added (no inputs of its own yet): the user's saved default settings for this
+        // indicator, if any (its settings → Defaults → Save as default). The changed inputs re-run it.
+        const def = ind.inputs ? undefined : scriptDefault(builtinScriptKey(ind.name));
+        if (def?.inputs && Object.keys(def.inputs).length) {
+          optsRef.current.onChangeInputs?.(ind.id, def.inputs);
+          // (a Pine script runs once, on its new inputs; the volume profile reads them as it draws)
+          if (ind.name !== VOLUME_PROFILE_VR) { l.visible = visible; continue; }
+        }
         if (ind.name === VOLUME_PROFILE_VR) {
           const main = optsRef.current.mainSeries();
           if (main) { l.vp = new VolumeProfileVR(optsRef.current.getBars, () => vpSettings(optsRef.current.indicators.find((i) => i.id === ind.id)?.inputs)); main.attachPrimitive(l.vp as any); l.vpOn = main; }
@@ -177,6 +186,7 @@ export function usePineIndicators(opts: {
     const inputsMeta = ind.name === VOLUME_PROFILE_VR ? VP_INPUTS : getPineInputsMeta(CATALOG[ind.name]);
     return {
       scriptName: inst?.title || ind.name,
+      templateKey: builtinScriptKey(ind.name),
       inputsMeta,
       currentOverrides: ind.inputs || {},
       plots: inst?.plots || [],
