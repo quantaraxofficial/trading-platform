@@ -126,6 +126,8 @@ Chart interactions
   - Script settings (a strategy's or a Pine indicator's Inputs / Properties / Style) laid out
     like the other settings dialogs, as on TradingView: label left, control right, group
     headings, TradingView checkboxes, colour boxes, a Defaults menu (Reset settings)
+  - Script settings apply as they're changed: the chart and the Strategy Tester report re-run
+    behind the open dialog; Cancel / Esc put the opening settings back, Ok keeps them
 
 Layouts
   - Multi-chart layouts (Layout setup grid, Manage layouts, sync in layout); each chart keeps
