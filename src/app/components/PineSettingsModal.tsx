@@ -142,11 +142,11 @@ export default function PineSettingsModal({
     setCapitalDraft(String(initialCapital));
   }
 
-  // Rendered on the page body: inside the chart it sat in the chart's own layer, under the
-  // Strategy Tester panel, which covered its lower half
+  // Rendered on the page body and above the panels (the bottom panel is z-index 2000-2003):
+  // inside the chart, or below that, the Strategy Tester panel covered its lower half
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 10050, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
