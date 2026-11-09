@@ -90,7 +90,7 @@ export function RotatedRectangleTool({
     const l = Math.hypot(x1 - x0, y1 - y0);
     const pnx = l > 0.0001 ? -(y1 - y0) / l : 0, pny = l > 0.0001 ? (x1 - x0) / l : 1;
     const next = [...points];
-    next[index] = p;
+    next[index] = { logical: p.logical, price: p.price, ...(p.time != null ? { time: p.time } : {}) };
     const w = at(x0 + pnx * half, y0 + pny * half);
     if (w) next[2] = w;
     onUpdatePoints(next.slice(0, 3));

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { X, Info } from "lucide-react";
 import type { PineInputMeta } from "../lib/pineScriptEngine";
 import { useEscapeClose } from "../lib/useEscapeClose";
@@ -141,7 +142,10 @@ export default function PineSettingsModal({
     setCapitalDraft(String(initialCapital));
   }
 
-  return (
+  // Rendered on the page body: inside the chart it sat in the chart's own layer, under the
+  // Strategy Tester panel, which covered its lower half
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
@@ -275,5 +279,5 @@ export default function PineSettingsModal({
         </div>
       </div>
     </div>
-  );
+  , document.body);
 }

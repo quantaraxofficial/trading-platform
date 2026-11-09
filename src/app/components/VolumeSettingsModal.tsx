@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from 'react-dom';
 import { X, ChevronDown, BarChart2, Activity, Plus } from "lucide-react";
 import { DualRangeSlider } from "./drawing/ui/DualRangeSlider";
 import { useEscapeClose } from "../lib/useEscapeClose";
@@ -121,7 +122,9 @@ export default function VolumeSettingsModal({ onClose, theme, config, onChangeCo
     transition: "color 0.2s, border-bottom 0.2s"
   });
 
-  return (
+  // On the page body: rendered inside the chart it sat under the panels below the chart
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div style={{
       position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
       backgroundColor: "rgba(0,0,0,0.5)",
@@ -303,7 +306,7 @@ export default function VolumeSettingsModal({ onClose, theme, config, onChangeCo
         </div>
       </div>
     </div>
-  );
+  , document.body);
 }
 
 function ColorBox({ color, onChangeColor, theme }: { color: string, onChangeColor: (c: string) => void, theme: string }) {

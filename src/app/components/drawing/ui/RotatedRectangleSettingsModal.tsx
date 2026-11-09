@@ -167,12 +167,12 @@ export function RotatedRectangleSettingsModal({ onClose }: RotatedRectangleSetti
 
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100px' }}>
-                <CheckBox checked={!!selectedShape?.fillEnabled} onChange={(v) => updateProp('fillEnabled', v)} />
+                <CheckBox checked={(selectedShape?.fillEnabled !== false)} onChange={(v) => updateProp('fillEnabled', v)} />
                 <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)' }}>Background</span>
               </div>
-              <div style={{ position: 'relative', width: '34px', height: '34px', borderRadius: '4px', border: '1px solid var(--tv-sub-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: selectedShape?.fillEnabled ? 1 : 0.5 }}>
+              <div style={{ position: 'relative', width: '34px', height: '34px', borderRadius: '4px', border: '1px solid var(--tv-sub-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: selectedShape?.fillEnabled !== false ? 1 : 0.5 }}>
                  <div style={{ width: '20px', height: '20px', backgroundColor: selectedShape?.fill || 'rgba(76, 175, 80, 0.2)', borderRadius: '2px' }}></div>
-                 <PaletteInput disabled={!selectedShape?.fillEnabled} value={selectedShape?.fill || '#4caf50'} onChange={e => updateProp('fill', e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: selectedShape?.fillEnabled ? 'pointer' : 'default' }} />
+                 <PaletteInput disabled={selectedShape?.fillEnabled === false} value={selectedShape?.fill || '#4caf50'} onChange={e => updateProp('fill', e.target.value)} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: selectedShape?.fillEnabled !== false ? 'pointer' : 'default' }} />
               </div>
             </div>
           </div>

@@ -5,7 +5,6 @@ import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../c
 import { useChartTick } from '../core/useChartTick';
 import { useSnap, useSnappedDrag } from '../core/snap';
 import { HandleCircle } from '../core/Handles';
-import { strokeOnlyHit } from '../core/textHit';
 
 interface ArcToolProps {
   id: string;
@@ -141,17 +140,16 @@ export function ArcTool({ id, points, stroke, strokeWidth, fill, isSelected, isH
           ctx.quadraticCurveTo(ctrlX, ctrlY, bx, by);
           ctx.strokeShape(shape);
         }}
+        // Only the curve takes the mouse (10 px wide), not the filled inside, as on TradingView
         hitFunc={(ctx, shape) => {
           ctx.beginPath();
           ctx.moveTo(ax, ay);
           ctx.quadraticCurveTo(ctrlX, ctrlY, bx, by);
-          ctx.closePath();
-          ctx.fillStrokeShape(shape);
+          ctx.strokeShape(shape);
         }}
         stroke={color}
         strokeWidth={strokeWidth}
         fill={fill || (stroke || '#2962ff') + '33'}
-        hitFunc={strokeOnlyHit}
         hitStrokeWidth={10}
         lineCap="round"
         shadowColor={isSelected ? stroke : 'transparent'}

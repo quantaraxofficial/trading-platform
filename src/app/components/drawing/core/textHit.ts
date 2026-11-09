@@ -27,7 +27,8 @@ export function textLinesHitFunc(context: any, shape: any) {
 // Draws the shape's own outline with the fill step skipped.
 export function strokeOnlyHit(context: any, shape: any) {
   context.fillStrokeShape = (s: any) => context.strokeShape(s);
+  context.fillShape = () => {};
   // (a built-in shape's own drawing, or a custom Shape's sceneFunc)
   const draw = shape.sceneFunc?.() || shape._sceneFunc;
-  try { draw.call(shape, context, shape); } finally { delete context.fillStrokeShape; }
+  try { draw.call(shape, context, shape); } finally { delete context.fillStrokeShape; delete context.fillShape; }
 }
