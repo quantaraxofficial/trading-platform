@@ -4572,7 +4572,7 @@ export default function ChartContainer({
             initialCapital={0}
             showProperties={false}
             plots={sp.plots}
-            onApply={(overrides) => { sp.onApply(overrides); pineIndicators.setSettingsFor(null); }}
+            onApply={(overrides) => sp.onApply(overrides)}
             onClose={() => pineIndicators.setSettingsFor(null)}
           />
         );

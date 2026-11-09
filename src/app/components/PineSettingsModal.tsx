@@ -47,7 +47,6 @@ export default function PineSettingsModal({
   theme = "dark", scriptName, inputsMeta, currentOverrides, initialCapital, pyramiding, defaultQtyValue, defaultQtyType, showProperties = true,
   plots, onApply, onClose,
 }: PineSettingsModalProps) {
-  useEscapeClose(onClose);
   const [tab, setTab] = useState<Tab>("Inputs");
   const [draft, setDraft] = useState<Record<string, any>>(() => {
     const d: Record<string, any> = {};
@@ -60,6 +59,41 @@ export default function PineSettingsModal({
     plots.forEach((p) => { d[p.title] = p.color; });
     return d;
   });
+
+  // Changes apply as they're made (the chart and the Strategy Tester report re-run behind the
+  // dialog, which stays open); a short pause first, so typing a number doesn't re-run the backtest
+  // for every keystroke. Cancel / Esc / the close button put back what the dialog opened with;
+  // Ok keeps the changes.
+  const initialRef = useRef({ draft, capital, plotColors });
+  const onApplyRef = useRef(onApply);
+  onApplyRef.current = onApply;
+  const appliedRef = useRef(false);          // something other than the opening settings is applied
+  const pendingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstRef = useRef(true);
+  const latestRef = useRef({ draft, capital, plotColors });
+  latestRef.current = { draft, capital, plotColors };
+  const applyNow = () => {
+    if (pendingRef.current) { clearTimeout(pendingRef.current); pendingRef.current = null; }
+    const { draft: d, capital: c, plotColors: pc } = latestRef.current;
+    onApplyRef.current(d, c > 0 ? c : initialCapital, pc);
+    appliedRef.current = true;
+  };
+  useEffect(() => {
+    if (firstRef.current) { firstRef.current = false; return; }
+    if (pendingRef.current) clearTimeout(pendingRef.current);
+    pendingRef.current = setTimeout(applyNow, 300);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, capital, plotColors]);
+  useEffect(() => () => { if (pendingRef.current) clearTimeout(pendingRef.current); }, []);
+  const cancel = () => {
+    if (pendingRef.current) { clearTimeout(pendingRef.current); pendingRef.current = null; }
+    if (appliedRef.current) {
+      const i = initialRef.current;
+      onApplyRef.current(i.draft, i.capital > 0 ? i.capital : initialCapital, i.plotColors);
+    }
+    onClose();
+  };
+  useEscapeClose(cancel);
 
   // The same colours and measurements as the EMA / Volume dialogs
   const isDark = theme === "dark";
@@ -155,8 +189,9 @@ export default function PineSettingsModal({
     }
   }
 
-  function handleApply() {
-    onApply(draft, capital > 0 ? capital : initialCapital, plotColors);
+  // Ok: the changes are already applied (one still waiting out its pause goes now)
+  function handleOk() {
+    if (pendingRef.current) applyNow();
     onClose();
   }
 
@@ -193,7 +228,7 @@ export default function PineSettingsModal({
         onClick={(e) => e.stopPropagation()}>
         <div style={{ padding: "20px 20px 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{scriptName}</h2>
-          <button type="button" aria-label="Close menu" onClick={onClose} style={{ border: "none", background: "transparent", color: textColor, cursor: "pointer", display: "flex", padding: 4, flexShrink: 0 }}><X size={20} /></button>
+          <button type="button" aria-label="Close menu" onClick={cancel} style={{ border: "none", background: "transparent", color: textColor, cursor: "pointer", display: "flex", padding: 4, flexShrink: 0 }}><X size={20} /></button>
         </div>
 
         <div role="tablist" style={{ display: "flex", margin: "14px 20px 0", borderBottom: `2px solid ${borderColor}`, gap: 24 }}>
@@ -264,8 +299,8 @@ export default function PineSettingsModal({
             )}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" onClick={onClose} style={{ height: 34, padding: "0 14px", borderRadius: 6, border: `1px solid ${fieldBorder}`, backgroundColor: "transparent", color: textColor, cursor: "pointer", fontSize: 14 }}>Cancel</button>
-            <button type="button" onClick={handleApply} style={{ height: 34, padding: "0 18px", borderRadius: 6, border: "none", backgroundColor: isDark ? "#ffffff" : "#131722", color: isDark ? "#131722" : "#ffffff", cursor: "pointer", fontSize: 14 }}>Ok</button>
+            <button type="button" onClick={cancel} style={{ height: 34, padding: "0 14px", borderRadius: 6, border: `1px solid ${fieldBorder}`, backgroundColor: "transparent", color: textColor, cursor: "pointer", fontSize: 14 }}>Cancel</button>
+            <button type="button" onClick={handleOk} style={{ height: 34, padding: "0 18px", borderRadius: 6, border: "none", backgroundColor: isDark ? "#ffffff" : "#131722", color: isDark ? "#131722" : "#ffffff", cursor: "pointer", fontSize: 14 }}>Ok</button>
           </div>
         </div>
       </div>
