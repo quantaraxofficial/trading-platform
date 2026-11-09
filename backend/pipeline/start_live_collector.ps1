@@ -9,7 +9,8 @@ param(
   [string]$Key = "$HOME\.ssh\tradepilot_gcp",
   [string]$Site = "https://34-93-138-162.sslip.io",
   [int]$Login = 26344911,
-  [string]$Symbol = "XAUUSD",
+  # Gold and the forex pairs the backfill stores (start_backfill.ps1), all from one process
+  [string]$Symbols = "XAUUSD,EURUSD,GBPUSD,USDJPY,USDCHF,USDCAD,AUDUSD,NZDUSD,EURJPY,GBPJPY,EURGBP,AUDJPY,USDINR,USDMXN,EURAUD",
   [string]$LogFile = ""
 )
 
@@ -28,9 +29,9 @@ Set-Location (Join-Path $PSScriptRoot "..")
 while ($true) {
   if ($LogFile) {
     if ((Test-Path $LogFile) -and (Get-Item $LogFile).Length -gt 5MB) { Move-Item $LogFile "$LogFile.old" -Force }
-    python -m pipeline.live_collector --login $Login --symbol $Symbol --url $Site *>> $LogFile
+    python -m pipeline.live_collector --login $Login --symbols $Symbols --url $Site *>> $LogFile
   } else {
-    python -m pipeline.live_collector --login $Login --symbol $Symbol --url $Site
+    python -m pipeline.live_collector --login $Login --symbols $Symbols --url $Site
   }
   Write-Host "Collector stopped (exit $LASTEXITCODE); restarting in 10 s. Ctrl+C to quit."
   Start-Sleep -Seconds 10

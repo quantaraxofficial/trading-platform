@@ -10,8 +10,13 @@ Runs on the Windows machine with the terminal logged into the Vantage account. R
 never trades or changes the terminal. The ingest token comes from the environment
 (LIVE_INGEST_TOKEN) and is never written anywhere.
 
+Several symbols stream from one process (--symbols XAUUSD,EURUSD,…): one MT5 connection, one
+loop. Gold (--fast) posts on every read; the others at most once a second, which is plenty for
+their charts and keeps the requests to the server down.
+
   set LIVE_INGEST_TOKEN=…
   python -m pipeline.live_collector --login 26344911 --url https://34-93-138-162.sslip.io
+  python -m pipeline.live_collector --login 26344911 --url … --symbols XAUUSD,EURUSD,GBPUSD
 """
 import argparse
 import logging
@@ -115,9 +120,78 @@ class Feed:
         self.last_post = time.time()
 
 
+class Stream:
+    """One symbol being streamed: its feed, where its ticks were read up to (server-time ms, and
+    how many ticks at exactly that ms were already taken), how often it posts"""
+    def __init__(self, feed: Feed, post_every: float) -> None:
+        self.feed = feed
+        self.post_every = post_every
+        self.last_msc = 0
+        self.seen = 0
+        self.sent = 0
+
+
+def catch_up(mt5, s: Stream) -> None:
+    """Fill the gap since the symbol's newest stored bar (that bar too: it may have been cut short)"""
+    feed = s.feed
+    off = offset_now()
+    now_srv = datetime.now(timezone.utc) + timedelta(hours=off)
+    # (each length from its own newest stored bar: the 15-second table starts empty)
+    floor = int((time.time() - CATCHUP_MAX_DAYS * 86400) * 1000)
+    last30 = max(feed.last_stored_ms(30), floor)
+    last15 = max(feed.last_stored_ms(15), floor)
+    start_utc = min(last30, last15)
+    frm = datetime.fromtimestamp(start_utc / 1000, timezone.utc) + timedelta(hours=off)
+    ticks = mt5.copy_ticks_range(feed.symbol, frm, now_srv + timedelta(minutes=5), mt5.COPY_TICKS_ALL)
+    if ticks is not None and len(ticks):
+        for bars_of, since in ((feed.b30, last30), (feed.b15, last15)):
+            bars = [b for b in bars_from_ticks(ticks, off, bars_of.bar_ms) if b[0] >= since // bars_of.bar_ms * bars_of.bar_ms]
+            if bars:
+                bars_of.bar = list(bars[-1])
+                bars_of.closed.extend(list(b) for b in bars[:-1])
+        s.last_msc = int(ticks["time_msc"][-1])
+        s.seen = int((ticks["time_msc"] == s.last_msc).sum())
+    del ticks
+    log.info("%s: catch-up from %s UTC, %d finished 30 s bars and %d 15 s bars to send", feed.symbol,
+             datetime.fromtimestamp(start_utc / 1000, timezone.utc), len(feed.b30.closed), len(feed.b15.closed))
+    while feed.pending():
+        before = feed.pending()
+        feed.post(force=True)
+        if feed.pending() == before:
+            time.sleep(5)
+    if not s.last_msc:
+        s.last_msc = int((time.time() + off * 3600) * 1000)
+
+
+def read_new(mt5, s: Stream, off_ms: int) -> None:
+    """The symbol's ticks since the last read, into its bars"""
+    ticks = mt5.copy_ticks_from(s.feed.symbol, datetime.fromtimestamp(s.last_msc // 1000, timezone.utc), 5000, mt5.COPY_TICKS_ALL)
+    if ticks is None or not len(ticks):
+        return
+    msc = ticks["time_msc"].astype("int64")
+    skip_same = s.seen
+    for i in range(len(ticks)):
+        m = int(msc[i])
+        if m < s.last_msc:
+            continue
+        if m == s.last_msc:
+            if skip_same > 0:
+                skip_same -= 1
+                continue
+            s.seen += 1
+        else:
+            s.last_msc, s.seen = m, 1
+            skip_same = 0
+        s.feed.add_tick(m - off_ms, float(ticks["bid"][i]), float(ticks["ask"][i]))
+        s.sent += 1
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--symbol", default="XAUUSD")
+    ap.add_argument("--symbol", default="XAUUSD", help="one symbol (--symbols for several)")
+    ap.add_argument("--symbols", default="", help="several, comma-separated (e.g. XAUUSD,EURUSD,GBPUSD): one MT5 connection, one loop")
+    ap.add_argument("--fast", default="XAUUSD", help="symbols posted on every read (4 a second); the others at most every --slow-every seconds")
+    ap.add_argument("--slow-every", type=float, default=1.0)
     ap.add_argument("--terminal", default=r"G:\MT5\terminal64.exe")
     ap.add_argument("--login", type=int, required=True, help="the MT5 account it must be logged into (checked, never changed)")
     ap.add_argument("--url", required=True, help="the site, e.g. https://34-93-138-162.sslip.io")
@@ -126,6 +200,8 @@ def main() -> None:
     token = os.environ.get("LIVE_INGEST_TOKEN", "")
     if len(token) < 32:
         sys.exit("LIVE_INGEST_TOKEN is not set")
+    wanted = [x.strip().upper() for x in (args.symbols or args.symbol).split(",") if x.strip()]
+    fast = {x.strip().upper() for x in args.fast.split(",") if x.strip()}
 
     import MetaTrader5 as mt5
     if not mt5.initialize(path=args.terminal, timeout=60000):
@@ -134,68 +210,39 @@ def main() -> None:
         acc = mt5.account_info()
         if not acc or acc.login != args.login:
             sys.exit(f"The terminal is logged into {acc.login if acc else None}, not {args.login}: nothing read")
-        if not mt5.symbol_select(args.symbol, True):
-            sys.exit(f"No symbol {args.symbol} on {acc.server}")
-        feed = Feed(args.url, token, args.symbol)
+        streams: list[Stream] = []
+        for sym in dict.fromkeys(wanted):
+            # (a symbol the broker doesn't have is skipped, the rest still stream)
+            if not mt5.symbol_select(sym, True):
+                log.warning("No symbol %s on %s: skipped", sym, acc.server)
+                continue
+            streams.append(Stream(Feed(args.url, token, sym), 0.0 if sym in fast else args.slow_every))
+        if not streams:
+            sys.exit("None of the symbols are on this server")
 
-        # 1) Fill the gap since the newest stored bar (that bar too: it may have been cut short)
-        off = offset_now()
-        now_srv = datetime.now(timezone.utc) + timedelta(hours=off)
-        # (each length from its own newest stored bar: the 15-second table starts empty)
-        floor = int((time.time() - CATCHUP_MAX_DAYS * 86400) * 1000)
-        last30 = max(feed.last_stored_ms(30), floor)
-        last15 = max(feed.last_stored_ms(15), floor)
-        start_utc = min(last30, last15)
-        frm = datetime.fromtimestamp(start_utc / 1000, timezone.utc) + timedelta(hours=off)
-        ticks = mt5.copy_ticks_range(args.symbol, frm, now_srv + timedelta(minutes=5), mt5.COPY_TICKS_ALL)
-        last_msc, seen = 0, 0
-        if ticks is not None and len(ticks):
-            for bars_of, since in ((feed.b30, last30), (feed.b15, last15)):
-                bars = [b for b in bars_from_ticks(ticks, off, bars_of.bar_ms) if b[0] >= since // bars_of.bar_ms * bars_of.bar_ms]
-                if bars:
-                    bars_of.bar = list(bars[-1])
-                    bars_of.closed.extend(list(b) for b in bars[:-1])
-            last_msc = int(ticks["time_msc"][-1])
-            seen = int((ticks["time_msc"] == last_msc).sum())
-        log.info("Catch-up from %s UTC: %d finished 30 s bars and %d 15 s bars to send",
-                 datetime.fromtimestamp(start_utc / 1000, timezone.utc), len(feed.b30.closed), len(feed.b15.closed))
-        while feed.pending():
-            before = feed.pending()
-            feed.post(force=True)
-            if feed.pending() == before:
-                time.sleep(5)
-        if not last_msc:
-            last_msc = int((time.time() + off * 3600) * 1000)
+        # 1) Each symbol's gap since its newest stored bar
+        for s in streams:
+            catch_up(mt5, s)
 
-        # 2) Live: new ticks four times a second
-        log.info("Streaming %s from %s (%s) to %s", args.symbol, acc.login, acc.server, args.url)
-        sent, report_at = 0, time.time() + 60
+        # 2) Live: every symbol's new ticks four times a second; fast ones posted each time, the
+        # others at most every --slow-every seconds (their ticks wait in the feed meanwhile)
+        log.info("Streaming %s from %s (%s) to %s", ", ".join(s.feed.symbol for s in streams), acc.login, acc.server, args.url)
+        report_at = time.time() + 60
         while True:
             t0 = time.time()
-            ticks = mt5.copy_ticks_from(args.symbol, datetime.fromtimestamp(last_msc // 1000, timezone.utc), 5000, mt5.COPY_TICKS_ALL)
-            if ticks is not None and len(ticks):
-                msc = ticks["time_msc"].astype("int64")
-                off_ms = offset_now() * 3_600_000
-                skip_same = seen
-                for i in range(len(ticks)):
-                    m = int(msc[i])
-                    if m < last_msc:
-                        continue
-                    if m == last_msc:
-                        if skip_same > 0:
-                            skip_same -= 1
-                            continue
-                        seen += 1
-                    else:
-                        last_msc, seen = m, 1
-                        skip_same = 0
-                    feed.add_tick(m - off_ms, float(ticks["bid"][i]), float(ticks["ask"][i]))
-                    sent += 1
-            feed.post(force=time.time() - feed.last_post > HEARTBEAT_S)
+            off_ms = offset_now() * 3_600_000
+            for s in streams:
+                read_new(mt5, s, off_ms)
+                since = time.time() - s.feed.last_post
+                if since >= s.post_every:
+                    s.feed.post(force=since > HEARTBEAT_S)
             if time.time() > report_at:
                 term = mt5.terminal_info()
-                log.info("%d ticks sent in the last minute%s", sent, "" if term and term.connected else " (terminal NOT connected to the broker)")
-                sent, report_at = 0, time.time() + 60
+                log.info("Ticks in the last minute: %s%s", ", ".join(f"{s.feed.symbol} {s.sent}" for s in streams),
+                         "" if term and term.connected else " (terminal NOT connected to the broker)")
+                for s in streams:
+                    s.sent = 0
+                report_at = time.time() + 60
             time.sleep(max(0.0, POLL_S - (time.time() - t0)))
     finally:
         mt5.shutdown()

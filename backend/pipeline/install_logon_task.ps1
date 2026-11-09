@@ -17,7 +17,7 @@ $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
 $trigger.Delay = "PT1M"
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -StartWhenAvailable
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
-Register-ScheduledTask -TaskName "TradePilot Live Collector" -Description "Streams Vantage XAUUSD ticks from MT5 to the TradePilot site" `
+Register-ScheduledTask -TaskName "TradePilot Live Collector" -Description "Streams Vantage gold and forex ticks from MT5 to the TradePilot site" `
   -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
 Write-Host "Installed. It starts at your next sign-in; to start it now: Start-ScheduledTask -TaskName 'TradePilot Live Collector'"
 Write-Host "Log: $log"
