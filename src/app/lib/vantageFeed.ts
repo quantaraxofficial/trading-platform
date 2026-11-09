@@ -9,8 +9,14 @@
 import { BACKEND_URL } from "@/lib/backend";
 import { engine } from "../trading/store";
 
+// Gold and the forex pairs whose full history is stored (pipeline/start_backfill.ps1) and which the
+// live collector streams (pipeline/start_live_collector.ps1). A pair joins this list only once its
+// backfill is done: before that its charts would show just the collector's last few days.
+// Still to join when their backfill finishes: NZDUSD, EURJPY, GBPJPY, EURGBP, AUDJPY, USDINR,
+// USDMXN, EURAUD. NEXT_PUBLIC_VANTAGE_SYMBOLS, when set at build time, replaces the list.
+const DEFAULT_VANTAGE_SYMBOLS = "XAUUSD,EURUSD,GBPUSD,USDJPY,USDCHF,USDCAD,AUDUSD";
 export const VANTAGE_SYMBOLS = new Set(
-  (process.env.NEXT_PUBLIC_VANTAGE_SYMBOLS || "XAUUSD").split(",").map(s => s.trim().toUpperCase()).filter(Boolean),
+  (process.env.NEXT_PUBLIC_VANTAGE_SYMBOLS || DEFAULT_VANTAGE_SYMBOLS).split(",").map(s => s.trim().toUpperCase()).filter(Boolean),
 );
 
 const norm = (symbol: string) => symbol.toUpperCase().replace(/\//g, "");

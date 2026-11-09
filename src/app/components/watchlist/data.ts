@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { rememberFromQuote } from "../../utils/symbolInfo";
 import { performance, seasonals, technicalRating, type DailyBar, type SeasonalYear, type TechnicalRating } from "./analytics";
 import { feedTimeToUnix } from "../../utils/feedTime";
+import { fetchVantageCandles, isVantageSymbol } from "../../lib/vantageFeed";
 
 export interface Quote {
   symbol: string;
@@ -188,12 +189,21 @@ export function useDetailsAnalytics(symbol: string): DetailsAnalytics | null {
     setA(null);
     (async () => {
       try {
-        const d = await (await fetch(`/api/stock-data?symbol=${encodeURIComponent(symbol)}&interval=1day&outputsize=800`)).json();
-        if (cancelled || !Array.isArray(d.values)) return;
-        const bars: DailyBar[] = d.values.map((x: any) => ({
-          time: feedTimeToUnix(x.datetime), open: +x.open, high: +x.high, low: +x.low, close: +x.close,
-          volume: x.volume != null ? +x.volume : undefined,
-        })).reverse();
+        // MT5 symbols (gold, the stored forex pairs): the same daily bars their chart shows, from
+        // our own store; the rest from TwelveData
+        const own = isVantageSymbol(symbol) ? await fetchVantageCandles(symbol, "1day") : null;
+        let bars: DailyBar[];
+        if (own && own.length) {
+          bars = own.map(b => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume }));
+        } else {
+          const d = await (await fetch(`/api/stock-data?symbol=${encodeURIComponent(symbol)}&interval=1day&outputsize=800`)).json();
+          if (cancelled || !Array.isArray(d.values)) return;
+          bars = d.values.map((x: any) => ({
+            time: feedTimeToUnix(x.datetime), open: +x.open, high: +x.high, low: +x.low, close: +x.close,
+            volume: x.volume != null ? +x.volume : undefined,
+          })).reverse();
+        }
+        if (cancelled) return;
         const vols = bars.slice(-30).map(b => b.volume).filter((x): x is number => x != null && x > 0);
         const v: DetailsAnalytics = {
           perf: performance(bars), seasonals: seasonals(bars), rating: technicalRating(bars),
