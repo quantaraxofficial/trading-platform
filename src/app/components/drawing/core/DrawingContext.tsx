@@ -188,6 +188,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
   // Read-only view for debugging and automated checks, like window.__chartFullData
   useEffect(() => { (window as any).__drawings = drawings; }, [drawings]);
   useEffect(() => { (window as any).__selectedDrawingId = selectedShapeId; }, [selectedShapeId]);
+  useEffect(() => { (window as any).__selectedDrawingIds = Array.from(selectedShapeIds); }, [selectedShapeIds]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [favoriteTools, setFavoriteTools] = useState<DrawingType[]>([]);
   const [isFavoritesToolbarVisible, setIsFavoritesToolbarVisible] = useState(true);
