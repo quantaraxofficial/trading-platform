@@ -96,6 +96,19 @@ function optimalCandlestickWidth(barSpacing: number, pixelRatio: number): number
   return Math.max(Math.floor(pixelRatio), Math.min(res, scaled));
 }
 
+// One drawing on the layer. Hovering, selecting or dragging one drawing re-renders the layer;
+// without this every other drawing was rebuilt too, which with a couple of hundred drawings made
+// the crosshair trail the mouse and a dragged tool stutter. A drawing re-renders only when its
+// own data, selection, hover, text editing or live drag changes (pans and zooms re-render each
+// tool through its own chart subscription).
+const DrawingSlot = React.memo(
+  function DrawingSlot({ drawing, render }: { drawing: any; render: (d: any) => React.ReactNode; [k: string]: any }) {
+    return <>{render(drawing)}</>;
+  },
+  (a, b) => a.drawing === b.drawing && a.sel === b.sel && a.hover === b.hover && a.editing === b.editing
+    && a.live === b.live && a.chart === b.chart && a.series === b.series,
+);
+
 export default function DrawingLayer({ chart, series, width, height, theme = 'light', readOnly = false, drawingsOverride, barsOf }: DrawingLayerProps) {
   const ctx = useDrawing();
   const { setActiveTool, setDrawings, addDrawing, setSelectedShapeId, updateDrawing, deleteDrawing, activeEmoji, setSelectedShapeIds, clearSelection, magnetMode, defaultSettings, keepDrawing, allDrawingsHidden } = ctx;
@@ -108,6 +121,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   // Clicking a drawing selects it — or, with the Eraser active, removes it. (The chart-level
   // click handler below can't do this on its own: a hovered drawing makes this layer capture
   // the click, so it never reaches the chart.)
+  const liveFns = useRef<any>(null);   // see renderDrawing
   const selectDrawing = (id: string) => {
     if (activeTool === 'eraser') { deleteDrawing(id); return; }
     setSelectedShapeId(id);
@@ -1535,6 +1549,9 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   }, [collabPreviews, collabOn, ctx.symbol]);
 
   // Renders a drawing as the chart shows it; the preview goes through here too
+  // The functions drawings call back into, read at call time: a drawing that wasn't re-rendered
+  // (see DrawingSlot) still calls the current ones
+  liveFns.current = { selectDrawing, handleUpdateWithClone, updateDrawing };
   const renderDrawing = (committed: any, asSelected = false) => {
             const drawing = liveEdit && liveEdit.id === committed.id ? { ...committed, ...liveEdit.updates } : committed;
             const isSel = asSelected || selectedShapeId === drawing.id || selectedShapeIds.has(drawing.id);
@@ -1554,8 +1571,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })}
                   isLocked={drawing.locked}
                 />
               );
@@ -1583,8 +1600,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })}
                   isLocked={drawing.locked}
                   text={(drawing as any).text}
                   onTextEdit={() => setEditingTextId(drawing.id)}
@@ -1602,8 +1619,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })}
                   isLocked={drawing.locked}
                   // New properties passed here
                   fill={drawing.fill}
@@ -1637,10 +1654,10 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdateText={(newText) => updateDrawing(drawing.id, { text: newText } as any)}
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)}
+                  onUpdateText={(newText) => liveFns.current.updateDrawing(drawing.id, { text: newText } as any)}
                   onEdit={() => setEditingTextId(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })}
                   initialBarWidth={(drawing as any).initialBarWidth}
                   isLocked={drawing.locked}
                   fontSize={(drawing as any).fontSize}
@@ -1664,8 +1681,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })}
                   targetFillColor={drawing.targetFillColor}
                   stopFillColor={drawing.stopFillColor}
                   textColor={drawing.textColor}
@@ -1688,8 +1705,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })}
                   targetFillColor={drawing.targetFillColor}
                   stopFillColor={drawing.stopFillColor}
                   textColor={drawing.textColor}
@@ -1714,8 +1731,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })}
                   isLocked={drawing.locked}
                   showTrendLine={(drawing as any).showTrendLine}
                   trendLineColor={(drawing as any).trendLineColor}
@@ -1751,8 +1768,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })}
                   isLocked={drawing.locked}
                 />
               );
@@ -1762,7 +1779,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
               );
             } else if (drawing.type === 'highlighter') {
               return (
-                <HighlighterTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
+                <HighlighterTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => liveFns.current.selectDrawing(drawing.id)} onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
               );
             } else if (drawing.type === 'arrow_marker') {
               return (
@@ -1775,8 +1792,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => selectDrawing(drawing.id)} 
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)} 
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })} 
                   text={drawing.text}
                   textColor={drawing.textColor}
                   fontSize={drawing.fontSize}
@@ -1787,7 +1804,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
               );
             } else if (drawing.type === 'arrow') {
               return (
-                <ArrowTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} lineStyle={(drawing as any).lineStyle} extendLeft={(drawing as any).extendLeft} extendRight={(drawing as any).extendRight} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
+                <ArrowTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} lineStyle={(drawing as any).lineStyle} extendLeft={(drawing as any).extendLeft} extendRight={(drawing as any).extendRight} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => liveFns.current.selectDrawing(drawing.id)} onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
               );
             } else if (drawing.type === 'arrow_mark_up' || drawing.type === 'arrow_mark_down') {
               return (
@@ -1800,8 +1817,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   type={drawing.type}
                   chart={chart}
                   series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })}
                   text={drawing.text}
                   textColor={drawing.textColor}
                   fontSize={drawing.fontSize}
@@ -1812,7 +1829,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
               );
             } else if (drawing.type === 'rotated_rectangle') {
               return (
-                <RotatedRectangleTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} fill={drawing.fill} backgroundVisible={(drawing as any).backgroundVisible} isPreview={drawing.id === 'preview'} />
+                <RotatedRectangleTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => liveFns.current.selectDrawing(drawing.id)} onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} fill={drawing.fill} backgroundVisible={(drawing as any).backgroundVisible} isPreview={drawing.id === 'preview'} />
               );
             } else if (drawing.type === 'path') {
               return (
@@ -1830,8 +1847,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => selectDrawing(drawing.id)} 
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)} 
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })} 
                   isLocked={drawing.locked} 
                   hideLastHandle={drawing.id === 'preview'}
                 />
@@ -1852,8 +1869,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => selectDrawing(drawing.id)} 
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)} 
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })} 
                   isLocked={drawing.locked} 
                 />
               );
@@ -1870,8 +1887,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })}
                   isLocked={drawing.locked}
                   text={(drawing as any).text}
                   onTextEdit={() => setEditingTextId(drawing.id)}
@@ -1893,8 +1910,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })}
                   isLocked={drawing.locked}
                   text={(drawing as any).text}
                   onTextEdit={() => setEditingTextId(drawing.id)}
@@ -1916,14 +1933,14 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => selectDrawing(drawing.id)} 
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)} 
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })} 
                   isLocked={drawing.locked} 
                 />
               );
             } else if (drawing.type === 'arc') {
               return (
-                <ArcTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} fill={(drawing as any).fill} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
+                <ArcTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} fill={(drawing as any).fill} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => liveFns.current.selectDrawing(drawing.id)} onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
               );
             } else if (drawing.type === 'curve') {
               return (
@@ -1941,8 +1958,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => selectDrawing(drawing.id)} 
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)} 
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })} 
                   isLocked={drawing.locked} 
                 />
               );
@@ -1962,8 +1979,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id} 
                   chart={chart} 
                   series={series} 
-                  onSelect={() => selectDrawing(drawing.id)} 
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} 
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)} 
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })} 
                   isLocked={drawing.locked} 
                 />
               );
@@ -1980,8 +1997,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })}
                   isLocked={drawing.locked}
                 />
               );
@@ -1997,8 +2014,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })}
                   isLocked={drawing.locked}
                   text={(drawing as any).text}
                   textColor={(drawing as any).textColor}
@@ -2024,9 +2041,9 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   isSelected={isSel} isHovering={hoveredShapeId === drawing.id}
                   chart={chart}
                   series={series}
-                  onSelect={() => selectDrawing(drawing.id)}
-                  onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })}
-                  onUpdateScale={(scaleX, scaleY, rotation) => updateDrawing(drawing.id, { scaleX, scaleY, rotation })}
+                  onSelect={() => liveFns.current.selectDrawing(drawing.id)}
+                  onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })}
+                  onUpdateScale={(scaleX, scaleY, rotation) => liveFns.current.updateDrawing(drawing.id, { scaleX, scaleY, rotation })}
                   isLocked={drawing.locked}
                   emojiSize={(drawing as any).emojiSize}
                   color={drawing.stroke}
@@ -2093,7 +2110,15 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
             )
           )}
 
-          {drawings.filter(d => d.visible).map(d => renderDrawing(remotePreviews.has(d.id) ? { ...d, ...remotePreviews.get(d.id) } : d))}
+          {drawings.filter(d => d.visible).map(d => {
+            const shown = remotePreviews.has(d.id) ? { ...d, ...remotePreviews.get(d.id) } : d;
+            return (
+              <DrawingSlot key={d.id} drawing={shown} render={renderDrawing} chart={chart} series={series}
+                sel={selectedShapeId === d.id || selectedShapeIds.has(d.id)} hover={hoveredShapeId === d.id}
+                editing={editingTextId === d.id ? `${editingTextKey ?? ''}|1` : ''}
+                live={liveEdit && liveEdit.id === d.id ? liveEdit.updates : null} />
+            );
+          })}
 
           {/* Shapes others in the collab are drawing right now */}
           {remotePreviews.size > 0 && (

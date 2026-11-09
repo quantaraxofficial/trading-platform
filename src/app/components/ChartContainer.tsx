@@ -4415,7 +4415,7 @@ export default function ChartContainer({
       {countdown && (
         <div aria-label="Time to bar close" style={{
           position: "absolute", ...(scaleSide === 'left' ? { left: 0 } : { right: 0 }), top: Math.round(countdown.top + 10), width: countdown.width, height: 17,
-          background: countdown.color, color: "#ffffff", fontSize: "12px", lineHeight: "15px", textAlign: "center",
+          background: countdown.color, color: labelTextOn(countdown.color), fontSize: "12px", lineHeight: "15px", textAlign: "center",
           borderRadius: "0 0 2px 2px", pointerEvents: "none", zIndex: 5, fontVariantNumeric: "tabular-nums",
         }}>
           {countdown.text}
@@ -4925,6 +4925,19 @@ export default function ChartContainer({
       )}
     </div>
   );
+}
+
+// Text colour on a price-axis label, by the chart library's own rule (so the countdown matches
+// the last-price label above it): black on a light label (e.g. white bullish candles), else white
+function labelTextOn(bg: string): string {
+  let r = 0, g = 0, b = 0;
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i.exec(bg.trim());
+  const rgb = /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i.exec(bg);
+  if (hex) {
+    const h = hex[1].length === 3 ? hex[1].split('').map(x => x + x).join('') : hex[1];
+    r = parseInt(h.slice(0, 2), 16); g = parseInt(h.slice(2, 4), 16); b = parseInt(h.slice(4, 6), 16);
+  } else if (rgb) { r = +rgb[1]; g = +rgb[2]; b = +rgb[3]; } else return '#ffffff';
+  return 0.199 * r + 0.687 * g + 0.114 * b > 160 ? '#000000' : '#ffffff';
 }
 
 // --- Legend helpers ---
