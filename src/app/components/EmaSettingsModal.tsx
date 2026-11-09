@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { X, ChevronDown } from "lucide-react";
 import { DualRangeSlider } from "./drawing/ui/DualRangeSlider";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import { useDialogDrag } from "../lib/useDialogDrag";
 import { ColorPickerPopup } from "./drawing/ui/ColorPickerPopup";
 import { PlotTypeMenu, PlotTypeIcon, PLOT_TYPES } from "./PlotTypeMenu";
 import type { PlotType } from "./chartPrimitives/CandleBodyAwareLine";
@@ -158,6 +159,8 @@ export default function EmaSettingsModal({ onClose, theme, config, onChangeConfi
   const setVis = (key: keyof EmaConfig["visibility"], patch: any) =>
     set({ visibility: { ...cfg.visibility, [key]: typeof cfg.visibility[key] === "object" ? { ...(cfg.visibility[key] as VisRange), ...patch } : patch } });
 
+  // Moved by its title bar, as on TradingView
+  const drag = useDialogDrag();
   const [defaultsOpen, setDefaultsOpen] = useState(false);
   const defaultsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -195,12 +198,12 @@ export default function EmaSettingsModal({ onClose, theme, config, onChangeConfi
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-      <div role="dialog" aria-label="EMA settings"
-        style={{ width: 454, maxWidth: "calc(100vw - 32px)", backgroundColor: bgColor, borderRadius: 8, boxShadow: isDark ? "0 4px 24px rgba(0,0,0,0.5)" : "0 4px 24px rgba(0,0,0,0.18)",
+      <div role="dialog" aria-label="EMA settings" ref={drag.ref}
+        style={{ ...drag.style, width: 454, maxWidth: "calc(100vw - 32px)", backgroundColor: bgColor, borderRadius: 8, boxShadow: isDark ? "0 4px 24px rgba(0,0,0,0.5)" : "0 4px 24px rgba(0,0,0,0.18)",
           border: `1px solid ${borderColor}`, pointerEvents: "auto", display: "flex", flexDirection: "column", color: textColor,
           fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif' }}
         onClick={e => e.stopPropagation()}>
-        <div style={{ padding: "20px 20px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div onPointerDown={drag.handle.onPointerDown} style={{ ...drag.handle.style, padding: "20px 20px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>EMA</h2>
           <button type="button" aria-label="Close menu" onClick={cancel} style={{ border: "none", background: "transparent", color: textColor, cursor: "pointer", display: "flex", padding: 4 }}><X size={20} /></button>
         </div>

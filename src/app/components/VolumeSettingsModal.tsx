@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from 'react-dom';
+import { useDialogDrag } from "../lib/useDialogDrag";
 import { X, ChevronDown, BarChart2, Activity, Plus } from "lucide-react";
 import { DualRangeSlider } from "./drawing/ui/DualRangeSlider";
 import { useEscapeClose } from "../lib/useEscapeClose";
@@ -86,6 +87,8 @@ export default function VolumeSettingsModal({ onClose, theme, config, onChangeCo
   const initialRef = React.useRef(config);
   const cancel = () => { onChangeConfig(initialRef.current); onClose(); };
   useEscapeClose(cancel);
+  // Moved by its title bar, as on TradingView
+  const drag = useDialogDrag();
   const [activeTab, setActiveTab] = useState<"Inputs" | "Style" | "Visibility">("Inputs");
   const [visibility, setVisibility] = useState({
     ticks: { enabled: true, from: 1, to: 1000 },
@@ -130,9 +133,10 @@ export default function VolumeSettingsModal({ onClose, theme, config, onChangeCo
       backgroundColor: "rgba(0,0,0,0.5)",
       display: "flex", alignItems: "center", justifyContent: "center",
       zIndex: 10000,
-    }} onClick={cancel}>
-      <div 
+    }} onClick={() => { if (!drag.justDragged()) cancel(); }}>
+      <div ref={drag.ref}
         style={{
+          ...drag.style,
           width: "360px",
           backgroundColor: bgColor, borderRadius: "6px",
           display: "flex", flexDirection: "column",
@@ -144,7 +148,7 @@ export default function VolumeSettingsModal({ onClose, theme, config, onChangeCo
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div style={{ padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div onPointerDown={drag.handle.onPointerDown} style={{ ...drag.handle.style, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>Vol</h2>
           <button onClick={cancel} style={{ background: "none", border: "none", cursor: "pointer", color: textColor, padding: 0 }}>
             <X size={20} strokeWidth={1.5} />
