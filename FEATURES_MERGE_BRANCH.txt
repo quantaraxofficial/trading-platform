@@ -1,6 +1,6 @@
 TRADEPILOT - FEATURES BUILT ON THE MERGE BRANCH
 Branch: merge-main-left-toolbar-tools  (everything here is on top of main)
-Up to: 4 Nov 2026 (Backtest sessions panel and length, timeframe switch keeps candle size)
+Up to: 9 Nov 2026 (Rotated rectangle as on TradingView, smooth drags with many drawings, Mac Command+drag selection)
 
 Contents
   1. Drawing tools (left toolbar)
@@ -75,6 +75,22 @@ flyouts and quick search.
   - Favourites bar: drag its tools to reorder them; it never covers the drawing toolbar
   - Colour palettes close on an outside click and apply shades as they're picked
   - Shape settings dialogs shrink to fit small windows; toolbar menus open where they fit
+  - Rotated rectangle as on TradingView: clicks 1 and 2 set its centre line, click 3 its width
+    (equal on both sides); six handles (the line's ends keep the width, the corners change
+    only the width); TradingView's green outline and fill; the Background checkbox works
+  - Brush, hovered or selected: hollow rings at its two ends, the stroke unchanged (no glow)
+  - Filled shapes (rectangle, rotated rectangle, circle, ellipse, triangle, polyline, path,
+    arc, curves) take the mouse only on their outline: inside them no hover handles, no
+    "+ Add text", no selection, as on TradingView
+  - Points placed to the right of the latest candle land on the future bars' times
+  - Dragged shapes follow the pointer without ever jumping back to where the drag began
+    (the Long/Short position "dancing"); Long/Short moves are logged in the browser console
+    (entry, target, stop, bars, times)
+  - With many drawings only the drawing that changes is redrawn: the crosshair keeps up with
+    the mouse and drags stay smooth (150 drawings: slowest mouse moves 240 ms -> 44 ms)
+  - Mac: Command+drag box-selects drawings, and Command does the other Ctrl gestures
+    (Ctrl+drag copy, magnet on/off); Windows keeps Ctrl
+  - Chart right-click menu: "Remove N drawings", with the count
 
 ======================================================================
 2. CHART, LAYOUTS AND CHART TYPES
@@ -96,6 +112,12 @@ Chart interactions
     axis keeps its stretch and shift against the visible high / low instead of freezing
     (normal scale; a log scale keeps its range)
   - Symbol info dialog: exchange, currency, tick size, today's session on a 24-hour bar
+  - Vertical grid lines carry on to the right of the latest candle, at the chart's own spacing
+  - Settings -> Canvas text colour also colours the legend (title, Vol, indicator names; their
+    inputs a faded shade)
+  - Countdown to bar close readable on light labels (black text with white bullish candles)
+  - The crosshair pointer is an image, so viewers see it when the chart tab is shared in
+    Google Meet (Chrome leaves the system crosshair out of a shared tab)
 
 Layouts
   - Multi-chart layouts (Layout setup grid, Manage layouts, sync in layout); each chart keeps

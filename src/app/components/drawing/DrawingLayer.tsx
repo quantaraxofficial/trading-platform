@@ -1974,7 +1974,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
               );
             } else if (drawing.type === 'rotated_rectangle') {
               return (
-                <RotatedRectangleTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => liveFns.current.selectDrawing(drawing.id)} onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} fill={drawing.fill} backgroundVisible={(drawing as any).backgroundVisible} isPreview={drawing.id === 'preview'} />
+                <RotatedRectangleTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => liveFns.current.selectDrawing(drawing.id)} onUpdatePoints={(points) => liveFns.current.handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} fill={drawing.fill} backgroundVisible={(drawing as any).backgroundVisible !== false && (drawing as any).fillEnabled !== false} isPreview={drawing.id === 'preview'} />
               );
             } else if (drawing.type === 'path') {
               return (
