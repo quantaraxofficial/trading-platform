@@ -63,7 +63,7 @@ export function VoiceRecorder({ onSend, onRecording, disabled }: { onSend: (file
       const secs = Math.max(1, Math.round((Date.now() - state.started) / 1000));
       if (state.send && state.chunks.length) {
         const mime = type.mime.split(";")[0];
-        const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "");
+        const stamp = new Date().toISOString().slice(0, 19).replace(/\D/g, "");   // digits only (a character class of dash, colon and T reads to Tailwind as a CSS class)
         onSend(new File(state.chunks, `voice-message-${stamp}.${type.ext}`, { type: mime }), Math.min(secs, MAX_VOICE_SECONDS));
       }
       cleanup();

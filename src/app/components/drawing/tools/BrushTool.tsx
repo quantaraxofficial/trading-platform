@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Line, Group } from 'react-konva';
+import React from 'react';
+import { Line, Group, Circle } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
@@ -11,6 +11,7 @@ interface BrushToolProps {
   stroke: string;
   strokeWidth: number;
   isSelected: boolean;
+  isHovering?: boolean;
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   onSelect: () => void;
@@ -18,13 +19,9 @@ interface BrushToolProps {
   isLocked?: boolean;
 }
 
-export function BrushTool({ id, points, stroke, strokeWidth, isSelected, chart, series, onSelect, onUpdatePoints, isLocked = false }: BrushToolProps) {
+export function BrushTool({ id, points, stroke, strokeWidth, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints, isLocked = false }: BrushToolProps) {
   const move = useSnappedDrag(chart, series, points, onUpdatePoints);
   useChartTick(chart, series);
-  // shadowBlur is a real per-pixel blur convolution that Konva redraws every frame of any
-  // native drag regardless of React re-renders — expensive enough to feel like lag, so it's
-  // switched off for the duration of a drag.
-  const [isDragging, setIsDragging] = useState(false);
   if (!chart || !series || points.length < 2) return null;
 
   // Flatten points for Konva Line [x1, y1, x2, y2, ...]
@@ -38,18 +35,22 @@ export function BrushTool({ id, points, stroke, strokeWidth, isSelected, chart, 
     }
   });
 
-  const handleDragStart = (e: any) => { e.cancelBubble = true; setIsDragging(true); move.start(e); };
+  const handleDragStart = (e: any) => { e.cancelBubble = true; move.start(e); };
 
   const handleDragEnd = (e: any) => {
-    setIsDragging(false);
     if (!onUpdatePoints) return;
     move.end(e);
   };
 
+  // As on TradingView: hovered or selected, the stroke itself stays as it is and a small
+  // hollow blue ring marks each end (the stroke moves as a whole; the rings don't reshape it)
+  const showEnds = (isSelected || isHovering) && flattenedPoints.length >= 4;
+  const n = flattenedPoints.length;
+
   return (
     <Group 
       id={id}
-      draggable={isSelected && !isLocked}
+      draggable={(isSelected || isHovering) && !isLocked}
       onDragStart={handleDragStart} onDragMove={move.drag}
       onDragEnd={handleDragEnd}
     >
@@ -72,10 +73,11 @@ export function BrushTool({ id, points, stroke, strokeWidth, isSelected, chart, 
         tension={0.5}
         lineCap="round"
         lineJoin="round"
-        shadowColor={isSelected ? stroke : 'transparent'}
-        shadowBlur={isSelected && !isDragging ? 4 : 0}
         listening={false}
       />
+      {showEnds && [[flattenedPoints[0], flattenedPoints[1]], [flattenedPoints[n - 2], flattenedPoints[n - 1]]].map(([x, y], i) => (
+        <Circle key={i} x={x} y={y} radius={4} stroke="#2962ff" strokeWidth={1} hitStrokeWidth={8} onClick={onSelect} onTap={onSelect} />
+      ))}
     </Group>
   );
 }
