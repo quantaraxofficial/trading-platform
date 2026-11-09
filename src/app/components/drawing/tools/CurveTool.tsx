@@ -5,6 +5,7 @@ import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../c
 import { useChartTick } from '../core/useChartTick';
 import { useSnap, useSnappedDrag } from '../core/snap';
 import { HandleCircle } from '../core/Handles';
+import { strokeOnlyHit } from '../core/textHit';
 
 interface CurveToolProps {
   id: string;
@@ -90,6 +91,7 @@ export function CurveTool({ id, points, stroke, strokeWidth, isSelected, isHover
         stroke={stroke}
         strokeWidth={strokeWidth}
         fill={fillEnabled ? fill : 'transparent'}
+        hitFunc={strokeOnlyHit}
         dash={lineStyle === 'Dashed' ? [strokeWidth * 3, strokeWidth * 3] : lineStyle === 'Dotted' ? [strokeWidth, strokeWidth * 2] : undefined}
         shadowColor={isSelected ? stroke : 'transparent'}
         shadowBlur={isSelected && !isDragging ? 4 : 0}

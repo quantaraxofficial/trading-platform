@@ -3,7 +3,7 @@ import { Ellipse as KonvaEllipse, Group, Circle, Text, Line } from 'react-konva'
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
 import { useChartTick } from '../core/useChartTick';
-import { textLinesHitFunc } from '../core/textHit';
+import { textLinesHitFunc, strokeOnlyHit } from '../core/textHit';
 import { useSnap, useSnappedDrag } from '../core/snap';
 import { HandleCircle } from '../core/Handles';
 
@@ -177,6 +177,8 @@ export function EllipseTool({
           x={mx} y={my} radiusX={radiusX} radiusY={radiusY} rotation={angle}
           stroke={stroke} strokeWidth={strokeWidth}
           fill={backgroundVisible !== false ? (fill || (stroke || '#2962ff') + '33') : 'transparent'}
+          hitFunc={strokeOnlyHit}
+          hitStrokeWidth={10}
           shadowColor={isSelected ? stroke : 'transparent'} shadowBlur={isSelected && !isDragging ? 4 : 0}
         />
       ) : (

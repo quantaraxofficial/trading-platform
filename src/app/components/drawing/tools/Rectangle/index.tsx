@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { Rect, Circle, Group, Text, Line } from 'react-konva';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../../core/coordinates';
 import { useChartTick } from '../../core/useChartTick';
-import { textLinesHitFunc } from '../../core/textHit';
+import { textLinesHitFunc, strokeOnlyHit } from '../../core/textHit';
 import { useSnap, useSnappedDrag } from '../../core/snap';
 import { HandleCircle, HandleRect } from '../../core/Handles';
 
@@ -160,6 +160,7 @@ export function RectangleTool({
         stroke={rectColor}
         strokeWidth={strokeWidth || 2}
         fill={bgColor}
+        hitFunc={strokeOnlyHit}
         dash={lineStyle === 'Dashed' ? [5, 5] : lineStyle === 'Dotted' ? [2, 2] : undefined}
         hitStrokeWidth={10}
       />

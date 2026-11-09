@@ -5,6 +5,7 @@ import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../c
 import { useChartTick } from '../core/useChartTick';
 import { useSnap, useSnappedDrag } from '../core/snap';
 import { HandleCircle } from '../core/Handles';
+import { strokeOnlyHit } from '../core/textHit';
 
 interface DoubleCurveToolProps {
   id: string;
@@ -77,6 +78,8 @@ export function DoubleCurveTool({ id, points, stroke, strokeWidth, isSelected, i
         stroke={stroke}
         strokeWidth={strokeWidth}
         fill={fillEnabled ? fill : 'transparent'}
+        hitFunc={strokeOnlyHit}
+        hitStrokeWidth={10}
         dash={lineStyle === 'Dashed' ? [strokeWidth * 3, strokeWidth * 3] : lineStyle === 'Dotted' ? [strokeWidth, strokeWidth * 2] : undefined}
         tension={0.5}
         lineCap="round"

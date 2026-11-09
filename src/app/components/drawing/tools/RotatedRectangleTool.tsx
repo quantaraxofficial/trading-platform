@@ -5,6 +5,7 @@ import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../c
 import { useChartTick } from '../core/useChartTick';
 import { useSnap, useSnappedDrag } from '../core/snap';
 import { HandleCircle } from '../core/Handles';
+import { strokeOnlyHit } from '../core/textHit';
 
 type Pt = { logical: number; price: number; time?: number };
 
@@ -119,6 +120,8 @@ export function RotatedRectangleTool({
           stroke={color}
           strokeWidth={strokeWidth || 2}
           fill={backgroundVisible !== false ? (fill || 'rgba(76, 175, 80, 0.2)') : undefined}
+          hitFunc={strokeOnlyHit}
+          hitStrokeWidth={10}
           closed
           lineJoin="miter"
         />

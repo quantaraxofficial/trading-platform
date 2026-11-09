@@ -5,6 +5,7 @@ import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../c
 import { useChartTick } from '../core/useChartTick';
 import { useSnap, useSnappedDrag } from '../core/snap';
 import { HandleCircle } from '../core/Handles';
+import { strokeOnlyHit } from '../core/textHit';
 
 interface TriangleToolProps {
   id: string;
@@ -106,6 +107,7 @@ export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, isHo
         stroke={stroke}
         strokeWidth={strokeWidth}
         fill={backgroundVisible !== false ? (fill || 'rgba(41, 98, 255, 0.08)') : 'transparent'}
+        hitFunc={strokeOnlyHit}
         closed={true}
         shadowColor={isSelected ? stroke : 'transparent'}
         shadowBlur={isSelected && !isDragging ? 4 : 0}
