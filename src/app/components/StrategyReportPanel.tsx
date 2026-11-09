@@ -250,7 +250,9 @@ function CustomRangeDialog({ from, to, min, max, onApply, onClose }: { from: num
       <div className="st-root" role="dialog" aria-label="Custom date range" style={{ width: 360, borderRadius: 10, boxShadow: "var(--st-menu-shadow)", background: "var(--st-menu-bg)", padding: "16px 20px 20px" }}>
         <div style={{ fontSize: 20, fontWeight: 600, lineHeight: "28px", marginBottom: 16 }}>Custom date range</div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input className="st-input" type="date" aria-label="Start date" value={a} min={min ? toInput(min) : undefined} max={b} onChange={(e) => setA(e.target.value)} style={{ flex: 1 }} />
+          {/* No lower limit: a start before the chart's first loaded bar is fine, the backtest loads the
+              older bars it needs (ensureHistoryForRange), as on TradingView */}
+          <input className="st-input" type="date" aria-label="Start date" value={a} max={b} onChange={(e) => setA(e.target.value)} style={{ flex: 1 }} />
           <span style={{ color: "var(--st-text-secondary)" }}>{"—"}</span>
           <input className="st-input" type="date" aria-label="End date" value={b} min={a} max={max ? toInput(max) : undefined} onChange={(e) => setB(e.target.value)} style={{ flex: 1 }} />
         </div>

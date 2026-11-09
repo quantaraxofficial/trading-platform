@@ -128,6 +128,8 @@ Chart interactions
     headings, TradingView checkboxes, colour boxes, a Defaults menu (Reset settings)
   - Script settings apply as they're changed: the chart and the Strategy Tester report re-run
     behind the open dialog; Cancel / Esc put the opening settings back, Ok keeps them
+  - Strategy Tester custom date range can start before the chart's first loaded bar (e.g.
+    January 2025 on a 2h chart); the older bars are loaded for the backtest
 
 Layouts
   - Multi-chart layouts (Layout setup grid, Manage layouts, sync in layout); each chart keeps
