@@ -87,6 +87,31 @@ const fmtFixed = (n: number, decimals: number) => {
 // Whole numbers without decimals, others to two ("1", "2.35")
 const fmtAmount = (n: number) => fmtFixed(n, Number.isInteger(Math.round(n * 100) / 100) ? 0 : 2);
 
+// Console log of a position tool's moves (for checking a drag on the live site): one line per
+// step — the start, each new bar / price it lands on, and the end — not one per mouse move
+let lastPosLog = '';
+function logPosition(what: string, side: string, id: string, pts: { logical: number; price: number }[], extra: Record<string, any> = {}) {
+  const bars: any[] = (window as any).__chartFullData || [];
+  const prec: number = (window as any).__pricePrecision ?? 2;
+  const timeAt = (l: number) => {
+    const i = Math.round(l), b = bars[i] ?? null;
+    if (b) return new Date(b.time * 1000).toISOString().replace('T', ' ').slice(0, 16);
+    if (bars.length >= 2) { const n = bars.length, dt = bars[n - 1].time - bars[n - 2].time; return new Date((bars[n - 1].time + (i - (n - 1)) * dt) * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' (future)'; }
+    return '?';
+  };
+  const [e, r, t, st] = pts;
+  const info = {
+    entry: +e.price.toFixed(prec), target: +t.price.toFixed(prec), stop: +st.price.toFixed(prec),
+    startBar: e.logical, endBar: r.logical, start: timeAt(e.logical) + ' UTC', end: timeAt(r.logical) + ' UTC', ...extra,
+  };
+  const key = what + JSON.stringify({ ...info, ...Object.fromEntries(Object.keys(extra).map(k => [k, 0])) });
+  if (what === 'move' && key === lastPosLog) return;
+  lastPosLog = key;
+  const more = Object.entries(extra).map(([k, v]) => `${k} ${v}`).join(', ');
+  console.log(`[${side === 'long' ? 'Long' : 'Short'} position ${id}] ${what}: entry ${info.entry}, target ${info.target}, stop ${info.stop}`
+    + ` | bars ${info.startBar} → ${info.endBar} | ${info.start} → ${info.end}${more ? ' | ' + more : ''}`);
+}
+
 export function PositionTool({
   side, id, points, isSelected, isHovering = false, chart, series, onSelect, onUpdatePoints,
   targetFillColor = POSITION_TARGET_FILL,
@@ -163,6 +188,7 @@ export function PositionTool({
   const handleDragStart = (e: any) => {
     if (!isWholeToolDrag(e)) return;
     dragStartRef.current = points.map(p => ({ logical: p.logical, price: p.price }));
+    logPosition('drag start', side, id, points);
   };
   const handleDragMove = (e: any) => {
     if (!isWholeToolDrag(e) || !onUpdatePoints) return;
@@ -179,12 +205,15 @@ export function PositionTool({
     if (!s) return;
     const dLogical = Math.round(s.logical - start[0].logical);
     const dPrice = s.price - start[0].price;
-    onUpdatePoints(start.map(p => ({ logical: p.logical + dLogical, price: p.price + dPrice })));
+    const moved = start.map(p => ({ logical: p.logical + dLogical, price: p.price + dPrice }));
+    logPosition('move', side, id, moved, { mouseDx: Math.round(dx), mouseDy: Math.round(dy), barsMoved: dLogical });
+    onUpdatePoints(moved);
   };
   const handleDragEnd = (e: any) => {
     if (!isWholeToolDrag(e)) return;
     e.target.position({ x: 0, y: 0 });
     dragStartRef.current = null;
+    logPosition('drag end', side, id, points);
   };
 
   // Handles (TradingView's four): the entry circle moves the start bar and the entry price
@@ -219,6 +248,7 @@ export function PositionTool({
       const p = isLong ? Math.min(price, e0.price - minGap) : Math.max(price, e0.price + minGap);
       next = [e0, r0, t0, { logical: s0.logical, price: p }];
     }
+    logPosition('move', side, id, next, { handle: ['entry', 'right end', 'target', 'stop'][index] });
     onUpdatePoints(next);
   };
 

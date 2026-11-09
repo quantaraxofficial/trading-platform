@@ -5,6 +5,7 @@ import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../c
 import { useChartTick } from '../core/useChartTick';
 import { useSnap, useSnappedDrag } from '../core/snap';
 import { HandleCircle } from '../core/Handles';
+import { strokeOnlyHit } from '../core/textHit';
 
 interface PolylineToolProps {
   id: string;
@@ -90,6 +91,7 @@ export function PolylineTool({
         stroke={stroke}
         strokeWidth={strokeWidth}
         fill={backgroundVisible !== false ? fill : 'transparent'}
+        hitFunc={strokeOnlyHit}
         closed={!!fill && fill !== 'transparent'}
         shadowColor={isSelected ? stroke : 'transparent'}
         shadowBlur={isSelected && !isDragging ? 4 : 0}

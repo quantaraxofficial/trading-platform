@@ -19,3 +19,15 @@ export function textLinesHitFunc(context: any, shape: any) {
   context.closePath();
   context.fillStrokeShape(shape);
 }
+
+// Hit region for a filled shape's body (rectangle, circle, ellipse, polygon…): only its outline,
+// widened by hitStrokeWidth, as on TradingView, where the inside of a shape doesn't take the
+// mouse (no hover handles, no selection, the chart underneath keeps the crosshair). Konva's
+// default hit fills the shape, so the whole inside counted, even with the background turned off.
+// Draws the shape's own outline with the fill step skipped.
+export function strokeOnlyHit(context: any, shape: any) {
+  context.fillStrokeShape = (s: any) => context.strokeShape(s);
+  // (a built-in shape's own drawing, or a custom Shape's sceneFunc)
+  const draw = shape.sceneFunc?.() || shape._sceneFunc;
+  try { draw.call(shape, context, shape); } finally { delete context.fillStrokeShape; }
+}
