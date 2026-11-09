@@ -27,7 +27,7 @@ interface EmaSettingsModalProps {
   onChangeConfig: (newConfig: EmaConfig) => void;
 }
 
-function CheckBox({ checked, onChange, label, disabled, color }: { checked: boolean; onChange: (v: boolean) => void; label?: React.ReactNode; disabled?: boolean; color: string }) {
+export function CheckBox({ checked, onChange, label, disabled, color }: { checked: boolean; onChange: (v: boolean) => void; label?: React.ReactNode; disabled?: boolean; color: string }) {
   return (
     <label style={{ display: "inline-flex", alignItems: "center", gap: 10, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, userSelect: "none" }}>
       <input type="checkbox" checked={checked} disabled={disabled} onChange={e => onChange(e.target.checked)}
@@ -44,7 +44,7 @@ function CheckBox({ checked, onChange, label, disabled, color }: { checked: bool
 }
 
 // A number field that applies each valid value as it's typed (and tidies up on blur)
-function NumberField({ value, onChange, min, step = 1, disabled, width = 120, colors, label }: {
+export function NumberField({ value, onChange, min, step = 1, disabled, width = 120, colors, label }: {
   value: number; onChange: (v: number) => void; min?: number; step?: number; disabled?: boolean; width?: number; label: string;
   colors: { bg: string; border: string; text: string; disabledBg: string };
 }) {
@@ -67,7 +67,7 @@ function NumberField({ value, onChange, min, step = 1, disabled, width = 120, co
   );
 }
 
-function Select({ value, options, onChange, width = 120, disabled, colors, label }: {
+export function Select({ value, options, onChange, width = 120, disabled, colors, label }: {
   value: string; options: readonly string[]; onChange: (v: string) => void; width?: number; disabled?: boolean; label: string;
   colors: { bg: string; border: string; text: string; disabledBg: string };
 }) {
@@ -78,12 +78,11 @@ function Select({ value, options, onChange, width = 120, disabled, colors, label
           color: colors.text, fontSize: 14, padding: "0 28px 0 10px", outline: "none", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.6 : 1 }}>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
       </TvSelect>
-      <ChevronDown size={14} color="#787b86" style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
     </div>
   );
 }
 
-const Info = ({ text, mark = "i", bg, fg }: { text: string; mark?: string; bg: string; fg: string }) => (
+export const Info = ({ text, mark = "i", bg, fg }: { text: string; mark?: string; bg: string; fg: string }) => (
   <Tip text={text} placement="top" maxWidth={260}>
     <span aria-label={text} style={{ width: 16, height: 16, borderRadius: "50%", background: bg, color: fg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, cursor: "default" }}>{mark}</span>
   </Tip>
