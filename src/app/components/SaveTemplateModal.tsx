@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
@@ -56,7 +57,9 @@ export default function SaveTemplateModal({ onClose, theme, settingsToSave }: Sa
     }
   };
 
-  return (
+  // On the page body: rendered inside the chart it sat under the panels below the chart
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div style={{
       position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
       zIndex: 10005, backgroundColor: 'rgba(0,0,0,0.4)'
@@ -110,5 +113,5 @@ export default function SaveTemplateModal({ onClose, theme, settingsToSave }: Sa
         </div>
       </div>
     </div>
-  );
+  , document.body);
 }

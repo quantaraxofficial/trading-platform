@@ -106,7 +106,7 @@ export default function MobileMenuDrawer(props: MobileMenuDrawerProps) {
         {row(<Wallet {...i20} />, "Trading panel", run(props.onOpenTradingPanel))}
         {row(<Bot {...i20} />, "Trading Agent", run(props.onOpenAgent))}
         {divider}
-        <Link href="/landing" style={{ textDecoration: "none" }} onClick={onClose}>
+        <Link href="/" style={{ textDecoration: "none" }} onClick={onClose}>
           {row(<Home {...i20} />, "Home", () => {})}
         </Link>
         {row(<Moon {...i20} />, "Dark theme", props.onToggleTheme, <Switch on={isDark} />)}

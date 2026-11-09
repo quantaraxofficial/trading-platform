@@ -122,7 +122,7 @@ export default function AccountMenu({ isDark, onToggleTheme, height, drawingsPan
               {row(<UserPlusIcon />, "Create account", () => go("/signup"))}
             </>
           )}
-          {row(<HomeIcon />, "Home", () => go("/landing"))}
+          {row(<HomeIcon />, "Home", () => go("/"))}
           {row(<SupportIcon />, "Support requests", () => go("/contact"))}
           {divider}
           {row(<MoonIcon />, "Dark theme", onToggleTheme, toggle(isDark))}

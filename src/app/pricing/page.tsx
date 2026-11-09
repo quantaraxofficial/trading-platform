@@ -94,13 +94,13 @@ export default function PricingPage() {
 
       {/* Navigation */}
       <nav style={{ position: 'relative', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 32px', maxWidth: '1200px', margin: '0 auto' }}>
-        <Link href="/landing" style={{ fontSize: '24px', fontWeight: 800, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px', background: 'linear-gradient(to right, #a78bfa, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+        <Link href="/" style={{ fontSize: '24px', fontWeight: 800, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px', background: 'linear-gradient(to right, #a78bfa, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
           <Zap size={24} style={{ color: '#8b5cf6', fill: '#8b5cf6' }} />
           TradePilot
         </Link>
         <div style={{ display: 'flex', gap: '32px', alignItems: 'center' }}>
-          <Link href="/landing" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Home</Link>
-          <Link href="/" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Chart</Link>
+          <Link href="/" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Home</Link>
+          <Link href="/chart" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Chart</Link>
           <Link href="/login" style={{ padding: '10px 24px', backgroundColor: '#9333ea', borderRadius: '8px', color: 'white', textDecoration: 'none', fontWeight: 600, fontSize: '15px' }}>Sign In</Link>
         </div>
       </nav>

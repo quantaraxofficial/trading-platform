@@ -37,7 +37,7 @@ export default function SignupPage() {
     }
     try {
       await signUp(formData.email, formData.password, formData.name, formData.phone);
-      router.push('/');
+      router.push('/chart');
     } catch (err: any) {
       setError(err.message || 'Failed to create account');
     }
@@ -46,7 +46,7 @@ export default function SignupPage() {
   const handleGoogleSignUp = async () => {
     try {
       // Closing the Google window just leaves the form as it was
-      if (await signInWithGoogle()) router.push('/');
+      if (await signInWithGoogle()) router.push('/chart');
     } catch (err: any) {
       setError(err.message || 'Failed to sign up with Google');
     }

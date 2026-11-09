@@ -1,6 +1,6 @@
 TRADEPILOT - FEATURES BUILT ON THE MERGE BRANCH
 Branch: merge-main-left-toolbar-tools  (everything here is on top of main)
-Up to: 9 Nov 2026 (Rotated rectangle as on TradingView, smooth drags with many drawings, Mac Command+drag selection)
+Up to: 9 Nov 2026 (Home page at / and the chart at /chart, profile page, chart dialogs above the panels)
 
 Contents
   1. Drawing tools (left toolbar)
@@ -18,7 +18,9 @@ Contents
  13. Community
  14. Settings, sync and personalisation
  15. Security and admin
- 16. Running it (setup notes)
+ 16. Voice assistant
+ 17. Site pages: home, sign-in, About, Contact, profile
+ 18. Running it (setup notes)
 
 ======================================================================
 1. DRAWING TOOLS (LEFT TOOLBAR)
@@ -118,6 +120,9 @@ Chart interactions
   - Countdown to bar close readable on light labels (black text with white bullish candles)
   - The crosshair pointer is an image, so viewers see it when the chart tab is shared in
     Google Meet (Chrome leaves the system crosshair out of a shared tab)
+  - Dialogs opened from the chart (strategy / indicator settings, alerts, volume, session,
+    symbol info, save template) open above the Strategy Tester and other panels instead of
+    being cut off by them
 
 Layouts
   - Multi-chart layouts (Layout setup grid, Manage layouts, sync in layout); each chart keeps
@@ -491,7 +496,25 @@ Posting signals out
   - Next: orders, drawing tools by voice
 
 ======================================================================
-17. RUNNING IT (SETUP NOTES)
+17. SITE PAGES: HOME, SIGN-IN, ABOUT, CONTACT, PROFILE
+======================================================================
+  - The home page is at / and the chart at /chart; old chart links (/?symbol=...) open the
+    chart, /landing opens the home page; every "back to the chart" link goes to /chart
+  - Home, About and Contact: a "Coming soon" roadmap (what's being built next), Pricing in the
+    navigation, a profile icon in place of "Log in" once signed in
+  - Sign-in in the home page's look (purple gradient, glowing blobs, a glass card), with
+    Google, "Remember me", "Forgot password?" and a link to sign up
+  - Normal-size text on the site pages (a 16px base, up to 19px on large screens; the chart
+    keeps its 13px), and a single scroll bar on tall pages
+  - Profile (/profile) from the account's real data: Overview (equity curve, metrics, profit
+    factor), Portfolio, Backtesting (bar-replay sessions and strategy backtests), 15
+    achievements earned from real trading, Settings (account and plan, trading toggles,
+    download settings, sign out, Upgrade to Pro through Cashfree); ?tab=settings opens Settings
+  - The chart's account menu: Your profile, Settings and billing, Home (/); the account's
+    plan now reaches the menu and the profile (it was loaded but never passed on)
+
+======================================================================
+18. RUNNING IT (SETUP NOTES)
 ======================================================================
   - Database: run "python manage.py migrate" (migrations up to 0038)
   - Live collab / chats: the backend runs under daphne (Django Channels)

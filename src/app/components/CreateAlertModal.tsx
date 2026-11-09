@@ -6,6 +6,7 @@
 // "Oops. This is replay mode" instead.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronRight, ChevronLeft, ChevronUp, X } from 'lucide-react';
 import { useAlerts, ALERT_OPERATORS, DEFAULT_NOTIFY, requestDesktopPermission } from '@/context/AlertsContext';
 import type { AlertNotify, AlertOperator, AlertTrigger } from '@/context/AlertsContext';
@@ -112,7 +113,9 @@ function AlertDialog({ onClose, theme, symbol: chartSymbol = 'XAUUSD', initialPr
   const row: React.CSSProperties = { display: 'flex', alignItems: 'center', minHeight: 30 };
   const link: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: 0, color: c.text, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' };
 
-  return (
+  // On the page body: rendered inside the chart it sat under the panels below the chart
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10005, backgroundColor: 'rgba(0,0,0,0.4)' }}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div role="dialog" aria-label={page === 'notifications' ? 'Notifications' : `${editing ? 'Edit' : 'Create'} alert on ${displaySymbol(symbol)}`}
@@ -202,7 +205,7 @@ function AlertDialog({ onClose, theme, symbol: chartSymbol = 'XAUUSD', initialPr
         </div>
       </div>
     </div>
-  );
+  , document.body);
 }
 
 type Palette = { bg: string; text: string; muted: string; border: string; input: string; hover: string; link: string };

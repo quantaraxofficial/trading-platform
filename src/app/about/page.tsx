@@ -1,17 +1,19 @@
 "use client";
 
+import SiteUserMenu from '../components/external/SiteUserMenu';
 import React from 'react';
 import { Zap, Shield, Globe, Award } from 'lucide-react';
+import ComingSoon from '../components/external/ComingSoon';
 import Link from 'next/link';
 
 export default function AboutPage() {
   return (
-    <div style={{ 
+    <div data-site-page style={{ 
       minHeight: '100vh', 
       backgroundColor: '#0f172a', 
       color: 'white', 
       position: 'relative', 
-      overflowX: 'hidden',
+      overflow: 'clip', // clips the glows without a second scroll bar (hidden would scroll)
       fontFamily: 'Inter, sans-serif'
     }}>
       {/* Abstract Background Gradients */}
@@ -20,17 +22,17 @@ export default function AboutPage() {
 
       {/* Navigation */}
       <nav style={{ position: 'relative', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 32px', maxWidth: '1200px', margin: '0 auto' }}>
-        <Link href="/landing" style={{ fontSize: '24px', fontWeight: 800, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px', background: 'linear-gradient(to right, #a78bfa, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+        <Link href="/" style={{ fontSize: '24px', fontWeight: 800, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px', background: 'linear-gradient(to right, #a78bfa, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
           <Zap size={24} style={{ color: '#8b5cf6', fill: '#8b5cf6' }} />
           TradePilot
         </Link>
         <div style={{ display: 'flex', gap: '32px', alignItems: 'center' }}>
-          <Link href="/landing" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Home</Link>
-          <Link href="/" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Chart</Link>
-          <Link href="/pricing" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Pricing</Link>
+          <Link href="/" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Home</Link>
+          <Link href="/chart" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Chart</Link>
           <Link href="/about" style={{ color: 'white', textDecoration: 'none', fontSize: '15px', fontWeight: 600 }}>About Us</Link>
           <Link href="/contact" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Contact</Link>
-          <Link href="/login" style={{ padding: '10px 24px', backgroundColor: '#9333ea', borderRadius: '8px', color: 'white', textDecoration: 'none', fontWeight: 600, fontSize: '15px' }}>Sign In</Link>
+          <Link href="/pricing" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Pricing</Link>
+          <SiteUserMenu signedOut={<Link href="/login" style={{ padding: '10px 24px', backgroundColor: '#9333ea', borderRadius: '8px', color: 'white', textDecoration: 'none', fontWeight: 600, fontSize: '15px' }}>Sign In</Link>} />
         </div>
       </nav>
 
@@ -64,6 +66,11 @@ export default function AboutPage() {
         </div>
       </div>
       
+      {/* Coming soon: what the next version adds */}
+      <div id="coming-soon" style={{ position: 'relative', zIndex: 10, maxWidth: '1200px', margin: '0 auto', padding: '0 24px 96px' }}>
+        <ComingSoon />
+      </div>
+
       {/* Footer */}
       <footer style={{ position: 'relative', zIndex: 10, borderTop: '1px solid #1e293b', padding: '48px 24px' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '32px', color: '#64748b', fontSize: '14px' }}>

@@ -2,11 +2,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, BarChart3, LineChart, Activity, Zap, Shield, Globe, ArrowRight, Menu, X, Target } from 'lucide-react';
 import RollingBitcoin from './RollingBitcoin';
+import ComingSoon from './ComingSoon';
+import SiteUserMenu from './SiteUserMenu';
+import { useAuth } from '@/context/AuthContext';
 
 export default function LandingPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrollY, setScrollY] = useState(0);
   const [activeFeature, setActiveFeature] = useState(0);
+  // Signed in: the profile icon instead of "Log in" (nav), "Your profile" instead of it (hero);
+  // "Log in" only once the sign-in has been read (no flash for a signed-in visitor)
+  const { user, loading } = useAuth();
 
   useEffect(() => {
     document.title = 'TradePilot | Professional Trading Made Simple';
@@ -71,7 +77,7 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="bg-gradient-to-br from-black via-purple-950 to-black text-white overflow-x-hidden">
+    <div data-site-page className="bg-gradient-to-br from-black via-purple-950 to-black text-white overflow-x-hidden">
       {/* Background Blobs */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
         <div className="blob blob-1"></div>
@@ -95,14 +101,15 @@ export default function LandingPage() {
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center space-x-8">
               <button onClick={() => scrollToSection('features')} className="text-purple-400 hover:text-white transition-colors">Features</button>
-              <button onClick={() => scrollToSection('tools')} className="text-purple-400 hover:text-white transition-colors">Tools</button>
+              <button onClick={() => scrollToSection('coming-soon')} className="text-purple-400 hover:text-white transition-colors">Coming soon</button>
               <a href="/about" className="text-purple-400 hover:text-white transition-colors">About Us</a>
               <a href="/contact" className="text-purple-400 hover:text-white transition-colors">Contact</a>
               <a href="/pricing" className="text-purple-400 hover:text-white transition-colors">Pricing</a>
-              <a href="/profile" className="text-purple-400 hover:text-white transition-colors">Profile</a>
-              <a href="/login" className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 px-6 py-2 rounded-lg font-semibold transition-all transform hover:scale-105">
-                Get Started
+              {!loading && !user && <a href="/login" className="text-purple-400 hover:text-white transition-colors">Log in</a>}
+              <a href="/chart" className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 px-6 py-2 rounded-lg font-semibold transition-all transform hover:scale-105">
+                Open the chart
               </a>
+              <SiteUserMenu signedOut={null} />
             </div>
 
             {/* Mobile Menu Button */}
@@ -115,13 +122,13 @@ export default function LandingPage() {
           {isMenuOpen && (
             <div className="md:hidden mt-4 pb-4 space-y-4">
               <button onClick={() => scrollToSection('features')} className="block text-purple-400 hover:text-white transition-colors">Features</button>
-              <button onClick={() => scrollToSection('tools')} className="block text-purple-400 hover:text-white transition-colors">Tools</button>
+              <button onClick={() => scrollToSection('coming-soon')} className="block text-purple-400 hover:text-white transition-colors">Coming soon</button>
               <a href="/about" className="block text-purple-400 hover:text-white transition-colors">About Us</a>
               <a href="/contact" className="block text-purple-400 hover:text-white transition-colors">Contact</a>
               <a href="/pricing" className="block text-purple-400 hover:text-white transition-colors">Pricing</a>
-              <a href="/profile" className="block text-purple-400 hover:text-white transition-colors">Profile</a>
-              <a href="/login" className="block text-center w-full bg-gradient-to-r from-purple-700 to-indigo-700 px-6 py-2 rounded-lg font-semibold transition-all">
-                Get Started
+              <SiteUserMenu mobile signedOut={<a href="/login" className="block text-purple-400 hover:text-white transition-colors">Log in</a>} />
+              <a href="/chart" className="block text-center w-full bg-gradient-to-r from-purple-700 to-indigo-700 px-6 py-2 rounded-lg font-semibold transition-all">
+                Open the chart
               </a>
             </div>
           )}
@@ -141,11 +148,11 @@ export default function LandingPage() {
               Advanced charting tools, real-time analysis, and intelligent risk management all in one powerful platform.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up animation-delay-400">
-              <a href="/login" className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 px-8 py-4 rounded-lg font-semibold text-lg transition-all transform hover:scale-105 flex items-center justify-center">
-                Start Trading <ArrowRight className="inline-block ml-2 w-5 h-5" />
+              <a href="/chart" className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 px-8 py-4 rounded-lg font-semibold text-lg transition-all transform hover:scale-105 flex items-center justify-center">
+                Open the chart <ArrowRight className="inline-block ml-2 w-5 h-5" />
               </a>
-              <a href="/signup" className="border-2 border-purple-600 hover:border-white px-8 py-4 rounded-lg font-semibold text-lg transition-all flex items-center justify-center">
-                Watch Demo
+              <a href={user ? '/profile' : '/login'} className="border-2 border-purple-600 hover:border-white px-8 py-4 rounded-lg font-semibold text-lg transition-all flex items-center justify-center">
+                {user ? 'Your profile' : 'Log in'}
               </a>
             </div>
           </div>
@@ -170,6 +177,13 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Coming soon: what the next version adds */}
+      <section id="coming-soon" className="py-20 px-6" style={{ zIndex: 1, position: 'relative' }}>
+        <div className="container mx-auto">
+          <ComingSoon />
         </div>
       </section>
 

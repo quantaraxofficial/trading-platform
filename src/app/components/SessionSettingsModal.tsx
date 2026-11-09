@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from 'react-dom';
 import { X, ChevronDown } from "lucide-react";
 import { DualRangeSlider } from "./drawing/ui/DualRangeSlider";
 import { useEscapeClose } from "../lib/useEscapeClose";
@@ -380,7 +381,9 @@ export default function SessionSettingsModal({ isOpen, onClose, config, onSave, 
     );
   };
 
-  return (
+  // On the page body: rendered inside the chart it sat under the panels below the chart
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", backgroundColor: "rgba(0,0,0,0.5)", zIndex: 99999, display: "flex", justifyContent: "center", alignItems: "center" }}>
       <div style={{ width: "420px", maxHeight: "80vh", backgroundColor: bg, borderRadius: "8px", display: "flex", flexDirection: "column", boxShadow: "0 2px 5px rgba(0,0,0,0.2)" }} onClick={e => e.stopPropagation()}>
         
@@ -587,5 +590,5 @@ export default function SessionSettingsModal({ isOpen, onClose, config, onSave, 
 
       </div>
     </div>
-  );
+  , document.body);
 }

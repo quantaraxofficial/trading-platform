@@ -74,7 +74,7 @@ export function sessionTrades(s: BacktestSession): ATrade[] {
 // Opening one on the chart: the chart page resumes it (as /?session=<id> does)
 export const OPEN_SESSION_EVENT = "tv:open-backtest-session";
 export function chartUrlFor(s: Pick<BacktestSession, "id" | "symbol">) {
-  return `/?symbol=${encodeURIComponent(s.symbol)}&session=${s.id}`;
+  return `/chart?symbol=${encodeURIComponent(s.symbol)}&session=${s.id}`;
 }
 
 // The bar `length` after `start` (seconds, UTC), as the server works it out (core/analytics.py

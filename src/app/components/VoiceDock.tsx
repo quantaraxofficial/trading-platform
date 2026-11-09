@@ -21,7 +21,7 @@ export default function VoiceDock() {
   const { user } = useAuth();
   const v = useVoice();
   const [open, setOpen] = useState(false);
-  const onChart = pathname === "/" || pathname === "";
+  const onChart = pathname === "/chart";
   useEscapeClose(() => setOpen(false), open && !onChart);
 
   useEffect(() => { if (!onChart) setVoiceUser(user?.uid ?? null); }, [user?.uid, onChart]);
@@ -39,7 +39,7 @@ export default function VoiceDock() {
   useEffect(() => {
     if (onChart) return;
     registerVoiceCommands("pages", [
-      { id: "page-chart", run: () => router.push("/") },
+      { id: "page-chart", run: () => router.push("/chart") },
       { id: "page-analytics", run: () => router.push("/analytics") },
       { id: "page-backtest-sessions", run: () => router.push("/analytics?view=backtests") },
       { id: "page-copy-trading", run: () => router.push("/analytics?view=copy") },

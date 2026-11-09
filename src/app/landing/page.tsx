@@ -1,10 +1,6 @@
-import { Metadata } from 'next';
-import LandingPage from '../components/external/LandingPage';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = {
-  title: 'TradePilot | Professional Trading Made Simple',
-};
-
+// The home page moved to /
 export default function Page() {
-  return <LandingPage />;
+  redirect('/');
 }

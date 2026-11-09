@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { createPortal } from 'react-dom';
 import { useEscapeClose } from "../lib/useEscapeClose";
 import { useSymbolInfo } from "../utils/symbolInfo";
 
@@ -53,7 +54,9 @@ export default function SymbolInfoDialog({ symbol, precision, onClose }: { symbo
   const grid = (children: React.ReactNode) => <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 24, rowGap: 16 }}>{children}</div>;
   const rule = <div style={{ height: 1, background: "var(--tv-color-border, #e0e3eb)", margin: "16px 0" }} />;
 
-  return (
+  // On the page body: rendered inside the chart it sat under the panels below the chart
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div onMouseDown={onClose} style={{ position: "fixed", inset: 0, zIndex: 10050, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div role="dialog" aria-label="Symbol info" data-name="symbol-info-dialog" onMouseDown={e => e.stopPropagation()}
         style={{ width: 480, borderRadius: 8, background: "var(--tv-color-pane-bg, #fff)", color: "var(--tv-hdr-text, #131722)", boxShadow: "0 2px 16px rgba(0,0,0,0.3)", fontFamily: "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif" }}>
@@ -93,5 +96,5 @@ export default function SymbolInfoDialog({ symbol, precision, onClose }: { symbo
         </div>
       </div>
     </div>
-  );
+  , document.body);
 }

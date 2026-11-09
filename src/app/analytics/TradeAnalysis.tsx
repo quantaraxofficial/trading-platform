@@ -143,7 +143,7 @@ function TradeDetail({ uid, source, t, all, journal, onJournal, fmt }: {
   const cmp = (v: number, a: number) => (a ? ((v - a) / Math.abs(a)) * 100 : null);
   const avgHold = all.avgHold;
   const avgQty = all.count ? all.closed.reduce((s, x) => s + x.qty, 0) / all.count : 0;
-  const chartHref = `/?symbol=${encodeURIComponent(t.symbol.replace(/\+$/, ""))}`;
+  const chartHref = `/chart?symbol=${encodeURIComponent(t.symbol.replace(/\+$/, ""))}`;
 
   return (
     <div className="space-y-5" data-testid="trade-detail">

@@ -27,7 +27,7 @@ export default function CommunityShell({ title, hint, active, children }: { titl
       </div>
       <div className="relative z-10 flex h-full">
         <aside className="hidden md:flex w-60 shrink-0 flex-col gap-6 p-5 border-r border-purple-800/30 bg-black/40 backdrop-blur-xl h-full overflow-y-auto">
-          <a href="/" className="flex items-center gap-2.5">
+          <a href="/chart" className="flex items-center gap-2.5">
             <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/20"><TrendingUp className="w-6 h-6" /></div>
             <span className="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent font-bold text-xl">TradePilot</span>
           </a>
@@ -40,7 +40,7 @@ export default function CommunityShell({ title, hint, active, children }: { titl
             ))}
             <a href="/analytics" className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-purple-300 hover:text-white hover:bg-purple-800/25"><BarChart3 size={18} />Analytics</a>
           </nav>
-          <a href="/" className="mt-auto flex items-center gap-2 text-sm text-purple-400 hover:text-white"><ArrowLeft size={15} />Back to the chart</a>
+          <a href="/chart" className="mt-auto flex items-center gap-2 text-sm text-purple-400 hover:text-white"><ArrowLeft size={15} />Back to the chart</a>
         </aside>
         <main className="flex-1 min-w-0 h-full overflow-y-auto px-4 sm:px-8 py-6">
           <header className="flex items-center gap-3 mb-6">
