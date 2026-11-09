@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { X, ChevronDown } from "lucide-react";
 import type { PineInputMeta } from "../lib/pineScriptEngine";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import { useDialogDrag } from "../lib/useDialogDrag";
 import { PaletteInput } from "./drawing/ui/PaletteInput";
 import TvSelect from "@/app/components/ui/TvSelect";
 import { CheckBox, NumberField, Select, Info } from "./EmaSettingsModal";
@@ -245,18 +246,20 @@ export default function PineSettingsModal({
   );
 
   const tabs: Tab[] = showProperties ? ["Inputs", "Properties", "Style"] : ["Inputs", "Style"];
+  // Moved by its title bar, as on TradingView
+  const drag = useDialogDrag();
 
   // Rendered on the page body and above the panels (the bottom panel is z-index 2000-2003):
   // inside the chart, or below that, the Strategy Tester panel covered its lower half
   if (typeof document === "undefined") return null;
   return createPortal(
     <div style={{ position: "fixed", inset: 0, zIndex: 10050, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-      <div role="dialog" aria-label={`${scriptName} settings`}
-        style={{ width: 454, maxWidth: "calc(100vw - 32px)", maxHeight: "calc(100vh - 32px)", backgroundColor: bgColor, borderRadius: 8, boxShadow: isDark ? "0 4px 24px rgba(0,0,0,0.5)" : "0 4px 24px rgba(0,0,0,0.18)",
+      <div role="dialog" aria-label={`${scriptName} settings`} ref={drag.ref}
+        style={{ ...drag.style, width: 454, maxWidth: "calc(100vw - 32px)", maxHeight: "calc(100vh - 32px)", backgroundColor: bgColor, borderRadius: 8, boxShadow: isDark ? "0 4px 24px rgba(0,0,0,0.5)" : "0 4px 24px rgba(0,0,0,0.18)",
           border: `1px solid ${borderColor}`, pointerEvents: "auto", display: "flex", flexDirection: "column", color: textColor, position: "relative",
           fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif' }}
         onClick={(e) => e.stopPropagation()}>
-        <div style={{ padding: "20px 20px 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <div onPointerDown={drag.handle.onPointerDown} style={{ ...drag.handle.style, padding: "20px 20px 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{scriptName}</h2>
           <button type="button" aria-label="Close menu" onClick={cancel} style={{ border: "none", background: "transparent", color: textColor, cursor: "pointer", display: "flex", padding: 4, flexShrink: 0 }}><X size={20} /></button>
         </div>

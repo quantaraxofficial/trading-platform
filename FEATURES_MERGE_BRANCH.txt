@@ -141,6 +141,8 @@ Chart interactions
   - Indicator templates also hold built-in Pine indicators' inputs and the custom script /
     strategy on the chart with its settings (by where it's saved or published on the site);
     applying the template puts it back on the chart with those settings
+  - Indicator and strategy settings dialogs (scripts, EMA, Volume) move by their title bar, as on
+    TradingView, and stay reachable on screen
 
 Layouts
   - Multi-chart layouts (Layout setup grid, Manage layouts, sync in layout); each chart keeps
