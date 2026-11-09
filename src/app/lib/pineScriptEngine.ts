@@ -125,7 +125,7 @@ export interface PineRunResult {
   logs: string[];
   warnings: string[];
   errors: PineScriptError[];
-  meta: { title: string; shortTitle?: string; isStrategy: boolean; overlay: boolean; initialCapital: number; pyramiding?: number; defaultQtyValue?: number; defaultQtyType?: string; precision?: number; maxLabels?: number; maxLines?: number; maxBoxes?: number };
+  meta: { title: string; shortTitle?: string; isStrategy: boolean; overlay: boolean; initialCapital: number; processOrdersOnClose?: boolean; pyramiding?: number; defaultQtyValue?: number; defaultQtyType?: string; precision?: number; maxLabels?: number; maxLines?: number; maxBoxes?: number };
   execMs: number;
   // Profiler mode: time spent on each script line (inclusive of the lines a block contains) and
   // how many times it ran
@@ -334,17 +334,29 @@ function closeStrategyPosition(ctx: Ctx, exitPrice: number, exitTime: number, ex
 // previous behavior here) silently drops any order whose level sits outside
 // the bar's H/L range even though it gapped straight through — which is
 // exactly the kind of miss that shows up as fewer trades than TradingView.
+// Which way price went inside a bar, as TradingView's broker emulator assumes without the bar
+// magnifier: "if the high is closer to the open than the low, the emulator assumes the price moved
+// open -> high -> low -> close; otherwise open -> low -> high -> close". So when a stop and a limit
+// both lie inside one bar, the one met first on that path fills (not always the stop: with a 1:1
+// target that alone turned many winners into losers).
+const highFirst = (bar: { open: number; high: number; low: number }) => bar.high - bar.open < bar.open - bar.low;
 function longExitFillPrice(bar: { open: number; high: number; low: number }, stop: number | null, limit: number | null): number | null {
-  // Pessimistic default (no bar magnifier): when both a stop and a limit
-  // could have triggered within the same bar, TradingView assumes the
-  // stop-loss is the one that hit first — hence checking stop before limit.
-  if (stop !== null && bar.low <= stop) return bar.open <= stop ? bar.open : stop;
-  if (limit !== null && bar.high >= limit) return bar.open >= limit ? bar.open : limit;
+  // Gapped through at the open: fills at the open
+  if (stop !== null && bar.open <= stop) return bar.open;
+  if (limit !== null && bar.open >= limit) return bar.open;
+  const hitStop = stop !== null && bar.low <= stop, hitLimit = limit !== null && bar.high >= limit;
+  if (hitStop && hitLimit) return highFirst(bar) ? limit : stop;
+  if (hitStop) return stop;
+  if (hitLimit) return limit;
   return null;
 }
 function shortExitFillPrice(bar: { open: number; high: number; low: number }, stop: number | null, limit: number | null): number | null {
-  if (stop !== null && bar.high >= stop) return bar.open >= stop ? bar.open : stop;
-  if (limit !== null && bar.low <= limit) return bar.open <= limit ? bar.open : limit;
+  if (stop !== null && bar.open >= stop) return bar.open;
+  if (limit !== null && bar.open <= limit) return bar.open;
+  const hitStop = stop !== null && bar.high >= stop, hitLimit = limit !== null && bar.low <= limit;
+  if (hitStop && hitLimit) return highFirst(bar) ? stop : limit;
+  if (hitStop) return stop;
+  if (hitLimit) return limit;
   return null;
 }
 
@@ -418,6 +430,23 @@ function processStrategyOrders(ctx: Ctx) {
   const dd = st.peakEquity - equity;
   st.maxDrawdown = Math.max(st.maxDrawdown, dd);
   if (st.peakEquity > 0) st.maxDrawdownPct = Math.max(st.maxDrawdownPct, (dd / st.peakEquity) * 100);
+}
+
+// strategy(process_orders_on_close = true): TradingView fills market orders at the close of the bar
+// whose script placed them (not at the next bar's open); their exits apply from the next bar.
+// Runs right after each bar's script.
+function fillMarketOrdersOnClose(ctx: Ctx) {
+  const st = ctx.strategyState;
+  const bar = ctx.bar;
+  for (const id of Object.keys(st.pendingEntries)) {
+    const order = st.pendingEntries[id];
+    if (order.limit !== null || order.stop !== null) continue;      // price orders wait for later bars
+    if (st.position && st.position.direction === order.direction) { delete st.pendingEntries[id]; continue; }
+    if (st.position) closeStrategyPosition(ctx, bar.close, bar.time, id);
+    st.position = { direction: order.direction, qty: order.qty, entryPrice: bar.close, entryTime: bar.time, id, entryBar: ctx.barIndex, maxFavorable: 0, maxAdverse: 0 };
+    st.pendingEntries = {}; // one position at a time
+    break;
+  }
 }
 
 function buildStrategyReport(ctx: Ctx): PineStrategyReport {
@@ -677,6 +706,7 @@ function parseMeta(text: string, meta: PineRunResult["meta"]) {
   meta.maxBoxes = count(/max_boxes_count\s*=\s*(\d+)/);
   const capMatch = text.match(/initial_capital\s*=\s*(-?[0-9.]+)/);
   if (capMatch) meta.initialCapital = parseFloat(capMatch[1]);
+  meta.processOrdersOnClose = /process_orders_on_close\s*=\s*true/.test(text);
   const pyramidingMatch = text.match(/pyramiding\s*=\s*([0-9]+)/);
   if (pyramidingMatch) meta.pyramiding = parseInt(pyramidingMatch[1], 10);
   const qtyMatch = text.match(/default_qty_value\s*=\s*(-?[0-9.]+)/);
@@ -2769,6 +2799,7 @@ function executeParsed(stmts: Stmt[], meta: PineRunResult["meta"], bars: Bar[], 
       ctx.bar = bars[i];
       if (meta.isStrategy) processStrategyOrders(ctx);
       execStmts(stmts, ctx);
+      if (meta.isStrategy && meta.processOrdersOnClose) fillMarketOrdersOnClose(ctx);
     }
     result.plots = ctx.plotOrder.map((id) => ctx.plots[id]);
     result.hlines = ctx.hlines || [];
