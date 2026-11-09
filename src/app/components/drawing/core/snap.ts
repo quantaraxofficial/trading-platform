@@ -106,24 +106,37 @@ export function useSnappedDrag<P extends { logical: number; price: number; time?
 ) {
   const snapMove = useSnapMove(chart, series);
   const startRef = useRef<P[] | null>(null);
+  const grabRef = useRef<{ x: number; y: number } | null>(null);
   const isGroupDrag = (e: any) => e.target === e.currentTarget;
   const apply = (e: any) => {
     const start = startRef.current;
     const node = e.target;
-    const dx = node.x(), dy = node.y();
+    const stage = node.getStage?.();
+    // The offset is the pointer's own travel since the grab, not the Group's position: the Group
+    // is put back at 0 after each move, and Konva skips re-positioning it when a pointer event
+    // repeats the last spot, so its position then read 0 and the shape jumped back to where the
+    // drag began for a frame (the shape "danced" left and right)
+    const p = stage?.getPointerPosition?.(), g = grabRef.current;
+    const dx = p && g ? p.x - g.x : node.x(), dy = p && g ? p.y - g.y : node.y();
     node.position({ x: 0, y: 0 });
     if (!start || !onUpdatePoints || (dx === 0 && dy === 0)) return;
-    const next = snapMove(start, dx, dy, e.evt, node.getStage?.());
+    const next = snapMove(start, dx, dy, e.evt, stage);
     if (next) onUpdatePoints(next);
   };
   return {
-    start: (e: any) => { if (isGroupDrag(e)) startRef.current = points; },
+    start: (e: any) => {
+      if (!isGroupDrag(e)) return;
+      startRef.current = points;
+      const p = e.target.getStage?.()?.getPointerPosition?.();
+      grabRef.current = p ? { x: p.x, y: p.y } : null;
+    },
     drag: (e: any) => { if (isGroupDrag(e)) apply(e); },
     // True when this was a whole-shape drag (handled here)
     end: (e: any): boolean => {
       if (!isGroupDrag(e)) return false;
       apply(e);
       startRef.current = null;
+      grabRef.current = null;
       return true;
     },
   };

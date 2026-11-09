@@ -130,6 +130,8 @@ export function PositionTool({
   useChartTick(chart, series);
   // Points when a whole-tool drag began (the drag is applied to these, in whole bars)
   const dragStartRef = useRef<{ logical: number; price: number }[] | null>(null);
+  // Where the pointer was when the drag began (the move is measured from it, see handleDragMove)
+  const grabRef = useRef<{ x: number; y: number } | null>(null);
   if (!chart || !series || points.length < 4) return null;
 
   // Positions drawn before the colours matched TradingView's kept the old defaults; show those
@@ -188,13 +190,19 @@ export function PositionTool({
   const handleDragStart = (e: any) => {
     if (!isWholeToolDrag(e)) return;
     dragStartRef.current = points.map(p => ({ logical: p.logical, price: p.price }));
+    const gp = e.target.getStage?.()?.getPointerPosition?.();
+    grabRef.current = gp ? { x: gp.x, y: gp.y } : null;
     logPosition('drag start', side, id, points);
   };
   const handleDragMove = (e: any) => {
     if (!isWholeToolDrag(e) || !onUpdatePoints) return;
     const start = dragStartRef.current;
     const node = e.target;
-    const dx = node.x(), dy = node.y();
+    // Measured from the pointer, not the Group's position: the Group is put back at 0 after each
+    // move and Konva doesn't re-position it when a pointer event repeats the last spot, so it read
+    // 0 and the tool jumped back to where the drag began every few frames (it danced)
+    const p = node.getStage?.()?.getPointerPosition?.(), g = grabRef.current;
+    const dx = p && g ? p.x - g.x : node.x(), dy = p && g ? p.y - g.y : node.y();
     node.position({ x: 0, y: 0 });
     if (!start) return;
     const ox = logicalToPixel(chart, start[0].logical);
@@ -213,6 +221,7 @@ export function PositionTool({
     if (!isWholeToolDrag(e)) return;
     e.target.position({ x: 0, y: 0 });
     dragStartRef.current = null;
+    grabRef.current = null;
     logPosition('drag end', side, id, points);
   };
 
