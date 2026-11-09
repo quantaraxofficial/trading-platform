@@ -113,6 +113,12 @@ const DrawingSlot = React.memo(
     && a.live === b.live && a.chart === b.chart && a.series === b.series,
 );
 
+// The chart's Ctrl gestures (Ctrl+drag box selection, Ctrl+drag clone, the magnet toggle) are
+// Command on a Mac, as on TradingView (Ctrl+click is a right-click there)
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
+const modKey = (e: { ctrlKey?: boolean; metaKey?: boolean } | null | undefined) => !!e && (!!e.ctrlKey || (IS_MAC && !!e.metaKey));
+const MOD_KEY_NAME = IS_MAC ? 'Meta' : 'Control';
+
 export default function DrawingLayer({ chart, series, width, height, theme = 'light', readOnly = false, drawingsOverride, barsOf }: DrawingLayerProps) {
   const ctx = useDrawing();
   const { setActiveTool, setDrawings, addDrawing, setSelectedShapeId, updateDrawing, deleteDrawing, activeEmoji, setSelectedShapeIds, clearSelection, magnetMode, defaultSettings, keepDrawing, allDrawingsHidden } = ctx;
@@ -587,7 +593,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     // Track Ctrl and Shift keys to allow starting a selection drag or measure drag
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
-      if (e.key === 'Control' || e.ctrlKey) { setIsCtrlPressed(true); ctrlRef.current = true; }
+      if (e.key === 'Control' || e.key === MOD_KEY_NAME || modKey(e)) { setIsCtrlPressed(true); ctrlRef.current = true; }
       if (e.key === 'Shift' || e.shiftKey) {
         setIsShiftPressed(true);
         shiftRef.current = true;
@@ -595,7 +601,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Control' || !e.ctrlKey) { setIsCtrlPressed(false); ctrlRef.current = false; }
+      if (e.key === 'Control' || e.key === MOD_KEY_NAME || !modKey(e)) { setIsCtrlPressed(false); ctrlRef.current = false; }
       if (e.key === 'Shift' || !e.shiftKey) {
         setIsShiftPressed(false);
         shiftRef.current = false;
@@ -844,7 +850,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     // Konva drag plus handleUpdateWithClone above — without this check this
     // branch fired first for every Ctrl+drag and hijacked the mousedown
     // before it ever reached the shape's own drag handling.
-    if (e.evt?.ctrlKey && !e.evt?.shiftKey && e.target === stage && (!activeTool || ['cross', 'dot', 'arrow_cursor', 'eraser', 'magic', 'demonstration'].includes(activeTool))) {
+    if (modKey(e.evt) && !e.evt?.shiftKey && e.target === stage && (!activeTool || ['cross', 'dot', 'arrow_cursor', 'eraser', 'magic', 'demonstration'].includes(activeTool))) {
       setIsCtrlDragging(true);
       setSelectionRect({ startX: pointerPos.x, startY: pointerPos.y, endX: pointerPos.x, endY: pointerPos.y });
       setSelectedShapeId(null);
@@ -856,7 +862,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     // since Ctrl+Shift+drag on a shape is the clone-drag gesture instead;
     // without this check this branch fired first and hijacked the mousedown
     // before it ever reached the shape's own drag handling.
-    if (e.evt?.shiftKey && !e.evt?.ctrlKey && (!activeTool || ['cross', 'dot', 'arrow_cursor', 'eraser', 'magic', 'demonstration'].includes(activeTool))) {
+    if (e.evt?.shiftKey && !modKey(e.evt) && (!activeTool || ['cross', 'dot', 'arrow_cursor', 'eraser', 'magic', 'demonstration'].includes(activeTool))) {
       const logical = pixelToLogical(chart, pointerPos.x);
       const price = pixelToPrice(series, pointerPos.y);
       if (logical !== null && price !== null) {
