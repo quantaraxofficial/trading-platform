@@ -354,7 +354,11 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
       }
       result.warnings.forEach(w => log(w, "warning"));
       log("Compiled.");
-      window.dispatchEvent(new CustomEvent("tv:run-pine-script", { detail: { result, scriptName: result.meta.title || scriptName, code, language } }));
+      // Where the script lives on the site (its settings templates are kept under this): a saved
+      // script by its id, an unchanged built-in by its name; anything else isn't saved yet
+      const builtin = BUILTIN_SCRIPTS.find(b => b.code === code);
+      const templateKey = currentScriptId ? `script:${currentScriptId}` : builtin ? `builtin:${builtin.name}` : null;
+      window.dispatchEvent(new CustomEvent("tv:run-pine-script", { detail: { result, scriptName: result.meta.title || scriptName, code, language, templateKey } }));
       setOnChart({ key: scriptKey, code });
       log(wasOnChart ? "Updated on chart." : "Added to chart.");
       if (profilerMode && result.profile) log(`Profiler: ${result.execMs.toFixed(1)} ms over ${bars.length} bars`);

@@ -54,7 +54,7 @@ interface TopBarProps {
   onRedesignClick?: () => void;
   redesigning?: boolean;
   onSnapshot?: (action: SnapshotAction) => void;
-  activeIndicators?: { id: string; name: string; visible?: boolean }[];
+  activeIndicators?: { id: string; name: string; visible?: boolean; inputs?: Record<string, any> }[];
   onApplyIndicatorTemplate?: (template: IndicatorTemplate) => void;
   onQuickSearchClick?: () => void;
   onMenuClick?: () => void;

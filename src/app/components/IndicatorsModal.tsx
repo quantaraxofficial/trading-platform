@@ -83,7 +83,9 @@ export default function IndicatorsModal({ onClose, onSelect }: IndicatorsModalPr
       const full = await getScript(uid, s.id, true);
       if (!full.code && !full.compiled) { setError("This script can't be run"); return; }
       // (hidden code: the compiled script runs instead)
-      window.dispatchEvent(new CustomEvent(ADD_SCRIPT_EVENT, { detail: full.code ? { code: full.code, language: full.language, scriptName: full.name } : { compiled: full.compiled, language: "pine", scriptName: full.name } }));
+      // (templateKey: its settings templates and saved default are kept under its published id)
+      const templateKey = `published:${s.id}`;
+      window.dispatchEvent(new CustomEvent(ADD_SCRIPT_EVENT, { detail: full.code ? { code: full.code, language: full.language, scriptName: full.name, templateKey, applyDefault: true } : { compiled: full.compiled, language: "pine", scriptName: full.name, templateKey, applyDefault: true } }));
       onClose();
     } catch (e: any) { setError(e?.message || "Couldn't add the script"); }
     finally { setAdding(null); }

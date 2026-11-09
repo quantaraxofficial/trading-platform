@@ -40,6 +40,7 @@ import { useTelemetry } from "@/context/TelemetryContext";
 import QuickSearchDialog, { QuickAction } from "./components/QuickSearchDialog";
 import { TVAlertIcon, TVReplayIcon, TVGoToDateIcon, TVPineIcon, TVSettingsIcon, TVIndicatorsIcon } from "./components/icons/TVIcons";
 import type { IndicatorTemplate } from "./utils/indicatorTemplates";
+import { resolveScriptCode } from "./lib/scriptTemplates";
 import MobileMenuDrawer, { MobilePanel, MobilePanelSheet } from "./components/MobileMenuDrawer";
 import KeyboardShortcutsDialog from "./components/KeyboardShortcutsDialog";
 import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
@@ -939,7 +940,23 @@ function AppLayout() {
       name: item.name,
       ...(item.visible !== undefined ? { visible: item.visible } : {}),
       config: item.config,
+      ...(item.inputs ? { inputs: item.inputs } : {}),
     }));
+    // The template's custom script / strategy: its code from where it's saved on the site (saved
+    // privately, or published), then on the chart with the settings the template kept
+    const sc = template.script;
+    if (sc) {
+      resolveScriptCode(sc.key, user?.uid ?? null).then((found) => {
+        if (!found) {
+          console.warn(`[Indicator template] "${sc.name}" (${sc.key}) is no longer saved or published on the site; left out`);
+          return;
+        }
+        window.dispatchEvent(new CustomEvent("tv:apply-template-script", { detail: {
+          code: found.code, compiled: found.compiled, language: found.language, scriptName: sc.name || found.name, templateKey: sc.key,
+          inputs: sc.inputs || {}, capital: sc.capital ?? null, plotColors: sc.plotColors || {},
+        } }));
+      });
+    }
     const ema: Record<string, any> = {};
     next.forEach(i => { if (i.config) ema[i.id] = i.config; });
     (window as any).__indicatorSettings?.set?.({ ema, volume: template.volumeConfig });

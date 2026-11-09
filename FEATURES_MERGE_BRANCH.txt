@@ -1,6 +1,6 @@
 TRADEPILOT - FEATURES BUILT ON THE MERGE BRANCH
 Branch: merge-main-left-toolbar-tools  (everything here is on top of main)
-Up to: 9 Nov 2026 (Home page at / and the chart at /chart, profile page, chart dialogs above the panels)
+Up to: 9 Nov 2026 (Settings and indicator templates for indicators and strategies, TradingView-exact backtest fills)
 
 Contents
   1. Drawing tools (left toolbar)
@@ -133,6 +133,14 @@ Chart interactions
   - Backtest fills as TradingView's broker emulator: strategy(process_orders_on_close = true)
     fills market entries at the signal bar's close; when a stop and a limit both lie inside one
     bar, the one met first on TradingView's assumed path (open -> nearer extreme -> other) fills
+  - Settings templates for indicators and strategies, as TradingView's Defaults menu: "Save as..."
+    a named set of a script's inputs (and a strategy's initial capital, the plots' colours), pick
+    one to apply it (the report re-runs live), delete it, "Save as default" (used whenever the
+    script is added), "Reset settings". Kept in the account (database), so they follow the user;
+    a custom script has to be saved on the site, or published publicly or privately, first
+  - Indicator templates also hold built-in Pine indicators' inputs and the custom script /
+    strategy on the chart with its settings (by where it's saved or published on the site);
+    applying the template puts it back on the chart with those settings
 
 Layouts
   - Multi-chart layouts (Layout setup grid, Manage layouts, sync in layout); each chart keeps

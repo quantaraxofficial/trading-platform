@@ -14,7 +14,7 @@ import {
 } from "@/app/utils/indicatorTemplates";
 import { displaySymbol } from "@/app/lib/symbolDisplay";
 
-interface ActiveIndicator { id: string; name: string; visible?: boolean }
+interface ActiveIndicator { id: string; name: string; visible?: boolean; inputs?: Record<string, any> }
 
 interface IndicatorTemplatesMenuProps {
   activeIndicators: ActiveIndicator[];
@@ -148,7 +148,13 @@ function describe(t: IndicatorTemplate) {
     const len = i.config?.length;
     return i.name === "Moving Average Exponential" && len ? `EMA ${len}` : i.name;
   });
+  if (t.script) names.push(t.script.name);
   return names.join(", ") || "No indicators";
+}
+
+// The custom script / strategy on the chart (ChartContainer publishes it), if any
+function chartScript(): { templateKey: string | null; scriptName: string; inputs: Record<string, any>; capital: number | null; plotColors: Record<string, string> } | null {
+  return (typeof window !== "undefined" && (window as any).__pineScriptState) || null;
 }
 
 function SaveIndicatorTemplateDialog({ activeIndicators, symbol, interval, intervalLabel, onClose }: {
@@ -161,14 +167,19 @@ function SaveIndicatorTemplateDialog({ activeIndicators, symbol, interval, inter
   const existing = useMemo(() => loadIndicatorTemplates(), []);
   const trimmed = name.trim();
   const replaces = trimmed && existing.some(t => t.name.toLowerCase() === trimmed.toLowerCase());
-  const canSave = !!trimmed && activeIndicators.length > 0;
+  const script = useMemo(() => chartScript(), []);
+  const scriptSaved = !!script?.templateKey;
+  const canSave = !!trimmed && (activeIndicators.length > 0 || scriptSaved);
 
   const handleSave = () => {
     if (!canSave) return;
     const settings = (window as any).__indicatorSettings?.get?.() ?? {};
     saveIndicatorTemplate({
       name: trimmed,
-      indicators: activeIndicators.map(i => ({ name: i.name, visible: i.visible, config: settings.ema?.[i.id] })),
+      indicators: activeIndicators.map(i => ({ name: i.name, visible: i.visible, config: settings.ema?.[i.id], ...(i.inputs ? { inputs: i.inputs } : {}) })),
+      // The script / strategy on the chart, with its settings: only one saved on the site (it's
+      // stored by its place there, not its code)
+      ...(script && script.templateKey ? { script: { key: script.templateKey, name: script.scriptName, inputs: script.inputs, capital: script.capital, plotColors: script.plotColors } } : {}),
       volumeConfig: activeIndicators.some(i => i.name === "Volume") ? settings.volume : undefined,
       symbol: rememberSymbol ? symbol : undefined,
       interval: rememberInterval ? interval : undefined,
@@ -205,10 +216,15 @@ function SaveIndicatorTemplateDialog({ activeIndicators, symbol, interval, inter
             {checkbox(rememberInterval, setRememberInterval, `Remember interval (${intervalLabel})`)}
           </div>
           <div style={{ fontSize: "12px", color: "var(--tv-color-text-muted)", margin: "14px 0 0", lineHeight: 1.5 }}>
-            {activeIndicators.length === 0
+            {activeIndicators.length === 0 && !scriptSaved
               ? "There are no indicators on the chart to save."
-              : `Includes: ${activeIndicators.map(i => i.name).join(", ")}`}
+              : `Includes: ${[...activeIndicators.map(i => i.name), ...(scriptSaved && script ? [`${script.scriptName} (with its settings)`] : [])].join(", ")}`}
           </div>
+          {script && !scriptSaved && (
+            <div style={{ fontSize: "12px", color: "#f7a600", marginTop: "6px", lineHeight: 1.5 }}>
+              “{script.scriptName}” isn&apos;t saved on the site, so it&apos;s left out. Save it in the Pine Editor (Save script) or publish it, publicly or privately, to include it.
+            </div>
+          )}
           {replaces && (
             <div style={{ fontSize: "12px", color: "#f7a600", marginTop: "6px" }}>
               A template with this name already exists — saving will replace it.

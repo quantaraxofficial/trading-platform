@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
-import { TrendingUp, BarChart3, LineChart, Activity, Zap, Shield, Globe, ArrowRight, Menu, X, Target } from 'lucide-react';
+import { TrendingUp, BarChart3, LineChart, Activity, Zap, Shield, Globe, ArrowRight, Menu, X, Target, LayoutTemplate } from 'lucide-react';
 import RollingBitcoin from './RollingBitcoin';
 import ComingSoon from './ComingSoon';
 import SiteUserMenu from './SiteUserMenu';
@@ -35,7 +35,7 @@ export default function LandingPage() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setActiveFeature((prev) => (prev + 1) % 4);
+      setActiveFeature((prev) => (prev + 1) % 6);
     }, 3000);
     return () => clearInterval(interval);
   }, []);
@@ -57,7 +57,9 @@ export default function LandingPage() {
     { icon: <TrendingUp className="w-8 h-8" />, title: "Advanced Charting", description: "Professional-grade charts with multiple drawing tools and technical indicators" },
     { icon: <Activity className="w-8 h-8" />, title: "Real-time Analysis", description: "Live market data with instant updates and customizable timeframes" },
     { icon: <Shield className="w-8 h-8" />, title: "Risk Management", description: "Built-in position sizing, stop-loss, and risk-reward calculation tools" },
-    { icon: <Zap className="w-8 h-8" />, title: "Lightning Fast", description: "Optimized performance for smooth scrolling and instant chart interactions" }
+    { icon: <Zap className="w-8 h-8" />, title: "Lightning Fast", description: "Optimized performance for smooth scrolling and instant chart interactions" },
+    { icon: <Target className="w-8 h-8" />, title: "Strategy Backtesting", description: "Pine Script strategies tested with TradingView's order fills, any date range back through history" },
+    { icon: <LayoutTemplate className="w-8 h-8" />, title: "Indicator & Strategy Templates", description: "Save indicators and your own scripts with their settings as templates, kept in your account on every device" }
   ];
 
   const stats = [
@@ -168,7 +170,7 @@ export default function LandingPage() {
             </h2>
             <p className="text-xl text-purple-400 max-w-2xl mx-auto">Everything you need to analyze markets and execute trades with confidence.</p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {features.map((feature, index) => (
               <div key={index} className={`bg-purple-950/60 backdrop-blur-sm border border-purple-800/50 rounded-xl p-6 transition-all duration-500 ${activeFeature === index ? 'scale-105 border-purple-600 shadow-xl' : ''}`}>
                 <div className="text-purple-500 mb-4">{feature.icon}</div>

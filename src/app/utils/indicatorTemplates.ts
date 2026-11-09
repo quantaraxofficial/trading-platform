@@ -9,6 +9,19 @@ export interface IndicatorTemplateItem {
   visible?: boolean;
   // Per-indicator settings (e.g. an EMA's length/source/offset/color)
   config?: any;
+  // A built-in Pine indicator's input values (RSI length, VWAP anchor…)
+  inputs?: Record<string, any>;
+}
+
+// The custom script or strategy that was on the chart, by where it's saved on the site
+// (lib/scriptTemplates: script:<id>, builtin:<name>, published:<id>) and with its settings.
+// Only a script saved on the site can be part of a template.
+export interface IndicatorTemplateScript {
+  key: string;
+  name: string;
+  inputs?: Record<string, any>;
+  capital?: number | null;
+  plotColors?: Record<string, string>;
 }
 
 export interface IndicatorTemplate {
@@ -17,6 +30,7 @@ export interface IndicatorTemplate {
   createdAt: number;
   indicators: IndicatorTemplateItem[];
   volumeConfig?: any;
+  script?: IndicatorTemplateScript;
   symbol?: string;
   interval?: string;
   // Came from an imported settings file: whose, and when they were saved
