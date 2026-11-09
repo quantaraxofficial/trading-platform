@@ -123,6 +123,9 @@ Chart interactions
   - Dialogs opened from the chart (strategy / indicator settings, alerts, volume, session,
     symbol info, save template) open above the Strategy Tester and other panels instead of
     being cut off by them
+  - Script settings (a strategy's or a Pine indicator's Inputs / Properties / Style) laid out
+    like the other settings dialogs, as on TradingView: label left, control right, group
+    headings, TradingView checkboxes, colour boxes, a Defaults menu (Reset settings)
 
 Layouts
   - Multi-chart layouts (Layout setup grid, Manage layouts, sync in layout); each chart keeps
