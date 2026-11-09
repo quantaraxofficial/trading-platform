@@ -1,6 +1,16 @@
 // The chart's cursor for the selected cursor mode / tool (left toolbar), shared by the chart
 // panes and the drawing layer above them so both show the same one. Crosshair visibility
 // goes with it: TradingView hides its crosshair lines in the Arrow, Eraser and Demonstration modes.
+// The crosshair pointer as an image, not the system 'crosshair': Chrome leaves the system
+// crosshair out of a shared tab's video (Google Meet "share this tab"), so viewers saw no
+// pointer over the chart, while an image pointer is drawn into it. Drawn like the system one:
+// a thin dark cross with a light edge so it shows on light and dark charts.
+export const CROSSHAIR_CURSOR = `url('data:image/svg+xml;utf8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" shape-rendering="crispEdges">'
+  + '<path d="M10.5 0v21M0 10.5h21" stroke="#ffffff" stroke-width="3"/>'
+  + '<path d="M10.5 0v21M0 10.5h21" stroke="#000000" stroke-width="1"/></svg>',
+)}') 10 10, crosshair`;
+
 export function chartModeCursor(activeTool: string | null, theme: string): { cursor: string; crosshairMode: number } {
   const ink = theme === 'dark' ? '#d1d4dc' : '#131722';
   const svg = (body: string, attrs = `fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`) =>
@@ -20,6 +30,6 @@ export function chartModeCursor(activeTool: string | null, theme: string): { cur
       return { cursor: 'zoom-in', crosshairMode: 0 };
     case 'cross':
     default:
-      return { cursor: 'crosshair', crosshairMode: 0 };
+      return { cursor: CROSSHAIR_CURSOR, crosshairMode: 0 };
   }
 }

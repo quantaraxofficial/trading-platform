@@ -15,7 +15,7 @@ import { useDrawing } from './core/DrawingContext';
 import { pixelToLogical, pixelToPrice, logicalToPixel, priceToPixel } from './core/coordinates';
 import { snapToChart, effectiveMagnet } from './core/snap';
 import { afterChartFrame } from './core/chartFrame';
-import { chartModeCursor } from '../chartCursor';
+import { chartModeCursor, CROSSHAIR_CURSOR } from '../chartCursor';
 import { isIconId } from '../ui/emojiArt';
 import { TrendLine } from './tools/TrendLine';
 import { RectangleTool } from './tools/Rectangle';
@@ -1266,7 +1266,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   // the cursor for the part under the mouse (the Eraser keeps its own), and empty chart the
   // selected cursor mode's
   let cursorStyle: string;
-  if (activeTool && !isCursorTool) cursorStyle = activeTool === 'zoom_in' ? 'zoom-in' : 'crosshair';
+  if (activeTool && !isCursorTool) cursorStyle = activeTool === 'zoom_in' ? 'zoom-in' : CROSSHAIR_CURSOR;
   else if (dragCursor) cursorStyle = dragCursor;
   else if (hoveredShapeId && hoverCursor && activeTool !== 'eraser') cursorStyle = hoverCursor;
   else cursorStyle = chartModeCursor(activeTool, theme).cursor;

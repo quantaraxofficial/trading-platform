@@ -16,7 +16,7 @@ import { attachLayoutSync } from "../lib/layoutSync";
 import { watchlists as wlStore, wl as wlActions } from "./watchlist/store";
 import { ReplayWatermark } from "./chartPrimitives/ReplayWatermark";
 import { FutureGrid } from "./chartPrimitives/FutureGrid";
-import { chartModeCursor } from "./chartCursor";
+import { chartModeCursor, CROSSHAIR_CURSOR } from "./chartCursor";
 import dynamic from "next/dynamic";
 const DrawingLayer = dynamic(() => import("./drawing/DrawingLayer"), { ssr: false });
 import { SubBar } from "./drawing/ui/SubBar";
@@ -4647,7 +4647,7 @@ export default function ChartContainer({
             position: "absolute",
             top: 0, left: 0, right: 0, bottom: 0,
             zIndex: 20,
-            cursor: "crosshair",
+            cursor: CROSSHAIR_CURSOR,
             pointerEvents: activeTool ? "none" : "auto",
           }}
         >
