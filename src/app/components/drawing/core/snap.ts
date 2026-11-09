@@ -38,6 +38,11 @@ export function snapToChart(chart: any, series: any, x: number, y: number, magne
 
   const idx = Math.round(rawLogical);
   const candle = idx >= 0 && idx < data.length ? data[idx] : null;
+  // Right of the latest candle there's nothing to stick to, but points still land on the
+  // future bars' slots (the times those bars will have), as on TradingView
+  if (!candle && idx >= data.length && data.length >= 2 && !freehand) {
+    return { logical: idx, price, time: timeAtLogical(data, idx) };
+  }
   if (!candle) return { logical, price, time };
 
   let onCandle = !freehand;

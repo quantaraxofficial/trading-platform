@@ -639,7 +639,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     circle: { type: 'click-point', maxPoints: 2 },
     measure: { type: 'click-point', maxPoints: 2 },
     
-    rotated_rectangle: { type: 'click-point', maxPoints: 2 },
+    rotated_rectangle: { type: 'click-point', maxPoints: 3 },
     triangle: { type: 'click-point', maxPoints: 3 },
     arc: { type: 'click-point', maxPoints: 3 },
     curve: { type: 'click-point', maxPoints: 2 },
@@ -1456,6 +1456,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     if (tool === 'fibonacci') Object.assign(style, DEFAULT_FIB_STYLE);
     if (ADVANCED_TOOLS[tool]) { style.stroke = ADVANCED_TOOLS[tool].stroke; Object.assign(style, ADVANCED_TOOLS[tool].extra || {}); }
     if (tool === 'arc') style.fill = 'rgba(233, 30, 99, 0.2)';
+    // TradingView's rotated rectangle: green outline, 20% green fill
+    if (tool === 'rotated_rectangle') { style.stroke = '#4caf50'; style.fill = 'rgba(76, 175, 80, 0.2)'; }
     if (tool === 'path') style.lineEndStyle = 'Arrow';
     return style;
   };
@@ -1810,7 +1812,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
               );
             } else if (drawing.type === 'rotated_rectangle') {
               return (
-                <RotatedRectangleTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} />
+                <RotatedRectangleTool key={drawing.id} id={drawing.id} points={drawing.points} stroke={drawing.stroke} strokeWidth={drawing.strokeWidth} isSelected={isSel} isHovering={hoveredShapeId === drawing.id} chart={chart} series={series} onSelect={() => selectDrawing(drawing.id)} onUpdatePoints={(points) => handleUpdateWithClone(drawing.id, { points })} isLocked={drawing.locked} fill={drawing.fill} backgroundVisible={(drawing as any).backgroundVisible} isPreview={drawing.id === 'preview'} />
               );
             } else if (drawing.type === 'path') {
               return (

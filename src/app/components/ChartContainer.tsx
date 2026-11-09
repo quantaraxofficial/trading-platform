@@ -15,6 +15,7 @@ import SymbolInfoDialog from "./SymbolInfoDialog";
 import { attachLayoutSync } from "../lib/layoutSync";
 import { watchlists as wlStore, wl as wlActions } from "./watchlist/store";
 import { ReplayWatermark } from "./chartPrimitives/ReplayWatermark";
+import { FutureGrid } from "./chartPrimitives/FutureGrid";
 import { chartModeCursor } from "./chartCursor";
 import dynamic from "next/dynamic";
 const DrawingLayer = dynamic(() => import("./drawing/DrawingLayer"), { ssr: false });
@@ -2743,6 +2744,9 @@ export default function ChartContainer({
     const replayWatermark = new ReplayWatermark(() => modeRef.current !== 'idle' && csRef.current.watermark.replay);
     newChart.panes()[0].attachPrimitive(replayWatermark);
     replayWatermarkRef.current = replayWatermark;
+    // Vertical grid lines carry on to the right of the latest candle (not for brick charts,
+    // whose bars have no real times)
+    newChart.panes()[0].attachPrimitive(new FutureGrid(() => { const b = fullDataRef.current; return b.length && isBrick(b[b.length - 1]) ? [] : b; }) as any);
 
     // Clicking a candle selects the price series; a click anywhere else clears it
     const seriesSelection = new SeriesSelection();
@@ -4200,7 +4204,7 @@ export default function ChartContainer({
         });
 
         return (
-          <div style={{ position: "absolute", top: "6px", left: 9 + leftScaleW, maxWidth: "calc(100% - 90px)", zIndex: 11, display: "flex", flexDirection: "column", alignItems: "flex-start", pointerEvents: "none", color: "var(--tv-hdr-text)" }}>
+          <div style={{ position: "absolute", top: "6px", left: 9 + leftScaleW, maxWidth: "calc(100% - 90px)", zIndex: 11, display: "flex", flexDirection: "column", alignItems: "flex-start", pointerEvents: "none", color: canvasColors.text, ["--tv-legend-args" as any]: `color-mix(in srgb, ${canvasColors.text} 65%, transparent)` }}>
             {/* Title line */}
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0 8px", minHeight: "22px" }}>
               {(sl.logo || sl.title) && (
@@ -5271,7 +5275,7 @@ function ChartContextMenu({ pos, price, precision = 3, symbol, theme, onClose, v
   const buy: TvMenuItem = { label: `Buy ${quickQty} ${displaySymbol(symbol)} @ ${p} ${buyType}`, icon: <MenuBuyIcon />, shortcut: buyType === 'limit' ? "Alt + Shift + B" : undefined, onClick: () => onQuickOrder('buy', buyType) };
   const sell: TvMenuItem = { label: `Sell ${quickQty} ${displaySymbol(symbol)} @ ${p} ${sellType}`, icon: <MenuSellIcon />, shortcut: sellType === 'limit' ? "Alt + Shift + S" : undefined, onClick: () => onQuickOrder('sell', sellType) };
   const removals: TvMenuItem[] = [
-    ...(drawingCount > 0 ? [{ label: "Remove drawings", onClick: onRemoveDrawings } as TvMenuItem] : []),
+    ...(drawingCount > 0 ? [{ label: `Remove ${drawingCount} drawing${drawingCount === 1 ? "" : "s"}`, onClick: onRemoveDrawings } as TvMenuItem] : []),
     ...(indicatorCount > 0 ? [{ label: `Remove ${indicatorCount} indicator${indicatorCount === 1 ? "" : "s"}`, onClick: onRemoveIndicators } as TvMenuItem] : []),
   ];
   const items: TvMenuItem[] = [
