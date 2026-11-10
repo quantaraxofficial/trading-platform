@@ -20,7 +20,7 @@
 
 export type Bar = { time: number; open: number; high: number; low: number; close: number };
 export type Side = "bull" | "bear";
-export type ZoneKind = "sr" | "fvg" | "ifvg" | "ob";
+export type ZoneKind = "sr" | "fvg" | "ifvg" | "ob" | "bos" | "choch";
 export type Zone = { kind: ZoneKind; side: Side; from: number; to: number; top: number; bottom: number; label: string; touches?: number };
 
 // Average true range at each bar (Wilder's smoothing)
@@ -145,6 +145,42 @@ export function inverseFairValueGaps(bars: Bar[], from: number, opts: { max?: nu
   return live.slice(-(opts.max ?? 6));
 }
 
+// ---- market structure: breaks of structure and changes of character ---------------------------------
+// The swing highs and lows (a swing counts once it's confirmed: k bars after it). A candle that closes
+// beyond the latest unbroken swing breaks it: in the trend's direction that's a break of structure
+// (BOS), against it a change of character (CHoCH), and the trend turns. Each is a level from the swing
+// to the candle that broke it (top = bottom = the swing's price).
+export function marketStructure(bars: Bar[], from: number, opts: { max?: number } = {}): Zone[] {
+  const last = bars.length - 1;
+  if (last - from < 10) return [];
+  const k = swingSize(last - from);
+  // (a little before the window, so the trend is known when it starts)
+  const start = Math.max(0, from - 100);
+  const { highs, lows } = swings(bars, k, start);
+  const out: Zone[] = [];
+  let trend: Side | null = null;
+  let hi = 0, lo = 0;
+  let swingHigh: number | null = null, swingLow: number | null = null;
+  for (let i = start; i <= last; i++) {
+    while (hi < highs.length && highs[hi] + k <= i) swingHigh = highs[hi++];
+    while (lo < lows.length && lows[lo] + k <= i) swingLow = lows[lo++];
+    if (swingHigh !== null && bars[i].close > bars[swingHigh].high) {
+      const kind: ZoneKind = trend === "bear" ? "choch" : "bos";
+      const level = bars[swingHigh].high;
+      out.push({ kind, side: "bull", from: swingHigh, to: i, top: level, bottom: level, label: kind === "choch" ? "CHoCH" : "BOS" });
+      swingHigh = null;
+      trend = "bull";
+    } else if (swingLow !== null && bars[i].close < bars[swingLow].low) {
+      const kind: ZoneKind = trend === "bull" ? "choch" : "bos";
+      const level = bars[swingLow].low;
+      out.push({ kind, side: "bear", from: swingLow, to: i, top: level, bottom: level, label: kind === "choch" ? "CHoCH" : "BOS" });
+      swingLow = null;
+      trend = "bear";
+    }
+  }
+  return out.filter(z => z.to >= from).slice(-(opts.max ?? 16));
+}
+
 // ---- order blocks --------------------------------------------------------------------------------
 export function orderBlocks(bars: Bar[], from: number, opts: { perSide?: number } = {}): Zone[] {
   const last = bars.length - 1;
@@ -185,12 +221,13 @@ export function orderBlocks(bars: Bar[], from: number, opts: { perSide?: number 
   return [...live.filter(b => b.side === "bull").slice(-perSide), ...live.filter(b => b.side === "bear").slice(-perSide)];
 }
 
-export type MarkKind = "order_blocks" | "fvg" | "ifvg" | "support_resistance";
+export type MarkKind = "order_blocks" | "fvg" | "ifvg" | "support_resistance" | "structure";
 export function analyse(kind: MarkKind, bars: Bar[], from: number): Zone[] {
   switch (kind) {
     case "order_blocks": return orderBlocks(bars, from);
     case "fvg": return fairValueGaps(bars, from);
     case "ifvg": return inverseFairValueGaps(bars, from);
     case "support_resistance": return supportResistance(bars, from);
+    case "structure": return marketStructure(bars, from);
   }
 }
