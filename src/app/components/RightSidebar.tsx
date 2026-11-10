@@ -18,6 +18,7 @@ import { useAlerts } from "@/context/AlertsContext";
 import { useCollab } from "../lib/collab/session";
 import { CollabIcon } from "./collab/icons";
 import { BacktestSessionsIcon } from "./BacktestSessionsPanel";
+import { EconomicCalendarIcon } from "./EconomicCalendarPanel";
 
 // Trading Agent — a small chat-bubble glyph (1px lines like the TradingView icons)
 function TVAgentIcon({ size = 28, ...props }: any) {
@@ -68,6 +69,8 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     { id: "collab", icon: <CollabIcon size={28} />, tooltip: inCollab ? "Collab: group chat and voice" : "Collabs" },
     // Your backtest sessions: one clicked opens in a new tab, carrying on where it was left
     { id: "backtest_sessions", icon: <BacktestSessionsIcon size={28} />, tooltip: "Backtest sessions" },
+    // The economic calendar: the week's news events, by importance and currency
+    { id: "economic_calendar", icon: <EconomicCalendarIcon size={28} />, tooltip: "Economic calendar" },
   ];
 
   const i18 = { size: 18, strokeWidth: 1.5 };

@@ -44,6 +44,7 @@ import KeyboardShortcutsDialog from "./components/KeyboardShortcutsDialog";
 import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
 import BacktestSessionBar from "./components/BacktestSessionBar";
 import BacktestSessionsPanel from "./components/BacktestSessionsPanel";
+import EconomicCalendarPanel from "./components/EconomicCalendarPanel";
 import { saveReplay, setSavedReplayUser } from "./lib/savedReplay";
 import { layoutStore, layouts, ensureLayout, readSharedLayout, newLayout } from "./lib/layoutStore";
 import { LAYOUTS, LAYOUT_ROWS } from "./lib/chartLayouts";
@@ -1071,6 +1072,8 @@ function AppLayout() {
             <CollabPanel onShare={() => setShowCollabDialog(true)} />
           ) : activeSidebarPanel === "backtest_sessions" ? (
             <BacktestSessionsPanel />
+          ) : activeSidebarPanel === "economic_calendar" ? (
+            <EconomicCalendarPanel symbol={symbol} />
           ) : (
             <RightToolbar symbol={symbol} onSymbolChange={setSymbol} />
           )}

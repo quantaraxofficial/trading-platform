@@ -1,8 +1,9 @@
 from django.urls import path
-from . import views, analytics, collab, collab_files, market, turn
+from . import views, analytics, collab, collab_files, market, turn, econ_calendar
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
+    path('calendar/economic/', econ_calendar.economic, name='economic_calendar'),
     path('user/<str:uid>/', views.get_user_data, name='get_user_data'),
     path('plan/', views.plan, name='plan'),
     path('templates/<str:uid>/', views.manage_templates, name='manage_templates'),

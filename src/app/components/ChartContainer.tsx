@@ -331,6 +331,8 @@ import { easedAutoscale } from "../lib/easedAutoscale";
 import { computeEma, normalizeEma, savedEmaDefaults, emaVisibleOnInterval, emaInputsText, type EmaConfig } from "../lib/emaCalc";
 import { BandFill } from "./chartPrimitives/BandFill";
 import { SessionBreaks } from "./chartPrimitives/SessionBreaks";
+import { EconomicEvents, type EventMark } from "./chartPrimitives/EconomicEvents";
+import { fetchEconomicEvents, symbolCurrencies, fmtTime as fmtEventTime, IMPACT_COLOR, IMPACT_LABEL } from "../lib/economicCalendar";
 import { chartSettings, themeCanvas, precisionFormat, wheelSpeed, type ChartSettings } from "../lib/chartSettings";
 import { chartBgImage, canvasBackgroundCss } from "../lib/chartBackgroundImage";
 import type { DateRangeSpan } from "./BottomPanel";
@@ -1190,6 +1192,47 @@ export default function ChartContainer({
     return () => { try { series.detachPrimitive(sb as any); } catch { /* chart gone */ } sessionBreaksRef.current = null; };
   }, [series]);
   useEffect(() => { sessionBreaksRef.current?.update(); }, [cs.sessionBreaks, cs.sessionBreaksStyle, chartTimezone]);
+
+  // ── Events → Economic events: the calendar's high and medium importance events for the symbol's
+  // currencies, as flags along the bottom (chartPrimitives/EconomicEvents); hovering one lists them
+  const econEventsRef = useRef<EconomicEvents | null>(null);
+  const [econHover, setEconHover] = useState<{ mark: EventMark; left: number; top: number } | null>(null);
+  useEffect(() => {
+    if (!series || series !== candleSeriesRef.current || !chart) return;
+    const ee = new EconomicEvents(() => ({ visible: csRef.current.economicEvents, onlyFuture: csRef.current.onlyFutureEvents, breaks: csRef.current.eventsBreaks, breaksStyle: csRef.current.eventsBreaksStyle }));
+    series.attachPrimitive(ee as any);
+    econEventsRef.current = ee;
+    const onMove = (param: any) => {
+      const pt = param?.point;
+      const m = pt && csRef.current.economicEvents ? ee.hit(pt.x, pt.y) : null;
+      if (!m) { setEconHover(h => (h ? null : h)); return; }
+      const box = chartContainerRef.current?.getBoundingClientRect();
+      let leftW = 0; try { leftW = chart.priceScale("left").width(); } catch { /* no left scale */ }
+      if (box) setEconHover(h => (h?.mark.x === m.x && h.mark.events.length === m.events.length ? h : { mark: m, left: box.left + leftW + m.x, top: box.top + m.y }));
+    };
+    chart.subscribeCrosshairMove(onMove);
+    return () => {
+      try { chart.unsubscribeCrosshairMove(onMove); } catch { /* chart gone */ }
+      try { series.detachPrimitive(ee as any); } catch { /* chart gone */ }
+      econEventsRef.current = null;
+      setEconHover(null);
+    };
+  }, [series, chart]);
+  useEffect(() => {
+    if (!cs.economicEvents) { econEventsRef.current?.setEvents([]); return; }
+    const currencies = symbolCurrencies(symbol);
+    let alive = true;
+    const load = () => {
+      const now = Math.floor(Date.now() / 1000);
+      fetchEconomicEvents(now - 110 * 86400, now + 10 * 86400)
+        .then(r => { if (alive) econEventsRef.current?.setEvents(r.events.filter(e => currencies.includes(e.currency) && (e.impact === "high" || e.impact === "medium"))); })
+        .catch(() => { /* the marks just aren't shown */ });
+    };
+    load();
+    const id = window.setInterval(load, 15 * 60_000);
+    return () => { alive = false; window.clearInterval(id); };
+  }, [symbol, series, cs.economicEvents]);
+  useEffect(() => { econEventsRef.current?.update(); }, [cs.economicEvents, cs.onlyFutureEvents, cs.eventsBreaks, cs.eventsBreaksStyle]);
 
   // ── Alerts → Alert lines (only active ones) ──
   useEffect(() => {
@@ -4858,6 +4901,26 @@ export default function ChartContainer({
       {showSymbolInfo && <SymbolInfoDialog symbol={symbol} precision={pricePrecision} onClose={() => setShowSymbolInfo(false)} />}
       {lockedCursorTime !== null && chartRef.current && (
         <LockedCursorLine chart={chartRef.current} time={lockedCursorTime} theme={theme} tz={chartTimezone} />
+      )}
+      {econHover && (
+        <div data-testid="econ-event-tooltip" style={{ position: "fixed", left: Math.max(8, Math.min(econHover.left - 130, window.innerWidth - 268)), top: econHover.top - 16, transform: "translateY(-100%)", width: 260, zIndex: 1000, pointerEvents: "none", padding: "8px 10px", borderRadius: 6, fontSize: 12, lineHeight: 1.45, background: theme === "dark" ? "#2a2e39" : "#ffffff", color: theme === "dark" ? "#d1d4dc" : "#131722", boxShadow: "0 2px 10px rgba(0,0,0,0.25)" }}>
+          {econHover.mark.events.slice(0, 6).map(e => (
+            <div key={e.id} style={{ padding: "3px 0" }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <span title={IMPACT_LABEL[e.impact]} style={{ width: 8, height: 8, borderRadius: 4, flexShrink: 0, background: IMPACT_COLOR[e.impact] }} />
+                <b style={{ fontWeight: 600 }}>{e.currency}</b>
+                <span style={{ flex: 1 }}>{e.title}</span>
+              </div>
+              <div style={{ opacity: 0.7, paddingLeft: 14 }}>
+                {e.all_day ? "All day" : fmtEventTime(e.time, (window as any).__chartTimezone || "UTC")}
+                {" · "}{new Date(e.time * 1000).toLocaleDateString([], { timeZone: (window as any).__chartTimezone || "UTC", day: "numeric", month: "short" })}
+                {e.forecast || e.previous ? ` · Forecast ${e.forecast || "—"} · Prior ${e.previous || "—"}` : ""}
+                {e.actual ? ` · Actual ${e.actual}` : ""}
+              </div>
+            </div>
+          ))}
+          {econHover.mark.events.length > 6 && <div style={{ opacity: 0.7 }}>and {econHover.mark.events.length - 6} more</div>}
+        </div>
       )}
       {showTableView && (
         <ChartTableView bars={fullDataRef.current} precision={pricePrecision} theme={theme} tz={chartTimezone} onClose={() => setShowTableView(false)} />
