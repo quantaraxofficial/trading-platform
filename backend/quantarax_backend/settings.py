@@ -261,3 +261,11 @@ FIREBASE_WEB_API_KEY = env('FIREBASE_WEB_API_KEY', default='')
 ALLOW_UNVERIFIED_SIGNIN = env.bool('ALLOW_UNVERIFIED_SIGNIN', default=False)
 if ALLOW_UNVERIFIED_SIGNIN and not DEBUG:
     raise ImproperlyConfigured("ALLOW_UNVERIFIED_SIGNIN is for local development only (DEBUG=True)")
+
+# Voice assistant AI (core/voice.py): Groq first, Gemini when Groq has no key or fails. Keys from
+# the environment only; without either, the assistant says it isn't set up
+GROQ_API_KEY = env('GROQ_API_KEY', default='')
+GROQ_MODEL = env('GROQ_MODEL', default='openai/gpt-oss-120b')
+GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
+GEMINI_MODEL = env('GEMINI_MODEL', default='gemini-2.5-flash')
+VOICE_AI_DAILY_LIMIT = env.int('VOICE_AI_DAILY_LIMIT', default=100)

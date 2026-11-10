@@ -747,3 +747,8 @@ ul {
 .tv-cid-btn.cancel:hover { background: var(--tv-im-hover); }
 .tv-cid-btn.primary { border: 1px solid var(--tv-im-selected-bg); background: var(--tv-im-selected-bg); color: var(--tv-im-selected-text); }
 .tv-cid-btn.primary:disabled { border-color: var(--tv-im-btn-disabled-bg); background: var(--tv-im-btn-disabled-bg); color: var(--tv-im-btn-disabled-text); }
+
+/* Voice assistant: the microphone pulses while it's listening */
+.tv-voice-mic.on { animation: tv-voice-pulse 1.4s ease-out infinite; }
+@keyframes tv-voice-pulse { 0% { box-shadow: 0 0 0 0 rgba(242, 54, 69, 0.5); } 70% { box-shadow: 0 0 0 12px rgba(242, 54, 69, 0); } 100% { box-shadow: 0 0 0 0 rgba(242, 54, 69, 0); } }
+@media (prefers-reduced-motion: reduce) { .tv-voice-mic.on { animation: none; } }

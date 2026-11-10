@@ -60,6 +60,8 @@ services:
       PIPELINE_SYMBOLS: XAUUSD
       LIVE_INGEST_TOKEN: ${LIVE_INGEST_TOKEN}    # the MT5 collector's key for /api/users/live/ingest/
       TURN_SECRET: ${TURN_SECRET}                # signs the voice relay's day-long credentials (core/turn.py)
+      GROQ_API_KEY: ${GROQ_API_KEY:-}            # the voice assistant's AI (core/voice.py); premium accounts only
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       TURN_HOST: ${TURN_EXTERNAL_IP}
     volumes:
       - static:/data/static

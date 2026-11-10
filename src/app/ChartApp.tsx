@@ -45,6 +45,12 @@ import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
 import BacktestSessionBar from "./components/BacktestSessionBar";
 import BacktestSessionsPanel from "./components/BacktestSessionsPanel";
 import EconomicCalendarPanel from "./components/EconomicCalendarPanel";
+import VoicePanel from "./components/VoicePanel";
+import { chartSettings } from "./lib/chartSettings";
+import VoiceBridge from "./components/VoiceBridge";
+import { registerVoiceCommands, registerVoiceFunctions, setVoiceContext, VoiceQuestion } from "./lib/voice/registry";
+import { DATE_RANGES } from "./components/BottomPanel";
+import { fetchEconomicEvents, periodRange, PERIODS, calendarTimezone, symbolCurrencies, fmtTime as fmtEventTime, fmtIn, openCalendar, type Period } from "./lib/economicCalendar";
 import { calendarDock, defaultCalendarWidth } from "./lib/economicCalendar";
 import { saveReplay, setSavedReplayUser } from "./lib/savedReplay";
 import { layoutStore, layouts, ensureLayout, readSharedLayout, newLayout } from "./lib/layoutStore";
@@ -356,6 +362,12 @@ function AppLayout() {
   const toggleTheme = () => {
     setTheme(prev => (prev === "light" ? "dark" : "light"));
   };
+  // The voice assistant switches the theme (tv:set-theme { theme: "light" | "dark" })
+  useEffect(() => {
+    const on = (e: Event) => { const t = (e as CustomEvent).detail?.theme; if (t === "light" || t === "dark") setTheme(t); };
+    window.addEventListener("tv:set-theme", on);
+    return () => window.removeEventListener("tv:set-theme", on);
+  }, []);
 
   // Esc always restores hidden panels, regardless of focus
   useEffect(() => {
@@ -857,6 +869,38 @@ function AppLayout() {
   const handleRemoveIndicator = (id: string) => {
     setActiveIndicators(prev => prev.filter(i => i.id !== id));
   };
+  // The voice assistant adds / removes an indicator by name (tv:add-indicator, tv:remove-indicator
+  // { name }: removes every one of that name), takes the chart image (tv:snapshot { action }),
+  // changes the timeframe (tv:set-interval), opens / closes the Pine Editor (tv:pine-editor) and
+  // opens a right-hand panel (tv:open-panel { id })
+  const selectedIntervalRef = useRef(selectedInterval);
+  selectedIntervalRef.current = selectedInterval;
+  const handleIndicatorSelectRef = useRef<(name: string) => void>(() => {});
+  handleIndicatorSelectRef.current = (name: string) => handleIndicatorSelect(name);
+  const setShowPineEditorRef = useRef(setShowPineEditor);
+  setShowPineEditorRef.current = setShowPineEditor;
+  useEffect(() => {
+    const onAdd = (e: Event) => { const n = (e as CustomEvent).detail?.name; if (typeof n === "string" && n) handleIndicatorSelectRef.current(n); };
+    const onRemove = (e: Event) => { const n = (e as CustomEvent).detail?.name; if (typeof n === "string" && n) setActiveIndicators(prev => prev.filter(i => i.name !== n)); };
+    const onSnapshot = (e: Event) => { const a = (e as CustomEvent).detail?.action; runSnapshotRef.current(a === "copy" ? "copy-image" : "download"); };
+    const onInterval = (e: Event) => {
+      const iv = (e as CustomEvent).detail?.interval;
+      if (typeof iv === "string" && iv && iv !== selectedIntervalRef.current) handleIntervalChangeRef.current(iv, intervalToLabel(iv));
+    };
+    const onPine = (e: Event) => { if ((e as CustomEvent).detail?.open) setShowPineEditorRef.current(true); else closePineEditor(); };
+    const onPanel = (e: Event) => {
+      const id = (e as CustomEvent).detail?.id;
+      if (typeof id !== "string" || !id) return;
+      setPanelsHidden(false);
+      setActiveSidebarPanel(id);
+      setRightPanel(true);
+    };
+    const pairs: [string, (e: Event) => void][] = [["tv:add-indicator", onAdd], ["tv:remove-indicator", onRemove], ["tv:snapshot", onSnapshot],
+      ["tv:set-interval", onInterval], ["tv:pine-editor", onPine], ["tv:open-panel", onPanel]];
+    pairs.forEach(([n, f]) => window.addEventListener(n, f));
+    return () => pairs.forEach(([n, f]) => window.removeEventListener(n, f));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // An indicator's inputs / visibility, kept on its entry so they save with the layout
   const handleUpdateIndicator = (id: string, patch: { inputs?: Record<string, any>; visible?: boolean; config?: Record<string, any> }) => {
     setActiveIndicators(prev => prev.map(i => (i.id === id ? { ...i, ...patch } : i)));
@@ -911,6 +955,43 @@ function AppLayout() {
   }, [activeIndicators]);
 
   const icon18 = { size: 18, strokeWidth: 1.5 };
+  // The voice assistant (premium accounts). It can do all of these (lib/voice/registry): Quick
+  // search's functions and the rest of the site's controls, re-registered every render (they use
+  // the latest state), and read out the economic calendar
+  const { active: voiceAllowed } = useAccess();
+  const replayApi = useReplay();
+  const voiceRegister = useRef<() => void>(() => {});
+  useEffect(() => { voiceRegister.current(); });
+  useEffect(() => () => { registerVoiceCommands("page", null); registerVoiceFunctions("economic-calendar", null); setVoiceContext("indicators", null); setVoiceContext("interval-label", null); }, []);
+  const symbolForVoice = useRef(symbol);
+  symbolForVoice.current = symbol;
+  useEffect(() => {
+    if (!voiceAllowed) return;
+    registerVoiceFunctions("economic-calendar", [{
+      name: "economic_calendar",
+      signature: `economic_calendar(period?, impact?, currency?) reads the economic calendar's news events; period: ${PERIODS.map(p => p.id).join(", ")} (default today); impact: high, medium, low or all (default high and medium); currency: a code like USD, or "chart" for the chart symbol's currencies (default all)`,
+      run: async a => {
+        const period = (String(a.period || "today").toLowerCase().replace(/\s+/g, "_")) as Period;
+        if (!PERIODS.some(p => p.id === period)) throw new VoiceQuestion(`Which period: ${PERIODS.map(p => p.label.toLowerCase()).join(", ")}?`);
+        const impact = String(a.impact || "").toLowerCase();
+        const impacts = impact === "all" ? ["high", "medium", "low", "holiday"] : impact && impact !== "default" ? [impact] : ["high", "medium"];
+        const cur = String(a.currency || "").toUpperCase();
+        const currencies = cur === "CHART" ? symbolCurrencies(symbolForVoice.current) : cur && cur !== "ALL" ? [cur] : null;
+        const tz = calendarTimezone();
+        const [from, to] = periodRange(period, tz);
+        const r = await fetchEconomicEvents(from, to);
+        const now = Date.now() / 1000;
+        const evs = r.events.filter(e => impacts.includes(e.impact) && (!currencies || currencies.includes(e.currency)));
+        const label = PERIODS.find(p => p.id === period)!.label.toLowerCase();
+        const which = `${impact === "all" ? "" : impacts.length === 1 ? `${impacts[0]} impact ` : "high and medium impact "}${currencies ? `${currencies.join(" and ")} ` : ""}`;
+        if (!evs.length) return r.coverage.to != null && from > r.coverage.to ? `${label}'s events aren't published yet.` : `No ${which}events ${label}.`;
+        const next = evs.find(e => e.time > now);
+        const list = evs.slice(0, 8).map(e => `${e.all_day ? "all day" : fmtEventTime(e.time, tz)} ${e.currency} ${e.title}${e.forecast ? `, forecast ${e.forecast}` : ""}${e.previous ? `, prior ${e.previous}` : ""}`);
+        return `${evs.length} ${which}events ${label}: ${list.join("; ")}${evs.length > 8 ? `; and ${evs.length - 8} more` : ""}.${next ? ` Next: ${next.currency} ${next.title} in ${fmtIn(next.time - now)}.` : ""}`;
+      },
+    }]);
+    return () => registerVoiceFunctions("economic-calendar", null);
+  }, [voiceAllowed]);
   const quickActions: QuickAction[] = [
     { id: 'indicators', label: 'Indicators, metrics, and strategies', section: 'FUNCTIONS', keywords: ['indicator', 'study', 'add'], shortcut: ['/'], icon: <TVIndicatorsIcon size={28} />, run: () => window.dispatchEvent(new CustomEvent('tv:open-indicators')) },
     { id: 'alert', label: 'Create alert', section: 'FUNCTIONS', keywords: ['alarm', 'notify'], shortcut: ['Alt', 'A'], icon: <TVAlertIcon size={28} />, run: () => openAlert() },
@@ -936,6 +1017,53 @@ function AppLayout() {
     { id: 'theme', label: theme === 'dark' ? 'Light theme' : 'Dark theme', section: 'SETTINGS', keywords: ['theme', 'color', 'mode', 'appearance'], icon: <SunMoon {...icon18} />, run: toggleTheme },
     { id: 'timezone', label: 'Time zone', section: 'SETTINGS', keywords: ['timezone', 'clock', 'utc'], icon: <Globe {...icon18} />, run: () => window.dispatchEvent(new CustomEvent('tv:open-timezone-menu')) },
   ];
+  voiceRegister.current = () => {
+    if (!voiceAllowed) { registerVoiceCommands("page", null); return; }
+    const ev = (name: string, detail?: any) => () => { window.dispatchEvent(new CustomEvent(name, { detail })); };
+    const tab = (href: string) => () => { try { window.open(href, "_blank", "noopener"); } catch { /* blocked */ } };
+    registerVoiceCommands("page", [
+      // (not the ones the assistant has its own action or function for: theme, alert, replay, Pine
+      // Editor, reset view, chart image, the watchlist, go to date, symbol, interval, orders)
+      ...quickActions.filter(a => !["theme", "alert", "replay", "pine-editor", "reset-view", "download-image", "copy-image", "open-watchlist",
+        "goto", "watchlist", "symbol", "interval", "market-buy", "market-sell"].includes(a.id))
+        .map(a => ({ id: a.id, run: () => { a.run(); } })),
+      { id: "theme-toggle-light-dark", run: toggleTheme },
+      { id: "indicators-remove-all", run: () => setActiveIndicators([]),
+        confirm: () => (activeIndicators.length ? `Remove all ${activeIndicators.length} indicators from the chart? Say yes or no.` : null) },
+      // bar replay
+      { id: "replay-select-bar", run: handleReplayClick },
+      { id: "replay-play", run: () => { if (!replayApi.isPlaying) replayApi.togglePlay(); } },
+      { id: "replay-pause", run: () => { if (replayApi.isPlaying) replayApi.togglePlay(); } },
+      { id: "replay-step-forward", run: replayApi.stepForward },
+      { id: "replay-step-back", run: replayApi.stepBack },
+      { id: "replay-skip-to-end", run: replayApi.skipToEnd },
+      { id: "replay-exit", run: () => leaveReplay(false) },
+      { id: "replay-exit-and-save", run: () => leaveReplay(true) },
+      ...[10, 7, 5, 3, 1, 0.5, 0.3, 0.2, 0.1].map(x => ({ id: `replay-speed-${x}x`, run: () => replayApi.setSpeed(x) })),
+      // date ranges (the bottom bar's 1D … All)
+      ...DATE_RANGES.map(r => ({ id: `range-${r.key.toLowerCase()}`, run: ev("tv:apply-date-range", { interval: r.interval, span: r.span }) })),
+      // layouts
+      { id: "layout-new", run: ev("tv:layout-create") },
+      { id: "layout-save", run: ev("tv:save-chart") },
+      // settings
+      ...["symbol", "legend", "scales", "canvas", "layout", "trading", "alerts", "events"].map(t => ({ id: `settings-${t}`, run: ev("tv:open-chart-settings", { tab: t }) })),
+      // trading, data, collabs
+      { id: "paper-trading-panel", run: ev("tv:open-trading-panel") },
+      { id: "download-chart-data", run: ev("tv:download-chart-data") },
+      { id: "collab-dialog", run: () => setShowCollabDialog(true) },
+      { id: "feedback-panel", run: () => setShowFeedback(true) },
+      // the economic calendar: its window, and its events on the chart (Settings → Events)
+      { id: "economic-calendar-open", run: openCalendar },
+      { id: "economic-calendar-close", run: () => calendarDock.set({ open: false, collapsed: false, maximized: false }) },
+      { id: "economic-events-on-chart-show", run: () => chartSettings.set({ economicEvents: true }) },
+      { id: "economic-events-on-chart-hide", run: () => chartSettings.set({ economicEvents: false }) },
+      // the site's other pages (in a new tab)
+      { id: "page-analytics", run: tab("/analytics") },
+      { id: "page-backtest-sessions", run: tab("/analytics?view=backtests") },
+    ]);
+    setVoiceContext("indicators", () => activeIndicators);
+    setVoiceContext("interval-label", () => intervalLabel);
+  };
 
   return (
     <div
@@ -1070,6 +1198,8 @@ function AppLayout() {
           );
         })()}
         <FavoritesToolbar />
+        {/* the voice assistant's functions with inputs (premium accounts) */}
+        {voiceAllowed && <VoiceBridge />}
       </main>
 
       {!panelsHidden && showRightPanel && (
@@ -1082,6 +1212,8 @@ function AppLayout() {
             <ObjectTreePanel />
           ) : activeSidebarPanel === "collab" ? (
             <CollabPanel onShare={() => setShowCollabDialog(true)} />
+          ) : activeSidebarPanel === "voice" && voiceAllowed ? (
+            <VoicePanel />
           ) : activeSidebarPanel === "backtest_sessions" ? (
             <BacktestSessionsPanel />
           ) : (

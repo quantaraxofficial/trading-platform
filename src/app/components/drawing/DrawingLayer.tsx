@@ -50,6 +50,11 @@ import { TextEditorOverlay } from './ui/TextEditorOverlay';
 import { LinkPromptDialog } from './ui/LinkPromptDialog';
 import { isTypingTarget } from '../../lib/isTypingTarget';
 import { paneGeometry } from '../../lib/priceScaleSide';
+import { registerVoiceFunctions, VoiceQuestion, type VoiceArgs } from '../../lib/voice/registry';
+import { findTool, emojiOf, colorOf } from '../../lib/voice/tools';
+import { getChartBars } from '../../lib/chartBars';
+import { analyse } from '../../lib/analysis/smc';
+import { strokesFor } from '../../lib/voice/strokeFont';
 
 interface DrawingLayerProps {
   chart: any;
@@ -1483,6 +1488,156 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   };
 
   // The points a drawing is stored with, from the points the user placed
+  // ---- the voice assistant: any drawing tool's shape put on the chart (lib/voice/registry) -------
+  // Where: a spot on the screen (centre, an edge or corner, the latest bar), a price / date, or
+  // around the latest zone still in play (an order block, FVG, IFVG, support, resistance: found as
+  // "mark" finds them). The tool's points are laid out to fill that spot: one point, a box, a
+  // triangle, a zigzag; the brush draws a loop / underline / line / zigzag, the highlighter a band
+  // as tall as the zone. Made exactly as a click would make it (shapeFor), so it's an ordinary drawing.
+  const placeByVoice = (a: VoiceArgs): string => {
+    const s = (v: unknown) => (typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : "");
+    const n = (v: unknown) => (typeof v === "number" ? v : s(v) && !isNaN(+s(v).replace(/,/g, "")) ? +s(v).replace(/,/g, "") : undefined);
+    const toolSaid = s(a.tool) || (a.emoji ? "emoji" : a.text ? "text" : "");
+    const tool = /emoji|icon|sticker/i.test(toolSaid) || (!a.tool && a.emoji) ? { type: "emoji", label: "emoji" } : findTool(toolSaid);
+    if (!tool) throw new VoiceQuestion("Which drawing? For example: rectangle, trend line, highlighter, brush, text or an emoji.");
+    const type = tool.type, config = TOOL_CONFIG[type];
+    if (!config || type === "zoom_in" || type === "measure") throw new VoiceQuestion(`The ${tool.label} isn't something I can put on the chart.`);
+    const lr = chart?.timeScale?.().getVisibleLogicalRange?.();
+    const paneH = chart?.panes?.()[0]?.getHeight?.() ?? null;
+    const top = paneH ? series?.coordinateToPrice?.(0) : null, bottom = paneH ? series?.coordinateToPrice?.(paneH) : null;
+    if (!lr || top == null || bottom == null) throw new VoiceQuestion("Open a chart with bars first.");
+    const bars = getChartBars();
+    const last = bars.length - 1;
+    const W = lr.to - lr.from, H = top - bottom;
+    const where = s(a.where).toLowerCase() || "center";
+    let x = lr.from + W * (/left/.test(where) ? 0.2 : /right/.test(where) ? 0.8 : 0.5);
+    let y = top - H * (/top|upper|above/.test(where) ? 0.2 : /bottom|lower|below/.test(where) ? 0.8 : 0.5);
+    const size = /small|tiny/i.test(s(a.size)) ? 0.1 : /large|big|huge/i.test(s(a.size)) ? 0.35 : 0.2;
+    let w = W * size, h = H * size;
+    let spot = /center|centre|middle/.test(where) ? "in the middle of the chart" : `at the ${where} of the chart`;
+    if (/last|latest|current|now/.test(where) && last >= 0) { x = last; y = bars[last].close; spot = "on the latest bar"; }
+    const price = n(a.price);
+    if (price !== undefined) { y = price; spot = `at ${price}`; }
+    const date = s(a.date);
+    if (/^\d{4}-\d{2}-\d{2}/.test(date)) {
+      const t = Date.parse(`${date.slice(0, 10)}T00:00:00Z`) / 1000;
+      const i = bars.findIndex(b => b.time >= t);
+      if (i < 0) throw new VoiceQuestion(`The chart has no bars on ${date.slice(0, 10)}.`);
+      x = i; if (price === undefined) y = bars[i].close; spot = `on ${date.slice(0, 10)}`;
+    }
+    // around a zone: the latest one still in play, found from the bars on screen
+    const around = s(a.around).toLowerCase();
+    let zone: { from: number; to: number; top: number; bottom: number } | null = null;
+    if (around) {
+      const kind = /inverse|ifvg/.test(around) ? "ifvg" : /fvg|fair value|imbalance|gap/.test(around) ? "fvg" : /order|ob\b/.test(around) ? "order_blocks" : /support|resistance|level/.test(around) ? "support_resistance" : null;
+      if (!kind) throw new VoiceQuestion("Around what: an order block, a fair value gap, an inverse FVG, support or resistance?");
+      const side = /bull|support|demand/.test(around) ? "bull" : /bear|resistance|supply/.test(around) ? "bear" : null;
+      const zones = analyse(kind, bars, Math.max(0, Math.floor(lr.from) - 150)).filter(z => !side || z.side === side);
+      const z = zones.sort((p, q) => q.from - p.from)[0];
+      if (!z) throw new VoiceQuestion(`I found no ${around} still in play on the screen. Zoom out to look further back?`);
+      zone = { from: z.from, to: Math.min(last, Math.max(z.from + 3, lr.to - 1)), top: z.top, bottom: z.bottom };
+      x = (zone.from + zone.to) / 2; y = (zone.top + zone.bottom) / 2; w = zone.to - zone.from; h = zone.top - zone.bottom;
+      spot = `over the latest ${z.label}`;
+    }
+    const time = (l: number) => {
+      const i = Math.round(l);
+      if (bars[i]) return bars[i].time;
+      const step = last > 0 ? bars[last].time - bars[last - 1].time : 60;
+      return last >= 0 ? bars[last].time + (i - last) * step : undefined;
+    };
+    const P = (l: number, p: number) => ({ logical: l, price: p, time: time(l) });
+    const id = `${type}-${Date.now()}`;
+    const color = colorOf(s(a.color));
+    const pxPerPrice = paneH / Math.max(1e-12, H);
+
+    // Writing with the brush ("write Rahul with the brush"): the text in a single-stroke hand
+    // (lib/voice/strokeFont), laid out in pixels so the letters keep their shape at any zoom, one
+    // brush stroke per pen stroke, all one group and one undo step
+    if (type === "brush" && s(a.text)) {
+      const text = s(a.text);
+      const { strokes, width, skipped } = strokesFor(text);
+      if (!strokes.length) throw new VoiceQuestion(`I can only write letters, numbers and a little punctuation with the brush. Use the text tool for "${text}"?`);
+      const ax = logicalToPixel(chart, x), ay = priceToPixel(series, y);
+      const paneW = chart?.timeScale?.().width?.() ?? 800;
+      if (ax === null || ay === null) throw new VoiceQuestion("That spot isn't on the screen.");
+      const share = /small|tiny/i.test(s(a.size)) ? 0.2 : /large|big|huge/i.test(s(a.size)) ? 0.6 : 0.35;
+      const unit = Math.min((paneW * share) / Math.max(1, width), (paneH * 0.25) / 6);
+      const left = ax - (width * unit) / 2, topPx = ay - 3 * unit;
+      const last2 = ((defaultSettings as any).brush || {}) as { stroke?: string; strokeWidth?: number };
+      const stroke = color || last2.stroke || "#2962ff";
+      const strokeWidth = Math.max(2, Math.min(8, Math.round(unit * 0.4)));
+      const group = { id: `voice-writing-${Date.now().toString(36)}`, name: `Writing: ${text}` };
+      const drawings = strokes.map((st, i) => ({
+        id: `brush-${Date.now()}-${i}`, type: "brush", visible: true, locked: false, group, stroke, strokeWidth,
+        points: st.map(([gx, gy]) => ({ logical: pixelToLogical(chart, left + gx * unit), price: pixelToPrice(series, topPx + gy * unit) }))
+          .filter(p => p.logical !== null && p.price !== null),
+      })).filter(d => d.points.length >= 2);
+      window.dispatchEvent(new CustomEvent("tv:add-drawings", { detail: { drawings } }));
+      return `Wrote "${text}" with the brush ${spot}.${skipped.length ? ` I left out ${skipped.join(" ")}: the brush hand doesn't have ${skipped.length === 1 ? "it" : "them"}.` : ""}`;
+    }
+    if (type === "brush" || type === "highlighter") {
+      const shape = s(a.stroke).toLowerCase() || (type === "highlighter" ? "band" : zone ? "loop" : "underline");
+      let pts: { logical: number; price: number }[] = [];
+      const N = 36;
+      if (type === "highlighter" || /band|line|underline|strike/.test(shape)) {
+        const yy = /underline/.test(shape) && zone ? zone.bottom - h * 0.15 : y;
+        pts = Array.from({ length: 12 }, (_, i) => ({ logical: x - w / 2 + (w * i) / 11, price: yy }));
+      } else if (/zig/.test(shape)) {
+        pts = Array.from({ length: 9 }, (_, i) => ({ logical: x - w / 2 + (w * i) / 8, price: y + (i % 2 ? h / 2 : -h / 2) }));
+      } else {
+        // a loop around it, a little bigger than what it circles
+        pts = Array.from({ length: N + 1 }, (_, i) => { const t = (i / N) * Math.PI * 2; return { logical: x + Math.cos(t) * w * 0.65, price: y + Math.sin(t) * h * 0.75 }; });
+      }
+      const last2 = ((defaultSettings as any)[type] || {}) as { stroke?: string; strokeWidth?: number };
+      const width = type === "highlighter" ? Math.max(8, Math.min(120, Math.round((zone ? h : H * 0.06) * pxPerPrice))) : last2.strokeWidth || 3;
+      addDrawing({ id, type: type as any, visible: true, locked: false,
+        stroke: color || last2.stroke || (type === "highlighter" ? "rgba(255, 235, 59, 1)" : "#2962ff"), strokeWidth: width, points: pts });
+      if (type === "highlighter") updateDrawing(id, { strokeWidth: width } as any);
+      if (color) updateDrawing(id, { stroke: color } as any);
+      return `${type === "highlighter" ? "Highlighted" : "Drew"} ${spot}.`;
+    }
+    if (type === "text") {
+      const text = s(a.text);
+      if (!text) throw new VoiceQuestion("What should the text say?");
+      const c0 = logicalToPixel(chart, 0), c1 = logicalToPixel(chart, 1);
+      addDrawing({ id, type: "text", visible: true, locked: false, stroke: "#2962ff", strokeWidth: 1, points: [P(x, y)],
+        // @ts-ignore
+        text, initialBarWidth: c0 !== null && c1 !== null ? Math.abs(c1 - c0) : 10 });
+      if (color) updateDrawing(id, { textColor: color } as any);
+      return `Wrote "${text}" ${spot}.`;
+    }
+    if (type === "emoji") {
+      const ch = emojiOf(s(a.emoji) || toolSaid) ?? "😀";
+      const c0 = logicalToPixel(chart, 0), c1 = logicalToPixel(chart, 1);
+      addDrawing({ id, type: "emoji", visible: true, locked: false, stroke: "#000000", strokeWidth: 1, points: [P(x, y)],
+        emojiChar: ch, scaleX: 1, scaleY: 1, rotation: 0, initialBarWidth: c0 !== null && c1 !== null ? Math.abs(c1 - c0) : 10 });
+      return `Put ${ch} ${spot}.`;
+    }
+    // the tool's points laid out over the spot
+    const count = config.maxPoints ?? 5;
+    let placed: { logical: number; price: number }[];
+    if (count === 1) placed = [{ logical: x, price: y }];
+    else if (type === "circle") placed = [{ logical: x, price: y }, { logical: x + w / 2, price: y }];
+    else if (type === "ellipse") placed = [{ logical: x, price: y }, { logical: x + w / 2, price: y }, { logical: x, price: y + h / 2 }];
+    else if (count === 2) placed = [{ logical: x - w / 2, price: y - h / 2 }, { logical: x + w / 2, price: y + h / 2 }];
+    else if (count === 3) placed = [{ logical: x - w / 2, price: y - h / 2 }, { logical: x, price: y + h / 2 }, { logical: x + w / 2, price: y - h / 2 }];
+    else { const k = Math.max(4, Math.min(count, 7)); placed = Array.from({ length: k }, (_v: unknown, i: number) => ({ logical: x - w / 2 + (w * i) / (k - 1), price: y + (i % 2 ? h / 2 : -h / 2) })); }
+    const { finalPoints, additionalProps } = shapeFor(type, placed.map(p => P(p.logical, p.price)));
+    addDrawing({ id, type: type as any, visible: true, locked: false, ...toolBaseStyle(type), points: finalPoints, ...additionalProps } as any);
+    // (a colour tints the shape's fill too, so a "green box" is green)
+    if (color) updateDrawing(id, { stroke: color, fill: color + "33" } as any);
+    if (s(a.text) && type !== "text") updateDrawing(id, { text: s(a.text) } as any);
+    return `Put a ${tool.label.toLowerCase()} ${spot}.`;
+  };
+  useEffect(() => {
+    registerVoiceFunctions("drawing-layer", [{
+      name: "place_drawing",
+      signature: "place_drawing(tool, where?, around?, emoji?, text?, stroke?, price?, date?, size?, color?) puts any drawing tool on the chart: an emoji, text you write, a rectangle, trend line, fib, brush, highlighter…; where center|top|bottom|left|right|top left…|last bar; around order block|fvg|ifvg|support|resistance (the latest on screen); stroke for the brush loop|underline|line|zigzag; the brush with text writes it by hand; size small|medium|large",
+      run: args => placeByVoice(args),
+    }]);
+  });
+  useEffect(() => () => registerVoiceFunctions("drawing-layer", null), []);
+
   const shapePoints = (tool: string, placed: any[]): any[] => {
     if (tool === 'curve' && placed.length === 2) return deriveCurvePoints(placed[0], placed[1]) ?? placed;
     if (tool === 'double_curve' && placed.length === 2) return deriveDoubleCurvePoints(placed[0], placed[1]) ?? placed;

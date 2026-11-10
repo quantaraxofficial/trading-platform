@@ -16,7 +16,7 @@ export type DateRangeSpan = { days?: number; months?: number } | "ytd" | "all";
 // TradingView's date ranges: each one switches the chart to a fitting interval and shows
 // that much history ending at the latest bar (ChartContainer applies the range once the
 // interval's bars are loaded — see "tv:apply-date-range").
-const DATE_RANGES: { key: string; label: string; interval: string; span: DateRangeSpan }[] = [
+export const DATE_RANGES: { key: string; label: string; interval: string; span: DateRangeSpan }[] = [
   { key: "1D", label: "1 day in 1 minute intervals", interval: "1min", span: { days: 1 } },
   { key: "5D", label: "5 days in 5 minutes intervals", interval: "5min", span: { days: 5 } },
   { key: "1M", label: "1 month in 30 minutes intervals", interval: "30min", span: { months: 1 } },

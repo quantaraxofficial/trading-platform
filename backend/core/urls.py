@@ -1,9 +1,11 @@
 from django.urls import path
-from . import views, analytics, collab, collab_files, market, turn, econ_calendar
+from . import voice, views, analytics, collab, collab_files, market, turn, econ_calendar
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
     path('calendar/economic/', econ_calendar.economic, name='economic_calendar'),
+    # Voice assistant (premium accounts): what's said, answered by an AI (core/voice.py)
+    path('voice/ask/<str:uid>/', voice.ask, name='voice_ask'),
     path('user/<str:uid>/', views.get_user_data, name='get_user_data'),
     path('plan/', views.plan, name='plan'),
     path('templates/<str:uid>/', views.manage_templates, name='manage_templates'),

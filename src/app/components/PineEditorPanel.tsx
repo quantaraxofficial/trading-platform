@@ -16,6 +16,7 @@ import { useAuth } from "@/context/AuthContext";
 import { runPineScriptAsync, appIntervalToPineTf, type PineRunResult } from "../lib/pineScriptEngine";
 import { fetchPineTimeframeData } from "../lib/pineDataFetch";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import { registerVoiceCommands } from "../lib/voice/registry";
 import type { PineEditorApi } from "./pine/PineMonaco";
 import { pineDock, pineEditorSettings, pineMisc, RELEASE_NOTES_VERSION, clampPineWidth, defaultPineWidth } from "./pine/pineStore";
 import { BUILTIN_SCRIPTS } from "./pine/builtinScripts";
@@ -437,6 +438,17 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
   const panelRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<PineEditorApi | null>(null);
   const keyActions = { run: () => runScript(), save: () => saveScript(), open: () => setDialog("open"), newIndicator: () => createNew("indicator"), newStrategy: () => createNew("strategy") };
+  // The voice assistant can do these while the editor is open (lib/voice/registry)
+  useEffect(() => {
+    registerVoiceCommands("pine-editor", [
+      { id: "pine-add-to-chart", run: keyActions.run },
+      { id: "pine-save", run: keyActions.save },
+      { id: "pine-open-script", run: keyActions.open },
+      { id: "pine-new-indicator", run: keyActions.newIndicator },
+      { id: "pine-new-strategy", run: keyActions.newStrategy },
+    ]);
+  });
+  useEffect(() => () => registerVoiceCommands("pine-editor", null), []);
   const keysRef = useRef(keyActions);
   keysRef.current = keyActions;
   useEffect(() => {

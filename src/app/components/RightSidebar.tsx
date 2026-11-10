@@ -20,6 +20,10 @@ import { useCollab } from "../lib/collab/session";
 import { CollabIcon } from "./collab/icons";
 import { BacktestSessionsIcon } from "./BacktestSessionsPanel";
 import { calendarDock, toggleCalendar } from "../lib/economicCalendar";
+import { VoiceAssistantIcon } from "./VoicePanel";
+import { useVoice, setVoiceUser } from "../lib/voice/assistant";
+import { useAccess } from "@/lib/access";
+import { useAuth } from "@/context/AuthContext";
 
 // Trading Agent — a small chat-bubble glyph (1px lines like the TradingView icons)
 function TVAgentIcon({ size = 28, ...props }: any) {
@@ -66,6 +70,11 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
   const calendar = calendarDock.useValue();
   const calendarOn = calendar.open && !calendar.collapsed;
   const isActive = (id: string) => activePanel === id;
+  // The voice assistant (premium accounts): a red dot while it's listening (it carries on with its panel closed)
+  const voiceState = useVoice();
+  const { active: voiceAllowed } = useAccess();
+  const { user: voiceUser } = useAuth();
+  useEffect(() => { setVoiceUser(voiceAllowed ? voiceUser?.uid ?? null : null); }, [voiceUser?.uid, voiceAllowed]);
   const panels = [
     { id: "watchlist", icon: <TVWatchlistIcon size={28} />, tooltip: "Watchlist, details and news" },
     { id: "alerts", icon: <TVAlertsIcon size={28} />, tooltip: "Alerts" },
@@ -74,6 +83,8 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     { id: "collab", icon: <CollabIcon size={28} />, tooltip: inCollab ? "Collab: group chat and voice" : "Collabs" },
     // Your backtest sessions: one clicked opens in a new tab, carrying on where it was left
     { id: "backtest_sessions", icon: <BacktestSessionsIcon size={28} />, tooltip: "Backtest sessions" },
+    // Talk to the site (premium accounts): spoken commands, answered aloud with subtitles (lib/voice/assistant)
+    ...(voiceAllowed ? [{ id: "voice", icon: <VoiceAssistantIcon size={28} />, tooltip: voiceState.listening ? "Voice assistant (listening)" : "Voice assistant" }] : []),
   ];
 
   const i18 = { size: 18, strokeWidth: 1.5 };
@@ -111,6 +122,9 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
               {p.icon}
               {p.id === "alerts" && unread > 0 && (
                 <span data-testid="alerts-badge" style={{ position: "absolute", top: 3, right: 3, minWidth: 16, height: 16, padding: "0 4px", boxSizing: "border-box", borderRadius: 8, background: "#f23645", color: "#fff", fontSize: 11, lineHeight: "16px", fontWeight: 600, pointerEvents: "none" }}>{unread > 99 ? "99+" : unread}</span>
+              )}
+              {p.id === "voice" && voiceState.listening && (
+                <span data-testid="voice-listening" aria-hidden style={{ position: "absolute", bottom: 5, right: 5, width: 8, height: 8, borderRadius: "50%", background: "#f23645", boxShadow: "0 0 0 2px var(--tv-color-pane-bg)", pointerEvents: "none" }} />
               )}
               {p.id === "collab" && collabState.unread > 0 && (
                 <span data-testid="collab-badge" style={{ position: "absolute", top: 3, right: 3, minWidth: 16, height: 16, padding: "0 4px", boxSizing: "border-box", borderRadius: 8, background: "#f23645", color: "#fff", fontSize: 11, lineHeight: "16px", fontWeight: 600, pointerEvents: "none" }}>{collabState.unread > 99 ? "99+" : collabState.unread}</span>
