@@ -134,6 +134,9 @@ function push(m: Omit<VoiceMessage, "id">): number {
 function patchMessage(id: number, p: Partial<VoiceMessage>) {
   set({ messages: state.messages.map(m => (m.id === id ? { ...m, ...p } : m)) });
 }
+function removeMessage(id: number) {
+  set({ messages: state.messages.filter(m => m.id !== id) });
+}
 
 export function setVoicePrefs(p: { replies?: boolean; lang?: string }) {
   init();
@@ -159,20 +162,31 @@ function pickVoice(): SpeechSynthesisVoice | null {
 }
 
 let speakQueue: Promise<void> = Promise.resolve();
+// The line being said (to cut it short when the trader talks over it, and to tell its echo from them)
+let speakingNow: { id: number; text: string; spokenTo: number; cut: boolean } | null = null;
+let speechGen = 0;              // bumped by an interruption: lines waiting to be said are dropped
+let lastSpoken = { text: "", at: 0 };
 
-// Shows a reply in the chat and says it, each word appearing as it's spoken (subtitles)
+// Shows a reply in the chat and says it. The chat shows the words as they're spoken, and only those:
+// a line that's cut short keeps what was said
 function say(text: string, extra?: Partial<VoiceMessage>): Promise<void> {
   const speak = state.replies && state.canSpeak;
-  const id = push({ from: "assistant", text, spokenTo: speak ? 0 : undefined, ...extra });
-  if (!speak) return Promise.resolve();
+  if (!speak) { push({ from: "assistant", text, ...extra }); return Promise.resolve(); }
+  const gen = speechGen;
   speakQueue = speakQueue.then(() => new Promise<void>(resolve => {
+    // (talked over before its turn: not said, not shown)
+    if (gen !== speechGen) { resolve(); return; }
+    const id = push({ from: "assistant", text, spokenTo: 0, ...extra });
+    const me = { id, text, spokenTo: 0, cut: false };
+    speakingNow = me;
     let done = false;
     const finish = () => {
       if (done) return;
       done = true;
-      patchMessage(id, { spokenTo: undefined });
+      if (!me.cut) patchMessage(id, { spokenTo: undefined });
+      if (speakingNow === me) speakingNow = null;
+      lastSpoken = { text, at: Date.now() };
       set({ speaking: false });
-      resumeAfterSpeaking();
       resolve();
     };
     try {
@@ -181,11 +195,12 @@ function say(text: string, extra?: Partial<VoiceMessage>): Promise<void> {
       if (v) u.voice = v;
       u.lang = v?.lang || state.lang;   // (no voice for it: the language still tells the browser how to read it)
       u.rate = 1.03;
-      u.onstart = () => { set({ speaking: true }); pauseForSpeaking(); };
+      u.onstart = () => { set({ speaking: true }); };
       u.onboundary = (e: SpeechSynthesisEvent) => {
-        if (e.name && e.name !== "word") return;
+        if (e.name && e.name !== "word" || me.cut) return;
         const end = text.indexOf(" ", e.charIndex + 1);
-        patchMessage(id, { spokenTo: end < 0 ? text.length : end });
+        me.spokenTo = end < 0 ? text.length : end;
+        patchMessage(id, { spokenTo: me.spokenTo });
       };
       u.onend = finish;
       u.onerror = finish;
@@ -197,9 +212,47 @@ function say(text: string, extra?: Partial<VoiceMessage>): Promise<void> {
   return speakQueue;
 }
 
+// The trader talked (or typed) over the assistant: it stops at once, the line keeps what was said,
+// and what was still waiting to be said is dropped
+export function interruptSpeaking() {
+  speechGen++;
+  const cur = speakingNow;
+  speakingNow = null;
+  if (cur && !cur.cut) {
+    cur.cut = true;
+    const said = cur.text.slice(0, cur.spokenTo).trimEnd();
+    if (said) patchMessage(cur.id, { text: `${said}…`, spokenTo: undefined }); else removeMessage(cur.id);
+    lastSpoken = { text: cur.text, at: Date.now() };
+  }
+  try { window.speechSynthesis.cancel(); } catch { /* none */ }
+  set({ speaking: false });
+}
+
+// Is what the mic heard the assistant's own voice (from the speakers)? Most of its words are in
+// what's being said; for languages without spaces, most of its character pairs
+const NOT_WORD = new RegExp("[^\\p{L}\\p{M}\\p{N}\\s]", "gu");   // (letters, their marks and digits of any script)
+const normText = (t: string) => t.toLowerCase().normalize("NFKC").replace(NOT_WORD, " ").replace(/\s+/g, " ").trim();
+function isEcho(heard: string, spoken: string): boolean {
+  const h = normText(heard), sp = normText(spoken);
+  if (!h) return true;
+  if (!sp) return false;
+  if (sp.includes(h)) return true;
+  const hw = h.split(" ");
+  if (hw.length >= 2) {
+    const sw = new Set(sp.split(" "));
+    return hw.filter(w => sw.has(w)).length / hw.length >= 0.6;
+  }
+  const pairs = (x: string) => { const out = new Set<string>(); const c = x.replace(/ /g, ""); for (let i = 0; i < c.length - 1; i++) out.add(c.slice(i, i + 2)); return out; };
+  const hp = pairs(h), sp2 = pairs(sp);
+  if (hp.size < 2) return true;                    // too short to tell: not taken as the trader
+  let hit = 0; hp.forEach(b => { if (sp2.has(b)) hit++; });
+  return hit / hp.size >= 0.6;
+}
+// Enough to be the trader talking (a word or two, not a cough)
+const substantial = (t: string) => { const n = normText(t); return n.split(" ").length >= 2 || n.replace(/ /g, "").length >= 4; };
+
 // ---- listening ------------------------------------------------------------------------------
 let rec: any = null;
-let pausedForSpeech = false;
 let restarts: number[] = [];
 
 function startRecognition() {
@@ -211,16 +264,24 @@ function startRecognition() {
   r.continuous = true;
   r.interimResults = true;
   r.lang = state.lang;
-  r.maxAlternatives = 1;
+  r.maxAlternatives = 3;
   r.onresult = (e: any) => {
     let interim = "";
+    // (what it's saying now, or said a moment ago: the speakers' sound reaching the mic)
+    const echoOf = speakingNow ? speakingNow.text : Date.now() - lastSpoken.at < 1500 ? lastSpoken.text : "";
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const res = e.results[i];
-      const text = res[0]?.transcript ?? "";
-      if (res.isFinal) { set({ hearing: "" }); if (text.trim()) handleText(text.trim()); }
-      else interim += text;
+      const text = (res[0]?.transcript ?? "").trim();
+      if (echoOf && isEcho(text, echoOf)) continue;
+      if (state.speaking && substantial(text)) interruptSpeaking();
+      if (res.isFinal) {
+        set({ hearing: "" });
+        // (what speech recognition also thought it heard: the AI picks the one that makes sense)
+        const alts = Array.from({ length: res.length }, (_, k) => (res[k]?.transcript ?? "").trim()).slice(1).filter(x => x && x !== text);
+        if (text) handleText(text, alts);
+      } else interim += `${text} `;
     }
-    if (interim) set({ hearing: interim.trim() });
+    set({ hearing: interim.trim() });
   };
   r.onerror = (e: any) => {
     const err = e?.error;
@@ -237,12 +298,12 @@ function startRecognition() {
     if (rec !== r) return;
     rec = null;
     // The browser ends a session after a pause: carry on while the mic is on
-    if (!state.listening || pausedForSpeech) return;
+    if (!state.listening) return;
     const now = Date.now();
     restarts = restarts.filter(t => now - t < 10000);
     if (restarts.length > 6) { stopListening(); set({ error: "Listening keeps stopping. Click the microphone to try again." }); return; }
     restarts.push(now);
-    setTimeout(() => { if (state.listening && !pausedForSpeech && !rec) startRecognition(); }, 250);
+    setTimeout(() => { if (state.listening && !rec) startRecognition(); }, 250);
   };
   try { r.start(); } catch { /* already started */ }
 }
@@ -253,17 +314,6 @@ function stopRecognition() {
   try { r?.abort(); } catch { /* none */ }
 }
 
-function pauseForSpeaking() {
-  if (!state.listening) return;
-  pausedForSpeech = true;
-  stopRecognition();
-  set({ hearing: "" });
-}
-function resumeAfterSpeaking() {
-  if (!pausedForSpeech) return;
-  pausedForSpeech = false;
-  if (state.listening) setTimeout(() => { if (state.listening && !rec && !state.speaking) startRecognition(); }, 300);
-}
 
 let greeted = false;
 export function startListening() {
@@ -281,7 +331,6 @@ export function startListening() {
   }
 }
 export function stopListening() {
-  pausedForSpeech = false;
   set({ listening: false, hearing: "" });
   stopRecognition();
 }
@@ -681,7 +730,7 @@ async function createBacktest(plan: BacktestPlan) {
   }
 }
 
-async function askAI(text: string) {
+async function askAI(text: string, alternatives: string[] = []) {
   if (!voiceUid) { say("Sign in to use the voice assistant: it answers through your account."); return; }
   const p = currentPrice();
   const chart = getChartInfo();
@@ -693,7 +742,7 @@ async function askAI(text: string) {
     const res = await backendFetch(`${BACKEND_URL}/api/users/voice/ask/${voiceUid}/`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       // (the symbol as the site writes it, "XAU/USD", so the AI answers in the same form)
-      body: JSON.stringify({ text, history, context: {
+      body: JSON.stringify({ text, alternatives: alternatives.slice(0, 3), history, context: {
         symbol: chartSymbol || null, interval: chart?.interval ?? null, price: p?.price ?? null,
         commands: voiceCommands().map(c => c.id),
         functions: voiceFunctions().map(f => f.signature),
@@ -723,10 +772,11 @@ async function askAI(text: string) {
 }
 
 // What was heard (or typed) → the chat, then the AI (or the answer to a yes / no question)
-export function handleText(text: string) {
+export function handleText(text: string, alternatives: string[] = []) {
   init();
   const t = text.trim();
   if (!t) return;
+  if (state.speaking || speakingNow) interruptSpeaking();
   push({ from: "user", text: t });
   set({ error: null });
   if (confirmPending && Date.now() - confirmPending.at > CONFIRM_MS) clearConfirm();
@@ -741,7 +791,7 @@ export function handleText(text: string) {
     clearConfirm();
     if (NO.test(low)) { say("Okay, I won't."); return; }
   }
-  queue(() => askAI(t));
+  queue(() => askAI(t, alternatives));
 }
 
 // One request at a time, in the order they came (speech can split a sentence into two)

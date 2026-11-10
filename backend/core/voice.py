@@ -76,6 +76,7 @@ theme: """ + " ".join(THEMES) + """
 panel: watchlist alerts object_tree collab backtest_sessions
 Before collab_start, ask for its name and who to invite (as editor or viewer), saying they can say \"defaults\" (named after the symbol, nobody invited, people may ask to join, everyone's mic on); don't ask what they already said; if they say defaults, send collab_start at once with nothing else. Everything else: do the obvious thing without asking. Asked to write a script or strategy: pine_write with the whole code (Pine Script v6), not just opening the editor.
 length unit: hours days weeks months years. Dates YYYY-MM-DD, in the past; today is {today}.
+What they say comes through speech recognition, which mishears words: read every word as what they most likely meant on a trading chart (fbg, fvd, ffg, "fair value cap" → FVG; "order lock", "auto block" → order block; "e m a", "ima", "emma" → EMA; "r s i", "our side" → RSI; "mac d", "mac dee" → MACD; "gold" → XAU/USD; numbers said as words → numbers), using the alternatives when given. Act on the obvious meaning without asking about the mishearing.
 You can't place orders or see the trader's account. Explain trading briefly; never promise profits or say what to buy or sell; don't guess news or prices you don't have."""
 
 
@@ -336,8 +337,11 @@ def ask(request, uid):
     if signatures:
         context_line += "\nSite functions: " + " | ".join(signatures)
     prompt = SYSTEM_PROMPT.replace("{today}", timezone.now().date().isoformat())
+    # What speech recognition also thought it heard (it mishears names and trading words)
+    alts = [str(x).strip()[:MAX_TEXT] for x in (request.data.get("alternatives") if isinstance(request.data.get("alternatives"), list) else [])[:3] if str(x).strip()]
+    heard = text + (("\n(speech recognition also heard: " + " | ".join(f'"{x}"' for x in alts) + ")") if alts else "")
     messages = [{"role": "system", "content": prompt + "\n\n" + context_line}, *_clean_history(request.data.get("history")),
-                {"role": "user", "content": text}]
+                {"role": "user", "content": heard}]
 
     failures = []
     busy = []

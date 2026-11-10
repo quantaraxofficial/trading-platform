@@ -22,11 +22,11 @@ export function VoiceAssistantIcon({ size = 28 }: { size?: number }) {
 
 const EXAMPLES = ["Open gold on the 15 minute", "Mark order blocks", "Mark fair value gaps", "Mark support and resistance", "Add RSI", "Backtest gold from 1 March 2024 with 10k", "Start replay from 1 March 2024", "Switch to Heikin Ashi"];
 
-// An answer as a subtitle: what's been said so far in full colour, the rest still faint
+// An answer as it's spoken: only the words said so far (a line cut short keeps those)
 function Subtitle({ m }: { m: VoiceMessage }) {
   if (m.spokenTo === undefined) return <>{m.text}</>;
-  const said = m.text.slice(0, m.spokenTo), rest = m.text.slice(m.spokenTo);
-  return (<><span>{said}</span><span style={{ opacity: 0.35 }}>{rest}</span></>);
+  const said = m.text.slice(0, m.spokenTo);
+  return said ? <>{said}</> : <span aria-label="Speaking" style={{ opacity: 0.5, letterSpacing: 2 }}>•••</span>;
 }
 
 export default function VoicePanel() {
