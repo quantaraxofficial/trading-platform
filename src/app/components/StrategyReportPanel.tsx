@@ -19,7 +19,7 @@ import {
   StArrowDownRightIcon, StUfoIcon, StStrategyTabIcon,
 } from "./strategy/icons";
 import {
-  fmtNum, fmtSigned, fmtPct, fmtSignedPct, fmtCompact, fmtCapital, fmtAxis, fmtDate, fmtDateTime, fmtDuration,
+  fmtNum, fmtSigned, fmtPct, fmtSignedPct, fmtCompact, fmtCapital, fmtAxis, fmtDate, fmtDateTime, fmtDuration, zoned,
   pnlBySignals, pnlBySide, totalCommission, periodBuckets, cagr, sharpeSortino, buyAndHoldPct, equityPriceCorrelation,
   growthEpisodes, expectancy, outliersPnl, largest, averages, returnsHistogram, streaks, resultsByTime, bestEntryTimes,
   avgTradeDuration, tradesCsv, type PeriodKind, type PnlRow, type TimeGroup,
@@ -47,6 +47,8 @@ interface StrategyReportPanelProps {
   onAddAlert: () => void;
   onRemove: () => void;
   fullRangeStart?: number;
+  // The chosen period reaches before the oldest bar that could be loaded: why, and what there is
+  historyLimit?: { reason: "source" | "cap"; from: number; to: number; bars: number } | null;
   fullRangeEnd?: number;
   onSaveToAnalytics?: () => Promise<string>;   // saves this backtest's trades for /analytics (its name back)
 }
@@ -273,8 +275,13 @@ function Toolbar({ p, view, setView }: { p: StrategyReportPanelProps; view: "met
   const execRef = useRef<HTMLButtonElement>(null);
   const dock = strategyDock.useValue();
   const eq = p.report.equityCurve;
-  const winFrom = eq.length ? eq[0].time : p.fullRangeStart ?? 0;
-  const winTo = eq.length ? eq[eq.length - 1].time : p.fullRangeEnd ?? 0;
+  // The testing period shown is the one chosen (a custom range as picked, as on TradingView), else
+  // the span the equity curve covers
+  const custom = p.range.kind === "custom" && p.range.from && p.range.to ? p.range : null;
+  const winFrom = custom ? custom.from! : eq.length ? eq[0].time : p.fullRangeStart ?? 0;
+  const winTo = custom ? custom.to! : eq.length ? eq[eq.length - 1].time : p.fullRangeEnd ?? 0;
+  // (a custom period's dates are whole UTC days, as the date boxes pick them: shown as picked)
+  const winTz = custom ? "UTC" : p.tz;
   const [capDraft, setCapDraft] = useState("");
   const close = () => setMenu(null);
   const toggle = (m: typeof menu) => setMenu((cur) => (cur === m ? null : m));
@@ -292,8 +299,8 @@ function Toolbar({ p, view, setView }: { p: StrategyReportPanelProps; view: "met
           <Tip text="Trades"><button type="button" role="tab" aria-selected={view === "trades"} aria-label="Trades" className={`st-lighttab${view === "trades" ? " selected" : ""}`} onClick={() => setView("trades")}><StTradesIcon /></button></Tip>
         </div>
         <div className="st-scroll" style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, overflowX: "auto", overflowY: "hidden" }}>
-          <ToolbarPill label={`${fmtDate(winFrom, p.tz)} — ${fmtDate(winTo, p.tz)}`} btnRef={rangeRef} open={menu === "range"} onClick={() => toggle("range")} tip="Testing period" icon={<StCalendarIcon />} disabled={p.busy}>
-            <span style={{ marginLeft: 4 }}>{fmtDate(winFrom, p.tz)} {"—"} {fmtDate(winTo, p.tz)}</span><Caret open={menu === "range"} />
+          <ToolbarPill label={`${fmtDate(winFrom, winTz)} — ${fmtDate(winTo, winTz)}`} btnRef={rangeRef} open={menu === "range"} onClick={() => toggle("range")} tip="Testing period" icon={<StCalendarIcon />} disabled={p.busy}>
+            <span style={{ marginLeft: 4 }}>{fmtDate(winFrom, winTz)} {"—"} {fmtDate(winTo, winTz)}</span><Caret open={menu === "range"} />
           </ToolbarPill>
           <ToolbarPill label={`${fmtCapital(p.report.initialCapital)} ${CURRENCY}`} btnRef={capRef} open={menu === "capital"} onClick={() => { setCapDraft(p.report.initialCapital.toLocaleString("en-US")); toggle("capital"); }} tip="Initial capital" icon={<StCapitalIcon />} disabled={p.busy}>
             <span style={{ marginLeft: 4 }}>{fmtCapital(p.report.initialCapital)}</span><Currency /><Caret open={menu === "capital"} />
@@ -1103,6 +1110,7 @@ function Panel(p: StrategyReportPanelProps) {
       {dock.expanded && (
         <>
           <Toolbar p={p} view={view} setView={setView} />
+          {p.historyLimit && !p.busy && <DataRangeDialog p={p} limit={p.historyLimit} />}
           <div ref={setBody} data-name="strategy-report-body" className="st-scroll" style={{ flex: 1, minHeight: 0, overflow: "auto", position: "relative", opacity: p.busy ? 0.6 : 1, transition: "opacity 0.15s" }}>
             {view === "metrics" ? <MetricsView p={p} bodyHeight={bodyH} /> : <TradesView p={p} scrollEl={bodyEl} />}
           </div>
@@ -1146,4 +1154,51 @@ export default function StrategyReportPanel(props: StrategyReportPanelProps) {
   }, []);
   if (!host) return null;
   return createPortal(<MemoPanel {...props} {...callbacks} />, host);
+}
+
+// The testing period reaches before the oldest bar there is (or that a backtest can load): a dialog
+// saying how much data there is, offering to test the period that's covered instead
+function DataRangeDialog({ p, limit }: { p: StrategyReportPanelProps; limit: NonNullable<StrategyReportPanelProps["historyLimit"]> }) {
+  const key = JSON.stringify([p.range, limit.from]);
+  const [closedFor, setClosedFor] = useState<string | null>(null);
+  const open = closedFor !== key;
+  const close = () => setClosedFor(key);
+  useEscapeClose(close, open);
+  if (!open) return null;
+  const sym = p.symbol.replace("/", "");
+  const reqFrom = p.range.kind === "custom" ? p.range.from : undefined;
+  const reqTo = p.range.kind === "custom" ? p.range.to : undefined;
+  const none = reqTo !== undefined && reqTo < limit.from;
+  const days = Math.max(1, Math.round((limit.to - limit.from) / 86400));
+  const span = days >= 365 ? `about ${(days / 365).toFixed(1).replace(/\.0$/, "")} years` : days >= 60 ? `about ${Math.round(days / 30)} months` : `${days} days`;
+  // The covered period as whole days, by the dates shown (the chart's time zone), in the custom
+  // range's own terms (UTC days, as its date boxes pick them)
+  const dayStart = (t: number) => { const z = zoned(t, p.tz); return Date.UTC(z.y, z.m, z.d) / 1000; };
+  const useCovered = () => {
+    close();
+    const to = reqTo && reqTo > limit.from ? reqTo : limit.to;
+    p.onChangeRange({ kind: "custom", from: dayStart(limit.from), to: reqTo && reqTo > limit.from ? reqTo : dayStart(to) + 86399 });
+  };
+  return createPortal(
+    <div style={{ position: "fixed", inset: 0, zIndex: 10060, background: "rgba(0,0,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }} onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
+      <div className="st-root" role="dialog" aria-label="Not enough data" style={{ width: 420, maxWidth: "calc(100vw - 32px)", borderRadius: 10, boxShadow: "var(--st-menu-shadow)", background: "var(--st-menu-bg)", padding: "18px 20px 20px" }}>
+        <div style={{ fontSize: 20, fontWeight: 600, lineHeight: "28px", marginBottom: 12 }}>{none ? "No data for this period" : "Not enough data for this period"}</div>
+        <div style={{ fontSize: 14, lineHeight: 1.55 }}>
+          {limit.reason === "source" ? <>TradePilot has <b>{sym}</b> data from <b>{fmtDate(limit.from, p.tz)}</b> to <b>{fmtDate(limit.to, p.tz)}</b> ({span}, {limit.bars.toLocaleString("en-US")} bars on this timeframe).</>
+            : <>A backtest loads up to about 40,000 bars, so on this timeframe it reaches back to <b>{fmtDate(limit.from, p.tz)}</b> ({span}, {limit.bars.toLocaleString("en-US")} bars). For an older period, use a higher timeframe.</>}
+        </div>
+        {reqFrom !== undefined && reqTo !== undefined && (
+          <div style={{ fontSize: 14, lineHeight: 1.55, marginTop: 10, color: "var(--st-text-secondary)" }}>
+            {none ? <>The period you picked, {fmtDate(reqFrom, "UTC")} — {fmtDate(reqTo, "UTC")}, is before that, so there was nothing to test.</>
+              : <>The period you picked starts {fmtDate(reqFrom, "UTC")}, so the test began at {fmtDate(limit.from, p.tz)}.</>}
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+          <button type="button" onClick={close} style={{ height: 34, padding: "0 16px", borderRadius: 8, border: "1px solid var(--st-input-border)", background: "transparent", color: "var(--st-text)", fontSize: 14, cursor: "pointer" }}>{none ? "Close" : "OK"}</button>
+          {none && <button type="button" onClick={useCovered} style={{ height: 34, padding: "0 16px", borderRadius: 8, border: "none", background: "var(--st-invert-bg)", color: "var(--st-invert-text)", fontSize: 14, cursor: "pointer" }}>Test {fmtDate(limit.from, p.tz)} — {fmtDate(limit.to, p.tz)}</button>}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
 }

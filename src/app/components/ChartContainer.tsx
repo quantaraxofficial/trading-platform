@@ -1488,6 +1488,8 @@ export default function ChartContainer({
   // same script over a different bar range at any time, editor open or not.
   const lastPineRunRef = useRef<{ code: string; symbol: string; pineTf: string; scriptName: string; templateKey?: string | null } | null>(null);
   const [backtestRange, setBacktestRange] = useState<{ kind: "all" | "days" | "custom" | "history"; days?: number; from?: number; to?: number }>({ kind: "all" });
+  // A testing period that reaches before the oldest bar that could be loaded (see ensureHistoryForRange)
+  const [historyLimit, setHistoryLimit] = useState<{ reason: "source" | "cap"; from: number; to: number; bars: number } | null>(null);
   const [backtestBusy, setBacktestBusy] = useState(false);
   const [capitalOverride, setCapitalOverride] = useState<number | null>(null);
   const [inputOverrides, setInputOverrides] = useState<Record<string, any>>({});
@@ -1571,6 +1573,7 @@ export default function ChartContainer({
   // triggered by the picker instead of a scroll event.
   async function ensureHistoryForRange(range: { kind: "all" | "days" | "custom" | "history"; days?: number; from?: number; to?: number }): Promise<any[]> {
     let all = fullDataRef.current || [];
+    setHistoryLimit(null);
     if (all.length === 0) return all;
     let neededFrom: number | null = null;
     if (range.kind === "days" && range.days) {
@@ -1612,6 +1615,11 @@ export default function ChartContainer({
       all = unique;
       fullDataRef.current = unique;
       (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
+    }
+    // The period starts before the oldest bar that could be loaded: the data source has nothing
+    // older, or the backtest's loading limit was reached first (the report says which, in a dialog)
+    if (all.length && all[0].time > neededFrom + 86400 && range.kind !== "history") {
+      setHistoryLimit({ reason: guard >= 8 ? "cap" : "source", from: all[0].time, to: all[all.length - 1].time, bars: all.length });
     }
     return all;
   }
@@ -4533,6 +4541,7 @@ export default function ChartContainer({
           onRemove={removePineScript}
           onSaveToAnalytics={saveStrategyToAnalytics}
           fullRangeStart={fullDataRef.current[0]?.time}
+          historyLimit={historyLimit}
           fullRangeEnd={fullDataRef.current[fullDataRef.current.length - 1]?.time}
         />
       )}
