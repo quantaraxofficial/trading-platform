@@ -523,6 +523,11 @@ Posting signals out
     whole site about 9 a minute and 240 a day ("busy, try again in a minute" past that)
   - Next: orders, drawing tools by voice
 
+  - Languages: 27 (English US / India / UK, Hindi, Marathi, Gujarati, Bengali, Tamil, Telugu,
+    Kannada, Malayalam, Punjabi, Urdu, Spanish, Portuguese, French, German, Italian, Russian,
+    Turkish, Arabic, Indonesian, Vietnamese, Thai, Chinese, Japanese, Korean): it hears in the
+    language chosen, the AI answers in it (actions stay the same), a voice of that language reads
+    it out, and yes / no are understood in it
 ======================================================================
 17. SITE PAGES: HOME, SIGN-IN, ABOUT, CONTACT, PROFILE
 ======================================================================

@@ -53,10 +53,37 @@ export type VoiceState = {
   error: string | null;
 };
 
+// The languages it hears (the browser's speech recognition) and answers in (the AI writes its reply
+// in the language chosen; the browser speaks it with a voice of that language when it has one).
+// `name` is what the AI is told to answer in.
 export const VOICE_LANGS = [
-  { value: "en-US", label: "English (US)" },
-  { value: "en-IN", label: "English (India)" },
-  { value: "en-GB", label: "English (UK)" },
+  { value: "en-US", label: "English (US)", name: "English" },
+  { value: "en-IN", label: "English (India)", name: "English" },
+  { value: "en-GB", label: "English (UK)", name: "English" },
+  { value: "hi-IN", label: "हिन्दी (Hindi)", name: "Hindi" },
+  { value: "mr-IN", label: "मराठी (Marathi)", name: "Marathi" },
+  { value: "gu-IN", label: "ગુજરાતી (Gujarati)", name: "Gujarati" },
+  { value: "bn-IN", label: "বাংলা (Bengali)", name: "Bengali" },
+  { value: "ta-IN", label: "தமிழ் (Tamil)", name: "Tamil" },
+  { value: "te-IN", label: "తెలుగు (Telugu)", name: "Telugu" },
+  { value: "kn-IN", label: "ಕನ್ನಡ (Kannada)", name: "Kannada" },
+  { value: "ml-IN", label: "മലയാളം (Malayalam)", name: "Malayalam" },
+  { value: "pa-IN", label: "ਪੰਜਾਬੀ (Punjabi)", name: "Punjabi" },
+  { value: "ur-IN", label: "اردو (Urdu)", name: "Urdu" },
+  { value: "es-ES", label: "Español (Spanish)", name: "Spanish" },
+  { value: "pt-BR", label: "Português (Portuguese)", name: "Portuguese" },
+  { value: "fr-FR", label: "Français (French)", name: "French" },
+  { value: "de-DE", label: "Deutsch (German)", name: "German" },
+  { value: "it-IT", label: "Italiano (Italian)", name: "Italian" },
+  { value: "ru-RU", label: "Русский (Russian)", name: "Russian" },
+  { value: "tr-TR", label: "Türkçe (Turkish)", name: "Turkish" },
+  { value: "ar-SA", label: "العربية (Arabic)", name: "Arabic" },
+  { value: "id-ID", label: "Bahasa Indonesia", name: "Indonesian" },
+  { value: "vi-VN", label: "Tiếng Việt (Vietnamese)", name: "Vietnamese" },
+  { value: "th-TH", label: "ไทย (Thai)", name: "Thai" },
+  { value: "zh-CN", label: "中文 (Chinese)", name: "Chinese (Simplified)" },
+  { value: "ja-JP", label: "日本語 (Japanese)", name: "Japanese" },
+  { value: "ko-KR", label: "한국어 (Korean)", name: "Korean" },
 ];
 
 const PREFS_KEY = "tv:voicePrefs";
@@ -118,15 +145,18 @@ export function setVoicePrefs(p: { replies?: boolean; lang?: string }) {
 }
 
 // ---- speaking -------------------------------------------------------------------------------
-// A clear English voice: the browser's natural / online ones first
+// A clear voice in the chosen language (its country's first, then the same language anywhere): the
+// browser's natural / online ones first. None in that language: the language's code is still set,
+// so the browser reads it as best it can
 function pickVoice(): SpeechSynthesisVoice | null {
   let voices: SpeechSynthesisVoice[] = [];
   try { voices = window.speechSynthesis.getVoices(); } catch { return null; }
-  const lang = state.lang.toLowerCase();
-  const en = voices.filter(v => v.lang.toLowerCase().startsWith("en"));
+  const lang = state.lang.toLowerCase().replace("_", "-");
+  const base = lang.split("-")[0];
+  const same = voices.filter(v => v.lang.toLowerCase().replace("_", "-").split("-")[0] === base);
   const score = (v: SpeechSynthesisVoice) =>
-    (v.lang.toLowerCase() === lang ? 4 : 0) + (/natural|neural|online/i.test(v.name) ? 3 : 0) + (/google|aria|jenny|samantha|zira|heera|neerja/i.test(v.name) ? 2 : 0) + (v.localService ? 0 : 1);
-  return en.sort((a, b) => score(b) - score(a))[0] ?? voices[0] ?? null;
+    (v.lang.toLowerCase().replace("_", "-") === lang ? 4 : 0) + (/natural|neural|online/i.test(v.name) ? 3 : 0) + (/google|aria|jenny|samantha|zira|heera|neerja/i.test(v.name) ? 2 : 0) + (v.localService ? 0 : 1);
+  return same.sort((a, b) => score(b) - score(a))[0] ?? null;
 }
 
 let speakQueue: Promise<void> = Promise.resolve();
@@ -150,7 +180,7 @@ function say(text: string, extra?: Partial<VoiceMessage>): Promise<void> {
       const u = new SpeechSynthesisUtterance(text);
       const v = pickVoice();
       if (v) u.voice = v;
-      u.lang = v?.lang || state.lang;
+      u.lang = v?.lang || state.lang;   // (no voice for it: the language still tells the browser how to read it)
       u.rate = 1.03;
       u.onstart = () => { set({ speaking: true }); pauseForSpeaking(); };
       u.onboundary = (e: SpeechSynthesisEvent) => {
@@ -283,8 +313,17 @@ const spokenDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateStr
 type Confirm = { intent: Intent; then: Intent[]; at: number; reply?: string };   // reply: the AI's words, said once it's done
 let confirmPending: Confirm | null = null;
 const CONFIRM_MS = 120_000;
-const YES = /^(yes|yeah|yep|yup|sure|ok|okay|do it|go ahead|confirm|please do|correct|go for it|create it|absolutely)\b/;
-const NO = /^(no|nope|nah|don'?t|cancel|stop|never ?mind|forget it|abort|wait)\b/;
+// Yes / no in the languages it speaks (the answer's first word or phrase)
+const YES_WORDS = ["yes", "yeah", "yep", "yup", "sure", "ok", "okay", "do it", "go ahead", "confirm", "please do", "correct", "go for it", "create it", "absolutely",
+  "हाँ", "हां", "हा", "जी", "जी हाँ", "ठीक है", "कर दो", "होय", "हो", "हा ना", "હા", "হ্যাঁ", "ஆம்", "சரி", "అవును", "సరే", "ಹೌದು", "ಸರಿ", "അതെ", "ശരി", "ਹਾਂ", "جی", "ہاں",
+  "haan", "han", "ha", "theek hai", "sí", "si", "claro", "vale", "sim", "oui", "d'accord", "ja", "jawohl", "certo", "да", "evet", "tamam", "نعم", "أجل", "ya", "iya", "có", "vâng",
+  "ใช่", "ตกลง", "是", "好", "对", "可以", "はい", "うん", "네", "예"];
+const NO_WORDS = ["no", "nope", "nah", "don't", "dont", "cancel", "stop", "never mind", "nevermind", "forget it", "abort", "wait",
+  "नहीं", "नही", "ना", "मत", "रहने दो", "नको", "ના", "না", "இல்லை", "వద్దు", "కాదు", "ಬೇಡ", "ಇಲ್ಲ", "വേണ്ട", "ഇല്ല", "ਨਹੀਂ", "نہیں",
+  "nahi", "nahin", "mat", "non", "nein", "não", "nao", "нет", "hayır", "hayir", "لا", "tidak", "jangan", "không", "ไม่", "不", "不要", "いいえ", "いや", "아니요", "아니"];
+const startsWithWord = (words: string[]) => (t: string) => words.some(w => t === w || t.startsWith(w + " "));
+const YES = { test: startsWithWord(YES_WORDS) };
+const NO = { test: startsWithWord(NO_WORDS) };
 function askConfirm(question: string, intent: Intent) {
   confirmPending = { intent, then: [], at: Date.now() };
   set({ pending: { question, options: ["Yes", "No"] } });
@@ -660,6 +699,7 @@ async function askAI(text: string) {
         commands: voiceCommands().map(c => c.id),
         functions: voiceFunctions().map(f => f.signature),
         collab: collab.get().room ? { name: collab.get().room!.name, role: collab.get().room!.role } : null,
+        lang: state.lang, language: VOICE_LANGS.find(l => l.value === state.lang)?.name ?? "English",
       } }),
     });
     const data = await res.json().catch(() => ({}));
@@ -693,7 +733,7 @@ export function handleText(text: string) {
   if (confirmPending && Date.now() - confirmPending.at > CONFIRM_MS) clearConfirm();
   if (confirmPending) {
     const c = confirmPending;
-    const low = t.toLowerCase().replace(/[.!?,]+/g, " ").trim();
+    const low = t.toLowerCase().replace(/[.!?,।。！？、]+/g, " ").replace(/\s+/g, " ").trim();
     if (YES.test(low)) {
       clearConfirm();
       queue(() => runChain([c.intent, ...c.then], c.intent.kind === "command" ? c.reply : undefined, true));
