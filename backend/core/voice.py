@@ -36,6 +36,7 @@ MAX_ACTIONS = 8          # instructions given in one go, done one after another
 INTERVALS = {"1min", "5min", "15min", "30min", "45min", "1h", "2h", "4h", "1day", "1week", "1month"}
 PANELS = {"watchlist", "alerts", "object_tree", "collab", "backtest_sessions"}
 SYMBOL = re.compile(r"^[A-Z0-9][A-Z0-9./:-]{0,19}$")
+LANGUAGE = re.compile(r"^[A-Za-z ()]{2,40}$")
 # Forex, metals and crypto are BASE/QUOTE on the site; "EURUSD" from the AI becomes "EUR/USD"
 CURRENCIES = {"USD", "EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF", "XAU", "XAG", "BTC", "ETH", "SGD", "HKD", "INR", "CNH", "ZAR", "MXN", "TRY", "SEK", "NOK"}
 
@@ -325,6 +326,11 @@ def ask(request, uid):
         sym=str(ctx.get("symbol") or "unknown")[:20], tf=str(ctx.get("interval") or "unknown")[:10],
         price=f", last price {ctx['price']}" if isinstance(ctx.get("price"), (int, float)) else "")
     context_line += " " + (f"In the collab {str(room.get('name'))[:80]!r} as {str(room.get('role'))[:10]}." if room else "Not in a collab.")
+    # The language they speak (the panel's choice): the reply in it, the actions as listed
+    language = str(ctx.get("language") or "").strip()
+    if language and LANGUAGE.match(language) and language != "English":
+        context_line += (f"\nThe trader speaks {language}: write reply (and any question) in {language}, in its own script, as a native"
+                         " speaker would say it aloud; keep action types, ids, names, symbols and dates exactly as listed (English).")
     if commands:
         context_line += "\nSite commands (use the id exactly): " + " ".join(commands)
     if signatures:
