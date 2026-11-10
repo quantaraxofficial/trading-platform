@@ -459,6 +459,10 @@ function buildStrategyReport(ctx: Ctx): PineStrategyReport {
   if (ctx.backtestFrom !== undefined) {
     st.equityCurve = st.equityCurve.filter((p) => p.time >= ctx.backtestFrom!);
   }
+  // …and everything after its end (a custom period that ends before the last bar)
+  if (ctx.backtestTo !== undefined) {
+    st.equityCurve = st.equityCurve.filter((p) => p.time <= ctx.backtestTo!);
+  }
   const wins = trades.filter((t) => t.netPnl > 0);
   const losses = trades.filter((t) => t.netPnl < 0);
   const breakevens = trades.filter((t) => t.netPnl === 0);

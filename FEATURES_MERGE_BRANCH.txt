@@ -130,6 +130,9 @@ Chart interactions
     behind the open dialog; Cancel / Esc put the opening settings back, Ok keeps them
   - Strategy Tester custom date range can start before the chart's first loaded bar (e.g.
     January 2025 on a 2h chart); the older bars are loaded for the backtest
+  - A custom testing period shows as picked; when it reaches before the data there is, a dialog
+    says how much data there is (from / to, years, bars on the timeframe) or that the backtest's
+    loading limit was reached, and offers to test the covered period
   - Backtest fills as TradingView's broker emulator: strategy(process_orders_on_close = true)
     fills market entries at the signal bar's close; when a stop and a limit both lie inside one
     bar, the one met first on TradingView's assumed path (open -> nearer extreme -> other) fills
