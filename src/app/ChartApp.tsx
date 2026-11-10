@@ -45,6 +45,7 @@ import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
 import BacktestSessionBar from "./components/BacktestSessionBar";
 import BacktestSessionsPanel from "./components/BacktestSessionsPanel";
 import EconomicCalendarPanel from "./components/EconomicCalendarPanel";
+import { calendarDock, defaultCalendarWidth, toggleCalendar } from "./lib/economicCalendar";
 import { saveReplay, setSavedReplayUser } from "./lib/savedReplay";
 import { layoutStore, layouts, ensureLayout, readSharedLayout, newLayout } from "./lib/layoutStore";
 import { LAYOUTS, LAYOUT_ROWS } from "./lib/chartLayouts";
@@ -193,7 +194,18 @@ function AppLayout() {
     window.addEventListener("resize", on);
     return () => window.removeEventListener("resize", on);
   }, []);
-  const splitW = pineVisible && pine.mode === "split" && !pine.maximized ? (pine.width || defaultPineWidth()) : 0;
+  // The Calendar window (right toolbar → Calendars): an overlay, or a split view like the Pine Editor's.
+  // One of the two at a time: opening one collapses the other
+  const cal = calendarDock.useValue();
+  const calVisible = cal.open && !cal.collapsed;
+  const prevPineVisible = useRef(pineVisible), prevCalVisible = useRef(calVisible);
+  useEffect(() => {
+    if (calVisible && !prevCalVisible.current && pineVisible && pine.mode !== "bottom") pineDock.set({ collapsed: true });
+    else if (pineVisible && !prevPineVisible.current && calVisible && pine.mode !== "bottom") calendarDock.set({ collapsed: true });
+    prevPineVisible.current = pineVisible; prevCalVisible.current = calVisible;
+  }, [pineVisible, calVisible, pine.mode]);
+  const calSplitW = calVisible && cal.mode === "split" && !cal.maximized ? (cal.width || defaultCalendarWidth()) : 0;
+  const splitW = Math.max(calSplitW, pineVisible && pine.mode === "split" && !pine.maximized ? (pine.width || defaultPineWidth()) : 0);
   const layoutW = winW - splitW;
   const layoutWidthClass = splitW ? `${layoutW <= 1150 ? "tv-lw-1150" : ""} ${layoutW <= 1000 ? "tv-lw-1000" : ""}` : "";
   // Lets the on-chart Pine script legend row's icons reopen the editor
@@ -1072,8 +1084,6 @@ function AppLayout() {
             <CollabPanel onShare={() => setShowCollabDialog(true)} />
           ) : activeSidebarPanel === "backtest_sessions" ? (
             <BacktestSessionsPanel />
-          ) : activeSidebarPanel === "economic_calendar" ? (
-            <EconomicCalendarPanel symbol={symbol} />
           ) : (
             <RightToolbar symbol={symbol} onSymbolChange={setSymbol} />
           )}
@@ -1085,6 +1095,7 @@ function AppLayout() {
           <RightSidebar
             activePanel={showRightPanel ? activeSidebarPanel : null}
             onPanelChange={(id) => {
+              if (id === "economic_calendar") { toggleCalendar(); return; }
               if (id === activeSidebarPanel && showRightPanel && !dockedTicketOpen) { setRightPanel(false); return; }
               setActiveSidebarPanel(id);
               setRightPanel(true);
@@ -1102,6 +1113,9 @@ function AppLayout() {
         <BottomPanel theme={theme} interval={selectedInterval} />
       </footer>
 
+      {cal.open && (
+        <EconomicCalendarPanel theme={theme === "dark" ? "dark" : "light"} onClose={() => calendarDock.set({ open: false, collapsed: false, maximized: false })} />
+      )}
       {showPineEditor && (
         <PineEditorPanel
           key={pineOpenRequest?.key ?? "default"}
