@@ -139,7 +139,8 @@ export function inverseFairValueGaps(bars: Bar[], from: number, opts: { max?: nu
     for (let j = flipped + 1; j <= last && !over; j++) {
       if (side === "bear" ? bars[j].close > g.top : bars[j].close < g.bottom) over = true;
     }
-    if (!over) live.push({ kind: "ifvg", side, from: flipped, to: last, top: g.top, bottom: g.bottom, label: side === "bull" ? "Bullish IFVG" : "Bearish IFVG" });
+    // (drawn from the gap itself, where it formed, on to the latest bar)
+    if (!over) live.push({ kind: "ifvg", side, from: g.at, to: last, top: g.top, bottom: g.bottom, label: side === "bull" ? "Bullish IFVG" : "Bearish IFVG" });
   }
   return live.slice(-(opts.max ?? 6));
 }
