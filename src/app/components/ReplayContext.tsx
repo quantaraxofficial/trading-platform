@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from "react";
 import { requireFeature, useAccess } from "@/lib/access";
-import { LiveReplayFeed, liveReplaySupported, type ReplayStep } from "../lib/replayLive";
+import { LiveReplayFeed, liveReplaySupported, ticksFrom, type ReplayStep } from "../lib/replayLive";
 import { getChartInfo } from "../lib/chartBars";
 
 export interface CandleData {
@@ -188,7 +188,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
       if (f && seriesRef.current) { try { seriesRef.current.update({ ...f.bar }); } catch { /* the series is being replaced */ } }
       setReplayIndex(replayIndexRef.current);
     }
-    if (feed.remaining < 400 && !feed.done && !feed.busy) void feed.more();
+    if (feed.remaining < 5000 && !feed.done && !feed.busy) void feed.more();
   };
   const liveTickRef = useRef(liveTick);
   liveTickRef.current = liveTick;
@@ -284,7 +284,13 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     setLiveError(null);
     if (!LEGACY_SPEEDS.includes(speedRef.current)) { speedRef.current = 1; setReplaySpeedState(1); }
     applyDataUpToIndex(clamped);
-    setAskLive(premiumRef.current && liveReplaySupported(getChartInfo()?.symbol || ""));
+    // Asked when there are ticks to replay from here (the replay "like the live market" is ticks only)
+    setAskLive(false);
+    const sym = getChartInfo()?.symbol || "";
+    const from = data[clamped + 1]?.time;
+    if (premiumRef.current && liveReplaySupported(sym) && from) {
+      void ticksFrom(sym, from).then(next => { if (next !== null && next - from < 3600 && (window as any).__replayActive) setAskLive(true); });
+    }
   }, [applyDataUpToIndex]);
 
   // `nextData`: the chart's data when it changed under the replay (a new timeframe or symbol), so
@@ -462,21 +468,30 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     }
     const sym = getChartInfo()?.symbol || "";
     if (!premiumRef.current) { setLiveError("Replay like the live market is for premium accounts."); return; }
-    if (!liveReplaySupported(sym)) { setLiveError("This symbol has no second-by-second history: it replays bar by bar."); return; }
+    if (!liveReplaySupported(sym)) { setLiveError("This symbol has no tick data: it replays bar by bar."); return; }
     feedRef.current = new LiveReplayFeed(sym);
     setLiveFlag(true);
     if (!LIVE_SPEEDS.includes(speedRef.current)) { speedRef.current = 10; setReplaySpeedState(10); }
     await positionLive(replayIndexRef.current);
     if (!feedRef.current?.steps.length) {
+      const first = feedRef.current?.firstAfter ?? null;
       feedRef.current = null;
       setLiveFlag(false);
-      setLiveError("There's no second-by-second data from this point: it replays bar by bar.");
+      setLiveError(first
+        ? `No tick data at this point: tick-by-tick replay is available from ${new Date(first * 1000).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.`
+        : "No tick data at this point: it replays bar by bar.");
       if (!LEGACY_SPEEDS.includes(speedRef.current)) { speedRef.current = 1; setReplaySpeedState(1); }
     }
     if (wasPlaying) startInterval();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applyDataUpToIndex, startInterval]);
   const dismissAskLive = useCallback(() => setAskLive(false), []);
+  // (a message about live replay goes after a while)
+  useEffect(() => {
+    if (!liveError) return;
+    const id = setTimeout(() => setLiveError(null), 7000);
+    return () => clearTimeout(id);
+  }, [liveError]);
 
   // The replay's "now" (unix s), for what counts down to it (the news countdown on the time scale):
   // the live replay's clock, or bar by bar the end of the last bar shown

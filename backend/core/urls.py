@@ -25,6 +25,7 @@ urlpatterns = [
     path('live/last-prices/', views.get_last_prices, name='live_last_prices'),
     path('live/candles/', market.candles, name='live_candles'),
     path('live/ingest/', market.ingest, name='live_ingest'),
+    path('live/ticks/', market.ticks, name='live_ticks'),
     # Analytics (core/analytics.py): saved backtests, backtest sessions, trade journals
     path('analytics/<str:uid>/backtests/', analytics.backtests, name='analytics_backtests'),
     path('analytics/<str:uid>/backtests/<int:bid>/', analytics.backtest, name='analytics_backtest'),

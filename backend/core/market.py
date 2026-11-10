@@ -44,6 +44,19 @@ LIVE: dict[str, dict] = {}
 _lock = threading.Lock()
 _cache: dict[tuple, tuple[float, list]] = {}
 
+# Raw ticks (bid / ask, to the millisecond), kept for the replay "like the live market": every tick
+# the collector sends is stored, in batches (ClickHouse wants few large inserts, not four small ones
+# a second), for TICKS_TTL_DAYS
+TICKS_TTL_DAYS = int(os.environ.get("TICKS_TTL_DAYS", "180"))
+TICK_FLUSH_S = 5.0
+TICK_FLUSH_ROWS = 20000
+MAX_TICKS_SERVED = 60000          # one /live/ticks/ answer
+MAX_TICK_WINDOW_S = 4 * 3600
+_tick_buf: list[str] = []
+_tick_lock = threading.Lock()
+_tick_flushed = 0.0
+_ticks_ready = False
+
 
 def group_of(symbol: str) -> str:
     return f"ticks.{symbol}"
@@ -139,6 +152,47 @@ def _ensure_bars15(ch) -> None:
     r = ch._session.post(f"{ch._base}/", params={"database": _db()}, data=sql.encode(), timeout=30)
     r.raise_for_status()
     _bars15_ready = True
+
+
+def _ensure_ticks(ch) -> None:
+    """The raw ticks' table (made the first time it's needed). Re-sent ticks (a backfill over what
+    the collector already sent) fold into one row."""
+    global _ticks_ready
+    if _ticks_ready:
+        return
+    sql = (f"CREATE TABLE IF NOT EXISTS {_db()}.ticks_raw ("
+           " symbol LowCardinality(String), ts DateTime64(3, 'UTC') CODEC(Delta, ZSTD(3)),"
+           " bid Float64 CODEC(Gorilla, ZSTD(1)), ask Float64 CODEC(Gorilla, ZSTD(1)))"
+           " ENGINE = ReplacingMergeTree() ORDER BY (symbol, ts, bid, ask)"
+           f" TTL toDateTime(ts) + toIntervalDay({TICKS_TTL_DAYS}) SETTINGS index_granularity = 8192")
+    r = ch._session.post(f"{ch._base}/", params={"database": _db()}, data=sql.encode(), timeout=30)
+    r.raise_for_status()
+    _ticks_ready = True
+
+
+def _store_ticks(sym: str, ticks: list, force: bool = False) -> None:
+    """Adds ticks to the batch; writes the batch when it's big or old enough"""
+    global _tick_flushed
+    with _tick_lock:
+        _tick_buf.extend(f"{sym}\t{t / 1000:.3f}\t{b}\t{a}" for t, b, a in ticks if b and b > 0)
+        now = time.time()
+        if not _tick_buf or (not force and len(_tick_buf) < TICK_FLUSH_ROWS and now - _tick_flushed < TICK_FLUSH_S):
+            return
+        rows = _tick_buf[:]
+        _tick_buf.clear()
+        _tick_flushed = now
+    try:
+        ch = _ch()
+        _ensure_ticks(ch)
+        r = ch._session.post(f"{ch._base}/", params={"database": _db(), "query": f"INSERT INTO {_db()}.ticks_raw FORMAT TabSeparated"},
+                             data=("\n".join(rows) + "\n").encode(), timeout=30)
+        r.raise_for_status()
+    except Exception as e:
+        import logging
+        logging.getLogger("core.market").warning("ticks not stored (%d): %s", len(rows), e)
+        with _tick_lock:
+            if len(_tick_buf) < 200000:       # try again with the next batch
+                _tick_buf[:0] = rows
 
 
 def _span(kind: str, n: int) -> int:
@@ -303,7 +357,8 @@ def ingest(request):
     (where to resume from).
     POST {"symbol", "ticks": [[t_ms, bid, ask], …], "bar": [t_ms, o, h, l, c, n] (open bar),
           "closed": [[t_ms, o, h, l, c, n], …], "bar15", "closed15" (the same for 15-second bars)}
-    -> closed bars to ClickHouse, ticks to the charts."""
+    -> closed bars to ClickHouse, ticks to the charts and to the raw ticks' table.
+    POST {"symbol", "ticks", "backfill": true} -> past ticks to the raw ticks' table only."""
     if not _authorized(request):
         return Response({"error": "forbidden"}, status=status.HTTP_403_FORBIDDEN)
     if request.method == "GET":
@@ -344,6 +399,13 @@ def ingest(request):
             return Response({"error": "store failed"}, status=status.HTTP_502_BAD_GATEWAY)
         _cache.clear()
 
+    # A backfill of past ticks (pipeline/tick_backfill.py): stored, not sent to the charts as live
+    if d.get("backfill"):
+        _store_ticks(sym, ticks, force=True)
+        return Response({"ok": True, "ticks_stored": len(ticks)})
+    if ticks:
+        _store_ticks(sym, ticks)
+
     with _lock:
         live = LIVE.setdefault(sym, {"bar": None, "bid": None, "ask": None, "t": 0, "rx": 0})
         live["rx"] = time.time()
@@ -362,3 +424,41 @@ def ingest(request):
         if layer is not None:
             async_to_sync(layer.group_send)(group_of(sym), {"type": "tick.message", "data": msg})
     return Response({"ok": True, "stored": len(closed), "stored15": len(closed15)})
+
+
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def ticks(request):
+    """?symbol=XAUUSD&start=<unix s>[&end=<unix s>] -> {"ticks": [[t_ms, bid], …] oldest first, at most
+    MAX_TICKS_SERVED and MAX_TICK_WINDOW_S from start; "to": unix s they cover up to (the next
+    request starts there); "next": the first stored tick at or after start (null: none), so a
+    replay knows where tick data begins}"""
+    sym = (request.query_params.get("symbol") or "").strip().upper().replace("/", "")
+    if not SYMBOL_RE.match(sym):
+        return Response({"error": "bad symbol"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        start = float(request.query_params["start"])
+        end = float(request.query_params.get("end") or start + MAX_TICK_WINDOW_S)
+    except (KeyError, ValueError):
+        return Response({"error": "start (and end) are unix seconds"}, status=status.HTTP_400_BAD_REQUEST)
+    end = min(end, start + MAX_TICK_WINDOW_S)
+    if end <= start:
+        return Response({"error": "end must be after start"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        ch = _ch()
+        _ensure_ticks(ch)
+        _store_ticks(sym, [], force=True)          # what's waiting in the batch is servable too
+        base = f"FROM {_db()}.ticks_raw FINAL WHERE symbol = '{sym}'"
+        rows = ch.query(f"SELECT toUnixTimestamp64Milli(ts) AS t, bid {base} AND ts >= toDateTime64({start:.3f}, 3, 'UTC') "
+                        f"AND ts < toDateTime64({end:.3f}, 3, 'UTC') ORDER BY ts LIMIT {MAX_TICKS_SERVED}")
+        first = ch.query(f"SELECT toUnixTimestamp64Milli(min(ts)) AS t {base} AND ts >= toDateTime64({start:.3f}, 3, 'UTC')")
+    except Exception as e:
+        import logging
+        logging.getLogger("core.market").warning("ticks unavailable for %s: %s", sym, e)
+        return Response({"error": "ticks unavailable"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    out = [[int(r["t"]), float(r["bid"])] for r in rows]
+    nxt = int(first[0]["t"]) if first and first[0].get("t") not in (None, "", 0, "0") else None
+    # (a full answer stops at its last tick: the next request starts just after it)
+    covered = out[-1][0] / 1000 + 0.001 if len(out) >= MAX_TICKS_SERVED else end
+    return Response({"ticks": out, "to": covered, "next": nxt / 1000 if nxt else None})

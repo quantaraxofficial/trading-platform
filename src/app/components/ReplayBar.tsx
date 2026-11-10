@@ -502,7 +502,7 @@ function LiveChoice({ onPick }: { onPick: (live: boolean) => void }) {
           <button type="button" aria-label="Close" onClick={() => onPick(false)} style={{ width: 28, height: 28, border: "none", background: "transparent", color: "var(--tv-color-text)", cursor: "pointer", fontSize: 18 }}>✕</button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {option(true, "Like the live market", "Each candle forms the way it did at the time: price moves inside it second by second, at the market's own pace (1× is real time). Orders fill at the price of that moment.")}
+          {option(true, "Like the live market", "Each candle forms from the real ticks of the time: every price change in its own order, at the market's own pace (1× is real time). Orders fill at the price of that moment.")}
           {option(false, "Bar by bar", "Whole candles appear one at a time, as before.")}
         </div>
       </div>

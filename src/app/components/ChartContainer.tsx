@@ -864,10 +864,14 @@ export default function ChartContainer({
       const data = fullDataRef.current;
       const series = candleSeriesRef.current;
       const chart = chartRef.current;
-      if (!data || data.length === 0 || !series || !chart || modeRef.current !== 'idle') { if (countdownRef.current) setCountdown(null); return; }
-      const last = data[data.length - 1];
+      // (a replay "like the live market" counts down its forming candle on the replay's clock)
+      const replayLive = modeRef.current !== 'idle' && (window as any).__replayLive && typeof (window as any).__replayNow === 'number';
+      if (!data || data.length === 0 || !series || !chart || (modeRef.current !== 'idle' && !replayLive)) { if (countdownRef.current) setCountdown(null); return; }
+      const shown = replayLive ? (series.data() as any[]) : null;
+      const last = replayLive ? shown![shown!.length - 1] : data[data.length - 1];
+      if (!last) { if (countdownRef.current) setCountdown(null); return; }
       const barEnd = last.time + Math.floor(getIntervalMs(intervalRef.current) / 1000);
-      const remain = barEnd - toChartTime(symbolRef.current, Date.now());
+      const remain = Math.floor(barEnd - (replayLive ? (window as any).__replayNow : toChartTime(symbolRef.current, Date.now())));
       const y = series.priceToCoordinate(last.close);
       const width = mainPriceScale(chart).width();
       // Nothing to count down once the bar has closed (e.g. the market is shut)
@@ -890,9 +894,12 @@ export default function ChartContainer({
     chart?.timeScale().subscribeVisibleLogicalRangeChange(schedule);
     // Each live tick moves the last-price label: the countdown under it moves in the same frame
     window.addEventListener('tv:live-price', schedule);
+    // (a live replay's ticks move the price and its clock)
+    window.addEventListener('tv:replay-tick', schedule);
     return () => {
       clearInterval(id);
       window.removeEventListener('tv:live-price', schedule);
+      window.removeEventListener('tv:replay-tick', schedule);
       cancelAnimationFrame(frame);
       try { chart?.timeScale().unsubscribeVisibleLogicalRangeChange(schedule); } catch { /* chart gone */ }
     };
