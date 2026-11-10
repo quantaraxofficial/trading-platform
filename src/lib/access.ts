@@ -19,6 +19,9 @@ export interface Access extends Plan {
   days_left: number;
   unlimited?: boolean;            // made "Unlimited" in admin
   locked: string[];               // locked for them when it was read
+  // The premium extras their plan includes (the plan "without voice & live replay" in admin has
+  // them off); missing (an older server): included with premium
+  extras?: { voice?: boolean; live_replay?: boolean };
 }
 
 let access: Access | null = null;
@@ -160,6 +163,14 @@ function snapshot() {
   return snap;
 }
 const serverSnap = { a: null, active: false, plan: null };
+
+// A premium extra (the voice assistant, the replay like the live market): premium, and their plan
+// includes it
+export type PremiumExtra = "voice" | "live_replay";
+export function useExtra(key: PremiumExtra): boolean {
+  const { access: a, active } = useAccess();
+  return active && a?.extras?.[key] !== false;
+}
 
 // `plan`: what's limited for them now (null: not known yet, nothing limited)
 export function useAccess(): { access: Access | null; active: boolean; plan: Plan | null } {

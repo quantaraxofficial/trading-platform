@@ -22,7 +22,7 @@ import { BacktestSessionsIcon } from "./BacktestSessionsPanel";
 import { calendarDock, toggleCalendar } from "../lib/economicCalendar";
 import { VoiceAssistantIcon } from "./VoicePanel";
 import { useVoice, setVoiceUser } from "../lib/voice/assistant";
-import { useAccess } from "@/lib/access";
+import { useExtra } from "@/lib/access";
 import { useAuth } from "@/context/AuthContext";
 
 // Trading Agent — a small chat-bubble glyph (1px lines like the TradingView icons)
@@ -72,7 +72,7 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
   const isActive = (id: string) => activePanel === id;
   // The voice assistant (premium accounts): a red dot while it's listening (it carries on with its panel closed)
   const voiceState = useVoice();
-  const { active: voiceAllowed } = useAccess();
+  const voiceAllowed = useExtra("voice");
   const { user: voiceUser } = useAuth();
   useEffect(() => { setVoiceUser(voiceAllowed ? voiceUser?.uid ?? null : null); }, [voiceUser?.uid, voiceAllowed]);
   const panels = [

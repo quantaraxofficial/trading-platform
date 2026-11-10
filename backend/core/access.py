@@ -48,9 +48,13 @@ def access_of(profile):
     active = bool(until and until > now)
     days_left = max(0, (until - now).days + (1 if (until - now).seconds else 0)) if active else 0
     plan = plan_info()
+    # The premium extras an account's plan includes: everyone premium has them, except the plan
+    # without them (tier 'basic', set in admin)
+    full = active and getattr(profile, "tier", "") != "basic"
     return {"active": active, "until": int(until.timestamp() * 1000) if until else None, "days_left": days_left,
             "unlimited": active and days_left > 50 * 365,
-            "locked": [] if active else list(plan["features"]), **plan}
+            "locked": [] if active else list(plan["features"]),
+            "extras": {"voice": full, "live_replay": full}, **plan}
 
 
 def is_locked(profile, key):

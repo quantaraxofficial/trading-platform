@@ -302,7 +302,7 @@ def ask(request, uid):
     profile, denied = require_session(request, uid)
     if denied:
         return denied
-    if not access_of(profile).get("active"):
+    if not access_of(profile).get("extras", {}).get("voice"):
         return Response({"error": "premium_only"}, status=status.HTTP_403_FORBIDDEN)
     text = str(request.data.get("text") or "").strip()[:MAX_TEXT]
     if not text:

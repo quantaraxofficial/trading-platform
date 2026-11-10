@@ -117,6 +117,8 @@ class CreateAccountForm(forms.Form):
     amount = forms.CharField(max_length=40, required=False, help_text="What they paid, for your records (e.g. ₹1,500 UPI)")
     note = forms.CharField(max_length=300, required=False)
     phone = forms.CharField(max_length=20, required=False)
+    plan = forms.ChoiceField(choices=[('pro', 'Premium (everything)'), ('basic', 'Premium without voice & live replay')], initial='pro',
+                             help_text="Without voice & live replay: no voice assistant and no replay like the live market")
 
     def clean_login(self):
         v = self.cleaned_data['login']
@@ -147,7 +149,7 @@ def _extend_action(months):
 
 @admin.register(TraderProfile)
 class TraderProfileAdmin(admin.ModelAdmin):
-    list_display = ('name', 'sign_in', 'phone', 'access_status', 'access_until_col', 'created_at', 'last_login')
+    list_display = ('name', 'sign_in', 'phone', 'access_status', 'access_until_col', 'tier', 'created_at', 'last_login')
     list_filter = (AccessFilter, 'tier', 'created_at')
     search_fields = ('name', 'email', 'phone', 'uid')
     ordering = ('-created_at',)
@@ -216,7 +218,7 @@ class TraderProfileAdmin(admin.ModelAdmin):
                 ctx.update(form=form, error=f"Couldn't create the sign-in: {e}")
                 return TemplateResponse(request, "admin/core/create_account.html", ctx)
             with transaction.atomic():
-                p = TraderProfile.objects.create(uid=uid, name=d['name'], email=email, phone=d.get('phone') or '')
+                p = TraderProfile.objects.create(uid=uid, name=d['name'], email=email, phone=d.get('phone') or '', tier=d.get('plan') or 'pro')
                 if d['months'] == -1:
                     sub = access.extend(p, days=access.UNLIMITED_DAYS, amount=d.get('amount') or '', note=d.get('note') or 'Unlimited, created from admin')
                 else:

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from "react";
-import { requireFeature, useAccess } from "@/lib/access";
+import { requireFeature, useExtra } from "@/lib/access";
 import { LiveReplayFeed, liveReplaySupported, ticksFrom, type ReplayStep } from "../lib/replayLive";
 import { getChartInfo } from "../lib/chartBars";
 
@@ -118,7 +118,8 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
   // at the market's pace: replayIndex stays the last *finished* bar (indicators and saved progress
   // never see the forming one's future), the forming candle is drawn on top, and each step's price
   // goes to replay paper trading (tv:replay-ticks, a frame's at a time)
-  const { active: premium } = useAccess();
+  // (premium, and their plan includes it)
+  const premium = useExtra("live_replay");
   const premiumRef = useRef(premium);
   premiumRef.current = premium;
   const [live, setLiveState] = useState(false);
@@ -499,7 +500,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const sym = getChartInfo()?.symbol || "";
-    if (!premiumRef.current) { setLiveError("Replay like the live market is for premium accounts."); return; }
+    if (!premiumRef.current) { setLiveError("Replay like the live market isn't included in this account's plan."); return; }
     if (!liveReplaySupported(sym)) { setLiveError("This symbol has no tick data: it replays bar by bar."); return; }
     feedRef.current = new LiveReplayFeed(sym);
     setLiveFlag(true);

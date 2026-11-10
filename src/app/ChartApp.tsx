@@ -22,7 +22,7 @@ import AlertsSidebar from "./components/AlertsSidebar";
 import CreateAlertModal from "./components/CreateAlertModal";
 import ChangeIntervalModal from "./components/ChangeIntervalModal";
 import { parseInterval, intervalShort, intervalSeconds, isIntervalAvailable, SECTIONS } from "./lib/intervals";
-import { featureLimit, intervalFeature, intervalLocked, requireFeature, requireInterval, requireRoom, useAccess } from "@/lib/access";
+import { featureLimit, intervalFeature, intervalLocked, requireFeature, requireInterval, requireRoom, useAccess, useExtra } from "@/lib/access";
 import ObjectTreePanel from "./components/objectTree/ObjectTreePanel";
 import FavoritesToolbar from "./components/FavoritesToolbar";
 import PineEditorPanel from "./components/PineEditorPanel";
@@ -958,7 +958,7 @@ function AppLayout() {
   // The voice assistant (premium accounts). It can do all of these (lib/voice/registry): Quick
   // search's functions and the rest of the site's controls, re-registered every render (they use
   // the latest state), and read out the economic calendar
-  const { active: voiceAllowed } = useAccess();
+  const voiceAllowed = useExtra("voice");
   const replayApi = useReplay();
   const voiceRegister = useRef<() => void>(() => {});
   useEffect(() => { voiceRegister.current(); });

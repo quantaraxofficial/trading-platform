@@ -5,7 +5,9 @@ class TraderProfile(models.Model):
     name = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=20, blank=True, null=True)
-    tier = models.CharField(max_length=20, default='free', choices=[('free', 'Free'), ('pro', 'Pro')])
+    # (with a subscription, every tier has premium; 'basic' has it without the voice assistant and the
+    # replay like the live market: core/access.py's extras)
+    tier = models.CharField(max_length=20, default='free', choices=[('free', 'Free'), ('pro', 'Pro'), ('basic', 'Premium without voice & live replay')])
     created_at = models.DateTimeField(auto_now_add=True)
     last_login = models.DateTimeField(auto_now=True)
 

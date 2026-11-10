@@ -3,7 +3,7 @@
 import React, { useSyncExternalStore, useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useReplay, LIVE_SPEEDS, type ReplayStartMode } from "./ReplayContext";
-import { useAccess } from "@/lib/access";
+import { useExtra } from "@/lib/access";
 import { liveReplaySupported } from "../lib/replayLive";
 import ReplayDateDialog from "./ReplayDateDialog";
 import { getEarliestBarTime } from "../utils/earliestBar";
@@ -44,7 +44,7 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
     live, askLive, liveLoading, liveError, setLive, dismissAskLive,
   } = useReplay();
   // Replaying like the live market: premium accounts, on symbols with second-by-second history
-  const { active: premium } = useAccess();
+  const premium = useExtra("live_replay");
   const liveAvailable = premium && liveReplaySupported(symbol);
   // In a collab: the replay everyone follows, and whether this person is driving or following it
   const { status: collabStatus, replay: shared, replayDetached, you } = useCollab();
