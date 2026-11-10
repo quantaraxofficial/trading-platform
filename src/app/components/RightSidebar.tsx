@@ -12,14 +12,14 @@ import {
   TVProductsIcon,
   TVIndicatorsIcon,
   TVReplayIcon,
+  TVCalendarIcon,
 } from "./icons/TVIcons";
 import { useEscapeClose } from "../lib/useEscapeClose";
 import { useAlerts } from "@/context/AlertsContext";
 import { useCollab } from "../lib/collab/session";
 import { CollabIcon } from "./collab/icons";
 import { BacktestSessionsIcon } from "./BacktestSessionsPanel";
-import { EconomicCalendarIcon } from "./EconomicCalendarPanel";
-import { calendarDock } from "../lib/economicCalendar";
+import { calendarDock, toggleCalendar } from "../lib/economicCalendar";
 
 // Trading Agent — a small chat-bubble glyph (1px lines like the TradingView icons)
 function TVAgentIcon({ size = 28, ...props }: any) {
@@ -62,9 +62,10 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
   const productsRef = useRef<HTMLButtonElement>(null);
   const helpRef = useRef<HTMLButtonElement>(null);
 
-  // The Calendars button opens the Calendar window (not a panel): it's lit while that's open
+  // Calendars (below Pine, where TradingView keeps it) opens the Calendar window: lit while it's open
   const calendar = calendarDock.useValue();
-  const isActive = (id: string) => (id === "economic_calendar" ? calendar.open && !calendar.collapsed : activePanel === id);
+  const calendarOn = calendar.open && !calendar.collapsed;
+  const isActive = (id: string) => activePanel === id;
   const panels = [
     { id: "watchlist", icon: <TVWatchlistIcon size={28} />, tooltip: "Watchlist, details and news" },
     { id: "alerts", icon: <TVAlertsIcon size={28} />, tooltip: "Alerts" },
@@ -73,8 +74,6 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     { id: "collab", icon: <CollabIcon size={28} />, tooltip: inCollab ? "Collab: group chat and voice" : "Collabs" },
     // Your backtest sessions: one clicked opens in a new tab, carrying on where it was left
     { id: "backtest_sessions", icon: <BacktestSessionsIcon size={28} />, tooltip: "Backtest sessions" },
-    // The economic calendar: the week's news events, by importance and currency
-    { id: "economic_calendar", icon: <EconomicCalendarIcon size={28} />, tooltip: "Calendars" },
   ];
 
   const i18 = { size: 18, strokeWidth: 1.5 };
@@ -131,6 +130,10 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
         <div className="tv-tooltip-container">
           <button className={`tv-rt-btn ${pineOpen ? "active" : ""}`} onClick={() => onOpenPineEditor?.()} aria-label="Pine" aria-pressed={pineOpen}><TVPineIcon size={28} /></button>
           {tooltip("Pine")}
+        </div>
+        <div className="tv-tooltip-container">
+          <button className={`tv-rt-btn ${calendarOn ? "active" : ""}`} onClick={toggleCalendar} aria-label="Calendars" aria-pressed={calendarOn}><TVCalendarIcon size={28} /></button>
+          {tooltip("Calendars")}
         </div>
         <div className="tv-tooltip-container">
           <button className="tv-rt-btn" onClick={() => window.dispatchEvent(new CustomEvent("tv:open-feedback"))} aria-label="Send feedback"><TVAgentIcon size={28} /></button>

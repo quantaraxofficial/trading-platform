@@ -25,17 +25,6 @@ import {
   type CalendarTimezone, type EconEvent, type EconResult, type Impact,
 } from "../lib/economicCalendar";
 
-export function EconomicCalendarIcon({ size = 28 }: { size?: number }) {
-  // A calendar page, in the toolbar's 1px line style
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" strokeLinecap="round" aria-hidden>
-      <rect x="5.5" y="7.5" width="17" height="15" rx="1.5" />
-      <path d="M5.5 11.5h17M10 5.5v4M18 5.5v4" />
-      <path d="M9 15h2M13 15h2M17 15h2M9 18.5h2M13 18.5h2" />
-    </svg>
-  );
-}
-
 const FONT = "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif";
 function palette(dark: boolean) {
   return dark ? {

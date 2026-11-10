@@ -45,7 +45,7 @@ import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
 import BacktestSessionBar from "./components/BacktestSessionBar";
 import BacktestSessionsPanel from "./components/BacktestSessionsPanel";
 import EconomicCalendarPanel from "./components/EconomicCalendarPanel";
-import { calendarDock, defaultCalendarWidth, toggleCalendar } from "./lib/economicCalendar";
+import { calendarDock, defaultCalendarWidth } from "./lib/economicCalendar";
 import { saveReplay, setSavedReplayUser } from "./lib/savedReplay";
 import { layoutStore, layouts, ensureLayout, readSharedLayout, newLayout } from "./lib/layoutStore";
 import { LAYOUTS, LAYOUT_ROWS } from "./lib/chartLayouts";
@@ -1095,7 +1095,6 @@ function AppLayout() {
           <RightSidebar
             activePanel={showRightPanel ? activeSidebarPanel : null}
             onPanelChange={(id) => {
-              if (id === "economic_calendar") { toggleCalendar(); return; }
               if (id === activeSidebarPanel && showRightPanel && !dockedTicketOpen) { setRightPanel(false); return; }
               setActiveSidebarPanel(id);
               setRightPanel(true);
