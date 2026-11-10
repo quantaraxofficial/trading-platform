@@ -243,6 +243,15 @@ export function TVObjectTreeIcon({ size = 28, ...props }: any) {
   return <TvGlyph size={size} rest={props} viewBox="8 8 28 28" lines={["M22.5 12 L11.8 18.8 L22.5 24.5 L33.5 18.8 Z", "M11.3 24.2 L22.6 31 L33.8 24.2"]} />;
 }
 
+// Calendars — TradingView's own glyph (a calendar page with two rings), filled, in the 44px button
+export function TVCalendarIcon({ size = 28, ...props }: any) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="8 8 28 28" width={size} height={size} aria-hidden {...props}>
+      <path fill="currentColor" fillRule="evenodd" d="M15 11h2v4h-2v-4Zm-1 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1h8v-1a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1h1a3 3 0 0 1 3 3v16a3 3 0 0 1-3 3H13a3 3 0 0 1-3-3V15a3 3 0 0 1 3-3h1v-1Zm4 2h8v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-2h1a2 2 0 0 1 2 2v4H11v-4c0-1.1.9-2 2-2h1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-2Zm-7 7v11c0 1.1.9 2 2 2h18a2 2 0 0 0 2-2V20H11Zm18-9h-2v4h2v-4Z" />
+    </svg>
+  );
+}
+
 // Help Center — a question mark in a circle
 export function TVHelpIcon({ size = 28, ...props }: any) {
   return <TvGlyph size={size} rest={props} viewBox="8 8 28 28" lines={[

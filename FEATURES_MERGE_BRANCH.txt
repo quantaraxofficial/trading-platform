@@ -544,7 +544,7 @@ Posting signals out
 ======================================================================
 17b. ECONOMIC CALENDAR
 ======================================================================
-  - Calendar window like TradingView's (right toolbar → Calendars): over the right of the window
+  - Calendar window like TradingView's (Calendars button with TradingView's icon, below Pine): over the right of the window
     or in split view beside the layout (like the Pine Editor), resizable, collapse / close /
     maximize; Escape closes it. Today, a week picker, previous / next week; cards for the week's
     days with their event counts (click to jump, the day in view highlighted, today underlined);

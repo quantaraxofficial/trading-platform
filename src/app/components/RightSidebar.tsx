@@ -12,6 +12,7 @@ import {
   TVProductsIcon,
   TVIndicatorsIcon,
   TVReplayIcon,
+  TVCalendarIcon,
 } from "./icons/TVIcons";
 import { useEscapeClose } from "../lib/useEscapeClose";
 import { useAlerts } from "@/context/AlertsContext";
@@ -20,8 +21,7 @@ import { CollabIcon } from "./collab/icons";
 import { useDms } from "../lib/collab/dms";
 import { useNotifications } from "../community/NotificationsPanel";
 import { BacktestSessionsIcon } from "./BacktestSessionsPanel";
-import { EconomicCalendarIcon } from "./EconomicCalendarPanel";
-import { calendarDock } from "../lib/economicCalendar";
+import { calendarDock, toggleCalendar } from "../lib/economicCalendar";
 import { VoiceAssistantIcon } from "./VoicePanel";
 import { useVoice, setVoiceUser } from "../lib/voice/assistant";
 import { useAuth } from "@/context/AuthContext";
@@ -73,9 +73,10 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
   const productsRef = useRef<HTMLButtonElement>(null);
   const helpRef = useRef<HTMLButtonElement>(null);
 
-  // The Calendars button opens the Calendar window (not a panel): it's lit while that's open
+  // Calendars (below Pine, where TradingView keeps it) opens the Calendar window: lit while it's open
   const calendar = calendarDock.useValue();
-  const isActive = (id: string) => (id === "economic_calendar" ? calendar.open && !calendar.collapsed : activePanel === id);
+  const calendarOn = calendar.open && !calendar.collapsed;
+  const isActive = (id: string) => activePanel === id;
   const panels = [
     { id: "watchlist", icon: <TVWatchlistIcon size={28} />, tooltip: "Watchlist, details and news" },
     { id: "alerts", icon: <TVAlertsIcon size={28} />, tooltip: "Alerts" },
@@ -88,8 +89,6 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     { id: "notifications", icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width={28} height={28} fill="none" stroke="currentColor" aria-hidden><path d="M14 6.5a5 5 0 0 0-5 5v3.5l-1.5 3h13l-1.5-3v-3.5a5 5 0 0 0-5-5Z" /><path d="M12 20.5a2 2 0 0 0 4 0" /></svg>, tooltip: "Notifications" },
     // Your backtest sessions: one clicked opens in a new tab, carrying on where it was left
     { id: "backtest_sessions", icon: <BacktestSessionsIcon size={28} />, tooltip: "Backtest sessions" },
-    // The economic calendar: the week's news events, by importance and currency
-    { id: "economic_calendar", icon: <EconomicCalendarIcon size={28} />, tooltip: "Calendars" },
     // Talk to the site: spoken commands, answered aloud with subtitles (lib/voice/assistant)
     { id: "voice", icon: <VoiceAssistantIcon size={28} />, tooltip: voiceState.listening ? "Voice assistant (listening)" : "Voice assistant" },
   ];
@@ -163,6 +162,10 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
         <div className="tv-tooltip-container">
           <button className={`tv-rt-btn ${pineOpen ? "active" : ""}`} onClick={() => onOpenPineEditor?.()} aria-label="Pine" aria-pressed={pineOpen}><TVPineIcon size={28} /></button>
           {tooltip("Pine")}
+        </div>
+        <div className="tv-tooltip-container">
+          <button className={`tv-rt-btn ${calendarOn ? "active" : ""}`} onClick={toggleCalendar} aria-label="Calendars" aria-pressed={calendarOn}><TVCalendarIcon size={28} /></button>
+          {tooltip("Calendars")}
         </div>
         <div className="tv-tooltip-container">
           <button className="tv-rt-btn" onClick={() => onOpenAgent?.()} aria-label="Trading Agent"><TVAgentIcon size={28} /></button>
