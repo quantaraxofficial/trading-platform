@@ -310,6 +310,9 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   // dragend's handler never runs with the real total offset (this is what
   // broke Ctrl-drag-to-clone from a hover-only, unselected shape).
   const isAnyDraggingRef = useRef(false);
+  // The drawing whose whole body is being dragged (null: none, or a handle — a Long / Short's TP or
+  // SL, a line's end): only a body drag with Ctrl/Cmd copies, as on TradingView
+  const bodyDragIdRef = useRef<string | null>(null);
   const [activelyDrawingId, setActivelyDrawingId] = useState<string | null>(null);
   const [activeStrokePoints, setActiveStrokePoints] = useState<{ logical: number; price: number }[]>([]);
   const [activeStrokeConfig, setActiveStrokeConfig] = useState<{ stroke: string, strokeWidth: number, type: string } | null>(null);
@@ -373,7 +376,11 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   // Clones on the first update if needed (a no-op if cloneDrawingIfNeeded already fired),
   // then applies the update — previewed while the pointer is held, committed otherwise.
   const handleUpdateWithClone = useCallback((drawingId: string, updates: Partial<any>) => {
-    cloneDrawingIfNeeded(drawingId);
+    if (bodyDragIdRef.current === drawingId) cloneDrawingIfNeeded(drawingId);
+    else if (ctrlRef.current && pointerHeldRef.current && !clonedDrawingIds.current.has(`handle:${drawingId}`)) {
+      clonedDrawingIds.current.add(`handle:${drawingId}`);
+      console.info("[DrawingCopy] handle drag with Ctrl/Cmd held: no copy", { type: drawingsNowRef.current.find(d => d.id === drawingId)?.type, id: drawingId, lastPress: lastPressRef.current, mac: IS_MAC });
+    }
     if (!pointerHeldRef.current) {
       updateDrawing(drawingId, updates);
       return;
@@ -612,9 +619,10 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
       // itself (handles are anonymous Circles/Rects with no id), so this
       // naturally skips cloning when a resize handle is being dragged.
       const drawingId = e.target?.id?.();
+      bodyDragIdRef.current = drawingId || null;
       if (drawingId) cloneDrawingIfNeeded(drawingId);
     };
-    const handleAnyDragEnd = () => { isAnyDraggingRef.current = false; };
+    const handleAnyDragEnd = () => { isAnyDraggingRef.current = false; bodyDragIdRef.current = null; };
     stageRef.current?.on('dragstart', handleAnyDragStart);
     stageRef.current?.on('dragend', handleAnyDragEnd);
 
