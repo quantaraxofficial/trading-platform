@@ -2573,8 +2573,18 @@ export default function ChartContainer({
     else engine.endReplaySession();
   }, [mode]);
   useEffect(() => () => engine.endReplaySession(), []);
+  // (a replay "like the live market" sends each price as it happens instead: tv:replay-tick)
   useEffect(() => {
-    if (mode !== 'active') return;
+    const onTick = (e: Event) => {
+      const d = (e as CustomEvent).detail;
+      if (typeof d?.price === "number" && typeof d?.time === "number") engine.setReplayQuote(symbolRef.current, d.price, d.time * 1000);
+    };
+    window.addEventListener("tv:replay-tick", onTick);
+    return () => window.removeEventListener("tv:replay-tick", onTick);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (mode !== 'active' || (window as any).__replayLive) return;
     const bar = fullDataRef.current[replayIndex];
     if (!bar) return;
     const t = (bar.time as number) * 1000;
@@ -4190,7 +4200,8 @@ export default function ChartContainer({
         const sl = statusLineSettings;
         const bars = fullDataRef.current;
         const hoverIdx = hoveredBarData ? barIndexAtTime(bars, hoveredBarData.time as number) : -1;
-        const idx = hoverIdx >= 0 ? hoverIdx : bars.length - 1;
+        // (in a replay: its last bar, not the latest loaded one, which is in the replay's future)
+        const idx = hoverIdx >= 0 ? hoverIdx : mode !== 'idle' && replayIndex >= 0 ? Math.min(replayIndex, bars.length - 1) : bars.length - 1;
         const bar = idx >= 0 ? bars[idx] : null;
         const prev = idx > 0 ? bars[idx - 1] : null;
         const upColor = candleColors.upColor, downColor = candleColors.downColor;

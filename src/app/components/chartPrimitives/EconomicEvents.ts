@@ -14,6 +14,13 @@ export type EventMark = { x: number; y: number; events: EconEvent[] };
 
 const SIZE = 18, BOTTOM = 8;
 
+// Now: the real time, or in a bar replay the replay's (ReplayContext's __replayNow; null until known)
+function replayNow(): number | null {
+  const w = typeof window !== "undefined" ? (window as any) : {};
+  if (!w.__replayActive) return Date.now() / 1000;
+  return typeof w.__replayNow === "number" ? w.__replayNow : null;
+}
+
 export class EconomicEvents {
   private chart: any = null;
   private series: any = null;
@@ -62,7 +69,8 @@ export class EconomicEvents {
   }
   // Seconds until the next event, or null (the chart ticks the countdown faster when it's close)
   secondsToNext(): number | null {
-    const now = Date.now() / 1000;
+    const now = replayNow();
+    if (now === null) return null;
     const n = this.style().visible ? this.next(now) : null;
     return n ? n.time - now : null;
   }
@@ -73,7 +81,9 @@ export class EconomicEvents {
   timeAxisViews() {
     const st = this.style();
     if (!st.visible || !this.chart || !this.series) return [];
-    const now = Date.now() / 1000;
+    // (in a bar replay it counts from the replay's time)
+    const now = replayNow();
+    if (now === null) return [];
     const n = this.next(now);
     if (!n) return [];
     const data = this.series.data() as any[];
@@ -113,7 +123,7 @@ export class EconomicEvents {
           if (!st.visible || !self.chart || !self.series || !self.events.length) return;
           const data = self.series.data() as any[];
           const ts = self.chart.timeScale();
-          const now = Date.now() / 1000;
+          const now = replayNow() ?? Date.now() / 1000;
           // events on one bar share a mark
           const byBar = new Map<number, EconEvent[]>();
           for (const e of self.events) {
