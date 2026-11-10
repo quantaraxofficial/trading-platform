@@ -303,6 +303,16 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     if (wasPlaying) startInterval();
   }, [mode, isPlaying, applyDataUpToIndex, startInterval]);
 
+  // The replay's "now" (unix s), for what counts down to it (the news countdown on the time scale):
+  // the end of the last bar shown
+  useEffect(() => {
+    if (mode !== 'active') { delete (window as any).__replayNow; return; }
+    const d = fullDataRef.current;
+    const i = replayIndex;
+    if (!d[i]) return;
+    (window as any).__replayNow = d[i + 1]?.time ?? d[i].time + (i > 0 ? d[i].time - d[i - 1].time : 60);
+  }, [mode, replayIndex]);
+
   const getReplayTime = useCallback(() => {
     if (fullDataRef.current.length > 0 && replayIndexRef.current >= 0 && replayIndexRef.current < fullDataRef.current.length) {
       return fullDataRef.current[replayIndexRef.current].time;
