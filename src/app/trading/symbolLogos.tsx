@@ -64,6 +64,17 @@ const FLAGS: Record<string, Art> = {
     {stripesV(["#006847", "#ffffff", "#ce1126"])}
     <circle cx={10} cy={10} r={2.2} fill="#8c5a2b" /><path d="M7.9 11.4q2.1 1.5 4.2 0" stroke="#006847" strokeWidth={0.7} fill="none" />
   </>),
+  CNY: () => (<>
+    <rect width={20} height={20} fill="#ee1c25" />
+    {star(6, 7, 3, "#ffff00")}{star(10.5, 3.8, 0.9, "#ffff00")}{star(12.4, 6, 0.9, "#ffff00")}{star(12.4, 9, 0.9, "#ffff00")}{star(10.5, 11.2, 0.9, "#ffff00")}
+  </>),
+  // "All": an event for every currency (the economic calendar's global events)
+  ALL: () => (<>
+    <rect width={20} height={20} fill="#2962ff" />
+    <g fill="none" stroke="#ffffff" strokeWidth={0.9}>
+      <circle cx={10} cy={10} r={6} /><ellipse cx={10} cy={10} rx={2.6} ry={6} /><path d="M4 10h12M5 7h10M5 13h10" />
+    </g>
+  </>),
 };
 
 // ---- coins
@@ -111,10 +122,50 @@ export function logoParts(symbol: string): [string, string | null] | null {
   return null;
 }
 
-let seq = 0;
+// (ids from useId: the same on the server and in the browser)
+
+// One currency's round flag (the economic calendar); null when we don't draw that currency
+export function CurrencyFlag({ code, size }: { code: string; size: number }) {
+  const uid = `cf${React.useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const c = code.toUpperCase();
+  if (!FLAGS[c]) return null;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0, display: "inline-block", verticalAlign: "middle" }} aria-hidden>
+      <Disc code={c} size={size} x={0} y={0} uid={uid} />
+    </svg>
+  );
+}
+
+// The same flag as an image, for drawing on a canvas (the chart's economic event marks). Rendered
+// once per currency and size, off-screen; null until it has loaded (the caller redraws on `onReady`).
+const flagImages = new Map<string, HTMLImageElement | "loading" | "none">();
+export function currencyFlagImage(code: string, size: number, onReady: () => void): HTMLImageElement | null {
+  const c = code.toUpperCase(), key = `${c}@${size}`;
+  const have = flagImages.get(key);
+  if (have instanceof HTMLImageElement) return have;
+  if (have) return null;
+  if (!FLAGS[c] || typeof document === "undefined") { flagImages.set(key, "none"); return null; }
+  flagImages.set(key, "loading");
+  void (async () => {
+    const [{ createRoot }, { flushSync }] = await Promise.all([import("react-dom/client"), import("react-dom")]);
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    flushSync(() => root.render(<CurrencyFlag code={c} size={size} />));
+    const svg = host.querySelector("svg");
+    svg?.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    const markup = svg?.outerHTML ?? "";
+    root.unmount();
+    if (!markup) { flagImages.set(key, "none"); return; }
+    const img = new Image(size, size);
+    img.onload = () => { flagImages.set(key, img); onReady(); };
+    img.onerror = () => flagImages.set(key, "none");
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
+  })();
+  return null;
+}
 // The logo, or null when the symbol isn't a pair / metal / coin we draw (the caller shows initials)
 export function SymbolLogo({ symbol, size }: { symbol: string; size: number }) {
-  const [uid] = React.useState(() => `sl${(seq++).toString(36)}`);
+  const uid = `sl${React.useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const parts = logoParts(symbol);
   if (!parts) return null;
   const [base, quote] = parts;

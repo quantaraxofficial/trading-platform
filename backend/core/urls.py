@@ -1,8 +1,9 @@
 from django.urls import path
-from . import voice, views, analytics, broker_algo, broker_mt5, copy_api, copy_share, optimizer_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github
+from . import voice, views, analytics, broker_algo, broker_mt5, copy_api, copy_share, optimizer_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github, econ_calendar
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
+    path('calendar/economic/', econ_calendar.economic, name='economic_calendar'),
     path('user/<str:uid>/', views.get_user_data, name='get_user_data'),
     path('templates/<str:uid>/', views.manage_templates, name='manage_templates'),
     path('templates/delete/<int:template_id>/', views.delete_template, name='delete_template'),

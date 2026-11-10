@@ -46,10 +46,12 @@ import KeyboardShortcutsDialog from "./components/KeyboardShortcutsDialog";
 import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
 import BacktestSessionBar from "./components/BacktestSessionBar";
 import BacktestSessionsPanel from "./components/BacktestSessionsPanel";
+import EconomicCalendarPanel from "./components/EconomicCalendarPanel";
 import VoicePanel from "./components/VoicePanel";
 import VoiceBridge from "./components/VoiceBridge";
 import FeedbackPanel from "./components/FeedbackPanel";
-import { registerVoiceCommands, setVoiceContext } from "./lib/voice/registry";
+import { registerVoiceCommands, registerVoiceFunctions, setVoiceContext, VoiceQuestion } from "./lib/voice/registry";
+import { fetchEconomicEvents, periodRange, PERIODS, calendarTimezone, symbolCurrencies, fmtTime as fmtEventTime, fmtIn, type Period } from "./lib/economicCalendar";
 import { DATE_RANGES } from "./components/BottomPanel";
 import { saveReplay, setSavedReplayUser } from "./lib/savedReplay";
 import { ADD_SCRIPT_EVENT, getScript } from "./community/social";
@@ -1044,6 +1046,10 @@ function AppLayout() {
       { id: "paper-trading-panel", run: ev("tv:open-trading-panel") },
       { id: "download-chart-data", run: ev("tv:download-chart-data") },
       { id: "collab-dialog", run: () => setShowCollabDialog(true) },
+      // the economic calendar: its panel, and its events on the chart (Settings → Events)
+      { id: "economic-calendar-panel", run: ev("tv:open-sidebar-panel", "economic_calendar") },
+      { id: "economic-events-on-chart-show", run: () => chartSettings.set({ economicEvents: true }) },
+      { id: "economic-events-on-chart-hide", run: () => chartSettings.set({ economicEvents: false }) },
       { id: "feedback-panel", run: () => setShowFeedback(true) },
       // the site's other pages (in a new tab)
       { id: "page-analytics", run: tab("/analytics") },
@@ -1056,6 +1062,35 @@ function AppLayout() {
     setVoiceContext("interval-label", () => intervalLabel);
   });
   useEffect(() => () => { registerVoiceCommands("page", null); setVoiceContext("indicators", null); setVoiceContext("interval-label", null); }, []);
+  // The voice assistant reads the economic calendar out ("any high impact news today?")
+  const symbolForVoice = useRef(symbol);
+  symbolForVoice.current = symbol;
+  useEffect(() => {
+    registerVoiceFunctions("economic-calendar", [{
+      name: "economic_calendar",
+      signature: `economic_calendar(period?, impact?, currency?) reads the economic calendar's news events; period: ${PERIODS.map(p => p.id).join(", ")} (default today); impact: high, medium, low or all (default high and medium); currency: a code like USD, or "chart" for the chart symbol's currencies (default all)`,
+      run: async a => {
+        const period = (String(a.period || "today").toLowerCase().replace(/\s+/g, "_")) as Period;
+        if (!PERIODS.some(p => p.id === period)) throw new VoiceQuestion(`Which period: ${PERIODS.map(p => p.label.toLowerCase()).join(", ")}?`);
+        const impact = String(a.impact || "").toLowerCase();
+        const impacts = impact === "all" ? ["high", "medium", "low", "holiday"] : impact && impact !== "default" ? [impact] : ["high", "medium"];
+        const cur = String(a.currency || "").toUpperCase();
+        const currencies = cur === "CHART" ? symbolCurrencies(symbolForVoice.current) : cur && cur !== "ALL" ? [cur] : null;
+        const tz = calendarTimezone();
+        const [from, to] = periodRange(period, tz);
+        const r = await fetchEconomicEvents(from, to);
+        const now = Date.now() / 1000;
+        const evs = r.events.filter(e => impacts.includes(e.impact) && (!currencies || currencies.includes(e.currency)));
+        const label = PERIODS.find(p => p.id === period)!.label.toLowerCase();
+        const which = `${impact === "all" ? "" : impacts.length === 1 ? `${impacts[0]} impact ` : "high and medium impact "}${currencies ? `${currencies.join(" and ")} ` : ""}`;
+        if (!evs.length) return r.coverage.to != null && from > r.coverage.to ? `${label}'s events aren't published yet.` : `No ${which}events ${label}.`;
+        const next = evs.find(e => e.time > now);
+        const list = evs.slice(0, 8).map(e => `${e.all_day ? "all day" : fmtEventTime(e.time, tz)} ${e.currency} ${e.title}${e.forecast ? `, forecast ${e.forecast}` : ""}${e.previous ? `, prior ${e.previous}` : ""}`);
+        return `${evs.length} ${which}events ${label}: ${list.join("; ")}${evs.length > 8 ? `; and ${evs.length - 8} more` : ""}.${next ? ` Next: ${next.currency} ${next.title} in ${fmtIn(next.time - now)}.` : ""}`;
+      },
+    }]);
+    return () => registerVoiceFunctions("economic-calendar", null);
+  }, []);
 
   // ---- The site's layout: the default grid, or the widgets where Redesign put them (lib/widgetLayout)
   const lay = widgetLayout.useValue();
@@ -1286,6 +1321,8 @@ function AppLayout() {
             <NotificationsPanel />
           ) : activeSidebarPanel === "backtest_sessions" ? (
             <BacktestSessionsPanel />
+          ) : activeSidebarPanel === "economic_calendar" ? (
+            <EconomicCalendarPanel symbol={symbol} />
           ) : activeSidebarPanel === "voice" ? (
             <VoicePanel />
           ) : (

@@ -32,7 +32,7 @@ export const ROADMAP: { icon: React.ReactNode; title: string; description: strin
   { icon: <ShieldCheck className="w-6 h-6" />, title: 'Prop firm rule guard', description: "Pick your prop firm and account; get warned before a trade breaks its drawdown or hidden rules." },
   { icon: <ShieldAlert className="w-6 h-6" />, title: 'Risk guard', description: 'Daily loss and position limits on your own account, enforced before an order goes out.' },
   { icon: <Brain className="w-6 h-6" />, title: 'AI trade coach', description: 'Reads your journal and results, and points out the patterns that cost you.' },
-  { icon: <CalendarClock className="w-6 h-6" />, title: 'Economic calendar', description: 'High-impact news on the chart, with an option to pause trading around it.' },
+  { icon: <CalendarClock className="w-6 h-6" />, title: 'News trading pause', description: "Pause trading around the economic calendar's high-impact news." },
   { icon: <Send className="w-6 h-6" />, title: 'Alerts to Telegram', description: 'Your price alerts sent to Telegram and to your own webhooks.' },
   { icon: <PlayCircle className="w-6 h-6" />, title: 'Trade replay', description: 'Replay any trade from your journal bar by bar, right in Trade Analysis.' },
   { icon: <NotebookPen className="w-6 h-6" />, title: 'Journal reminders', description: 'A weekly review of your trades, and reminders to journal the ones you missed.' },
