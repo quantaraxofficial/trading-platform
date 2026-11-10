@@ -320,6 +320,8 @@ import { chartObjects, sameObjects, type ChartObject, type DataWindowData, type 
 import { sideOfPlacement, applyScaleSide, mainPriceScale, paneGeometry, onPriceAxis, mainScaleSide } from "../lib/priceScaleSide";
 import { applyChartWheel, stopChartGlide } from "../lib/chartWheel";
 import { registerChartBars, registerChartInfo } from "../lib/chartBars";
+import { registerVoiceFunctions, VoiceQuestion, type VoiceArgs } from "../lib/voice/registry";
+const ask = (q: string): never => { throw new VoiceQuestion(q); };
 import { easedAutoscale } from "../lib/easedAutoscale";
 import { computeEma, normalizeEma, savedEmaDefaults, emaVisibleOnInterval, emaInputsText, type EmaConfig } from "../lib/emaCalc";
 import { BandFill } from "./chartPrimitives/BandFill";
@@ -1438,6 +1440,127 @@ export default function ChartContainer({
   pineIndRerunRef.current = pineIndicators.rerunAll;
   const pineIndMarkersRef = useRef(pineIndicators.overlayMarkers);
   pineIndMarkersRef.current = pineIndicators.overlayMarkers;
+
+  // An EMA's settings applied: drawn at once on the chart (just this EMA), the rest of the page's
+  // state follows in the background so typing a length never waits on a full re-render
+  const applyEmaConfig = (id: string, newConfig: any) => {
+    emaConfigsRef.current = { ...emaConfigsRef.current, [id]: newConfig };
+    if (emasRef.current[id]) {
+      applyEmaStyles(id);
+      refreshEma(id, emaBars(fullDataRef.current));
+      emaAppliedRef.current.cfgs[id] = JSON.stringify(emaCfg(id));
+    }
+    // (kept on the indicator's entry too: it's saved with the chart, so a reload keeps it)
+    startTransition(() => { setEmaConfigs(prev => ({ ...prev, [id]: newConfig })); onUpdateIndicator?.(id, { config: newConfig }); });
+  };
+
+  // The voice assistant changes an indicator's settings ("make the EMA 15", "RSI length 21", "EMA
+  // colour red"): the EMA's own settings, or any input a Pine indicator has (by its title)
+  const voiceIndicatorRef = useRef<(a: VoiceArgs) => string>(() => "");
+  voiceIndicatorRef.current = (a: VoiceArgs) => {
+    const str = (v: unknown) => (typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : typeof v === "boolean" ? String(v) : "");
+    const low = (v: unknown) => str(v).toLowerCase();
+    const num = (v: unknown) => { const n = typeof v === "number" ? v : parseFloat(str(v).replace(/,/g, "")); return isFinite(n) ? n : undefined; };
+    const EMA = "Moving Average Exponential";
+    const ALIASES: Record<string, string> = {
+      ema: EMA, "exponential moving average": EMA, "moving average exponential": EMA, sma: "Moving Average Simple", "simple moving average": "Moving Average Simple",
+      rsi: "Relative Strength Index", "relative strength index": "Relative Strength Index", macd: "MACD", atr: "Average True Range", "average true range": "Average True Range",
+      vwap: "Volume Weighted Average Price", ichimoku: "Ichimoku Cloud", pivots: "Pivot Points Standard", "pivot points": "Pivot Points Standard",
+      donchian: "Donchian Channels", momentum: "Momentum", "williams r": "Williams %R", "williams %r": "Williams %R", "awesome oscillator": "Awesome Oscillator",
+      "bull bear power": "Bull Bear Power", roc: "Rate Of Change", "rate of change": "Rate Of Change", "price channel": "Price Channel", "volume profile": "Volume Profile Visible Range",
+    };
+    const list = (activeIndicatorsRef.current || []) as { id: string; name: string; config?: any; inputs?: Record<string, any> }[];
+    if (!list.length) throw new VoiceQuestion("There are no indicators on the chart. Shall I add an EMA?");
+    const said = low(a.indicator);
+    const wanted = said ? ALIASES[said] ?? said : "";
+    let cands = wanted ? list.filter(i => i.name.toLowerCase() === wanted.toLowerCase() || i.name.toLowerCase().includes(wanted.toLowerCase())) : list;
+    if (!wanted && cands.length > 1 && cands.some(i => i.name === EMA)) cands = cands.filter(i => i.name === EMA);
+    if (!cands.length) throw new VoiceQuestion(`There's no ${str(a.indicator)} on the chart. It has: ${Array.from(new Set(list.map(i => i.name))).join(", ")}.`);
+    const lengthOf = (i: { id: string; name: string; inputs?: Record<string, any> }) => (i.name === EMA ? emaCfg(i.id).length : num(Object.entries(i.inputs || {}).find(([k]) => /len|period/i.test(k))?.[1]));
+    const labelOf = (i: { id: string; name: string; inputs?: Record<string, any> }) => (i.name === EMA ? `${emaCfg(i.id).length} EMA` : i.name);
+    let ind = cands[0];
+    if (cands.length > 1) {
+      const w = num(a.which);
+      const byLength = w !== undefined ? cands.filter(i => lengthOf(i) === w) : [];
+      if (byLength.length === 1) ind = byLength[0];
+      else if (w !== undefined && Number.isInteger(w) && w >= 1 && w <= cands.length) ind = cands[w - 1];
+      else throw new VoiceQuestion(`Which one: ${cands.map(labelOf).join(", or the ")}?`);
+    }
+    const setting = low(a.setting) || "length";
+    const value = a.value;
+    if (value === undefined || str(value) === "") throw new VoiceQuestion(`What should the ${setting} be?`);
+    const COLORS: Record<string, string> = {
+      red: "#f23645", green: "#089981", blue: "#2962ff", white: "#ffffff", black: "#000000", yellow: "#ffeb3b", orange: "#ff9800",
+      purple: "#9c27b0", gray: "#787b86", grey: "#787b86", teal: "#00bcd4", pink: "#e91e63", brown: "#795548", aqua: "#00bcd4", violet: "#7e57c2",
+    };
+    const colorOf = (v: unknown) => COLORS[low(v)] ?? (/^#[0-9a-f]{6}$/i.test(str(v)) ? str(v) : null);
+    const label = labelOf(ind);
+
+    if (ind.name === EMA) {
+      const cfg = emaCfg(ind.id);
+      let patch: Record<string, any> | null = null, said2 = "";
+      if (/len|period|^\d|value|number|days|bars/.test(setting)) {
+        const n = num(value);
+        if (!n || n < 1 || n > 5000 || !Number.isInteger(n)) throw new VoiceQuestion("What length? A whole number like 9, 20 or 200.");
+        patch = { length: n }; said2 = `length to ${n}`;
+      } else if (/source|price/.test(setting)) {
+        const SOURCES = ["Open", "High", "Low", "Close", "HL2", "HLC3", "OHLC4", "HLCC4"];
+        const src = SOURCES.find(x => x.toLowerCase() === low(value).replace(/[^a-z0-9]/g, "")) ?? ask(`Which source: ${SOURCES.join(", ")}?`);
+        patch = { source: src }; said2 = `source to ${src}`;
+      } else if (/colou?r/.test(setting)) {
+        const c = colorOf(value) ?? ask("What colour? Say a name like red or blue.");
+        patch = { color: c, maPlot: { ...cfg.maPlot, color: c } }; said2 = `colour to ${str(value)}`;
+      } else if (/width|thick/.test(setting)) {
+        const n = Math.round(num(value) ?? 0);
+        if (n < 1 || n > 4) throw new VoiceQuestion("What width: 1, 2, 3 or 4?");
+        patch = { lineWidth: n, maPlot: { ...cfg.maPlot, width: n } }; said2 = `line width to ${n}`;
+      } else if (/offset|shift/.test(setting)) {
+        const n = Math.round(num(value) ?? NaN);
+        if (!isFinite(n)) throw new VoiceQuestion("What offset, in bars?");
+        patch = { offset: n }; said2 = `offset to ${n}`;
+      } else throw new VoiceQuestion("For the EMA I can change its length, source, colour, line width or offset.");
+      applyEmaConfig(ind.id, { ...cfg, ...patch });
+      return `Set the ${label}'s ${said2}.`;
+    }
+
+    const props = pineIndicators.settingsProps(ind.id);
+    if (!props) throw new VoiceQuestion(`I can't change the ${label}'s settings.`);
+    const metas = props.inputsMeta.filter(m => m.type !== "text_area");
+    const words = setting.replace(/colour/g, "color").split(/\s+/);
+    const score = (m: { title: string; varName: string }) => {
+      const t = `${m.title} ${m.varName}`.toLowerCase();
+      return words.reduce((n, w) => n + (t.includes(w) ? 2 : /len|period/.test(w) && /len|period/.test(t) ? 1 : 0), 0);
+    };
+    const ranked = metas.map(m => ({ m, s: score(m) })).filter(x => x.s > 0).sort((x, y) => y.s - x.s);
+    if (!ranked.length || (ranked.length > 1 && ranked[0].s === ranked[1].s && ranked[0].m.title !== ranked[1].m.title)) {
+      throw new VoiceQuestion(`Which setting of the ${label}: ${metas.slice(0, 8).map(m => m.title).join(", ")}?`);
+    }
+    const m = ranked[0].m;
+    let v: any;
+    if (m.type === "int" || m.type === "float") {
+      const n = num(value);
+      if (n === undefined) throw new VoiceQuestion(`What number should ${m.title} be?`);
+      v = m.type === "int" ? Math.round(n) : n;
+      if (m.minval !== undefined && v < m.minval) v = m.minval;
+      if (m.maxval !== undefined && v > m.maxval) v = m.maxval;
+    } else if (m.type === "bool") {
+      v = /^(on|yes|true|show|enable|1)$/i.test(str(value)) ? true : /^(off|no|false|hide|disable|0)$/i.test(str(value)) ? false : ask("On or off?");
+    } else if (m.type === "color") {
+      v = colorOf(value) ?? ask("What colour? Say a name like red or blue.");
+    } else if (m.options?.length) {
+      v = m.options.find(o => o.toLowerCase() === low(value)) ?? m.options.find(o => o.toLowerCase().includes(low(value))) ?? ask(`${m.title}: ${m.options.join(", ")}?`);
+    } else v = str(value);
+    props.onApply({ ...props.currentOverrides, [m.varName]: v });
+    return `Set the ${label}'s ${m.title} to ${v}.`;
+  };
+  useEffect(() => {
+    registerVoiceFunctions("indicator-settings", [{
+      name: "indicator_settings",
+      signature: "indicator_settings(setting, value, indicator?, which?) changes an indicator on the chart: \"EMA 15\" is setting length value 15; indicator EMA, RSI, MACD… (default: the EMA, or the only one); setting length, source, colour, width, offset, or any input it has by its name; which: its place (1, 2…) or its current length when there are several",
+      run: a => voiceIndicatorRef.current(a),
+    }]);
+    return () => registerVoiceFunctions("indicator-settings", null);
+  }, []);
 
   const pineVisibleRef = useRef(true);
   useEffect(() => { pineVisibleRef.current = pineVisible; }, [pineVisible]);
@@ -4405,19 +4528,7 @@ export default function ChartContainer({
           onClose={() => setShowEmaSettingsFor(null)} 
           theme={theme} 
           config={normalizeEma(emaConfigs[showEmaSettingsFor] ?? savedEmaDefaults())}
-          onChangeConfig={(newConfig) => {
-            // Drawn at once on the chart (just this EMA), the rest of the page's state follows in
-            // the background so typing a length never waits on a full re-render
-            const id = showEmaSettingsFor;
-            emaConfigsRef.current = { ...emaConfigsRef.current, [id]: newConfig };
-            if (emasRef.current[id]) {
-              applyEmaStyles(id);
-              refreshEma(id, emaBars(fullDataRef.current));
-              emaAppliedRef.current.cfgs[id] = JSON.stringify(emaCfg(id));
-            }
-            // (kept on the indicator's entry too: it's saved with the chart, so a reload keeps it)
-            startTransition(() => { setEmaConfigs(prev => ({ ...prev, [id]: newConfig })); onUpdateIndicator?.(id, { config: newConfig }); });
-          }}
+          onChangeConfig={(newConfig) => applyEmaConfig(showEmaSettingsFor, newConfig)}
         />
       )}
 

@@ -523,6 +523,13 @@ Posting signals out
     whole site about 9 a minute and 240 a day ("busy, try again in a minute" past that)
   - Next: orders, drawing tools by voice
 
+  - Talk over it: it keeps listening while it speaks (its own voice from the speakers is told
+    apart), stops as soon as the trader talks or types, and the chat keeps only the words it said;
+    answers appear word by word as they're spoken
+  - Misheard words understood: speech recognition's alternatives go to the AI, which reads them as
+    the trading terms meant (fbg → FVG, "auto block" → order block, "e m a" → EMA…)
+  - Indicator settings by voice: "change the EMA to 15", "make the EMA red", "RSI length 21" (an
+    EMA's length / source / colour / width / offset, or any input of a Pine indicator by its title)
   - Languages: 27 (English US / India / UK, Hindi, Marathi, Gujarati, Bengali, Tamil, Telugu,
     Kannada, Malayalam, Punjabi, Urdu, Spanish, Portuguese, French, German, Italian, Russian,
     Turkish, Arabic, Indonesian, Vietnamese, Thai, Chinese, Japanese, Korean): it hears in the
