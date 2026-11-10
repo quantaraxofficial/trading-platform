@@ -416,6 +416,10 @@ def ingest(request):
         if ticks:
             t, bid, ask = ticks[-1]
             live.update(t=t, bid=bid, ask=ask)
+    # The mobile terminal's stops and pending orders on this symbol (core/mobile.py)
+    if ticks:
+        from . import mobile
+        mobile.check_symbol(sym, ticks[-1][1], ticks[-1][2] or ticks[-1][1])
     if ticks:
         bids = [b for _, b, _ in ticks]
         msg = {"type": "tick", "s": sym, "t": ticks[-1][0], "o": ticks[0][1], "p": ticks[-1][1], "a": ticks[-1][2],

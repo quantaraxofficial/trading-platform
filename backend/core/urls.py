@@ -1,5 +1,5 @@
 from django.urls import path
-from . import voice, views, analytics, collab, collab_files, market, turn, econ_calendar
+from . import mobile, voice, views, analytics, collab, collab_files, market, turn, econ_calendar
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -26,6 +26,13 @@ urlpatterns = [
     path('live/candles/', market.candles, name='live_candles'),
     path('live/ingest/', market.ingest, name='live_ingest'),
     path('live/ticks/', market.ticks, name='live_ticks'),
+    # The mobile terminal (/m, core/mobile.py): its account, orders, positions, history
+    path('m/state/<str:uid>/', mobile.state, name='m_state'),
+    path('m/order/<str:uid>/', mobile.place, name='m_place'),
+    path('m/position/<str:uid>/<int:pid>/modify/', mobile.modify_position, name='m_modify'),
+    path('m/position/<str:uid>/<int:pid>/close/', mobile.close_position, name='m_close'),
+    path('m/order/<str:uid>/<int:oid>/cancel/', mobile.cancel_order, name='m_cancel'),
+    path('m/history/<str:uid>/', mobile.history, name='m_history'),
     # Analytics (core/analytics.py): saved backtests, backtest sessions, trade journals
     path('analytics/<str:uid>/backtests/', analytics.backtests, name='analytics_backtests'),
     path('analytics/<str:uid>/backtests/<int:bid>/', analytics.backtest, name='analytics_backtest'),

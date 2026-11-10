@@ -419,3 +419,77 @@ class TradeJournal(models.Model):
 
     class Meta:
         unique_together = ('owner', 'source', 'trade_key')
+
+
+# ---------------------------------------------------------------- the mobile terminal (/m)
+# A demo trading account per person for the mobile terminal (core/mobile.py): its positions (kept
+# when closed, for History), pending orders and deals. Fills are at the live MT5 bid / ask on the
+# server; SL, TP and pending orders trigger there as the ticks come in.
+
+class MobileAccount(models.Model):
+    profile = models.OneToOneField(TraderProfile, on_delete=models.CASCADE, related_name='mobile_account')
+    balance = models.DecimalField(max_digits=16, decimal_places=2, default=100000)
+    deposit = models.DecimalField(max_digits=16, decimal_places=2, default=100000)
+    currency = models.CharField(max_length=8, default='USD')
+    leverage = models.IntegerField(default=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.profile.name}: {self.balance} {self.currency}"
+
+
+class MobilePosition(models.Model):
+    account = models.ForeignKey(MobileAccount, on_delete=models.CASCADE, related_name='positions')
+    symbol = models.CharField(max_length=20)
+    side = models.CharField(max_length=4, choices=[('buy', 'Buy'), ('sell', 'Sell')])
+    volume = models.DecimalField(max_digits=10, decimal_places=2)
+    open_price = models.FloatField()
+    sl = models.FloatField(null=True, blank=True)
+    tp = models.FloatField(null=True, blank=True)
+    open_time = models.DateTimeField()
+    # closed: when, at what price, why (client / sl / tp), the profit
+    close_time = models.DateTimeField(null=True, blank=True)
+    close_price = models.FloatField(null=True, blank=True)
+    close_reason = models.CharField(max_length=10, blank=True)
+    profit = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)
+
+    class Meta:
+        ordering = ['-open_time']
+        indexes = [models.Index(fields=['account', 'close_time']), models.Index(fields=['symbol', 'close_time'])]
+
+
+class MobileOrder(models.Model):
+    KINDS = [('buy_limit', 'Buy Limit'), ('sell_limit', 'Sell Limit'), ('buy_stop', 'Buy Stop'), ('sell_stop', 'Sell Stop'), ('buy', 'Buy'), ('sell', 'Sell')]
+    account = models.ForeignKey(MobileAccount, on_delete=models.CASCADE, related_name='orders')
+    symbol = models.CharField(max_length=20)
+    kind = models.CharField(max_length=12, choices=KINDS)
+    volume = models.DecimalField(max_digits=10, decimal_places=2)
+    price = models.FloatField()
+    sl = models.FloatField(null=True, blank=True)
+    tp = models.FloatField(null=True, blank=True)
+    # placed (pending) → filled / cancelled; a market order is filled at once
+    status = models.CharField(max_length=10, default='placed')
+    created_at = models.DateTimeField()
+    done_at = models.DateTimeField(null=True, blank=True)
+    position = models.ForeignKey(MobilePosition, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['account', 'status']), models.Index(fields=['symbol', 'status'])]
+
+
+class MobileDeal(models.Model):
+    account = models.ForeignKey(MobileAccount, on_delete=models.CASCADE, related_name='deals')
+    symbol = models.CharField(max_length=20)
+    side = models.CharField(max_length=4)
+    volume = models.DecimalField(max_digits=10, decimal_places=2)
+    price = models.FloatField()
+    entry = models.CharField(max_length=4)        # in / out
+    profit = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    position = models.ForeignKey(MobilePosition, on_delete=models.SET_NULL, null=True, blank=True, related_name='deals')
+    order = models.ForeignKey(MobileOrder, on_delete=models.SET_NULL, null=True, blank=True, related_name='deals')
+    reason = models.CharField(max_length=10, blank=True)
+    time = models.DateTimeField()
+
+    class Meta:
+        ordering = ['-time']
