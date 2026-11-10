@@ -6,6 +6,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useEscapeClose } from "../lib/useEscapeClose";
+import { SymbolLogo, logoParts } from "./symbolLogos";
 
 export const C = {
   panel: "var(--tv-trade-panel-bg)",
@@ -204,6 +205,8 @@ export function BrandMark({ size = 17, color = "currentColor" }: { size?: number
 // Round avatar with the symbol's initials, colored per symbol (the watchlist's style)
 const AVATAR_COLORS = ["#f7931a", "#2962ff", "#089981", "#e91e63", "#9c27b0", "#ff9800", "#00bcd4", "#f23645"];
 export function SymbolAvatar({ symbol, size = 20 }: { symbol: string; size?: number }) {
+  // Forex pairs, metals and coins: TradingView's kind of logo (flags, a gold / silver coin)
+  if (logoParts(symbol)) return <SymbolLogo symbol={symbol} size={size} />;
   let h = 0;
   for (let i = 0; i < symbol.length; i++) h = (h * 31 + symbol.charCodeAt(i)) >>> 0;
   const letters = symbol.replace(/[^A-Z]/gi, "").slice(0, symbol.includes("/") ? 1 : 2).toUpperCase();

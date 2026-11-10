@@ -143,6 +143,11 @@ Chart interactions
     applying the template puts it back on the chart with those settings
   - Indicator and strategy settings dialogs (scripts, EMA, Volume) move by their title bar, as on
     TradingView, and stay reachable on screen
+  - Symbol logos as TradingView's: a forex pair as its two round flags overlapping (USD, EUR,
+    GBP, JPY, CHF, CAD, AUD, NZD, INR, MXN), gold / silver as a gold / silver coin with the
+    quote's flag, BTC / ETH as their coins (watchlist, legend, trading panels)
+  - The tab title's change % is since the previous day's close (it compared with the bar before
+    and showed +0.00% on minute charts)
 
 Layouts
   - Multi-chart layouts (Layout setup grid, Manage layouts, sync in layout); each chart keeps

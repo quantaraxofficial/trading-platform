@@ -2615,7 +2615,7 @@ export default function ChartContainer({
         try { cs.update(bar); } catch { return; }
       }
       updateEmaData(fullDataRef.current);
-      setLastPriceData({ price: d.price, prevPrice: bars.length > 1 ? bars[bars.length - 2].close : d.price });
+      setLastPriceData({ price: d.price, prevPrice: titleBaseClose(bars, intervalRef.current) ?? (bars.length > 1 ? bars[bars.length - 2].close : d.price) });
       // Script execution "On realtime bar tick": the strategy recalculates on each real-time update
       // (at most every 1.5 s, one run at a time)
       // (and, whatever that setting, on each bar's close: the new bar opening closes the last one)
@@ -2919,7 +2919,7 @@ export default function ChartContainer({
       if (stockData.length > 1) {
         setLastPriceData({
           price: stockData[stockData.length - 1].close,
-          prevPrice: stockData[stockData.length - 2].close
+          prevPrice: titleBaseClose(stockData, intervalRef.current) ?? stockData[stockData.length - 2].close
         });
       }
 
@@ -3157,7 +3157,7 @@ export default function ChartContainer({
         if (stockData.length > 1) {
           setLastPriceData({
             price: stockData[stockData.length - 1].close,
-            prevPrice: stockData[stockData.length - 2].close
+            prevPrice: titleBaseClose(stockData, intervalRef.current) ?? stockData[stockData.length - 2].close
           });
         }
         return stockData;
@@ -3597,7 +3597,7 @@ export default function ChartContainer({
           if (stockData.length > 1) {
             setLastPriceData({
               price: stockData[stockData.length - 1].close,
-              prevPrice: stockData[stockData.length - 2].close
+              prevPrice: titleBaseClose(stockData, intervalRef.current) ?? stockData[stockData.length - 2].close
             });
           }
 
@@ -4993,6 +4993,19 @@ function previousDayClose(bars: { time: number; close: number }[], idx: number, 
   const dayOf = (t: number) => { const d = new Date(t * 1000); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
   const today = dayOf(bars[idx].time);
   for (let i = idx - 1; i >= 0; i--) if (dayOf(bars[i].time) !== today) return bars[i].close;
+  return null;
+}
+
+// The tab title's change is since the previous trading day's close, as on TradingView (the bar
+// before the last one moved it by ~0.00% on a minute chart). A day: the UTC date; daily and longer
+// bars compare with the bar before.
+function titleBaseClose(bars: { time: number; close: number }[], interval: string): number | null {
+  const n = bars.length;
+  if (n < 2) return null;
+  if (/day|week|month/.test(interval)) return bars[n - 2].close;
+  const dayOf = (t: number) => Math.floor(t / 86400);
+  const today = dayOf(bars[n - 1].time);
+  for (let i = n - 2; i >= 0; i--) if (dayOf(bars[i].time) !== today) return bars[i].close;
   return null;
 }
 
