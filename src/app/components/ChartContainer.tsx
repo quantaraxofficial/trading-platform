@@ -1234,6 +1234,19 @@ export default function ChartContainer({
     return () => { alive = false; window.clearInterval(id); };
   }, [symbol, series, cs.economicEvents]);
   useEffect(() => { econEventsRef.current?.update(); }, [cs.economicEvents, cs.onlyFutureEvents, cs.eventsBreaks, cs.eventsBreaksStyle]);
+  // The next news' countdown on the time scale: redrawn every second while it's less than a day
+  // away, every half minute before that (it shows days, hours and minutes then)
+  useEffect(() => {
+    if (!cs.economicEvents) return;
+    let tick = 0;
+    const id = window.setInterval(() => {
+      const ee = econEventsRef.current;
+      const left = ee?.secondsToNext();
+      if (left == null) return;
+      if (left < 86400 || ++tick % 30 === 0) ee!.update();
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [cs.economicEvents]);
 
   // ── Alerts → Alert lines (only active ones) ──
   useEffect(() => {
