@@ -560,6 +560,10 @@ Posting signals out
   - Settings → Events → Economic events now works: the symbol's high and medium importance events
     as flags along the bottom of the chart (upcoming ones right of the last bar), ringed in the
     importance colour; hovering lists them. "Only future events" and "Events breaks" work too
+  - News countdown on the time scale, like the bar countdown on the price scale: the next high /
+    medium event for the chart symbol's currencies ("USD CPI m/m  01:23:45"), in its importance's
+    colour at the event's time, held at the scale's edge with an arrow while that's off screen;
+    ticks every second within a day. Shown with Settings → Events → Economic events
   - Voice: open / close the calendar, show / hide economic events on the chart, and
     economic_calendar(period, impact, currency) reads the events out ("any high impact USD news
     today?")
