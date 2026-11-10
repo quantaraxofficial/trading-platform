@@ -30,7 +30,8 @@ interface ReplayContextType {
   setHoverX: (x: number | null) => void;
   // Actions
   enterSelectMode: () => void;
-  startReplayAt: (index: number, data: CandleData[], series: any, chart: any) => void;
+  // `continuing`: the same replay on new bars (a new timeframe): its mode stays and nothing is asked
+  startReplayAt: (index: number, data: CandleData[], series: any, chart: any, opts?: { continuing?: boolean }) => void;
   getReplayTime: () => number | null;
   stopReplay: (nextData?: CandleData[]) => void;
   togglePlay: () => void;
@@ -116,7 +117,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
   // The candle after the replay's last bar forms from the stored 15 / 30-second bars, step by step
   // at the market's pace: replayIndex stays the last *finished* bar (indicators and saved progress
   // never see the forming one's future), the forming candle is drawn on top, and each step's price
-  // goes to replay paper trading (tv:replay-tick { price, time })
+  // goes to replay paper trading (tv:replay-ticks, a frame's at a time)
   const { active: premium } = useAccess();
   const premiumRef = useRef(premium);
   premiumRef.current = premium;
@@ -162,7 +163,14 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     const f = formingRef.current;
     if (!f) formingRef.current = { index: p, bar: { time: data[p].time, open: s.p, high: s.p, low: s.p, close: s.p } };
     else { f.bar.high = Math.max(f.bar.high, s.p); f.bar.low = Math.min(f.bar.low, s.p); f.bar.close = s.p; }
-    window.dispatchEvent(new CustomEvent("tv:replay-tick", { detail: { price: s.p, time: s.t } }));
+    tickBatchRef.current.push({ price: s.p, time: s.t });
+  };
+  // (a frame's ticks go out together: tv:replay-ticks { ticks: [{ price, time }…] })
+  const tickBatchRef = useRef<{ price: number; time: number }[]>([]);
+  const flushTicks = () => {
+    if (!tickBatchRef.current.length) return;
+    const ticks = tickBatchRef.current.splice(0);
+    window.dispatchEvent(new CustomEvent("tv:replay-ticks", { detail: { ticks } }));
   };
   const liveTick = () => {
     const feed = feedRef.current;
@@ -183,6 +191,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     (window as any).__replayNow = clockRef.current;
     let played = false;
     while (next && next.t <= clockRef.current) { playStep(next); feed.i++; played = true; next = feed.steps[feed.i]; }
+    flushTicks();
     if (played) {
       const f = formingRef.current;
       if (f && seriesRef.current) { try { seriesRef.current.update({ ...f.bar }); } catch { /* the series is being replaced */ } }
@@ -203,6 +212,21 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     (window as any).__replayNow = from;
     setLiveLoading(true);
     try { await feed.seek(from); } catch { /* shown below */ } finally { setLiveLoading(false); }
+  };
+
+  // Back to a moment of the live replay on new bars: the ticks from the bar after `index` up to
+  // `clock` are played at once into its forming candle, and the replay carries on from there
+  const resumeLiveAt = async (index: number, clock: number) => {
+    await positionLive(index);
+    const feed = feedRef.current;
+    if (!feed) return;
+    while (feed.i < feed.steps.length && feed.steps[feed.i].t <= clock) { playStep(feed.steps[feed.i]); feed.i++; }
+    flushTicks();
+    clockRef.current = Math.max(clockRef.current, clock);
+    (window as any).__replayNow = clockRef.current;
+    const f = formingRef.current;
+    if (f && seriesRef.current) { try { seriesRef.current.update({ ...f.bar }); } catch { /* being replaced */ } }
+    setReplayIndex(replayIndexRef.current);
   };
 
   const startInterval = useCallback(() => {
@@ -261,7 +285,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
 
   const cancelSelectRef = useRef<() => void>(() => {});
 
-  const startReplayAt = useCallback((index: number, data: CandleData[], series: any, chart: any) => {
+  const startReplayAt = useCallback((index: number, data: CandleData[], series: any, chart: any, opts?: { continuing?: boolean }) => {
     if (!requireFeature('replay')) return;   // (a saved replay or a collab's replay starts here directly)
     stopInterval();
     seriesRef.current = series;
@@ -279,6 +303,14 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     setHasStarted(true);
     setIsPlaying(false);
     formingRef.current = null;
+    // The same replay on another timeframe: it stays as it was (live or bar by bar), unasked. Live,
+    // the new timeframe's forming candle is built from the ticks up to the replay's moment
+    if (opts?.continuing) {
+      applyDataUpToIndex(clamped);
+      setAskLive(false);
+      if (liveRef.current && feedRef.current) void resumeLiveAt(clamped, clockRef.current);
+      return;
+    }
     feedRef.current = null;
     setLiveFlag(false);
     setLiveError(null);

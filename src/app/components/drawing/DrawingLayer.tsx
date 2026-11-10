@@ -125,6 +125,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   const { setActiveTool, setDrawings, addDrawing, setSelectedShapeId, updateDrawing, deleteDrawing, activeEmoji, setSelectedShapeIds, clearSelection, magnetMode, defaultSettings, keepDrawing, allDrawingsHidden } = ctx;
   const activeTool = readOnly ? null : ctx.activeTool;
   const drawings: typeof ctx.drawings = drawingsOverride ?? ctx.drawings;
+  const drawingsNowRef = useRef(drawings);
+  drawingsNowRef.current = drawings;
   const selectedShapeId = readOnly ? null : ctx.selectedShapeId;
   const selectedShapeIds = readOnly ? NO_SELECTION : ctx.selectedShapeIds;
   // Once a drawing is finished the tool goes back to the cursor, unless "Keep drawing" is on
@@ -320,6 +322,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
 
   // Refs for Ctrl/Shift so callbacks always see fresh key state (updated synchronously in key handlers)
   const ctrlRef = useRef(false);
+  // The last press's modifier keys (logged with a copy, [DrawingCopy])
+  const lastPressRef = useRef<{ ctrl: boolean; meta: boolean; alt: boolean; shift: boolean; at: string } | null>(null);
   const shiftRef = useRef(false);
 
   // Track which drawings have already been cloned in the current drag to avoid duplicates
@@ -336,10 +340,13 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   const cloneDrawingIfNeeded = useCallback((drawingId: string) => {
     if (!ctrlRef.current || clonedDrawingIds.current.has(drawingId)) return;
     clonedDrawingIds.current.add(drawingId);
+    const cloneId = Math.random().toString(36).substring(2, 10);
+    // [DrawingCopy] (debugging copies made while dragging, e.g. a Short duplicated on a Mac)
+    console.info("[DrawingCopy] copy made by Ctrl/Cmd+drag", { type: drawingsNowRef.current.find(d => d.id === drawingId)?.type, from: drawingId, copy: cloneId,
+      ctrlHeld: ctrlRef.current, lastPress: lastPressRef.current, mac: IS_MAC, at: new Date().toISOString() });
     setDrawings(prev => {
       const original = prev.find(d => d.id === drawingId);
       if (!original) return prev;
-      const cloneId = Math.random().toString(36).substring(2, 10);
       return [...prev, { ...original, id: cloneId }];
     });
   }, [setDrawings]);
@@ -400,12 +407,32 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     };
   }, [commitLiveEdit]);
 
-  // Clear cloned tracking when a new drag starts
+  // Clear cloned tracking when a new drag starts. The press's own modifier keys decide whether it's a
+  // Ctrl/Cmd gesture: a key-up the page never got (on a Mac, Cmd released after Cmd+Tab or a Cmd
+  // shortcut) left Ctrl/Cmd "held", and the next plain drag of a shape copied it. [DrawingCopy] logs
+  // what happens, to confirm it on the reporter's Mac.
   useEffect(() => {
     if (readOnly) return;
-    const handleMouseDown = () => { clonedDrawingIds.current.clear(); };
-    window.addEventListener('mousedown', handleMouseDown);
-    return () => window.removeEventListener('mousedown', handleMouseDown);
+    const handleMouseDown = (e: MouseEvent) => {
+      clonedDrawingIds.current.clear();
+      const real = modKey(e);
+      lastPressRef.current = { ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey, shift: e.shiftKey, at: new Date().toISOString() };
+      if (ctrlRef.current !== real) {
+        console.info("[DrawingCopy] press: Ctrl/Cmd state corrected", { remembered: ctrlRef.current, actual: real, ...lastPressRef.current, mac: IS_MAC });
+        ctrlRef.current = real;
+        setIsCtrlPressed(real);
+      }
+    };
+    // (the window losing focus: no key is held any more)
+    const handleBlur = () => {
+      if (ctrlRef.current) console.info("[DrawingCopy] window lost focus with Ctrl/Cmd held: released", { at: new Date().toISOString() });
+      ctrlRef.current = false;
+      setIsCtrlPressed(false);
+    };
+    window.addEventListener('mousedown', handleMouseDown, true);
+    window.addEventListener('blur', handleBlur);
+    return () => { window.removeEventListener('mousedown', handleMouseDown, true); window.removeEventListener('blur', handleBlur); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Panning / zooming doesn't re-render this layer: each drawing follows the chart itself
@@ -594,7 +621,10 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     // Track Ctrl and Shift keys to allow starting a selection drag or measure drag
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
-      if (e.key === 'Control' || e.key === MOD_KEY_NAME || modKey(e)) { setIsCtrlPressed(true); ctrlRef.current = true; }
+      if (e.key === 'Control' || e.key === MOD_KEY_NAME || modKey(e)) {
+        if (!ctrlRef.current) console.info("[DrawingCopy] Ctrl/Cmd down", { key: e.key, ctrl: e.ctrlKey, meta: e.metaKey, mac: IS_MAC });
+        setIsCtrlPressed(true); ctrlRef.current = true;
+      }
       if (e.key === 'Shift' || e.shiftKey) {
         setIsShiftPressed(true);
         shiftRef.current = true;
@@ -602,7 +632,10 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Control' || e.key === MOD_KEY_NAME || !modKey(e)) { setIsCtrlPressed(false); ctrlRef.current = false; }
+      if (e.key === 'Control' || e.key === MOD_KEY_NAME || !modKey(e)) {
+        if (ctrlRef.current) console.info("[DrawingCopy] Ctrl/Cmd up", { key: e.key, ctrl: e.ctrlKey, meta: e.metaKey, mac: IS_MAC });
+        setIsCtrlPressed(false); ctrlRef.current = false;
+      }
       if (e.key === 'Shift' || !e.shiftKey) {
         setIsShiftPressed(false);
         shiftRef.current = false;

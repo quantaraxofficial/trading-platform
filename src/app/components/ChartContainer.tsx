@@ -897,11 +897,11 @@ export default function ChartContainer({
     // Each live tick moves the last-price label: the countdown under it moves in the same frame
     window.addEventListener('tv:live-price', schedule);
     // (a live replay's ticks move the price and its clock)
-    window.addEventListener('tv:replay-tick', schedule);
+    window.addEventListener('tv:replay-ticks', schedule);
     return () => {
       clearInterval(id);
       window.removeEventListener('tv:live-price', schedule);
-      window.removeEventListener('tv:replay-tick', schedule);
+      window.removeEventListener('tv:replay-ticks', schedule);
       cancelAnimationFrame(frame);
       try { chart?.timeScale().unsubscribeVisibleLogicalRangeChange(schedule); } catch { /* chart gone */ }
     };
@@ -2703,14 +2703,15 @@ export default function ChartContainer({
     else engine.endReplaySession();
   }, [mode]);
   useEffect(() => () => engine.endReplaySession(), []);
-  // (a replay "like the live market" sends each price as it happens instead: tv:replay-tick)
+  // (a replay "like the live market" sends its prices as they happen instead, a frame's at a time:
+  // tv:replay-ticks)
   useEffect(() => {
-    const onTick = (e: Event) => {
-      const d = (e as CustomEvent).detail;
-      if (typeof d?.price === "number" && typeof d?.time === "number") engine.setReplayQuote(symbolRef.current, d.price, d.time * 1000);
+    const onTicks = (e: Event) => {
+      const ticks = (e as CustomEvent).detail?.ticks;
+      if (Array.isArray(ticks) && ticks.length) engine.setReplayQuotes(symbolRef.current, ticks.map((t: any) => ({ price: t.price, time: t.time * 1000 })));
     };
-    window.addEventListener("tv:replay-tick", onTick);
-    return () => window.removeEventListener("tv:replay-tick", onTick);
+    window.addEventListener("tv:replay-ticks", onTicks);
+    return () => window.removeEventListener("tv:replay-ticks", onTicks);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
@@ -3902,7 +3903,7 @@ export default function ChartContainer({
               // (the subscription ran out during the replay: it ends, with the full chart back)
               if (featureLocked('replay')) { stopReplay(stockData); requireFeature('replay'); }
               else {
-                startReplayAt(closestIdx, stockData, candleSeriesRef.current, chartRef.current);
+                startReplayAt(closestIdx, stockData, candleSeriesRef.current, chartRef.current, { continuing: true });
                 // Cutting the bars back to the replay's keeps the old distance from the last bar
                 // (thousands of bars on the full data), which parked the view at the far left:
                 // place it again, the candle size and the replay bar's spot as before
