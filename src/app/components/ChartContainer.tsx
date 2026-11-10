@@ -2615,7 +2615,7 @@ export default function ChartContainer({
         if (vs && vp) { try { vs.update(vp); } catch { /* the volume pane is being rebuilt */ } }
       }
       updateEmaData(fullDataRef.current);
-      setLastPriceData({ price: d.price, prevPrice: bars.length > 1 ? bars[bars.length - 2].close : d.price });
+      setLastPriceData({ price: d.price, prevPrice: titleBaseClose(bars, symbolRef.current, intervalRef.current) ?? (bars.length > 1 ? bars[bars.length - 2].close : d.price) });
       // Script execution "On realtime bar tick": the strategy recalculates on each real-time update
       // (at most every 1.5 s, one run at a time)
       if (strategyDock.get().onRealtimeTick && Date.now() - realtimeRerunRef.current.last > 1500) realtimeRerunRef.current.run();
@@ -2927,7 +2927,7 @@ export default function ChartContainer({
       if (stockData.length > 1) {
         setLastPriceData({
           price: stockData[stockData.length - 1].close,
-          prevPrice: stockData[stockData.length - 2].close
+          prevPrice: titleBaseClose(stockData, symbolRef.current, intervalRef.current) ?? stockData[stockData.length - 2].close
         });
       }
 
@@ -3169,7 +3169,7 @@ export default function ChartContainer({
         if (stockData.length > 1) {
           setLastPriceData({
             price: stockData[stockData.length - 1].close,
-            prevPrice: stockData[stockData.length - 2].close
+            prevPrice: titleBaseClose(stockData, symbolRef.current, intervalRef.current) ?? stockData[stockData.length - 2].close
           });
         }
         return stockData;
@@ -3606,7 +3606,7 @@ export default function ChartContainer({
           if (stockData.length > 1) {
             setLastPriceData({
               price: stockData[stockData.length - 1].close,
-              prevPrice: stockData[stockData.length - 2].close
+              prevPrice: titleBaseClose(stockData, symbolRef.current, intervalRef.current) ?? stockData[stockData.length - 2].close
             });
           }
 
@@ -5002,6 +5002,20 @@ function previousDayClose(bars: { time: number; close: number }[], idx: number, 
   const dayOf = (t: number) => { const d = new Date(t * 1000); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
   const today = dayOf(bars[idx].time);
   for (let i = idx - 1; i >= 0; i--) if (dayOf(bars[i].time) !== today) return bars[i].close;
+  return null;
+}
+
+// The tab title's change is since the previous trading day's close, as on TradingView (the bar
+// before the last one moved it by ~0.00% on a minute chart). A trading day: the feed's own for gold
+// and the stored forex pairs (from 17:00 New York), else the UTC date; daily and longer bars compare
+// with the bar before.
+function titleBaseClose(bars: { time: number; close: number }[], symbol: string, interval: string): number | null {
+  const n = bars.length;
+  if (n < 2) return null;
+  if (/day|week|month/.test(interval)) return bars[n - 2].close;
+  const dayOf = (t: number) => (isVantageSymbol(symbol) ? vantageBarTime("1day", t * 1000) : null) ?? Math.floor(t / 86400) * 86400;
+  const today = dayOf(bars[n - 1].time);
+  for (let i = n - 2; i >= 0; i--) if (dayOf(bars[i].time) !== today) return bars[i].close;
   return null;
 }
 
