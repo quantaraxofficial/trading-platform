@@ -253,6 +253,8 @@ const substantial = (t: string) => { const n = normText(t); return n.split(" ").
 
 // ---- listening ------------------------------------------------------------------------------
 let rec: any = null;
+let quietRestart = false;
+const PAUSE_MS = 1200;          // the pause that ends a spoken command
 let restarts: number[] = [];
 
 function startRecognition() {
@@ -265,6 +267,24 @@ function startRecognition() {
   r.interimResults = true;
   r.lang = state.lang;
   r.maxAlternatives = 3;
+  // A pause after speaking ends the command: what was heard runs at once while the mic stays on
+  // (the browser can hold a sentence back as "not final" until the mic is turned off). The session
+  // starts afresh after it, so the same words don't come back as a final result.
+  let pending = "";
+  let pauseTimer: ReturnType<typeof setTimeout> | undefined;
+  const endOnPause = () => {
+    clearTimeout(pauseTimer);
+    if (!pending) return;
+    pauseTimer = setTimeout(() => {
+      if (rec !== r || !pending) return;
+      const t = pending;
+      pending = "";
+      set({ hearing: "" });
+      quietRestart = true;
+      try { r.abort(); } catch { /* ended */ }
+      handleText(t);
+    }, PAUSE_MS);
+  };
   r.onresult = (e: any) => {
     let interim = "";
     // (what it's saying now, or said a moment ago: the speakers' sound reaching the mic)
@@ -278,10 +298,14 @@ function startRecognition() {
         set({ hearing: "" });
         // (what speech recognition also thought it heard: the AI picks the one that makes sense)
         const alts = Array.from({ length: res.length }, (_, k) => (res[k]?.transcript ?? "").trim()).slice(1).filter(x => x && x !== text);
+        clearTimeout(pauseTimer);
+        pending = "";
         if (text) handleText(text, alts);
       } else interim += `${text} `;
     }
     set({ hearing: interim.trim() });
+    pending = interim.trim();
+    endOnPause();
   };
   r.onerror = (e: any) => {
     const err = e?.error;
@@ -299,6 +323,8 @@ function startRecognition() {
     rec = null;
     // The browser ends a session after a pause: carry on while the mic is on
     if (!state.listening) return;
+    // (a command ended by a pause restarts it on purpose: not counted as the browser stopping it)
+    if (quietRestart) { quietRestart = false; setTimeout(() => { if (state.listening && !rec) startRecognition(); }, 60); return; }
     const now = Date.now();
     restarts = restarts.filter(t => now - t < 10000);
     if (restarts.length > 6) { stopListening(); set({ error: "Listening keeps stopping. Click the microphone to try again." }); return; }
