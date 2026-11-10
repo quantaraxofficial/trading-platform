@@ -9,12 +9,14 @@ import { getChartBars } from "../chartBars";
 import { analyse, type MarkKind, type Zone } from "../analysis/smc";
 
 export type { MarkKind };
-export const MARK_KINDS: MarkKind[] = ["order_blocks", "fvg", "ifvg", "support_resistance"];
+export const MARK_KINDS: MarkKind[] = ["order_blocks", "fvg", "ifvg", "support_resistance", "structure"];
 export const MARK_NAMES: Record<MarkKind, string> = {
   order_blocks: "order blocks", fvg: "fair value gaps", ifvg: "inverse fair value gaps", support_resistance: "support and resistance levels",
+  structure: "structure breaks",
 };
 const GROUP_NAMES: Record<MarkKind, string> = {
   order_blocks: "Order blocks", fvg: "Fair value gaps", ifvg: "Inverse FVGs", support_resistance: "Support / resistance",
+  structure: "BOS / CHoCH",
 };
 export const GROUP_PREFIX = "voice-marks-";
 const groupId = (k: MarkKind) => `${GROUP_PREFIX}${k}`;
@@ -24,6 +26,8 @@ const COLORS: Record<Zone["kind"], Record<Zone["side"], string>> = {
   fvg: { bull: "#2962ff", bear: "#ff9800" },
   ifvg: { bull: "#00bcd4", bear: "#e91e63" },
   sr: { bull: "#089981", bear: "#f23645" },
+  bos: { bull: "#089981", bear: "#f23645" },
+  choch: { bull: "#089981", bear: "#f23645" },
 };
 
 // The bars to look at: what's on screen, and at least 150 bars back from its right edge
@@ -35,7 +39,7 @@ function analysisStart(bars: { length: number }): number {
   return Math.max(0, bars.length - 300);
 }
 
-export type MarkResult = { ok: true; count: number; bull: number; bear: number } | { ok: false; reason: "no_data" };
+export type MarkResult = { ok: true; count: number; bull: number; bear: number; bos?: number; choch?: number } | { ok: false; reason: "no_data" };
 
 export function markOnChart(kind: MarkKind): MarkResult {
   const bars = getChartBars();
@@ -45,6 +49,18 @@ export function markOnChart(kind: MarkKind): MarkResult {
   const stamp = Date.now().toString(36);
   const drawings = zones.map((z, i) => {
     const color = COLORS[z.kind][z.side];
+    // A break of structure / change of character: a line at the swing's level, from the swing to the
+    // candle that broke it, labelled (a CHoCH dashed)
+    if (z.kind === "bos" || z.kind === "choch") {
+      return {
+        id: `${groupId(kind)}-${stamp}-${i}`, type: "trendline", visible: true, locked: false, group,
+        stroke: color, strokeWidth: z.kind === "choch" ? 2 : 1, lineStyle: z.kind === "choch" ? "dashed" : "solid", text: z.label,
+        points: [
+          { logical: z.from, price: z.top, time: bars[z.from]?.time },
+          { logical: z.to, price: z.top, time: bars[z.to]?.time },
+        ],
+      };
+    }
     return {
       id: `${groupId(kind)}-${stamp}-${i}`, type: "rectangle", visible: true, locked: false, group,
       stroke: color, strokeWidth: 1, fill: color + (z.kind === "sr" ? "22" : "33"), backgroundVisible: true,
@@ -58,7 +74,8 @@ export function markOnChart(kind: MarkKind): MarkResult {
   });
   // (the old marks of this kind go in the same step: one undo takes the whole marking back)
   fire("tv:add-drawings", { drawings, replaceGroup: group.id });
-  return { ok: true, count: zones.length, bull: zones.filter(z => z.side === "bull").length, bear: zones.filter(z => z.side === "bear").length };
+  return { ok: true, count: zones.length, bull: zones.filter(z => z.side === "bull").length, bear: zones.filter(z => z.side === "bear").length,
+    bos: zones.filter(z => z.kind === "bos").length, choch: zones.filter(z => z.kind === "choch").length };
 }
 
 // How many of the assistant's marks are on the chart (one kind, or all)

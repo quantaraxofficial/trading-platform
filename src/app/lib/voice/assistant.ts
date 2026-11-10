@@ -464,7 +464,8 @@ async function run(intent: Intent, reply?: string, quiet = false, confirmed = fa
         const r = markOnChart(k);
         if (!r.ok) { say("The chart has no bars to look at yet."); return; }
         if (!r.count) { none.push(MARK_NAMES[k]); continue; }
-        const sides = k === "support_resistance" ? `${r.bull} support, ${r.bear} resistance` : `${r.bull} bullish, ${r.bear} bearish`;
+        const sides = k === "support_resistance" ? `${r.bull} support, ${r.bear} resistance`
+          : k === "structure" ? `${r.bos ?? 0} BOS, ${r.choch ?? 0} CHoCH` : `${r.bull} bullish, ${r.bear} bearish`;
         done.push(`${r.count} ${r.count === 1 ? MARK_NAMES[k].replace(/s$/, "").replace(/levels$/, "level") : MARK_NAMES[k]} (${sides})`);
       }
       // (the counts are the site's, so they're said even when the AI gave its own reply)

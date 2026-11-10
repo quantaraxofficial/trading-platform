@@ -6,6 +6,16 @@ import { useSnap, useSnappedDrag } from '../../core/snap';
 import { HandleCircle } from '../../core/Handles';
 import { lineStats, textWidth, isDarkChart, SHAPE_FONT } from '../../core/lineStats';
 
+// A label's width as Konva draws it (its default font)
+let measureCtx: CanvasRenderingContext2D | null = null;
+function measureLabel(text: string, fontSize: number): number {
+  if (typeof document === "undefined") return text.length * fontSize * 0.7;
+  measureCtx = measureCtx || document.createElement("canvas").getContext("2d");
+  if (!measureCtx) return text.length * fontSize * 0.7;
+  measureCtx.font = `${fontSize}px Arial`;
+  return measureCtx.measureText(text).width;
+}
+
 interface TrendLineProps {
   id: string;
   points: { logical: number; price: number }[]; // Needs exactly 2 points
@@ -272,7 +282,8 @@ export function TrendLine({
           // center the text on (mx,my) — offsetX=0 anchors at the text's own left
           // edge instead, which is what let this drift out of sync with the HTML
           // text-edit overlay (which centers using the real DOM-measured width).
-          const estWidth = Math.max(text.length * 14 * 0.6, 10);
+          // (measured, not guessed: a guess too narrow wrapped short labels, "BOS" became "BO / S")
+          const estWidth = Math.max(measureLabel(text, 14) + 2, 10);
           return (
             <Group
               x={mx}
@@ -289,6 +300,7 @@ export function TrendLine({
                 offsetX={estWidth / 2}
                 offsetY={10} // Position above the line
                 align="center"
+                wrap="none"
               />
             </Group>
           );

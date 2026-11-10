@@ -4,7 +4,7 @@
 
 export type Interval = { value: string; label: string; spoken: string };
 export type PanelId = "watchlist" | "alerts" | "object_tree" | "collab" | "chats" | "notifications" | "backtest_sessions";
-export type MarkKind = "order_blocks" | "fvg" | "ifvg" | "support_resistance";
+export type MarkKind = "order_blocks" | "fvg" | "ifvg" | "support_resistance" | "structure";
 export type LengthUnit = "hours" | "days" | "weeks" | "months" | "years";
 
 export type Intent =

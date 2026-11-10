@@ -528,6 +528,9 @@ Posting signals out
     answers appear word by word as they're spoken
   - Misheard words understood: speech recognition's alternatives go to the AI, which reads them as
     the trading terms meant (fbg → FVG, "auto block" → order block, "e m a" → EMA…)
+  - Market structure by voice ("mark BOS and CHoCH"): breaks of structure and changes of character
+    from the confirmed swings, as lines from the swing to the candle that broke it (CHoCH dashed),
+    green bullish / red bearish, in an Object tree group like the other marks
   - Indicator settings by voice: "change the EMA to 15", "make the EMA red", "RSI length 21" (an
     EMA's length / source / colour / width / offset, or any input of a Pine indicator by its title)
   - Languages: 27 (English US / India / UK, Hindi, Marathi, Gujarati, Bengali, Tamil, Telugu,
