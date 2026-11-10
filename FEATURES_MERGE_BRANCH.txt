@@ -544,18 +544,23 @@ Posting signals out
 ======================================================================
 17b. ECONOMIC CALENDAR
 ======================================================================
-  - Economic calendar (right toolbar, calendar icon), as on TradingView: Yesterday, Today,
-    Tomorrow, This week and Next week; each event's time (chart timezone), flag, importance
-    bars, and actual / forecast / prior; past events dimmed, a NOW line, a countdown to the next
-    event; a row opens to its details and a link to the event. Filters for importance and
-    currencies, or only the chart symbol's currencies (kept per browser)
+  - Calendar window like TradingView's (right toolbar → Calendars): over the right of the window
+    or in split view beside the layout (like the Pine Editor), resizable, collapse / close /
+    maximize; Escape closes it. Today, a week picker, previous / next week; cards for the week's
+    days with their event counts (click to jump, the day in view highlighted, today underlined);
+    Economic; a High importance toggle; categories (Bonds, Business, Consumer, GDP, Government,
+    Health, Housing, Labor, Money, Prices, Trade, Taxes); settings for countries and timezone
+  - The week's events as one table under a sticky day header (Actual / Forecast / Prior): time
+    once per time, flag once per country, importance bars, values. The next events get a red
+    time and "Coming in mm:ss" (within the hour) or "Coming soon", a red line marks now, and a
+    "Coming soon" button jumps back to them
   - Data: Forex Factory's weekly feed through the backend (/api/users/calendar/economic/),
     refreshed every 30 minutes and kept as a growing history (past weeks stay). The feed has no
     actual values, so Actual shows "—"; next week appears once Forex Factory publishes it
   - Settings → Events → Economic events now works: the symbol's high and medium importance events
     as flags along the bottom of the chart (upcoming ones right of the last bar), ringed in the
     importance colour; hovering lists them. "Only future events" and "Events breaks" work too
-  - Voice: "open the economic calendar", show / hide economic events on the chart, and
+  - Voice: open / close the calendar, show / hide economic events on the chart, and
     economic_calendar(period, impact, currency) reads the events out ("any high impact USD news
     today?")
   - Flags for China and "Global" events; logo ids no longer differ between server and browser

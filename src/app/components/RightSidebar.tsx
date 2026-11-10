@@ -21,6 +21,7 @@ import { useDms } from "../lib/collab/dms";
 import { useNotifications } from "../community/NotificationsPanel";
 import { BacktestSessionsIcon } from "./BacktestSessionsPanel";
 import { EconomicCalendarIcon } from "./EconomicCalendarPanel";
+import { calendarDock } from "../lib/economicCalendar";
 import { VoiceAssistantIcon } from "./VoicePanel";
 import { useVoice, setVoiceUser } from "../lib/voice/assistant";
 import { useAuth } from "@/context/AuthContext";
@@ -72,6 +73,9 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
   const productsRef = useRef<HTMLButtonElement>(null);
   const helpRef = useRef<HTMLButtonElement>(null);
 
+  // The Calendars button opens the Calendar window (not a panel): it's lit while that's open
+  const calendar = calendarDock.useValue();
+  const isActive = (id: string) => (id === "economic_calendar" ? calendar.open && !calendar.collapsed : activePanel === id);
   const panels = [
     { id: "watchlist", icon: <TVWatchlistIcon size={28} />, tooltip: "Watchlist, details and news" },
     { id: "alerts", icon: <TVAlertsIcon size={28} />, tooltip: "Alerts" },
@@ -85,7 +89,7 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     // Your backtest sessions: one clicked opens in a new tab, carrying on where it was left
     { id: "backtest_sessions", icon: <BacktestSessionsIcon size={28} />, tooltip: "Backtest sessions" },
     // The economic calendar: the week's news events, by importance and currency
-    { id: "economic_calendar", icon: <EconomicCalendarIcon size={28} />, tooltip: "Economic calendar" },
+    { id: "economic_calendar", icon: <EconomicCalendarIcon size={28} />, tooltip: "Calendars" },
     // Talk to the site: spoken commands, answered aloud with subtitles (lib/voice/assistant)
     { id: "voice", icon: <VoiceAssistantIcon size={28} />, tooltip: voiceState.listening ? "Voice assistant (listening)" : "Voice assistant" },
   ];
@@ -127,7 +131,7 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
       <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
         {panels.map(p => (
           <div key={p.id} className="tv-tooltip-container">
-            <button className={`tv-rt-btn ${activePanel === p.id ? "active" : ""}`} onClick={() => onPanelChange(p.id)} aria-label={p.tooltip} aria-pressed={activePanel === p.id} style={{ position: "relative" }}>
+            <button className={`tv-rt-btn ${isActive(p.id) ? "active" : ""}`} onClick={() => onPanelChange(p.id)} aria-label={p.tooltip} aria-pressed={isActive(p.id)} style={{ position: "relative" }}>
               {p.icon}
               {p.id === "alerts" && unread > 0 && (
                 <span data-testid="alerts-badge" style={{ position: "absolute", top: 3, right: 3, minWidth: 16, height: 16, padding: "0 4px", boxSizing: "border-box", borderRadius: 8, background: "#f23645", color: "#fff", fontSize: 11, lineHeight: "16px", fontWeight: 600, pointerEvents: "none" }}>{unread > 99 ? "99+" : unread}</span>

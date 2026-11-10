@@ -47,6 +47,7 @@ import ReplayLeaveDialog from "./components/ReplayLeaveDialog";
 import BacktestSessionBar from "./components/BacktestSessionBar";
 import BacktestSessionsPanel from "./components/BacktestSessionsPanel";
 import EconomicCalendarPanel from "./components/EconomicCalendarPanel";
+import { calendarDock, defaultCalendarWidth, toggleCalendar, openCalendar } from "./lib/economicCalendar";
 import VoicePanel from "./components/VoicePanel";
 import VoiceBridge from "./components/VoiceBridge";
 import FeedbackPanel from "./components/FeedbackPanel";
@@ -247,7 +248,18 @@ function AppLayout() {
     window.addEventListener("resize", on);
     return () => window.removeEventListener("resize", on);
   }, []);
-  const splitW = pineVisible && pine.mode === "split" && !pine.maximized ? (pine.width || defaultPineWidth()) : 0;
+  // The Calendar window (right toolbar → Calendars): an overlay, or a split view like the Pine Editor's.
+  // One of the two at a time: opening one collapses the other
+  const cal = calendarDock.useValue();
+  const calVisible = cal.open && !cal.collapsed;
+  const prevPineVisible = useRef(pineVisible), prevCalVisible = useRef(calVisible);
+  useEffect(() => {
+    if (calVisible && !prevCalVisible.current && pineVisible && pine.mode !== "bottom") pineDock.set({ collapsed: true });
+    else if (pineVisible && !prevPineVisible.current && calVisible && pine.mode !== "bottom") calendarDock.set({ collapsed: true });
+    prevPineVisible.current = pineVisible; prevCalVisible.current = calVisible;
+  }, [pineVisible, calVisible, pine.mode]);
+  const calSplitW = calVisible && cal.mode === "split" && !cal.maximized ? (cal.width || defaultCalendarWidth()) : 0;
+  const splitW = Math.max(calSplitW, pineVisible && pine.mode === "split" && !pine.maximized ? (pine.width || defaultPineWidth()) : 0);
   const layoutW = winW - splitW;
   const layoutWidthClass = splitW ? `${layoutW <= 1150 ? "tv-lw-1150" : ""} ${layoutW <= 1000 ? "tv-lw-1000" : ""}` : "";
   // Lets the on-chart Pine script legend row's icons reopen the editor
@@ -1047,7 +1059,8 @@ function AppLayout() {
       { id: "download-chart-data", run: ev("tv:download-chart-data") },
       { id: "collab-dialog", run: () => setShowCollabDialog(true) },
       // the economic calendar: its panel, and its events on the chart (Settings → Events)
-      { id: "economic-calendar-panel", run: ev("tv:open-sidebar-panel", "economic_calendar") },
+      { id: "economic-calendar-open", run: openCalendar },
+      { id: "economic-calendar-close", run: () => calendarDock.set({ open: false, collapsed: false, maximized: false }) },
       { id: "economic-events-on-chart-show", run: () => chartSettings.set({ economicEvents: true }) },
       { id: "economic-events-on-chart-hide", run: () => chartSettings.set({ economicEvents: false }) },
       { id: "feedback-panel", run: () => setShowFeedback(true) },
@@ -1321,8 +1334,6 @@ function AppLayout() {
             <NotificationsPanel />
           ) : activeSidebarPanel === "backtest_sessions" ? (
             <BacktestSessionsPanel />
-          ) : activeSidebarPanel === "economic_calendar" ? (
-            <EconomicCalendarPanel symbol={symbol} />
           ) : activeSidebarPanel === "voice" ? (
             <VoicePanel />
           ) : (
@@ -1336,6 +1347,7 @@ function AppLayout() {
           <RightSidebar
             activePanel={showRightPanel ? activeSidebarPanel : null}
             onPanelChange={(id) => {
+              if (id === "economic_calendar") { toggleCalendar(); return; }
               if (id === activeSidebarPanel && showRightPanel && !dockedTicketOpen) { setRightPanel(false); return; }
               setActiveSidebarPanel(id);
               setRightPanel(true);
@@ -1362,6 +1374,9 @@ function AppLayout() {
           onSaveTemplate={saveLayoutTemplate} />
       )}
 
+      {cal.open && (
+        <EconomicCalendarPanel theme={theme === "dark" ? "dark" : "light"} onClose={() => calendarDock.set({ open: false, collapsed: false, maximized: false })} />
+      )}
       {showPineEditor && (
         <PineEditorPanel
           key={pineOpenRequest?.key ?? "default"}

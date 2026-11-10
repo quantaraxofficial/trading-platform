@@ -4,7 +4,7 @@
 // growing history) for the Economic calendar panel and the chart's event marks. Requests are
 // cached for a few minutes and shared, so the panel and the chart don't both fetch.
 
-import { useSyncExternalStore } from "react";
+import { makeStore } from "../trading/settings";
 // (this branch has no shared backend URL module: the deployment overrides it, as FeedbackPanel does)
 const BACKEND_URL = ((typeof process !== "undefined" && process.env.NEXT_PUBLIC_BACKEND_URL) || "http://localhost:8000").replace(/\/$/, "");
 
@@ -47,33 +47,60 @@ export function symbolCurrencies(symbol: string): string[] {
   return Array.from(out).filter(c => c !== "ALL" && c in CURRENCY_NAMES);
 }
 
-// ---- the panel's filters (this viewer's own: kept in the browser)
-export type CalendarFilters = { impacts: Impact[]; currencies: string[]; chartOnly: boolean };
-const FILTERS_KEY = "tv:econCalendarFilters";
-const DEFAULT_FILTERS: CalendarFilters = { impacts: ["high", "medium", "low", "holiday"], currencies: CALENDAR_CURRENCIES, chartOnly: false };
-let filters: CalendarFilters = DEFAULT_FILTERS;
-let filtersRead = false;
-const listeners = new Set<() => void>();
-function readFilters(): CalendarFilters {
-  if (!filtersRead && typeof window !== "undefined") {
-    filtersRead = true;
-    try { const v = JSON.parse(localStorage.getItem(FILTERS_KEY) || "null"); if (v && Array.isArray(v.impacts) && Array.isArray(v.currencies)) filters = { ...DEFAULT_FILTERS, ...v }; } catch { /* unavailable */ }
-  }
-  return filters;
+// ---- the Calendar window, as TradingView's: an overlay over the right of the window or a split
+// view beside the whole layout (like the Pine Editor), its width, and whether it's collapsed
+export type CalendarDock = { open: boolean; collapsed: boolean; mode: "overlay" | "split"; width: number; maximized: boolean; headerCollapsed: boolean };
+export const calendarDock = makeStore<CalendarDock>("tv:calendarDock", { open: false, collapsed: false, mode: "overlay", width: 0, maximized: false, headerCollapsed: false });
+export const defaultCalendarWidth = () => (typeof window === "undefined" ? 720 : Math.round(window.innerWidth / 2));
+export const clampCalendarWidth = (w: number) => Math.max(420, Math.min(w, (typeof window === "undefined" ? 1440 : window.innerWidth) - 240));
+export const openCalendar = () => calendarDock.set(d => ({ open: true, collapsed: false, width: d.width || defaultCalendarWidth() }));
+export const toggleCalendar = () => { const d = calendarDock.get(); if (d.open && !d.collapsed) calendarDock.set({ collapsed: true }); else openCalendar(); };
+
+// ---- its settings (this viewer's own: kept in the browser)
+export type CalendarTimezone = "chart" | "local" | "UTC";
+export type CalendarSettings = { countries: string[]; highOnly: boolean; category: string; timezone: CalendarTimezone };
+export const calendarSettings = makeStore<CalendarSettings>("tv:calendarSettings", { countries: CALENDAR_CURRENCIES, highOnly: false, category: "all", timezone: "chart" });
+export function resolveTimezone(tz: CalendarTimezone): string {
+  if (tz === "UTC") return "UTC";
+  if (tz === "local") { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch { return "UTC"; } }
+  return calendarTimezone();
 }
-export function setCalendarFilters(patch: Partial<CalendarFilters>) {
-  filters = { ...readFilters(), ...patch };
-  try { localStorage.setItem(FILTERS_KEY, JSON.stringify(filters)); } catch { /* unavailable */ }
-  listeners.forEach(l => l());
+// "UTC+5:30", "UTC−4", "UTC"
+export function utcOffsetLabel(tz: string, at = Date.now()): string {
+  try {
+    const name = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" }).formatToParts(new Date(at)).find(p => p.type === "timeZoneName")?.value || "GMT";
+    return name.replace("GMT", "UTC").replace("-", "−");
+  } catch { return "UTC"; }
 }
-export const resetCalendarFilters = () => setCalendarFilters(DEFAULT_FILTERS);
-export function useCalendarFilters(): CalendarFilters {
-  return useSyncExternalStore(l => { listeners.add(l); return () => listeners.delete(l); }, readFilters, () => DEFAULT_FILTERS);
+
+// ---- categories, as TradingView sorts economic events (from the event's name)
+export const CATEGORIES: { id: string; label: string; re: RegExp }[] = [
+  { id: "taxes", label: "Taxes", re: /\btax/i },
+  { id: "bonds", label: "Bonds", re: /auction|\bbond|\bbill\b|gilt|\bbtp|bund|yield|\bnotes?\b|\bjgb/i },
+  { id: "gdp", label: "GDP", re: /\bgdp\b|gross domestic/i },
+  { id: "labor", label: "Labor", re: /employ|jobless|payroll|\bnfp\b|claimant|labou?r|\bjobs?\b|\bjolts\b|\badp\b|wage|earnings|hours worked/i },
+  { id: "prices", label: "Prices", re: /\bcpi\b|\bppi\b|\bpce\b|inflation|price|deflator|\bhicp\b|\brpi\b|\btrimmed mean\b/i },
+  { id: "housing", label: "Housing", re: /hous|home|building|mortgage|construction|\bhpi\b|pending|dwelling/i },
+  { id: "trade", label: "Trade", re: /trade|export|import|current account|tourist/i },
+  { id: "money", label: "Money", re: /rate statement|cash rate|interest rate|bank rate|policy rate|monetary|\bm[0-3]\b|money supply|loans|lending|credit|reserves|financing|speaks|testif|\bfomc\b|\becb\b|\bboe\b|\bboj\b|\brba\b|\brbnz\b|\bsnb\b|\bboc\b|\bpboc\b|\bfed\b|press conference|minutes/i },
+  { id: "government", label: "Government", re: /budget|government|treasury|election|summit|meeting|\bg7\b|\bg20\b|president|parliament|vote|fiscal|holiday|minister/i },
+  { id: "business", label: "Business", re: /pmi|manufactur|industrial|production|business|\bism\b|factory|capex|orders|sentix|\bzew\b|\bifo\b|nfib|inventor|empire state|philly|tankan|durable|leading/i },
+  { id: "consumer", label: "Consumer", re: /retail|consumer|sentiment|spending|confidence|sales|\bcar\b|vehicle/i },
+  { id: "health", label: "Health", re: /covid|health|pandemic/i },
+];
+export function categoryOf(e: EconEvent): string {
+  if (/covid|health|pandemic/i.test(e.title)) return "health";
+  for (const c of CATEGORIES) if (c.id !== "health" && c.re.test(e.title)) return c.id;
+  return "business";
 }
-export function passesFilters(e: EconEvent, f: CalendarFilters, chartCurrencies: string[]): boolean {
-  if (!f.impacts.includes(e.impact)) return false;
-  if (f.chartOnly) return chartCurrencies.includes(e.currency);
-  return f.currencies.includes(e.currency);
+// The categories menu, in TradingView's order
+export const CATEGORY_MENU = ["bonds", "business", "consumer", "gdp", "government", "health", "housing", "labor", "money", "prices", "trade", "taxes"]
+  .map(id => CATEGORIES.find(c => c.id === id)!);
+// The week (Monday to Sunday, in `tz`) a moment falls in: its seven days' starts and the end
+export function weekDays(t: number, tz: string): number[] {
+  const p = dayParts(t, tz);
+  const monday = -((p.wd + 6) % 7);
+  return Array.from({ length: 8 }, (_, i) => { const u = new Date(Date.UTC(p.y, p.m - 1, p.d + monday + i)); return zonedToUtc(u.getUTCFullYear(), u.getUTCMonth() + 1, u.getUTCDate(), tz); });
 }
 
 // ---- periods, as TradingView's calendar offers them, in a timezone's days
@@ -84,7 +111,7 @@ export const PERIODS: { id: Period; label: string }[] = [
 ];
 
 // The UTC instant a wall-clock date-time in `tz` is
-function zonedToUtc(y: number, m: number, d: number, tz: string): number {
+export function zonedToUtc(y: number, m: number, d: number, tz: string): number {
   const guess = Date.UTC(y, m - 1, d);
   const off = (t: number) => {
     const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric" })
