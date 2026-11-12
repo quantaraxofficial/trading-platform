@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 class TraderProfile(models.Model):
     uid = models.CharField(max_length=128, unique=True)
@@ -8,6 +9,9 @@ class TraderProfile(models.Model):
     tier = models.CharField(max_length=20, default='free', choices=[('free', 'Free'), ('pro', 'Pro')])
     created_at = models.DateTimeField(auto_now_add=True)
     last_login = models.DateTimeField(auto_now=True)
+    # The site open in a visible tab: pinged every minute (core/presence.py); active now = the last 2 minutes
+    last_seen = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_where = models.CharField(max_length=40, blank=True, default='')
     # The public profile (core/social.py): how people find you (@username), a bio, what it shows
     # (each off until you turn it on) and who may message you or invite you to a collab
     username = models.CharField(max_length=30, unique=True, null=True, blank=True)
@@ -752,3 +756,31 @@ class FeedbackMessage(models.Model):
     def __str__(self):
         who = self.user.name if self.user else f"(anonymous {self.session_key[:8]})"
         return f"{who} — {self.message[:50]}"
+
+
+
+class Payment(models.Model):
+    """Money someone paid us, entered in Django Admin (Payments, or on their profile). Earnings
+    (core/earnings.py) adds these up by day, month and year."""
+    CURRENCIES = [('INR', '₹ INR'), ('USD', '$ USD')]
+    profile = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='payments')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, choices=CURRENCIES, default='INR')
+    paid_at = models.DateTimeField(default=timezone.now, db_index=True)
+    method = models.CharField(max_length=40, blank=True, help_text="UPI, bank transfer, cash…")
+    note = models.CharField(max_length=300, blank=True, help_text="What it's for (e.g. 3 months premium)")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-paid_at']
+
+    def __str__(self):
+        return f"{self.currency} {self.amount} from {self.profile.name if self.profile else '—'} on {self.paid_at:%d %b %Y}"
+
+
+class Earning(Payment):
+    """The payments seen as earnings (Django Admin → Earnings: this month, this year, month by month)"""
+    class Meta:
+        proxy = True
+        verbose_name = "Earnings"
+        verbose_name_plural = "Earnings"

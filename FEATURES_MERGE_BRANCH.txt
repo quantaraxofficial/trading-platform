@@ -1,6 +1,6 @@
 TRADEPILOT - FEATURES BUILT ON THE MERGE BRANCH
 Branch: merge-main-left-toolbar-tools  (everything here is on top of main)
-Up to: 9 Nov 2026 (Settings and indicator templates for indicators and strategies, TradingView-exact backtest fills)
+Up to: 12 Nov 2026 (Django admin: who's active right now, and Earnings / payments accounting)
 
 Contents
   1. Drawing tools (left toolbar)
@@ -427,6 +427,14 @@ Posting signals out
     and viewable in Django admin with day / week / month and status filters
   - Secrets (MT5 passwords, GitHub tokens, Telegram / Discord / WhatsApp tokens) stored
     encrypted and never sent back to the browser
+  - Who's active right now (Django admin, Trader profiles): the count and names above the list,
+    an "Online" column (Active now and which page, or "12 min ago"), and an "Active now /
+    seen in the last 24 hours" filter. The site tells the server once a minute while it's open
+    in a visible tab
+  - Accounting (Django admin): Payments (who paid, amount in ₹ or $, when, how, a note; also on
+    each trader's profile) and an Earnings page: today, this month, last month, this year and
+    all time, a year month by month with bars and its total, and this month's payments.
+    Months and years in Indian time
 
 ======================================================================
 16. VOICE ASSISTANT
@@ -588,7 +596,7 @@ Posting signals out
 ======================================================================
 18. RUNNING IT (SETUP NOTES)
 ======================================================================
-  - Database: run "python manage.py migrate" (migrations up to 0038)
+  - Database: run "python manage.py migrate" (migrations up to 0039)
   - Live collab / chats: the backend runs under daphne (Django Channels)
   - Copy trading: run "python manage.py run_copier" on the copier server (MT5 installed)
   - Market data: TWELVEDATA_API_KEY (8 requests a minute on the free plan; the optimizer

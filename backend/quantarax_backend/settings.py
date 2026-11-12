@@ -40,6 +40,7 @@ ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 INSTALLED_APPS = [
     'daphne',  # ASGI server: `runserver` then serves WebSockets too (collab charts)
     'django.contrib.admin',
+    'django.contrib.humanize',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',

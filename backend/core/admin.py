@@ -1,6 +1,35 @@
 from django.contrib import admin
 from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, CollabRoom, CollabMember, CollabMessage, CollabJoinRequest, GitHubLink, BrokerAccount, AlgoStrategy, AlgoLog, BacktestRun, TradeJournal, ReplaySession, SavedReplay, CopyChannel, CopySubscription, CopySignal, CopyExecution, Follow, PublishedScript, Notification
-from .models import FeedbackMessage
+from .models import FeedbackMessage, Payment, Earning
+from django.contrib import messages
+from django.template.response import TemplateResponse
+from django.utils import timezone
+from django.utils.html import format_html
+
+
+class ActiveNowFilter(admin.SimpleListFilter):
+    """Who has the site open right now (core/presence.py)"""
+    title = 'activity'
+    parameter_name = 'online'
+
+    def lookups(self, request, model_admin):
+        return [('now', 'Active now'), ('today', 'Seen in the last 24 hours')]
+
+    def queryset(self, request, qs):
+        from .presence import ACTIVE_WINDOW
+        now = timezone.now()
+        if self.value() == 'now':
+            return qs.filter(last_seen__gte=now - ACTIVE_WINDOW)
+        if self.value() == 'today':
+            return qs.filter(last_seen__gte=now - timezone.timedelta(days=1))
+        return qs
+
+
+class PaymentInline(admin.TabularInline):
+    """What they've paid (adds up in Earnings)"""
+    model = Payment
+    extra = 0
+    fields = ('paid_at', 'amount', 'currency', 'method', 'note')
 
 @admin.register(FailedRequest)
 class FailedRequestAdmin(admin.ModelAdmin):
@@ -21,10 +50,33 @@ class FailedRequestAdmin(admin.ModelAdmin):
 
 @admin.register(TraderProfile)
 class TraderProfileAdmin(admin.ModelAdmin):
-    list_display = ('name', 'email', 'phone', 'tier', 'created_at', 'last_login')
-    list_filter = ('tier', 'created_at')
+    list_display = ('name', 'online', 'email', 'phone', 'tier', 'created_at', 'last_login')
+    list_filter = (ActiveNowFilter, 'tier', 'created_at')
     search_fields = ('name', 'email', 'phone', 'uid')
     ordering = ('-created_at',)
+    inlines = [PaymentInline]
+
+    @admin.display(description='Online', ordering='-last_seen')
+    def online(self, obj):
+        from .presence import ACTIVE_WINDOW
+        if not obj.last_seen:
+            return '—'
+        ago = timezone.now() - obj.last_seen
+        if ago <= ACTIVE_WINDOW:
+            return format_html('<b style="color:#1a7f37">● Active now</b>{}', f' · {obj.last_where}' if obj.last_where else '')
+        mins = int(ago.total_seconds() // 60)
+        return f'{mins} min ago' if mins < 60 else f'{mins // 60} h ago' if mins < 1440 else f'{mins // 1440} d ago'
+
+    def changelist_view(self, request, extra_context=None):
+        # how many are on the site right now, and who, above the list
+        from .presence import active_now
+        people = list(active_now()[:50])
+        if people:
+            names = ', '.join(f'{p.name} ({p.last_where or "site"})' for p in people)
+            self.message_user(request, f'Active now: {len(people)} — {names}', messages.INFO)
+        else:
+            self.message_user(request, 'Active now: 0', messages.INFO)
+        return super().changelist_view(request, extra_context)
 
 @admin.register(BacktestSession)
 class BacktestSessionAdmin(admin.ModelAdmin):
@@ -237,3 +289,38 @@ class FeedbackMessageAdmin(admin.ModelAdmin):
     def get_readonly_fields(self, request, obj=None):
         # everything except the read flag
         return [f for f in self.readonly_fields if f != "is_read"]
+
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    """Money received: add one each time someone pays (Earnings adds them up)"""
+    list_display = ('paid_at', 'profile', 'amount', 'currency', 'method', 'note')
+    list_filter = ('currency', 'method')
+    date_hierarchy = 'paid_at'
+    search_fields = ('profile__name', 'profile__email', 'note', 'method')
+    autocomplete_fields = ('profile',)
+
+
+@admin.register(Earning)
+class EarningAdmin(admin.ModelAdmin):
+    """What we've earned: today, this month, last month, this year, all time, and a year month by
+    month (core/earnings.py), from the payments. Read only: payments are entered in Payments."""
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from . import earnings
+        try:
+            year = int(request.GET.get("year") or 0) or None
+        except ValueError:
+            year = None
+        ctx = {**self.admin_site.each_context(request), "title": "Earnings", "opts": self.model._meta, **earnings.report(year)}
+        return TemplateResponse(request, "admin/core/earnings.html", ctx)

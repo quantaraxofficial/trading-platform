@@ -1,0 +1,72 @@
+{% extends "admin/base_site.html" %}
+{% load humanize tz %}
+{% block title %}Earnings | {{ site_title }}{% endblock %}
+{% block breadcrumbs %}
+<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> › Earnings</div>
+{% endblock %}
+{% block extrastyle %}{{ block.super }}
+<style>
+  .earn-cards { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 24px; }
+  .earn-card { flex: 1 1 170px; border: 1px solid var(--hairline-color); border-radius: 8px; padding: 14px 16px; background: var(--darkened-bg); }
+  .earn-card .k { color: var(--body-quiet-color); font-size: 13px; }
+  .earn-card .v { font-size: 24px; font-weight: 600; margin-top: 4px; }
+  .earn-card .n { color: var(--body-quiet-color); font-size: 12px; margin-top: 2px; }
+  .earn-months td, .earn-months th { padding: 6px 10px; vertical-align: middle; }
+  .earn-bar { height: 12px; border-radius: 3px; background: #2f8cff; min-width: 2px; }
+  .earn-future { opacity: .45; }
+  .earn-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+</style>
+{% endblock %}
+{% block content %}
+<div id="content-main">
+  <p style="color:var(--body-quiet-color)">From the <a href="{% url 'admin:core_payment_changelist' %}">payments</a> entered here, by the day each was paid (Indian time). <a href="{% url 'admin:core_payment_add' %}">Add a payment</a>.</p>
+
+  <div class="earn-cards">
+    {% for label, totals, count in cards %}
+    <div class="earn-card">
+      <div class="k">{{ label }}</div>
+      <div class="v">{% for cur, v in totals.items %}{% if not forloop.first %}<br>{% endif %}{% if cur == "USD" %}${% else %}₹{% endif %}{{ v|floatformat:"0"|intcomma }}{% empty %}₹0{% endfor %}</div>
+      <div class="n">{{ count }} payment{{ count|pluralize }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <h2 style="display:flex;align-items:center;gap:12px">Month by month
+    <form method="get" style="display:inline">
+      <select name="year" onchange="this.form.submit()">{% for y in years %}<option value="{{ y }}"{% if y == year %} selected{% endif %}>{{ y }}</option>{% endfor %}</select>
+    </form>
+  </h2>
+  <table class="earn-months" style="width:100%;max-width:820px">
+    <thead><tr><th>Month</th><th class="earn-num">Payments</th><th class="earn-num">Earned</th><th style="width:45%"></th></tr></thead>
+    <tbody>
+    {% for m in months %}
+      <tr class="{% if m.future %}earn-future{% endif %}">
+        <td>{{ m.name }} {{ year }}</td>
+        <td class="earn-num">{{ m.count }}</td>
+        <td class="earn-num">{% for cur, v in m.totals.items %}{% if not forloop.first %} + {% endif %}{% if cur == "USD" %}${% else %}₹{% endif %}{{ v|floatformat:"0"|intcomma }}{% empty %}—{% endfor %}</td>
+        <td>{% if m.bar %}<div class="earn-bar" style="width:{{ m.bar }}%"></div>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><th>{{ year }} total</th><th class="earn-num">{{ year_count }}</th>
+      <th class="earn-num">{% for cur, v in year_total.items %}{% if not forloop.first %} + {% endif %}{% if cur == "USD" %}${% else %}₹{% endif %}{{ v|floatformat:"0"|intcomma }}{% empty %}₹0{% endfor %}</th><th></th></tr></tfoot>
+  </table>
+
+  <h2 style="margin-top:28px">This month's payments</h2>
+  {% if this_month %}
+  <table style="width:100%;max-width:820px">
+    <thead><tr><th>Date</th><th>Who</th><th>Method</th><th class="earn-num">Amount</th><th>Note</th></tr></thead>
+    <tbody>
+    {% for r in this_month %}
+      <tr><td>{{ r.when|timezone:"Asia/Kolkata"|date:"j M, H:i" }}</td>
+        <td>{% if r.sub.profile_id %}<a href="{% url 'admin:core_traderprofile_change' r.sub.profile_id %}">{{ r.sub.profile.name }}</a>{% else %}—{% endif %}</td>
+        <td>{{ r.sub.method }}</td>
+        <td class="earn-num"><a href="{% url 'admin:core_payment_change' r.sub.pk %}">{% if r.currency == "USD" %}${% else %}₹{% endif %}{{ r.value|floatformat:"0"|intcomma }}</a></td>
+        <td>{{ r.sub.note }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p>None yet this month.</p>{% endif %}
+
+</div>
+{% endblock %}

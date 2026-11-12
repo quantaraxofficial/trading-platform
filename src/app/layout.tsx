@@ -14,6 +14,7 @@ import { TelemetryProvider } from "@/context/TelemetryContext";
 import { AlertsProvider } from "@/context/AlertsContext";
 import { PaperTradingProvider } from "@/context/PaperTradingContext";
 import CloudSync from "./components/CloudSync";
+import PresencePing from "./components/PresencePing";
 import SiteThemeVars from "./components/SiteThemeVars";
 import VoiceDock from "./components/VoiceDock";
 
@@ -31,6 +32,7 @@ export default function RootLayout({
       <body>
         <AuthProvider>
           <CloudSync />
+          <PresencePing />
           <SiteThemeVars />
           <PaperTradingProvider>
             <AlertsProvider>
