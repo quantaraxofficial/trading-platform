@@ -168,7 +168,8 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# Admin and pages show times in India time (stored in UTC, as always)
+TIME_ZONE = 'Asia/Kolkata'
 
 USE_I18N = True
 

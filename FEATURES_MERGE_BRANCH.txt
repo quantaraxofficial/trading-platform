@@ -448,6 +448,7 @@ Posting signals out
   - The whole Django admin in TradePilot's own look (the sign-in / profile pages: black to deep
     purple, purple-bordered cards, purple-to-indigo buttons, the site's font and logo), its pages,
     menus and lists organised as before
+  - Every date and time in the Django admin is in India time (IST)
 
 ======================================================================
 16. VOICE ASSISTANT
