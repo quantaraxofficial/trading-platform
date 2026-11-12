@@ -1,0 +1,22 @@
+{% extends "admin/base.html" %}
+{% comment %}
+  Django admin in TradePilot's own look (the site's pages: sign-in, profile, home): the same pages,
+  menus and lists as Django's, restyled only. Dark purple background, cards with purple borders,
+  purple-to-indigo buttons, the site's font. Loaded first through settings TEMPLATES DIRS.
+{% endcomment %}
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | TradePilot admin{% endblock %}
+
+{% block branding %}
+<div id="site-name">
+  <a href="{% url 'admin:index' %}" class="tp-brand">
+    <span class="tp-logo" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 7l-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/></svg>
+    </span>
+    <span class="tp-name">TradePilot</span><span class="tp-sub">admin</span>
+  </a>
+</div>
+{% endblock %}
+
+{% block extrastyle %}{{ block.super }}{% include "admin/tradepilot_theme.html" %}{% endblock %}
+
+{% block nav-global %}{% endblock %}

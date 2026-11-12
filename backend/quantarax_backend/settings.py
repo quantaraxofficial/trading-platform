@@ -114,7 +114,8 @@ ROOT_URLCONF = 'quantarax_backend.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        # (the admin in TradePilot's look: core/admin_theme, ahead of Django's own templates)
+        'DIRS': [BASE_DIR / 'core' / 'admin_theme'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [

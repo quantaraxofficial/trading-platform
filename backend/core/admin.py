@@ -50,11 +50,18 @@ class FailedRequestAdmin(admin.ModelAdmin):
 
 @admin.register(TraderProfile)
 class TraderProfileAdmin(admin.ModelAdmin):
-    list_display = ('name', 'online', 'email', 'phone', 'tier', 'created_at', 'last_login')
+    list_display = ('name', 'online', 'email', 'phone', 'tier', 'created_at', 'last_login', 'presence_dot')
     list_filter = (ActiveNowFilter, 'tier', 'created_at')
     search_fields = ('name', 'email', 'phone', 'uid')
     ordering = ('-created_at',)
     inlines = [PaymentInline]
+
+    @admin.display(description='')
+    def presence_dot(self, obj):
+        # a glowing green dot while they're on the site (the last 2 minutes), red otherwise
+        from .presence import ACTIVE_WINDOW
+        on = bool(obj.last_seen and timezone.now() - obj.last_seen <= ACTIVE_WINDOW)
+        return format_html('<span class="tp-dot {}" title="{}"></span>', 'on' if on else 'off', 'Active now' if on else 'Not on the site')
 
     @admin.display(description='Online', ordering='-last_seen')
     def online(self, obj):
@@ -351,3 +358,34 @@ class VoiceRequestAdmin(admin.ModelAdmin):
     @admin.action(description="Mark as ignored")
     def mark_ignored(self, request, queryset):
         queryset.update(status='ignored')
+
+
+
+from .models import TimeOnSite
+
+
+@admin.register(TimeOnSite)
+class TimeOnSiteAdmin(admin.ModelAdmin):
+    """How long traders had the site open: today, this week, month, year, all time; per trader and the
+    last 30 days (core/sitetime.py). Read only."""
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.template.response import TemplateResponse
+        from . import sitetime
+        ctx = {**self.admin_site.each_context(request), "title": "Time on site", "opts": self.model._meta,
+               **sitetime.report(request.GET.get("sort") or "today")}
+        return TemplateResponse(request, "admin/core/time_on_site.html", ctx)
+
+
+# The admin is TradePilot's (its look: core/admin_theme)
+admin.site.site_title = "TradePilot admin"
+admin.site.site_header = "TradePilot admin"

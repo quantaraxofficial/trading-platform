@@ -1,6 +1,6 @@
 TRADEPILOT - FEATURES BUILT ON THE MERGE BRANCH
 Branch: merge-main-left-toolbar-tools  (everything here is on top of main)
-Up to: 12 Nov 2026 (voice: every SMC / ICT and price-action concept; admin: active now, Earnings)
+Up to: 12 Nov 2026 (admin in TradePilot's look, time on site, online dots; voice: SMC / ICT concepts)
 
 Contents
   1. Drawing tools (left toolbar)
@@ -437,6 +437,13 @@ Posting signals out
     each trader's profile) and an Earnings page: today, this month, last month, this year and
     all time, a year month by month with bars and its total, and this month's payments.
     Months and years in Indian time
+  - Time on site (Django admin): how long each trader had the site open, today, this week, this
+    month, this year and all time, sortable, with their daily average and the last 30 days
+  - Trader profiles: a glowing green dot at the end of each row while that trader is on the site,
+    red otherwise
+  - The whole Django admin in TradePilot's own look (the sign-in / profile pages: black to deep
+    purple, purple-bordered cards, purple-to-indigo buttons, the site's font and logo), its pages,
+    menus and lists organised as before
 
 ======================================================================
 16. VOICE ASSISTANT
@@ -612,7 +619,7 @@ Posting signals out
 ======================================================================
 18. RUNNING IT (SETUP NOTES)
 ======================================================================
-  - Database: run "python manage.py migrate" (migrations up to 0039)
+  - Database: run "python manage.py migrate" (migrations up to 0041)
   - Live collab / chats: the backend runs under daphne (Django Channels)
   - Copy trading: run "python manage.py run_copier" on the copier server (MT5 installed)
   - Market data: TWELVEDATA_API_KEY (8 requests a minute on the free plan; the optimizer

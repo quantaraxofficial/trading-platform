@@ -1,0 +1,168 @@
+<style>
+/* TradePilot's admin: the look of the site's own pages (sign-in, profile, home: black to deep
+   purple, cards with purple borders, purple-to-indigo buttons, white and soft-purple text). Django
+   admin's pages, menus and lists are unchanged; only their colours, fonts and shapes are. One dark
+   look, as the site's pages have (the light / dark toggle is hidden). */
+:root, html[data-theme], html[data-theme="light"], html[data-theme="dark"] {
+  color-scheme: dark;
+  --tp-950: #3b0764; --tp-900: #581c87; --tp-800: #6b21a8; --tp-700: #7e22ce; --tp-600: #9333ea;
+  --tp-500: #a855f7; --tp-400: #c084fc; --tp-300: #d8b4fe; --tp-200: #e9d5ff;
+  --tp-indigo-700: #4338ca; --tp-indigo-600: #4f46e5; --tp-indigo-400: #818cf8;
+  --tp-card: rgba(0, 0, 0, 0.5); --tp-card-line: rgba(107, 33, 168, 0.4);
+  --tp-gradient: linear-gradient(90deg, var(--tp-700), var(--tp-indigo-700));
+  --tp-gradient-hover: linear-gradient(90deg, var(--tp-800), #3730a3);
+
+  --primary: var(--tp-700);
+  --secondary: var(--tp-900);
+  --accent: var(--tp-300);
+  --primary-fg: #ffffff;
+  --body-fg: #f5f3ff;
+  --body-bg: transparent;
+  --body-quiet-color: rgba(216, 180, 254, 0.7);
+  --body-medium-color: var(--tp-200);
+  --body-loud-color: #ffffff;
+  --header-color: var(--tp-300);
+  --header-branding-color: #ffffff;
+  --header-bg: rgba(59, 7, 100, 0.55);
+  --header-link-color: var(--tp-200);
+  --breadcrumbs-fg: var(--tp-300);
+  --breadcrumbs-link-fg: #ffffff;
+  --breadcrumbs-bg: rgba(0, 0, 0, 0.35);
+  --link-fg: var(--tp-400);
+  --link-hover-color: var(--tp-200);
+  --link-selected-fg: var(--tp-300);
+  --hairline-color: rgba(107, 33, 168, 0.35);
+  --border-color: rgba(107, 33, 168, 0.5);
+  --error-fg: #f87171;
+  --message-success-bg: rgba(52, 211, 153, 0.12);
+  --message-warning-bg: rgba(252, 211, 77, 0.12);
+  --message-error-bg: rgba(248, 113, 113, 0.14);
+  --darkened-bg: rgba(88, 28, 135, 0.25);
+  --selected-bg: rgba(126, 34, 206, 0.28);
+  --selected-row: rgba(126, 34, 206, 0.22);
+  --button-fg: #ffffff;
+  --button-bg: var(--tp-700);
+  --button-hover-bg: var(--tp-800);
+  --default-button-bg: var(--tp-indigo-600);
+  --default-button-hover-bg: var(--tp-indigo-700);
+  --close-button-bg: rgba(255, 255, 255, 0.12);
+  --close-button-hover-bg: rgba(255, 255, 255, 0.2);
+  --delete-button-bg: #b91c1c;
+  --delete-button-hover-bg: #991b1b;
+  --object-tools-fg: #ffffff;
+  --object-tools-bg: var(--tp-800);
+  --object-tools-hover-bg: var(--tp-700);
+  --font-family-primary: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* the page: the sign-in page's background */
+/* (on the whole page, so nothing shows above a page whose content starts lower: the sign-in box) */
+html { background: #000 linear-gradient(135deg, #000 0%, #3b0764 50%, #000 100%) fixed; min-height: 100%; }
+body {
+  background: transparent !important;
+  min-height: 100vh;
+  color: var(--body-fg);
+  -webkit-font-smoothing: antialiased;
+}
+.theme-toggle { display: none !important; }
+
+/* header: the site's nav (the logo mark and the gradient name) */
+#header { background: var(--header-bg); backdrop-filter: blur(12px); border-bottom: 1px solid var(--tp-card-line); padding-top: 12px; padding-bottom: 12px; }
+#site-name a.tp-brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
+.tp-logo { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(90deg, var(--tp-500), #6366f1); display: inline-flex; align-items: center; justify-content: center; color: #fff; box-shadow: 0 6px 18px rgba(168, 85, 247, 0.25); }
+.tp-name { font-size: 20px; font-weight: 700; background: linear-gradient(90deg, var(--tp-400), var(--tp-indigo-400)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.tp-sub { font-size: 13px; color: var(--tp-300); font-weight: 500; letter-spacing: .3px; margin-left: -4px; }
+#user-tools { color: var(--tp-200); }
+#user-tools a, #logout-form button { color: var(--tp-200); border-bottom: none; }
+#user-tools a:hover, #logout-form button:hover { color: #fff; text-decoration: none; }
+div.breadcrumbs { background: var(--breadcrumbs-bg); border-bottom: 1px solid var(--tp-card-line); }
+
+/* cards: the profile page's panels */
+.module, #changelist .changelist-form-container, #changelist-filter, .inline-group, fieldset.module, .dashboard .module, #nav-sidebar .module,
+.tp-card, .submit-row, .paginator, #toolbar, .actions, .selector-available, .selector-chosen {
+  background: var(--tp-card) !important;
+  border: 1px solid var(--tp-card-line) !important;
+  border-radius: 16px;
+  backdrop-filter: blur(16px);
+}
+.module, #changelist-filter, .inline-group, fieldset.module { overflow: hidden; }
+.module h2, .module caption, .inline-group h2, #changelist-filter h2, fieldset.module h2 {
+  background: linear-gradient(90deg, rgba(126, 34, 206, 0.55), rgba(67, 56, 202, 0.45)) !important;
+  color: #fff !important; font-weight: 600; letter-spacing: .2px; border-bottom: 1px solid var(--tp-card-line);
+}
+.dashboard .module table th, .dashboard .module table td { border-color: var(--hairline-color); }
+#content h1 { color: #fff; font-weight: 700; }
+#content h2 { color: var(--tp-200); }
+#changelist-filter h3 { color: var(--tp-300); }
+#changelist-filter li.selected a { color: #fff !important; }
+
+/* the sidebar of models */
+#nav-sidebar { background: transparent; border-right: 1px solid var(--tp-card-line); }
+#nav-sidebar .module { margin: 8px; }
+#nav-sidebar .current-model { background: var(--selected-bg); }
+#nav-filter { background: rgba(0, 0, 0, 0.4); color: #fff; border: 1px solid var(--tp-card-line); border-radius: 10px; }
+.toggle-nav-sidebar { background: transparent; border-color: var(--tp-card-line); color: var(--tp-300); }
+
+/* tables */
+#result_list, .tp-table { background: transparent; }
+thead th, tfoot td, #result_list thead th { background: rgba(88, 28, 135, 0.35) !important; color: var(--tp-200) !important; border-color: var(--tp-card-line) !important; }
+thead th a, thead th a:link, thead th a:visited { color: var(--tp-200) !important; }
+tr:nth-child(odd), .row-form-errors { background: transparent; }
+tr:nth-child(even) { background: rgba(88, 28, 135, 0.12); }
+tbody tr:hover { background: rgba(126, 34, 206, 0.18); }
+td, th { border-color: var(--hairline-color) !important; }
+
+/* buttons: the site's purple-to-indigo buttons */
+.button, input[type=submit], input[type=button], .submit-row input, a.button, button.button, .object-tools a, #changelist-search input[type=submit] {
+  background: var(--tp-gradient) !important; color: #fff !important; border: none !important; border-radius: 10px !important;
+  font-weight: 600; box-shadow: 0 6px 18px rgba(126, 34, 206, 0.25); transition: transform .12s ease, background .12s ease;
+}
+.button:hover, input[type=submit]:hover, input[type=button]:hover, a.button:hover, .object-tools a:hover { background: var(--tp-gradient-hover) !important; transform: translateY(-1px); }
+.submit-row a.deletelink, .deletelink-box a.deletelink { background: var(--delete-button-bg) !important; border-radius: 10px; }
+.object-tools a { border-radius: 999px !important; }
+
+/* inputs: the sign-in form's fields */
+input[type=text], input[type=password], input[type=email], input[type=url], input[type=number], input[type=tel], input[type=search],
+textarea, select, .vTextField, .vDateField, .vTimeField {
+  background: rgba(0, 0, 0, 0.45) !important; color: #fff !important; border: 1px solid rgba(126, 34, 206, 0.5) !important; border-radius: 10px !important;
+}
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--tp-400) !important; box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.25); }
+select option { background: #1e0836; color: #fff; }
+.help, p.help, div.help { color: var(--body-quiet-color) !important; }
+
+/* messages */
+ul.messagelist li { border-radius: 12px; border: 1px solid var(--tp-card-line); color: #fff; background-color: rgba(126, 34, 206, 0.22); }
+ul.messagelist li.success { background-color: var(--message-success-bg); border-color: rgba(52, 211, 153, 0.4); }
+ul.messagelist li.warning { background-color: var(--message-warning-bg); border-color: rgba(252, 211, 77, 0.4); }
+ul.messagelist li.error { background-color: var(--message-error-bg); border-color: rgba(248, 113, 113, 0.4); }
+ul.messagelist li.info, ul.messagelist li.debug { background-color: rgba(126, 34, 206, 0.22) !important; border-color: var(--tp-card-line); color: var(--tp-200) !important; }
+
+/* the sign-in page */
+body.login .submit-row { background: transparent !important; border: none !important; backdrop-filter: none; padding-left: 0; }
+body.login .submit-row input { width: 100%; padding: 10px; }
+body.login #container { background: var(--tp-card); border: 1px solid var(--tp-card-line); border-radius: 18px; backdrop-filter: blur(16px); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5); }
+body.login #header { border-radius: 18px 18px 0 0; }
+
+/* the site's report pages (Earnings, Time on site) */
+.tp-muted { color: var(--body-quiet-color); }
+.tp-small { font-size: 12px; }
+.tp-cards, .earn-cards { display: flex; flex-wrap: wrap; gap: 12px; margin: 10px 0 24px; }
+.tp-card, .earn-card { flex: 1 1 140px; padding: 16px 18px; border-radius: 16px !important; background: var(--tp-card) !important; border: 1px solid var(--tp-card-line) !important; }
+.tp-card-k, .earn-card .k { color: var(--tp-300) !important; font-size: 13px; }
+.tp-card-v, .earn-card .v { font-size: 26px; font-weight: 700; margin-top: 4px; color: #fff; }
+.tp-card-n, .earn-card .n { color: var(--body-quiet-color) !important; font-size: 12px; margin-top: 2px; }
+.tp-table { width: 100%; max-width: 980px; border-collapse: collapse; }
+.tp-table td, .tp-table th { padding: 8px 10px; vertical-align: middle; }
+.tp-num, .earn-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tp-sorted { color: #fff !important; }
+.tp-bar, .earn-bar { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--tp-600), var(--tp-indigo-600)) !important; min-width: 2px; }
+
+/* who's on the site: a glowing green dot (active now), red otherwise (Trader profiles) */
+.tp-dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: middle; }
+.tp-dot.on { background: #22c55e; box-shadow: 0 0 6px 2px rgba(34, 197, 94, 0.75), 0 0 14px 4px rgba(34, 197, 94, 0.35); animation: tp-glow 1.8s ease-in-out infinite; }
+.tp-dot.off { background: #ef4444; box-shadow: 0 0 4px 1px rgba(239, 68, 68, 0.5); }
+@keyframes tp-glow { 50% { box-shadow: 0 0 9px 3px rgba(34, 197, 94, 0.9), 0 0 20px 6px rgba(34, 197, 94, 0.45); } }
+@media (prefers-reduced-motion: reduce) { .tp-dot.on { animation: none; } }
+/* (the dot stays in sight at the row's right end, however wide the table) */
+td.field-presence_dot, th.column-presence_dot { text-align: center; width: 36px; position: sticky; right: 0; z-index: 1; background: #1a0630 !important; box-shadow: -8px 0 10px -6px rgba(0, 0, 0, 0.6); }
+</style>

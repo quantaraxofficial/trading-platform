@@ -8,7 +8,13 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .auth import require_session
-from .models import TraderProfile
+from zoneinfo import ZoneInfo
+
+from django.db.models import F
+
+from .models import SiteTime, TraderProfile
+
+IST = ZoneInfo("Asia/Kolkata")
 
 ACTIVE_WINDOW = timedelta(minutes=2)
 
@@ -23,6 +29,24 @@ def ping(request, uid):
     if denied:
         return denied
     where = str((request.data or {}).get("where") or "")[:40]
+    now = timezone.now()
     # (.update: no other field's auto timestamps touched)
-    TraderProfile.objects.filter(pk=profile.pk).update(last_seen=timezone.now(), last_where=where)
+    TraderProfile.objects.filter(pk=profile.pk).update(last_seen=now, last_where=where)
+    count_time(profile, profile.last_seen, now)
     return Response({"ok": True})
+
+
+# Pings come every minute while the site is open in a visible tab: the time since the previous one is
+# time on the site (at most MAX_GAP: a longer gap means it was closed or hidden in between)
+MAX_GAP = 150
+
+
+def count_time(profile, previous, now):
+    if not previous:
+        return
+    gap = (now - previous).total_seconds()
+    if not 0 < gap <= MAX_GAP:
+        return
+    day = now.astimezone(IST).date()
+    row, _ = SiteTime.objects.get_or_create(profile=profile, day=day)
+    SiteTime.objects.filter(pk=row.pk).update(seconds=F("seconds") + int(round(gap)))

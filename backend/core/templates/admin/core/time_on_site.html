@@ -1,0 +1,42 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Time on site | TradePilot admin{% endblock %}
+{% block breadcrumbs %}
+<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> › Time on site</div>
+{% endblock %}
+{% block content %}
+<div id="content-main">
+  <p class="tp-muted">How long traders had the site open in a visible tab (counted once a minute; Indian time, weeks from Monday).</p>
+  <div class="tp-cards">
+    {% for c in cards %}
+    <div class="tp-card"><div class="tp-card-k">{{ c.label }}</div><div class="tp-card-v">{{ c.time }}</div><div class="tp-card-n">{{ c.people }} trader{{ c.people|pluralize }}</div></div>
+    {% endfor %}
+  </div>
+
+  <h2>Per trader</h2>
+  {% if rows %}
+  <table class="tp-table">
+    <thead><tr><th>Trader</th>
+      {% for key, label in periods %}<th class="tp-num"><a href="?sort={{ key }}"{% if key == sort %} class="tp-sorted"{% endif %}>{{ label }}{% if key == sort %} ▾{% endif %}</a></th>{% endfor %}
+      <th class="tp-num">Daily average (this month)</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr><td><a href="{% url 'admin:core_traderprofile_change' r.profile_id %}">{{ r.profile__name }}</a><div class="tp-muted tp-small">{{ r.profile__email }}</div></td>
+        {% for cell in r.cells %}<td class="tp-num">{{ cell }}</td>{% endfor %}
+        <td class="tp-num">{{ r.avg }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p>Nobody yet: time is counted from now on, as people use the site.</p>{% endif %}
+
+  <h2 style="margin-top:28px">The last 30 days</h2>
+  <table class="tp-table">
+    <thead><tr><th>Day</th><th class="tp-num">Traders</th><th class="tp-num">Time</th><th style="width:50%"></th></tr></thead>
+    <tbody>
+    {% for d in days reversed %}
+      <tr><td>{{ d.day|date:"D j M" }}</td><td class="tp-num">{{ d.people }}</td><td class="tp-num">{{ d.time }}</td>
+        <td>{% if d.bar %}<div class="tp-bar" style="width:{{ d.bar }}%"></div>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

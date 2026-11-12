@@ -807,3 +807,27 @@ class VoiceRequest(models.Model):
 
     def __str__(self):
         return self.task
+
+
+
+class SiteTime(models.Model):
+    """How long someone had the site open in a visible tab, per day (Indian time): each presence ping
+    (core/presence.py) adds the time since their previous one"""
+    profile = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='site_time')
+    day = models.DateField(db_index=True)
+    seconds = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ('profile', 'day')
+        ordering = ['-day']
+
+    def __str__(self):
+        return f"{self.profile.name}: {self.seconds // 60} min on {self.day}"
+
+
+class TimeOnSite(SiteTime):
+    """The site time seen in Django Admin: today, this week, month, year, per trader (core/sitetime.py)"""
+    class Meta:
+        proxy = True
+        verbose_name = "Time on site"
+        verbose_name_plural = "Time on site"
