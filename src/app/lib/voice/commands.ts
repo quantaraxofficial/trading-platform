@@ -14,7 +14,7 @@ export type Intent =
   | { kind: "interval"; interval: Interval }
   | { kind: "pine"; open: boolean }
   | { kind: "backtest_new"; symbol?: string; interval?: Interval; start?: string; balance?: number; length?: { value: number; unit: LengthUnit } }
-  | { kind: "mark"; what: MarkKind[] }
+  | { kind: "mark"; what: MarkKind[]; patterns?: string[] }
   | { kind: "clear_marks"; what?: MarkKind[] }
   | { kind: "indicator"; name: string; remove?: boolean }
   | { kind: "chart_type"; type: string; label: string }

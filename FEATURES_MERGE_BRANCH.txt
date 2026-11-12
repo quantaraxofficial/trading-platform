@@ -559,6 +559,13 @@ Posting signals out
     LH / LL), trend lines, supply / demand zones, candle patterns (engulfing, hammer / shooting
     star, doji, inside bar, morning / evening star), chart patterns (double top / bottom, head and
     shoulders with necklines, "confirmed" once broken) and ranges (consolidation)
+  - Every candlestick pattern by voice, all of them or the ones named ("mark the dojis", "mark
+    harami and tweezers"): doji, dragonfly / gravestone / long-legged doji, hammer, hanging man,
+    inverted hammer, shooting star, spinning top, marubozu, belt hold, engulfing, harami, harami
+    cross, piercing line, dark cloud cover, tweezer top / bottom, kicker, inside / outside bar,
+    morning / evening (doji) star, abandoned baby, three white soldiers, three black crows, three
+    inside / outside up / down, rising / falling three methods; hammer-type patterns read against
+    the trend before them. The assistant also explains any pattern or concept when asked
   - Asked for something about trading or the site it can't do yet, the assistant says so (and
     does the parts it can) instead of pretending; the request is kept in Django admin ("Voice
     requests to train": what was said, the task, who asked), to be taught and marked Trained

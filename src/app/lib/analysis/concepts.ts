@@ -34,8 +34,8 @@
 //   Supply / demand   the base (1–3 small candles, body ≤ 0.6 ATR) right before a strong move
 //                     (body ≥ 1.5 ATR): demand below a rally, supply above a drop. Live until a
 //                     close through its far edge
-//   Candle patterns   on the latest 60 bars: engulfing, hammer / shooting star (pin bars), doji,
-//                     inside bar, morning / evening star
+//   Candle patterns   every common one (./candles: the doji family, hammer / hanging man, stars,
+//                     engulfing, harami, tweezers, soldiers / crows, three methods…), or the ones asked for
 //   Chart patterns    double tops / bottoms (two swing points within 0.3 ATR with a swing between
 //                     them: its level is the neckline) and head and shoulders (three swing highs,
 //                     the middle one highest, the shoulders within 0.5 ATR), with their necklines;
@@ -46,6 +46,7 @@ import {
   atr, swings, swingSize, fairValueGaps, inverseFairValueGaps, marketStructure, orderBlocks, allOrderBlocks, supportResistance,
   type Bar, type Side, type Zone,
 } from "./smc";
+import { candlePatterns } from "./candles";
 
 export type MarkKind =
   | "order_blocks" | "fvg" | "ifvg" | "support_resistance" | "structure"
@@ -58,7 +59,7 @@ export const ALL_MARK_KINDS: MarkKind[] = [
   "swing_points", "trendlines", "supply_demand", "candle_patterns", "chart_patterns", "ranges",
 ];
 
-export function analyse(kind: MarkKind, bars: Bar[], from: number): Zone[] {
+export function analyse(kind: MarkKind, bars: Bar[], from: number, opts: { patterns?: string[] } = {}): Zone[] {
   switch (kind) {
     case "order_blocks": return orderBlocks(bars, from);
     case "fvg": return fairValueGaps(bars, from);
@@ -77,7 +78,7 @@ export function analyse(kind: MarkKind, bars: Bar[], from: number): Zone[] {
     case "swing_points": return swingPoints(bars, from);
     case "trendlines": return trendLines(bars, from);
     case "supply_demand": return supplyDemand(bars, from);
-    case "candle_patterns": return candlePatterns(bars, from);
+    case "candle_patterns": return candlePatterns(bars, from, { patterns: opts.patterns });
     case "chart_patterns": return chartPatterns(bars, from);
     case "ranges": return ranges(bars, from);
   }
@@ -430,30 +431,6 @@ export function supplyDemand(bars: Bar[], from: number): Zone[] {
     return true;
   }).map(({ move, ...z }) => { void move; return z; });
   return [...live.filter(z => z.side === "bull").slice(-3), ...live.filter(z => z.side === "bear").slice(-3)];
-}
-
-// ---- candle patterns ----------------------------------------------------------------------------
-export function candlePatterns(bars: Bar[], from: number): Zone[] {
-  const last = bars.length - 1;
-  if (last < 3) return [];
-  const unit = unitOf(bars, Math.max(0, from));
-  const out: Zone[] = [];
-  const at = (i: number, side: Side, text: string) =>
-    out.push(label("candle", side, i, side === "bull" ? bars[i].low - unit * 0.15 : bars[i].high + unit * 0.9, text));
-  for (let i = Math.max(2, last - 59, from); i <= last; i++) {
-    const b = bars[i], p = bars[i - 1], q = bars[i - 2];
-    const range = b.high - b.low || 1e-9, bd = body(b);
-    const upper = b.high - Math.max(b.open, b.close), lower = Math.min(b.open, b.close) - b.low;
-    if (b.close > b.open && p.close < p.open && b.close >= p.open && b.open <= p.close && bd > body(p)) at(i, "bull", "Bullish engulfing");
-    else if (b.close < b.open && p.close > p.open && b.open >= p.close && b.close <= p.open && bd > body(p)) at(i, "bear", "Bearish engulfing");
-    else if (q.close < q.open && body(q) > unit * 0.6 && body(p) < body(q) * 0.4 && b.close > b.open && b.close > (q.open + q.close) / 2) at(i, "bull", "Morning star");
-    else if (q.close > q.open && body(q) > unit * 0.6 && body(p) < body(q) * 0.4 && b.close < b.open && b.close < (q.open + q.close) / 2) at(i, "bear", "Evening star");
-    else if (lower >= 2 * bd && lower >= 0.6 * range && upper <= 0.2 * range && range > unit * 0.5) at(i, "bull", "Hammer");
-    else if (upper >= 2 * bd && upper >= 0.6 * range && lower <= 0.2 * range && range > unit * 0.5) at(i, "bear", "Shooting star");
-    else if (bd <= 0.1 * range && range > unit * 0.3) at(i, b.close >= p.close ? "bull" : "bear", "Doji");
-    else if (b.high < p.high && b.low > p.low) at(i, b.close >= b.open ? "bull" : "bear", "Inside bar");
-  }
-  return out.slice(-14);
 }
 
 // ---- chart patterns -----------------------------------------------------------------------------

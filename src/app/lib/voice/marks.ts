@@ -8,6 +8,7 @@
 
 import { getChartBars } from "../chartBars";
 import { analyse, ALL_MARK_KINDS, type MarkKind } from "../analysis/concepts";
+export { CANDLE_PATTERN_IDS } from "../analysis/candles";
 import type { Zone } from "../analysis/smc";
 
 export type { MarkKind };
@@ -76,10 +77,10 @@ function summarise(kind: MarkKind, zones: Zone[]): string {
   return `${count} ${count === 1 ? one : name}${detail ? ` (${detail})` : ""}`;
 }
 
-export function markOnChart(kind: MarkKind): MarkResult {
+export function markOnChart(kind: MarkKind, opts: { patterns?: string[] } = {}): MarkResult {
   const bars = getChartBars();
   if (bars.length < 30) return { ok: false, reason: "no_data" };
-  const zones = analyse(kind, bars, analysisStart(bars));
+  const zones = analyse(kind, bars, analysisStart(bars), opts);
   const group = { id: groupId(kind), name: `${GROUP_NAMES[kind]} · voice assistant` };
   const stamp = Date.now().toString(36);
   const pt = (i: number, price: number) => ({ logical: i, price, time: bars[Math.min(Math.max(i, 0), bars.length - 1)]?.time });
