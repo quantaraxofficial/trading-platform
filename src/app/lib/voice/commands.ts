@@ -4,7 +4,9 @@
 
 export type Interval = { value: string; label: string; spoken: string };
 export type PanelId = "watchlist" | "alerts" | "object_tree" | "collab" | "chats" | "notifications" | "backtest_sessions";
-export type MarkKind = "order_blocks" | "fvg" | "ifvg" | "support_resistance" | "structure";
+// (every SMC / ICT and price-action concept the chart can mark: lib/analysis/concepts)
+export type { MarkKind } from "../analysis/concepts";
+import type { MarkKind } from "../analysis/concepts";
 export type LengthUnit = "hours" | "days" | "weeks" | "months" | "years";
 
 export type Intent =

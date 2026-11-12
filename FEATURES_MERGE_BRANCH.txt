@@ -1,6 +1,6 @@
 TRADEPILOT - FEATURES BUILT ON THE MERGE BRANCH
 Branch: merge-main-left-toolbar-tools  (everything here is on top of main)
-Up to: 12 Nov 2026 (Django admin: who's active now, Earnings / payments; tab title to 3 decimals)
+Up to: 12 Nov 2026 (voice: every SMC / ICT and price-action concept; admin: active now, Earnings)
 
 Contents
   1. Drawing tools (left toolbar)
@@ -541,6 +541,17 @@ Posting signals out
   - Market structure by voice ("mark BOS and CHoCH"): breaks of structure and changes of character
     from the confirmed swings, as lines from the swing to the candle that broke it (CHoCH dashed),
     green bullish / red bearish, in an Object tree group like the other marks
+  - Every SMC / ICT and price-action concept by voice ("mark the POIs", "mark liquidity and
+    sweeps", "mark all SMC concepts"), worked out from the chart's bars and drawn as labelled
+    boxes, lines and labels, each kind its own Object tree group:
+    POIs (points of interest: the best unmitigated OB / FVG / supply-demand zones, ranked by
+    confluence, premium-discount and trend), liquidity (BSL / SSL, equal highs / lows), liquidity
+    sweeps (stop hunts), premium / discount with equilibrium and the OTE 62-79% zone, breaker
+    blocks, balanced price ranges (BPR), displacement candles, ICT kill zones (Asia, London, New
+    York, London close), key levels (PDH / PDL, PWH / PWL, daily open), swing points (HH / HL /
+    LH / LL), trend lines, supply / demand zones, candle patterns (engulfing, hammer / shooting
+    star, doji, inside bar, morning / evening star), chart patterns (double top / bottom, head and
+    shoulders with necklines, "confirmed" once broken) and ranges (consolidation)
   - Indicator settings by voice: "change the EMA to 15", "make the EMA red", "RSI length 21" (an
     EMA's length / source / colour / width / offset, or any input of a Pine indicator by its title)
   - Languages: 27 (English US / India / UK, Hindi, Marathi, Gujarati, Bengali, Tamil, Telugu,

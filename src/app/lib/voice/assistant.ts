@@ -20,7 +20,7 @@ import { voiceCommand, voiceCommands, voiceContext, pickTool, voiceFunction, voi
 import { findTool } from "./tools";
 import { collab, collabApi, collabLink, type Person, type RoomInfo, type Member } from "../collab/session";
 import { openCollab } from "../../components/collab/CollabController";
-import { markOnChart, clearMarks, countMarks, MARK_NAMES } from "./marks";
+import { markOnChart, clearMarks, countMarks, MARK_NAMES, MARK_KINDS } from "./marks";
 import { getChartInfo, getChartBars } from "../chartBars";
 import { setChartType, type ChartType } from "../chartType";
 import { chartSettings, themeCanvas } from "../chartSettings";
@@ -464,9 +464,7 @@ async function run(intent: Intent, reply?: string, quiet = false, confirmed = fa
         const r = markOnChart(k);
         if (!r.ok) { say("The chart has no bars to look at yet."); return; }
         if (!r.count) { none.push(MARK_NAMES[k]); continue; }
-        const sides = k === "support_resistance" ? `${r.bull} support, ${r.bear} resistance`
-          : k === "structure" ? `${r.bos ?? 0} BOS, ${r.choch ?? 0} CHoCH` : `${r.bull} bullish, ${r.bear} bearish`;
-        done.push(`${r.count} ${r.count === 1 ? MARK_NAMES[k].replace(/s$/, "").replace(/levels$/, "level") : MARK_NAMES[k]} (${sides})`);
+        done.push(r.summary);
       }
       // (the counts are the site's, so they're said even when the AI gave its own reply)
       const result = (done.length ? `Marked ${done.join(" and ")} on the visible bars.` : "")
@@ -712,7 +710,11 @@ function intentOf(a: any): Intent | null {
     };
     case "panel": return PANEL_LABELS[a.panel] ? { kind: "panel", panel: a.panel, label: PANEL_LABELS[a.panel] } : null;
     case "price": return { kind: "price" };
-    case "mark": return Array.isArray(a.what) && a.what.length ? { kind: "mark", what: a.what as MarkKind[] } : null;
+    case "mark": {
+      // (only kinds this page knows: a newer server's are skipped)
+      const what = Array.isArray(a.what) ? (a.what as MarkKind[]).filter(k => MARK_KINDS.includes(k)) : [];
+      return what.length ? { kind: "mark", what } : null;
+    }
     case "clear_marks": return { kind: "clear_marks", what: Array.isArray(a.what) && a.what.length ? a.what as MarkKind[] : undefined };
     case "indicator": return typeof a.name === "string" ? { kind: "indicator", name: a.name, remove: !!a.remove } : null;
     case "chart_type": return typeof a.chart_type === "string" ? { kind: "chart_type", type: a.chart_type, label: String(a.label || a.chart_type) } : null;

@@ -21,7 +21,12 @@
 export type Bar = { time: number; open: number; high: number; low: number; close: number };
 export type Side = "bull" | "bear";
 export type ZoneKind = "sr" | "fvg" | "ifvg" | "ob" | "bos" | "choch";
-export type Zone = { kind: ZoneKind; side: Side; from: number; to: number; top: number; bottom: number; label: string; touches?: number };
+// A mark: a box (from..to, top..bottom), or a line (from top to bottom: its prices at each end), or a
+// label at one bar. More kinds come from ./concepts (POI, liquidity, breakers…)
+export type Zone = {
+  kind: ZoneKind | string; side: Side; from: number; to: number; top: number; bottom: number; label: string; touches?: number;
+  shape?: "box" | "line" | "label"; dashed?: boolean; extend?: boolean;
+};
 
 // Average true range at each bar (Wilder's smoothing)
 export function atr(bars: Bar[], n = 14): number[] {
@@ -185,6 +190,20 @@ export function marketStructure(bars: Bar[], from: number, opts: { max?: number 
 export function orderBlocks(bars: Bar[], from: number, opts: { perSide?: number } = {}): Zone[] {
   const last = bars.length - 1;
   if (last - from < 20) return [];
+  const blocks = allOrderBlocks(bars, from);
+  // still in play: no close through the block's far edge since it formed
+  const live = blocks.filter(b => {
+    for (let j = b.from + 1; j <= last; j++) if (b.side === "bull" ? bars[j].close < b.bottom : bars[j].close > b.top) return false;
+    return true;
+  });
+  const perSide = opts.perSide ?? 3;
+  return [...live.filter(b => b.side === "bull").slice(-perSide), ...live.filter(b => b.side === "bear").slice(-perSide)];
+}
+
+// Every order block formed in the window, broken or not (breaker blocks are the broken ones)
+export function allOrderBlocks(bars: Bar[], from: number): Zone[] {
+  const last = bars.length - 1;
+  if (last - from < 20) return [];
   const k = Math.max(3, swingSize(last - from) + 1);
   // swings over all the bars up to the window (a break inside it may use an older swing)
   const { highs, lows } = swings(bars, k, Math.max(0, from - 200), last);
@@ -212,13 +231,7 @@ export function orderBlocks(bars: Bar[], from: number, opts: { perSide?: number 
       blocks.push({ kind: "ob", side: "bear", from: pick, to: last, top: bars[pick].high, bottom: bars[pick].low, label: "Bearish OB" });
     }
   }
-  // still in play: no close through the block's far edge since it formed
-  const live = blocks.filter(b => {
-    for (let j = b.from + 1; j <= last; j++) if (b.side === "bull" ? bars[j].close < b.bottom : bars[j].close > b.top) return false;
-    return true;
-  });
-  const perSide = opts.perSide ?? 3;
-  return [...live.filter(b => b.side === "bull").slice(-perSide), ...live.filter(b => b.side === "bear").slice(-perSide)];
+  return blocks;
 }
 
 export type MarkKind = "order_blocks" | "fvg" | "ifvg" | "support_resistance" | "structure";
