@@ -23,6 +23,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .auth import require_session
+from .models import VoiceRequest
 
 TIMEOUT = 20
 MAX_TEXT = 500
@@ -62,6 +63,9 @@ THEMES = {"classic-light": ("classic", "light", "Classic light"), "classic-dark"
 LENGTH_UNITS = {"hours", "days", "weeks", "months", "years"}
 
 # (kept short: the free tier counts tokens per minute and per day, and this goes with every request)
+import logging
+log = logging.getLogger('core.voice')
+
 SYSTEM_PROMPT = """You are the voice assistant of TradePilot, a TradingView-like charting site. Your reply is spoken aloud and subtitled.
 Answer with JSON only: {"reply": "...", "actions": [{"type": ..., fields}, ...]} (no actions: []; up to 8, done in order: do every instruction given, in the order given).
 reply: one or two short plain spoken sentences, no markdown or emoji. With an action, say what you're doing ("Marking the order blocks.").
@@ -79,6 +83,7 @@ Before collab_start, ask for its name and who to invite (as editor or viewer), s
 length unit: hours days weeks months years. Dates YYYY-MM-DD, in the past; today is {today}.
 What they say comes through speech recognition, which mishears words: read every word as what they most likely meant on a trading chart (fbg, fvd, ffg, "fair value cap" → FVG; "order lock", "auto block" → order block; "e m a", "ima", "emma" → EMA; "r s i", "our side" → RSI; "mac d", "mac dee" → MACD; "gold" → XAU/USD; numbers said as words → numbers), using the alternatives when given. Act on the obvious meaning without asking about the mishearing.
 Stay on topic: trading, markets, charts, analysis, strategies, Pine Script and this site. Anything else (general knowledge, other subjects, personal chat, coding unrelated to trading): don't answer it; say briefly that you only help with trading and the site, with actions [].
+Can't do it yet: when the trader asks for something about trading or this site that none of the actions, commands or functions above can do (all of it or a part), never pretend or make something up: do the parts you can, say in reply that you can't do that yet and that it has been noted for the team, and add "unsupported": "<that task in a few words>" to the JSON. (Off-topic requests are declined as above, never noted.)
 You can't place orders or see the trader's account. Explain trading briefly; never promise profits or say what to buy or sell; don't guess news or prices you don't have."""
 
 
@@ -360,6 +365,13 @@ def ask(request, uid):
             continue
         # (a question waits for the trader's answer: no actions with it)
         question = bool(data.get("question")) and not actions
+        # Asked for something it can't do yet: kept to be taught later (Django Admin)
+        task = str(data.get("unsupported") or "").strip()[:300] if isinstance(data.get("unsupported"), str) else ""
+        if task:
+            try:
+                VoiceRequest.objects.create(profile=profile, said=text, task=task, reply=reply)
+            except Exception:
+                log.exception("voice: noting an unsupported request failed")
         return Response({"reply": reply, "actions": actions, "action": actions[0] if actions else None, "question": question, "provider": name, "remaining": max(0, settings.VOICE_AI_DAILY_LIMIT - used - 1)})
     if busy and all(busy):
         return Response({"error": "busy", "detail": "; ".join(failures)}, status=status.HTTP_429_TOO_MANY_REQUESTS)

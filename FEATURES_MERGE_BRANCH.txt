@@ -552,6 +552,9 @@ Posting signals out
     LH / LL), trend lines, supply / demand zones, candle patterns (engulfing, hammer / shooting
     star, doji, inside bar, morning / evening star), chart patterns (double top / bottom, head and
     shoulders with necklines, "confirmed" once broken) and ranges (consolidation)
+  - Asked for something about trading or the site it can't do yet, the assistant says so (and
+    does the parts it can) instead of pretending; the request is kept in Django admin ("Voice
+    requests to train": what was said, the task, who asked), to be taught and marked Trained
   - Indicator settings by voice: "change the EMA to 15", "make the EMA red", "RSI length 21" (an
     EMA's length / source / colour / width / offset, or any input of a Pine indicator by its title)
   - Languages: 27 (English US / India / UK, Hindi, Marathi, Gujarati, Bengali, Tamil, Telugu,

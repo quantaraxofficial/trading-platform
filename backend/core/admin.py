@@ -324,3 +324,30 @@ class EarningAdmin(admin.ModelAdmin):
             year = None
         ctx = {**self.admin_site.each_context(request), "title": "Earnings", "opts": self.model._meta, **earnings.report(year)}
         return TemplateResponse(request, "admin/core/earnings.html", ctx)
+
+
+
+from .models import VoiceRequest
+
+
+@admin.register(VoiceRequest)
+class VoiceRequestAdmin(admin.ModelAdmin):
+    """What traders asked the voice assistant that it can't do yet: teach it, then mark it Trained"""
+    list_display = ('created_at', 'task', 'said', 'profile', 'status')
+    list_filter = ('status', 'created_at')
+    list_editable = ('status',)
+    search_fields = ('task', 'said', 'profile__name', 'profile__email')
+    readonly_fields = ('profile', 'said', 'task', 'reply', 'created_at')
+    fields = ('task', 'said', 'reply', 'profile', 'created_at', 'status', 'note')
+    actions = ('mark_trained', 'mark_ignored')
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.action(description="Mark as trained")
+    def mark_trained(self, request, queryset):
+        queryset.update(status='trained')
+
+    @admin.action(description="Mark as ignored")
+    def mark_ignored(self, request, queryset):
+        queryset.update(status='ignored')

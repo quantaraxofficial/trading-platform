@@ -784,3 +784,26 @@ class Earning(Payment):
         proxy = True
         verbose_name = "Earnings"
         verbose_name_plural = "Earnings"
+
+
+
+class VoiceRequest(models.Model):
+    """Something a trader asked the voice assistant that it can't do yet (about trading or the site,
+    not off-topic): what they said and the task, kept so it can be taught later (Django Admin →
+    Voice requests to train)"""
+    STATUSES = [('new', 'To do'), ('trained', 'Trained'), ('ignored', 'Ignored')]
+    profile = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='voice_requests')
+    said = models.TextField()
+    task = models.CharField(max_length=300)
+    reply = models.CharField(max_length=600, blank=True)
+    status = models.CharField(max_length=10, choices=STATUSES, default='new', db_index=True)
+    note = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Voice request to train"
+        verbose_name_plural = "Voice requests to train"
+
+    def __str__(self):
+        return self.task
