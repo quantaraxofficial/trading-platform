@@ -97,6 +97,10 @@ flyouts and quick search.
 ======================================================================
 2. CHART, LAYOUTS AND CHART TYPES
 ======================================================================
+  - An indicator turned off (its eye, on the chart or in the Object tree) stays off after a reload,
+    for every indicator (EMA, Volume and the session range only hid it until the page reloaded)
+  - The candle's countdown to close stays on top of the price axis's other labels (a selected
+    drawing's or a position's labels no longer cover it)
 Chart interactions
   - The cursor stays the cross over the whole chart (candles, the price "+" button, execution
     arrows); clicking a candle selects the price series (dots on the candle bodies)

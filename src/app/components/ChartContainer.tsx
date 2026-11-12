@@ -4168,14 +4168,17 @@ export default function ChartContainer({
   });
   for (const ind of activeIndicators || []) {
     const remove = () => onRemoveIndicator?.(ind.id);
-    if (ind.name === 'Volume') addObject(ind.id, 'indicator', 'Vol', 'Volume', volumeVisible, { toggle: () => setVolumeVisible(v => !v), settings: () => setShowVolumeSettings(true), remove });
+    // (an indicator's eye saves `visible` on it, so it's still off after a reload)
+    const shownVol = volumeVisible && ind.visible !== false, shownSession = sessionVisible && ind.visible !== false;
+    if (ind.name === 'Volume') addObject(ind.id, 'indicator', 'Vol', 'Volume', shownVol, { toggle: () => { setVolumeVisible(true); onUpdateIndicator?.(ind.id, { visible: !shownVol }); }, settings: () => setShowVolumeSettings(true), remove });
     else if (ind.name === 'Moving Average Exponential') {
       const cfg = normalizeEma(emaConfigs[ind.id] ?? ind.config ?? savedEmaDefaults());
-      const vis = (emaVisibilities[ind.id] ?? true) && emaVisibleOnInterval(cfg, interval);
+      const on = (emaVisibilities[ind.id] ?? true) && ind.visible !== false;
+      const vis = on && emaVisibleOnInterval(cfg, interval);
       addObject(ind.id, 'indicator', `EMA (${emaInputsText(cfg).split(' ').join(', ')})`, 'Moving Average Exponential', vis, {
-        toggle: () => setEmaVisibilities(prev => ({ ...prev, [ind.id]: !(prev[ind.id] ?? true) })), settings: () => setShowEmaSettingsFor(ind.id), remove,
+        toggle: () => { setEmaVisibilities(prev => ({ ...prev, [ind.id]: true })); onUpdateIndicator?.(ind.id, { visible: !on }); }, settings: () => setShowEmaSettingsFor(ind.id), remove,
       });
-    } else if (ind.name === 'FXN - Asian Session Range') addObject(ind.id, 'indicator', ind.name, ind.name, sessionVisible, { toggle: () => setSessionVisible(v => !v), settings: () => setSessionSettingsOpen(true), remove });
+    } else if (ind.name === 'FXN - Asian Session Range') addObject(ind.id, 'indicator', ind.name, ind.name, shownSession, { toggle: () => { setSessionVisible(true); onUpdateIndicator?.(ind.id, { visible: !shownSession }); }, settings: () => setSessionSettingsOpen(true), remove });
     else if (isPineIndicator(ind.name)) {
       const inst = pineIndicators.instances.find(i => i.id === ind.id);
       const title = inst ? (inst.inputsText.length ? `${inst.title} (${inst.inputsText.join(', ')})` : inst.title) : ind.name;
@@ -4371,15 +4374,16 @@ export default function ChartContainer({
                 name="Vol" fullName="Volume" args=""
                 values={[{ text: formatVolume(bar?.volume), color: barColor }]}
                 status={statusLineSettings} background={indicatorBg}
-                isVisible={volumeVisible}
-                onToggleVisibility={() => setVolumeVisible(!volumeVisible)}
+                isVisible={volumeVisible && ind.visible !== false}
+                onToggleVisibility={() => { const on = !(volumeVisible && ind.visible !== false); setVolumeVisible(true); onUpdateIndicator?.(ind.id, { visible: on }); }}
                 onOpenSettings={() => setShowVolumeSettings(true)}
                 onRemove={() => onRemoveIndicator?.(ind.id)}
               />
             );
           } else if (ind.name === "Moving Average Exponential") {
             const cfg = normalizeEma(emaConfigs[ind.id] ?? ind.config ?? savedEmaDefaults());
-            const isVis = emaVisibilities[ind.id] ?? true;
+            // (shown: on in the indicator list, which is saved, and not switched off on this chart)
+            const isVis = (emaVisibilities[ind.id] ?? true) && ind.visible !== false;
             const prec = cfg.precision === "Default" ? pricePrecision : Number(cfg.precision);
             const fmtE = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: prec, maximumFractionDigits: prec });
             const val = (key: string, sr: any, color: string) => {
@@ -4400,7 +4404,7 @@ export default function ChartContainer({
                 values={values}
                 status={statusLineSettings} background={indicatorBg}
                 isVisible={isVis && emaVisibleOnInterval(cfg, interval)}
-                onToggleVisibility={() => setEmaVisibilities(prev => ({ ...prev, [ind.id]: !isVis }))}
+                onToggleVisibility={() => { setEmaVisibilities(prev => ({ ...prev, [ind.id]: true })); onUpdateIndicator?.(ind.id, { visible: !isVis }); }}
                 onOpenSettings={() => setShowEmaSettingsFor(ind.id)}
                 onRemove={() => onRemoveIndicator?.(ind.id)}
               />
@@ -4411,8 +4415,8 @@ export default function ChartContainer({
                 key={ind.id}
                 name="FXN - Asian Session Range" fullName="FXN - Asian Session Range" args="" values={[]}
                 status={statusLineSettings} background={indicatorBg}
-                isVisible={sessionVisible}
-                onToggleVisibility={() => setSessionVisible(!sessionVisible)}
+                isVisible={sessionVisible && ind.visible !== false}
+                onToggleVisibility={() => { const on = !(sessionVisible && ind.visible !== false); setSessionVisible(true); onUpdateIndicator?.(ind.id, { visible: on }); }}
                 onOpenSettings={() => setSessionSettingsOpen(true)}
                 onRemove={() => onRemoveIndicator?.(ind.id)}
               />
@@ -4621,7 +4625,8 @@ export default function ChartContainer({
         <div aria-label="Time to bar close" style={{
           position: "absolute", ...(scaleSide === 'left' ? { left: 0 } : { right: 0 }), top: Math.round(countdown.top + 10), width: countdown.width, height: 17,
           background: countdown.color, color: labelTextOn(countdown.color), fontSize: "12px", lineHeight: "15px", textAlign: "center",
-          borderRadius: "0 0 2px 2px", pointerEvents: "none", zIndex: 5, fontVariantNumeric: "tabular-nums",
+          // (above the price-axis labels of drawings and positions, AxisHighlights z 11: always in sight)
+          borderRadius: "0 0 2px 2px", pointerEvents: "none", zIndex: 12, fontVariantNumeric: "tabular-nums",
         }}>
           {countdown.text}
         </div>
