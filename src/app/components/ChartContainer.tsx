@@ -2712,12 +2712,14 @@ export default function ChartContainer({
   useEffect(() => {
     if (lastPriceData) {
       const { price, prevPrice } = lastPriceData;
-      const formattedPrice = price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+      // As TradingView's tab: "XAUUSD 3,945.400 ▼ −1.06%" (3 decimals at least, the symbol's own if more)
+      const digits = Math.max(3, pricePrecision || 0);
+      const formattedPrice = price.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
       const change = price - prevPrice;
       const changePercent = (change / prevPrice) * 100;
       const sign = change >= 0 ? '▲' : '▼';
-      const prefix = change >= 0 ? '+' : '';
-      document.title = `${displaySymbol(symbol)} ${formattedPrice} ${sign} ${prefix}${changePercent.toFixed(2)}% | TradePilot`;
+      const pct = `${change >= 0 ? '+' : '−'}${Math.abs(changePercent).toFixed(2)}%`;
+      document.title = `${displaySymbol(symbol)} ${formattedPrice} ${sign} ${pct} | TradePilot`;
       
       // The last loaded bar is a quote for paper trading (a newer live quote wins)
       if (mode === 'idle') {
@@ -2734,7 +2736,7 @@ export default function ChartContainer({
     } else {
       document.title = `${displaySymbol(symbol)} | TradePilot`;
     }
-  }, [symbol, lastPriceData, checkAlerts, mode]);
+  }, [symbol, lastPriceData, checkAlerts, mode, pricePrecision]);
 
   // "Add order on AAPL at 180.00…": the ticket as a limit/stop at that price
   const addOrderAt = (price: number) => {

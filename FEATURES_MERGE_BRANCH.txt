@@ -1,6 +1,6 @@
 TRADEPILOT - FEATURES BUILT ON THE MERGE BRANCH
 Branch: merge-main-left-toolbar-tools  (everything here is on top of main)
-Up to: 12 Nov 2026 (Django admin: who's active right now, and Earnings / payments accounting)
+Up to: 12 Nov 2026 (Django admin: who's active now, Earnings / payments; tab title to 3 decimals)
 
 Contents
   1. Drawing tools (left toolbar)
@@ -153,6 +153,8 @@ Chart interactions
     and showed +0.00% on minute charts)
 
 Layouts
+  - The tab title shows the price to 3 decimals at least (the symbol's own if more), as
+    TradingView's: "XAUUSD 3,945.400 ▼ −1.06%"
   - Multi-chart layouts (Layout setup grid, Manage layouts, sync in layout); each chart keeps
     its own chart type
   - Price scale on the left (Move scale to left)
