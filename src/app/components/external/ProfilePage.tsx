@@ -120,7 +120,7 @@ export default function ProfilePage() {
 
       {/* Navigation */}
       <nav className="fixed top-0 w-full z-50 bg-purple-900/80 backdrop-blur-md shadow-lg">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between gap-4">
+        <div className="container mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3 sm:gap-4">
           <a href="/" className="flex items-center space-x-2">
             <span className="w-10 h-10 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg flex items-center justify-center"><TrendingUp className="w-6 h-6" /></span>
             <span className="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent font-bold text-xl">TradePilot</span>
@@ -128,7 +128,7 @@ export default function ProfilePage() {
           <div className="flex items-center gap-4 sm:gap-8">
             <a href="/" className="hidden sm:inline text-purple-300 hover:text-white transition-colors">Home</a>
             <a href="/analytics" className="hidden sm:inline text-purple-300 hover:text-white transition-colors">Analytics</a>
-            <a href="/chart" className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 px-3 sm:px-5 py-2 rounded-lg font-semibold whitespace-nowrap transition-all">Open the chart</a>
+            <a href="/chart" className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 px-3 sm:px-5 py-2 rounded-lg font-semibold whitespace-nowrap transition-all"><span className="max-[359px]:hidden">Open the chart</span><span className="hidden max-[359px]:inline">Chart</span></a>
             <SiteUserMenu signedOut={<a href="/login" className="text-purple-300 hover:text-white">Log in</a>} />
           </div>
         </div>

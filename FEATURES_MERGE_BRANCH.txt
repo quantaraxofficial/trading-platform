@@ -572,6 +572,9 @@ Posting signals out
 ======================================================================
 17. SITE PAGES: HOME, SIGN-IN, ABOUT, CONTACT, PROFILE
 ======================================================================
+  - Every site page fits every screen, from a 320px phone to a 1920px desktop, portrait or
+    landscape: About and Contact have a ☰ menu on phones (their links used to run off the screen),
+    their card grids shrink to the screen, and the profile page's header fits the smallest phones
   - The home page is at / and the chart at /chart; old chart links (/?symbol=...) open the
     chart, /landing opens the home page; every "back to the chart" link goes to /chart
   - Home, About and Contact: a "Coming soon" roadmap (what's being built next), Pricing in the
