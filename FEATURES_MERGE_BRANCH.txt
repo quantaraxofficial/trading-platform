@@ -84,6 +84,11 @@ flyouts and quick search.
   - Filled shapes (rectangle, rotated rectangle, circle, ellipse, triangle, polyline, path,
     arc, curves) take the mouse only on their outline: inside them no hover handles, no
     "+ Add text", no selection, as on TradingView
+  - Typing text in a shape (text, rectangle, circle, ellipse, lines, note, callout, table…) works
+    as on TradingView: the shape draws the text as it's typed with a blinking caret and
+    selection (an invisible input takes the keys), so it doesn't move when Enter / a click
+    outside ends typing; a click in the text moves the caret; Escape takes the typing back
+  - A trend line's text sits 7px clear above the line (TradingView's gap), more lines going up
   - Points placed to the right of the latest candle land on the future bars' times
   - Dragged shapes follow the pointer without ever jumping back to where the drag began
     (the Long/Short position "dancing"); Long/Short moves are logged in the browser console

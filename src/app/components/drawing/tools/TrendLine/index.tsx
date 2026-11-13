@@ -46,6 +46,9 @@ interface TrendLineProps {
   allowText?: boolean;
 }
 
+// The gap between a line and the bottom of its text label (TradingView's: the letters ~8px above it)
+export const LABEL_GAP = 5;
+
 export function TrendLine({
   id, points, stroke, strokeWidth, lineStyle = 'solid',
   extendLeft = false, extendRight = false, showMiddlePoint = false,
@@ -269,21 +272,26 @@ export function TrendLine({
       {infoStats && <InfoBox p1={p1} p2={p2} x1={x1} y1={y1} x2={x2} y2={y2} />}
       {angleMark && <AngleMark p1={p1} p2={p2} x1={x1} y1={y1} x2={x2} y2={y2} color={stroke} />}
 
-      {/* Text rendering — suppressed while the HTML overlay is actively editing this
-          shape's text, so its own blinking cursor isn't doubled up with this label */}
-      {allowText && !isEditingText && (() => {
+      {/* Text rendering — drawn while it's being typed too (the editor over it is invisible
+          and draws its caret on this node, found by name), so nothing moves when typing ends */}
+      {allowText && (() => {
         const mx = (x1 + x2) / 2;
         const my = (y1 + y2) / 2;
         const angle = Math.atan2(y2 - y1, x2 - x1) * (180 / Math.PI);
         const textRot = (angle > 90 || angle < -90) ? angle + 180 : angle;
 
-        if (text) {
+        if (text || isEditingText) {
+          const shownText = text || 'Add text';
           // offsetX must be half the rendered width for align="center" to actually
           // center the text on (mx,my) — offsetX=0 anchors at the text's own left
           // edge instead, which is what let this drift out of sync with the HTML
           // text-edit overlay (which centers using the real DOM-measured width).
           // (measured, not guessed: a guess too narrow wrapped short labels, "BOS" became "BO / S")
-          const estWidth = Math.max(measureLabel(text, 14) + 2, 10);
+          const lines = shownText.split('\n');
+          const estWidth = Math.max(...lines.map(l => measureLabel(l, 14) + 2), 10);
+          // Sits on the line as TradingView's does: its bottom 5px above it (the letters
+          // stand 7px clear), more lines growing upwards, never over the line
+          const textH = lines.length * 14;
           return (
             <Group
               x={mx}
@@ -293,12 +301,14 @@ export function TrendLine({
               onTap={(e) => { e.cancelBubble = true; onTextEdit && onTextEdit(); }}
             >
               <Text
-                text={text}
+                name={isEditingText ? 'tv-edit-text' : undefined}
+                text={shownText}
+                opacity={text ? 1 : 0.6}
                 fill={stroke}
                 fontSize={14}
                 width={estWidth}
                 offsetX={estWidth / 2}
-                offsetY={10} // Position above the line
+                offsetY={textH + LABEL_GAP}
                 align="center"
                 wrap="none"
               />
@@ -327,7 +337,7 @@ export function TrendLine({
                 fontSize={12}
                 width={placeholderWidth}
                 offsetX={placeholderWidth / 2}
-                offsetY={10}
+                offsetY={12 + LABEL_GAP}
                 align="center"
               />
             </Group>

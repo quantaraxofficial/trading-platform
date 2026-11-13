@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useLayoutEffect, useState } from 'react';
 import { Text as KonvaText, Group, Rect } from 'react-konva';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../../core/coordinates';
 import { useChartTick } from '../../core/useChartTick';
@@ -28,6 +28,7 @@ interface TextToolProps {
   showBorder?: boolean;
   borderColor?: string;
   textWrap?: boolean;
+  isEditingText?: boolean;
 }
 
 export function TextTool({ 
@@ -53,14 +54,19 @@ export function TextTool({
   backgroundOpacity = 0.2,
   showBorder = false,
   borderColor = '#b2b5be',
-  textWrap = false
+  textWrap = false,
+  isEditingText = false,
 }: TextToolProps) {
   const snap = useSnap(chart, series);
   useChartTick(chart, series);
   const textRef = useRef<any>(null);
   const [textDims, setTextDims] = useState({ width: 0, height: 0 });
 
-  useEffect(() => {
+  // (an empty text being typed shows TradingView's faded "Add text")
+  const shownText = text || (isEditingText ? 'Add text' : '');
+  // Measured before the frame is painted, so a text changing as it's typed stays centred on its
+  // point without a frame drawn off-centre
+  useLayoutEffect(() => {
     if (textRef.current) {
       const w = textRef.current.width();
       const h = textRef.current.height();
@@ -68,7 +74,7 @@ export function TextTool({
         setTextDims({ width: w, height: h });
       }
     }
-  }, [text, fontSize, bold, italic]);
+  }, [shownText, fontSize, bold, italic, textWrap]);
 
   if (points.length < 1) return null;
 
@@ -133,11 +139,13 @@ export function TextTool({
       <KonvaText
         ref={textRef}
         id={id}
+        name={isEditingText ? 'tv-edit-text' : undefined}
+        opacity={text ? 1 : 0.6}
         x={0}
         y={0}
         offsetX={textDims.width / 2}
         offsetY={textDims.height / 2}
-        text={text}
+        text={shownText}
         fontSize={fontSize}
         fontStyle={fontStyle}
         fontFamily="sans-serif"

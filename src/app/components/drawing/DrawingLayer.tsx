@@ -280,6 +280,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   // Which of the edited drawing's texts is open: null its text, 'r,c' a table cell
   const [editingTextKey, setEditingTextKey] = useState<string | null>(null);
+  // The text as it's being typed: the shape draws it (the editor itself is invisible, as on TradingView)
+  const [draftText, setDraftText] = useState<string | null>(null);
   // Post / Idea waiting for their link
   const [linkPrompt, setLinkPrompt] = useState<{ id: string; kind: 'post' | 'idea' } | null>(null);
   // Which drawing (if any) the pointer is currently over. Driven from the
@@ -1387,13 +1389,11 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
       const my = (y1 + y2) / 2;
       const angle = Math.atan2(y2 - y1, x2 - x1) * (180 / Math.PI);
       rot = (angle > 90 || angle < -90) ? angle + 180 : angle;
-      // TrendLine renders its own text/placeholder offset 10px "up" in the line's own
-      // rotated local space (Konva's offsetY), not straight up on screen — matching
-      // that rotated offset here is what stops a visible jump the instant you click
-      // "+ Add text" and this HTML overlay replaces it at a different spot.
+      // (where its label sits, above the line in the line's own rotated space: the invisible
+      // editor goes there so the browser's IME / emoji popups open by the text)
       const rotRad = (rot * Math.PI) / 180;
-      px = mx + 10 * Math.sin(rotRad);
-      py = my - 10 * Math.cos(rotRad);
+      px = mx + 13 * Math.sin(rotRad);
+      py = my - 13 * Math.cos(rotRad);
     } else if (d.type === 'rectangle' && d.points.length === 2) {
       const x1 = logicalToPixel(chart, d.points[0].logical) || 0;
       const y1 = priceToPixel(series, d.points[0].price) || 0;
@@ -1856,6 +1856,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   showBorder={(drawing as any).showBorder}
                   borderColor={(drawing as any).borderColor}
                   textWrap={(drawing as any).textWrap}
+                  isEditingText={editingTextId === drawing.id}
                 />
               );
             } else if (drawing.type === 'long_position') {
@@ -2296,12 +2297,23 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
             )
           )}
 
-          {drawings.filter(d => d.visible).map(d => (
-            <DrawingSlot key={d.id} drawing={d} render={renderDrawing} chart={chart} series={series}
-              sel={selectedShapeId === d.id || selectedShapeIds.has(d.id)} hover={hoveredShapeId === d.id}
-              editing={editingTextId === d.id ? `${editingTextKey ?? ''}|1` : ''}
-              live={liveEdit && liveEdit.id === d.id ? liveEdit.updates : null} />
-          ))}
+          {drawings.filter(d => d.visible).map(d => {
+            let shown = d;
+            if (editingTextId === d.id && draftText !== null) {
+              const cell = editingTextKey ? editingTextKey.split(',').map(Number) : null;
+              if (cell) {
+                const cells = ((shown as any).cells || [['', '', ''], ['', '', ''], ['', '', '']]).map((r: string[]) => [...r]);
+                cells[cell[0]][cell[1]] = draftText;
+                shown = { ...shown, cells } as any;
+              } else shown = { ...shown, text: draftText } as any;
+            }
+            return (
+              <DrawingSlot key={d.id} drawing={shown} render={renderDrawing} chart={chart} series={series}
+                sel={selectedShapeId === d.id || selectedShapeIds.has(d.id)} hover={hoveredShapeId === d.id}
+                editing={editingTextId === d.id ? `${editingTextKey ?? ''}|1` : ''}
+                live={liveEdit && liveEdit.id === d.id ? liveEdit.updates : null} />
+            );
+          })}
 
           {previewDrawing && <Group listening={false}>{renderDrawing(previewDrawing, true)}</Group>}
 
@@ -2362,7 +2374,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
       </Stage>
 
       {editingTextId && editingOverlayGeometry && (() => {
-        const { d, px, py, rot } = editingOverlayGeometry;
+        const { d, px, py } = editingOverlayGeometry;
         const cell = editingTextKey ? editingTextKey.split(',').map(Number) : null;
         const cells: string[][] | null = cell ? ((d as any).cells || [['', '', ''], ['', '', ''], ['', '', '']]) : null;
         return (
@@ -2371,10 +2383,10 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
             initialText={cells && cell ? cells[cell[0]][cell[1]] : (d as any).text || ''}
             x={px}
             y={py}
-            rotation={TEXT_LINE_TYPES.includes(d.type) ? rot : (d.type === 'rectangle' || d.type === 'circle' || d.type === 'ellipse') ? 0 : undefined}
-            color={editingOverlayGeometry.color || (d as any).textColor || d.stroke}
-            fontSize={editingOverlayGeometry.fontSize || (d as any).fontSize || 14}
+            stage={stageRef.current}
+            onDraft={setDraftText}
             onCommit={(newText) => {
+              setDraftText(null);
               if (cells && cell) {
                 // a table cell
                 const next = cells.map(r => [...r]);
@@ -2391,6 +2403,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
               setEditingTextKey(null);
             }}
             onCancel={() => {
+              setDraftText(null);
               if (((d as any).text || '').trim() === '' && d.type === 'text') {
                 deleteDrawing(editingTextId);
               }

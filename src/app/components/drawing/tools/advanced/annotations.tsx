@@ -11,15 +11,18 @@ const PLACEHOLDER = 'Add text';
 type TextGeom = { x: number; y: number; color: string; fontSize: number };
 type GeomCtx = { p: XY[]; d: any; key?: string };
 
-const shown = (c: RenderCtx, key = '') => c.editingKey !== key;
+// The text being typed in stays drawn by the tool itself (as on TradingView); the HTML editor over it is
+// invisible and finds this node by name to draw its caret, so nothing moves when typing ends
+export const EDIT_TEXT_NAME = 'tv-edit-text';
+const editName = (c: RenderCtx, key = '') => (c.editingKey === key ? EDIT_TEXT_NAME : undefined);
 const textOf = (d: any) => (d.text || '') as string;
 const linesOf = (t: string) => t.split('\n');
 const boxSize = (t: string, fontSize: number, padX: number, padY: number, minW = 0) => {
   const lines = linesOf(t || PLACEHOLDER);
   return { w: Math.max(minW, Math.max(...lines.map(l => textWidth(l, fontSize))) + padX * 2), h: lines.length * Math.round(fontSize * 1.25) + padY * 2 };
 };
-const textNode = (x: number, y: number, t: string, fontSize: number, fill: string, onClick?: () => void, key?: string, bold = false) => (
-  <Text key={key} x={x} y={y} text={t || PLACEHOLDER} fontSize={fontSize} lineHeight={1.25} fontFamily={SHAPE_FONT}
+const textNode = (x: number, y: number, t: string, fontSize: number, fill: string, onClick?: () => void, key?: string, bold = false, name?: string) => (
+  <Text key={key} name={name} x={x} y={y} text={t || PLACEHOLDER} fontSize={fontSize} lineHeight={1.25} fontFamily={SHAPE_FONT}
     fontStyle={bold ? 'bold' : 'normal'} fill={t ? fill : '#9598a1'} onClick={onClick} onTap={onClick} />
 );
 
@@ -34,7 +37,7 @@ export function renderTextNote(c: RenderCtx) {
     <Group>
       <Line points={[A.x, A.y, B.x, B.y]} stroke={c.d.stroke || '#0F0F0F'} strokeWidth={1} hitStrokeWidth={8} />
       <Rect x={b.x} y={b.y} width={b.w} height={b.h} cornerRadius={4} fill="#ffffff" shadowColor="rgba(0,0,0,0.25)" shadowBlur={6} shadowOffsetY={1} onClick={() => c.editText()} />
-      {shown(c) && textNode(b.x + NOTE.padX, b.y + NOTE.padY, textOf(c.d), fs, c.d.textColor || '#0F0F0F', () => c.editText())}
+      {textNode(b.x + NOTE.padX, b.y + NOTE.padY, textOf(c.d), fs, c.d.textColor || '#0F0F0F', () => c.editText(), undefined, false, editName(c))}
     </Group>
   );
 }
@@ -74,7 +77,7 @@ export function renderPin(c: RenderCtx) {
         <Group>
           <Rect x={b.x} y={b.y} width={b.w} height={b.h} cornerRadius={4} fill="#ffffff" shadowColor="rgba(0,0,0,0.25)" shadowBlur={8} shadowOffsetY={2} onClick={() => c.editText()} />
           <Shape fill="#ffffff" listening={false} sceneFunc={(ctx, s) => { ctx.beginPath(); ctx.moveTo(P.x - 7, b.y + b.h); ctx.lineTo(P.x, b.y + b.h + 7); ctx.lineTo(P.x + 7, b.y + b.h); ctx.closePath(); ctx.fillShape(s); }} />
-          {shown(c) && textNode(b.x + PIN.padX, b.y + PIN.padY, textOf(c.d), c.d.fontSize || PIN.fs, c.d.textColor || '#0F0F0F', () => c.editText())}
+          {textNode(b.x + PIN.padX, b.y + PIN.padY, textOf(c.d), c.d.fontSize || PIN.fs, c.d.textColor || '#0F0F0F', () => c.editText(), undefined, false, editName(c))}
         </Group>
       )}
     </Group>
@@ -102,7 +105,7 @@ export function renderTable(c: RenderCtx) {
         return (
           <Group key={key}>
             <Rect x={g.x} y={g.y} width={g.w} height={g.h} fill={c.d.fill || '#ffffff'} stroke={border} strokeWidth={1} onClick={() => c.editText(key)} onTap={() => c.editText(key)} />
-            {txt && shown(c, key) && <Text x={g.x + TABLE.padX} y={g.y + (g.h - 14) / 2} width={g.w - TABLE.padX * 2} text={txt} fontSize={c.d.fontSize || TABLE.fs} fontFamily={SHAPE_FONT} fill={c.d.textColor || '#0F0F0F'} wrap="none" ellipsis listening={false} />}
+            {(txt || editName(c, key)) && <Text name={editName(c, key)} x={g.x + TABLE.padX} y={g.y + (g.h - 14) / 2} width={g.w - TABLE.padX * 2} text={txt} fontSize={c.d.fontSize || TABLE.fs} fontFamily={SHAPE_FONT} fill={c.d.textColor || '#0F0F0F'} wrap="none" ellipsis listening={false} />}
           </Group>
         );
       }))}
@@ -129,7 +132,7 @@ export function renderCallout(c: RenderCtx) {
       <Shape fill={fill} stroke={border} strokeWidth={2} hitStrokeWidth={10}
         sceneFunc={(ctx, s) => { ctx.beginPath(); ctx.moveTo(cx - 7, cy); ctx.lineTo(A.x, A.y); ctx.lineTo(cx + 7, cy); ctx.closePath(); ctx.fillStrokeShape(s); }} />
       <Rect x={b.x} y={b.y} width={b.w} height={b.h} cornerRadius={8} fill={fill} stroke={border} strokeWidth={2} onClick={() => c.editText()} />
-      {shown(c) && textNode(b.x + CALLOUT.padX, b.y + CALLOUT.padY, textOf(c.d), c.d.fontSize || CALLOUT.fs, c.d.textColor || '#ffffff', () => c.editText())}
+      {textNode(b.x + CALLOUT.padX, b.y + CALLOUT.padY, textOf(c.d), c.d.fontSize || CALLOUT.fs, c.d.textColor || '#ffffff', () => c.editText(), undefined, false, editName(c))}
     </Group>
   );
 }
@@ -145,7 +148,7 @@ export function renderComment(c: RenderCtx) {
   return (
     <Group>
       <Rect x={b.x} y={b.y} width={b.w} height={b.h} cornerRadius={[r, r, r, 0]} fill={c.d.fill || '#2962FF'} onClick={() => c.editText()} />
-      {shown(c) && textNode(b.x + COMMENT.padX, b.y + COMMENT.padY, textOf(c.d), c.d.fontSize || COMMENT.fs, c.d.textColor || '#ffffff', () => c.editText())}
+      {textNode(b.x + COMMENT.padX, b.y + COMMENT.padY, textOf(c.d), c.d.fontSize || COMMENT.fs, c.d.textColor || '#ffffff', () => c.editText(), undefined, false, editName(c))}
     </Group>
   );
 }
@@ -178,7 +181,7 @@ export function renderSignpost(c: RenderCtx) {
     <Group>
       <Line points={[P.x, P.y, P.x, b.y + b.h]} stroke={color} strokeWidth={2} hitStrokeWidth={10} />
       <Rect x={b.x} y={b.y} width={b.w} height={b.h} cornerRadius={4} fill={color} onClick={() => c.editText()} />
-      {shown(c) && textNode(b.x + SIGN.padX, b.y + SIGN.padY, textOf(c.d), c.d.fontSize || SIGN.fs, c.d.textColor || '#ffffff', () => c.editText())}
+      {textNode(b.x + SIGN.padX, b.y + SIGN.padY, textOf(c.d), c.d.fontSize || SIGN.fs, c.d.textColor || '#ffffff', () => c.editText(), undefined, false, editName(c))}
     </Group>
   );
 }

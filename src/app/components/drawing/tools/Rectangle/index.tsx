@@ -174,11 +174,13 @@ export function RectangleTool({
         />
       )}
 
-      {/* Suppressed while the HTML overlay is actively editing this shape's text, so
-          its own blinking cursor isn't doubled up with this label */}
-      {text && !isEditingText && (
+      {/* Drawn while its text is being typed too (the editor over it is invisible and draws
+          its caret on this node, found by name), so nothing moves when typing ends */}
+      {(text || isEditingText) && (
         <Text
-          text={text}
+          name={isEditingText ? 'tv-edit-text' : undefined}
+          text={text || 'Add text'}
+          opacity={text ? 1 : 0.6}
           hitFunc={textLinesHitFunc}
           x={left + 5}
           y={top + 5}
