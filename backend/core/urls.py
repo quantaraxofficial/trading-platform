@@ -13,6 +13,7 @@ urlpatterns = [
     path('drawings/<str:uid>/', views.manage_drawings, name='manage_drawings'),
     path('chart_state/<str:uid>/', views.manage_chart_state, name='manage_chart_state'),
     path('settings/<str:uid>/', views.manage_settings, name='manage_settings'),
+    path('favorites/<str:uid>/', views.favorite_tools, name='favorite_tools'),
     path('create-order/', views.create_cashfree_order, name='create_cashfree_order'),
     path('telemetry/session/start/<str:uid>/', views.start_backtest_session, name='start_backtest_session'),
     path('telemetry/actions/log/<str:uid>/', views.log_telemetry_actions, name='log_telemetry_actions'),

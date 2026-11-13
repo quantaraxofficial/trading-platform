@@ -615,6 +615,34 @@ def manage_settings(request, uid):
     return Response(kept)
 
 
+
+FAVORITES_KEY = 'favorite_tools'
+
+
+@api_view(['GET', 'POST'])
+def favorite_tools(request, uid):
+    """The favourite drawing tools (the favourites toolbar), in their order, kept in the account so they
+    follow the trader to other devices. GET: the list ([] when none yet). POST {"favorites": [tool, …]}."""
+    import json
+    profile, denied = require_session(request, uid)
+    if denied:
+        return denied
+    if request.method == 'GET':
+        s = UserSetting.objects.filter(owner=profile, key=FAVORITES_KEY).first()
+        try:
+            favs = json.loads(s.value) if s else []
+        except ValueError:
+            favs = []
+        return Response(favs if isinstance(favs, list) else [])
+    favs = request.data.get('favorites') if isinstance(request.data, dict) else None
+    if not isinstance(favs, list) or len(favs) > 200 or not all(isinstance(t, str) and 0 < len(t) <= 60 for t in favs):
+        return Response({"error": "favorites must be a list of tool names"}, status=status.HTTP_400_BAD_REQUEST)
+    favs = list(dict.fromkeys(favs))
+    UserSetting.objects.update_or_create(owner=profile, key=FAVORITES_KEY,
+                                         defaults={'value': json.dumps(favs), 'updated_at': int(timezone.now().timestamp() * 1000)})
+    return Response(favs)
+
+
 # --- Feedback / bug reports (from the chart's Send feedback button, or the voice assistant) ---
 
 FEEDBACK_MAX_IMAGES = 5
