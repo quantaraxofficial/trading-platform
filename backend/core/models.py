@@ -12,6 +12,8 @@ class TraderProfile(models.Model):
     # The site open in a visible tab: pinged every minute (core/presence.py); active now = the last 2 minutes
     last_seen = models.DateTimeField(null=True, blank=True, db_index=True)
     last_where = models.CharField(max_length=40, blank=True, default='')
+    # Student categories they're in ("Batch A"…), set in Django admin (core/categories_admin.py)
+    categories = models.ManyToManyField('TraderCategory', blank=True, related_name='traders')
     # The public profile (core/social.py): how people find you (@username), a bio, what it shows
     # (each off until you turn it on) and who may message you or invite you to a collab
     username = models.CharField(max_length=30, unique=True, null=True, blank=True)
@@ -848,3 +850,17 @@ class TraderSource(TraderProfile):
         proxy = True
         verbose_name = "Where traders came from"
         verbose_name_plural = "Where traders came from"
+
+
+class TraderCategory(models.Model):
+    """A group of students ("Batch A", "Weekend class"…), made and filled in Django admin"""
+    name = models.CharField(max_length=80, unique=True)
+    note = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Student category"
+        verbose_name_plural = "Student categories"
+
+    def __str__(self):
+        return self.name

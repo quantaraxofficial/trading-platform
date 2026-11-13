@@ -1,0 +1,26 @@
+{% extends "admin/base_site.html" %}
+{% block title %}{{ title }} | TradePilot admin{% endblock %}
+{% block breadcrumbs %}
+<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> › <a href="{% url 'admin:core_traderprofile_changelist' %}">Trader profiles</a> › {{ title }}</div>
+{% endblock %}
+{% block content %}
+<div id="content-main">
+  <form method="post">{% csrf_token %}
+    <p>{% if adding %}Add{% else %}Remove{% endif %} these {{ queryset|length }} trader{{ queryset|length|pluralize }} {% if adding %}to{% else %}from{% endif %} a category:</p>
+    <ul class="tp-muted">{% for p in queryset %}<li>{{ p.name }} <span class="tp-small">({{ p.email }})</span></li>{% endfor %}</ul>
+    {% if form.non_field_errors %}<ul class="errorlist">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+    <fieldset class="module aligned">
+      {% for field in form %}
+      <div class="form-row"><div><label for="{{ field.id_for_label }}">{{ field.label|capfirst }}:</label> {{ field }}</div></div>
+      {% endfor %}
+    </fieldset>
+    {% for p in queryset %}<input type="hidden" name="{{ action_checkbox_name }}" value="{{ p.pk }}">{% endfor %}
+    <input type="hidden" name="action" value="{{ action }}">
+    <input type="hidden" name="apply" value="1">
+    <div class="submit-row">
+      <input type="submit" class="default" value="{% if adding %}Add to the category{% else %}Remove from the category{% endif %}">
+      <a href="{% url 'admin:core_traderprofile_changelist' %}" class="button cancel-link">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

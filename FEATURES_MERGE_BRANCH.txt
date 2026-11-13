@@ -462,6 +462,10 @@ Posting signals out
     Email / Campaign link / Another website / Direct with its source and campaign. A report page
     (sign-ups by kind and by source and campaign: last 30 days, this month, this year, all time; the
     latest sign-ups), and a "Came from" column, filter and details on Trader profiles
+  - Student categories (Django admin): groups of traders ("Batch A", "Weekend class"…) made and filled on
+    their own page (students added there), from Trader profiles (select some: "Add to a category…" /
+    "Remove from a category…", a new category named there too) or on a trader's page; Trader profiles
+    shows each one's categories as chips (a click lists that category) and filters by them
 
 ======================================================================
 16. VOICE ASSISTANT

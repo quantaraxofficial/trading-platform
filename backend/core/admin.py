@@ -48,10 +48,14 @@ class FailedRequestAdmin(admin.ModelAdmin):
     def has_change_permission(self, request, obj=None):
         return False   # read-only detail view
 
+from .categories_admin import TraderCategoriesMixin  # noqa: E402  (student categories)
+
+
 @admin.register(TraderProfile)
-class TraderProfileAdmin(admin.ModelAdmin):
-    list_display = ('name', 'online', 'email', 'phone', 'tier', 'came_from', 'created_at', 'last_login', 'presence_dot')
-    list_filter = (ActiveNowFilter, 'tier', 'source_kind', 'created_at')
+class TraderProfileAdmin(TraderCategoriesMixin, admin.ModelAdmin):
+    list_display = ('name', 'online', 'email', 'phone', 'tier', 'came_from', 'categories_col', 'created_at', 'last_login', 'presence_dot')
+    list_filter = (ActiveNowFilter, 'tier', 'source_kind', 'categories', 'created_at')
+    filter_horizontal = ('categories',)
     search_fields = ('name', 'email', 'phone', 'uid', 'source', 'campaign')
     exclude = ('arrival',)
     readonly_fields = ('arrival_details',)
