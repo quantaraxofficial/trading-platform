@@ -197,3 +197,55 @@ class BacktestLeaderboardTests(TestCase):
         self.assertEqual(res.status_code, 200, res.content)
         self.assertTrue(res.json()["session"]["on_leaderboard"])
         self.assertEqual(len(APIClient().get("/api/users/stats/leaderboard/manual/").json()["rows"]), 3)
+
+
+class MarketTests(TestCase):
+    """The boards on one market (a symbol, or a group), and the Most followed board"""
+    def test_symbols_and_groups(self):
+        from .symbol_groups import group_of, normalize
+        cases = {"XAUUSD+": ("XAUUSD", "metals"), "XAU/USD": ("XAUUSD", "metals"), "OANDA:XAUUSD": ("XAUUSD", "metals"), "GOLD": ("XAUUSD", "metals"),
+                 "EURUSD.r": ("EURUSD", "forex"), "EUR/USD": ("EURUSD", "forex"), "gbpjpym": ("GBPJPY", "forex"), "BTCUSDT": ("BTCUSD", "crypto"),
+                 "US30.cash": ("US30", "indices"), "NAS100": ("US100", "indices"), "USOIL": ("USOIL", "energies"), "AAPL": ("AAPL", "other")}
+        for raw, (sym, grp) in cases.items():
+            self.assertEqual((normalize(raw), group_of(raw)), (sym, grp), raw)
+
+    def test_accounts_on_a_market(self):
+        now = int(time.time() * 1000)
+        p = TraderProfile.objects.create(uid="mk", name="MK", email="mk@test.invalid")
+        trades = [{"symbol": "XAUUSD+" if i % 2 else "EURUSD.r", "entry_time": now - (20 - i) * D - H, "exit_time": now - (20 - i) * D,
+                   "pnl": 100 if i % 2 else -50} for i in range(14)]
+        StatsAccount.objects.create(owner=p, platform="mt5", login=1, on_leaderboard=True, mode="real", trades=trades, initial_balance=10000)
+        get = lambda **q: APIClient().get("/api/users/stats/leaderboard/", {"period": "30d", **q}).json()["rows"]
+        self.assertEqual((get()[0]["trades"], get()[0]["net"]), (14, 350.0))
+        gold = get(market="metals")[0]
+        self.assertEqual((gold["trades"], gold["net"], gold["win_rate"], gold["symbols"]), (7, 700.0, 100.0, ["XAUUSD"]))
+        self.assertEqual(get(market="XAU/USD")[0]["net"], 700.0)          # the symbol, however it's written
+        self.assertEqual(get(market="forex")[0]["net"], -350.0)
+        self.assertEqual(get(market="crypto"), [])
+        mk = APIClient().get("/api/users/stats/leaderboard/markets/").json()
+        self.assertEqual({x["symbol"]: x["group"] for x in mk["symbols"]}, {"XAUUSD": "metals", "EURUSD": "forex"})
+        self.assertIn({"id": "forex", "label": "Forex (currencies)"}, mk["groups"])
+
+    def test_manual_on_a_market(self):
+        from .models import ReplaySession
+        p = TraderProfile.objects.create(uid="ms", name="MS", email="ms@test.invalid")
+        book = {"trades": [{"id": str(i), "symbol": "XAUUSD" if i < 12 else "EURUSD", "exitTime": 2000 + i, "pnl": 50} for i in range(15)]}
+        ReplaySession.objects.create(owner=p, name="mixed", symbol="XAUUSD", interval="15min", start_time=1, current_time=2, initial_balance=10000, book=book, on_leaderboard=True)
+        get = lambda **q: APIClient().get("/api/users/stats/leaderboard/manual/", q).json()["rows"]
+        self.assertEqual(get(market="metals")[0]["trades"], 12)
+        self.assertEqual(get(market="forex"), [])   # 3 trades: under the 10 needed
+
+    def test_most_followed(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from .models import Follow
+        ps = {u: TraderProfile.objects.create(uid=u, name=u.upper(), email=f"{u}@test.invalid", username=u) for u in ("aa", "bb", "cc", "dd")}
+        for f in ("bb", "cc", "dd"):
+            Follow.objects.create(follower=ps[f], following=ps["aa"])                 # aa: 3 followers
+        for f in ("aa", "cc"):
+            Follow.objects.create(follower=ps[f], following=ps["bb"])                 # bb: 2
+        Follow.objects.filter(following=ps["aa"]).update(created_at=timezone.now() - timedelta(days=60))   # aa's are old
+        rows = APIClient().get("/api/users/stats/leaderboard/followers/").json()["rows"]
+        self.assertEqual([(r["username"], r["followers"]) for r in rows], [("aa", 3), ("bb", 2)])
+        rows = APIClient().get("/api/users/stats/leaderboard/followers/", {"period": "30d", "sort": "gained"}).json()["rows"]
+        self.assertEqual([(r["username"], r["gained"]) for r in rows], [("bb", 2), ("aa", 0)])

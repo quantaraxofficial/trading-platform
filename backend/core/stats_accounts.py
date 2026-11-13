@@ -24,6 +24,7 @@ from rest_framework.response import Response
 from . import broker_mt5 as mt
 from . import ctrader_api as ct
 from . import prop_rules
+from . import symbol_groups as sg
 from .auth import require_session
 from .models import StatsAccount
 
@@ -300,12 +301,22 @@ def presets(request):
 PERIODS = {"7d": 7, "30d": 30, "90d": 90, "1y": 365, "all": None}
 
 
-def metrics(acc, since_ms):
-    """The account's results over the period: return on its balance at the period's start, net,
-    win rate, profit factor, the largest drop from a high (% of that high), trades, trading days"""
+def _top_symbols(syms, n=3):
+    counts = {}
+    for x in syms:
+        k = sg.normalize(x)
+        if k:
+            counts[k] = counts.get(k, 0) + 1
+    return [k for k, _ in sorted(counts.items(), key=lambda kv: -kv[1])[:n]]
+
+
+def metrics(acc, since_ms, market=""):
+    """The account's results over the period (and on one market: a symbol or a group of them, its
+    other trades left out): return on its balance at the period's start, net, win rate, profit
+    factor, the largest drop from a high (% of that high), trades, trading days, its main symbols"""
     trades = sorted((t for t in acc.trades or [] if t.get("exit_time")), key=lambda t: t["exit_time"])
     start = (acc.initial_balance or 0) + sum(t["pnl"] for t in trades if since_ms and t["exit_time"] < since_ms)
-    period = [t for t in trades if not since_ms or t["exit_time"] >= since_ms]
+    period = [t for t in trades if (not since_ms or t["exit_time"] >= since_ms) and sg.matches(t.get("symbol"), market)]
     if not period or start <= 0:
         return None
     wins = [t["pnl"] for t in period if t["pnl"] > 0]
@@ -319,13 +330,20 @@ def metrics(acc, since_ms):
     return {"return_pct": round(net / start * 100, 2), "net": round(net, 2), "trades": len(period),
             "win_rate": round(len(wins) / len(period) * 100, 1),
             "profit_factor": round(sum(wins) / -sum(losses), 2) if losses else None,
-            "max_dd_pct": round(dd, 2), "days": len({datetime.fromtimestamp(t["exit_time"] / 1000, dt_tz.utc).date() for t in period})}
+            "max_dd_pct": round(dd, 2), "days": len({datetime.fromtimestamp(t["exit_time"] / 1000, dt_tz.utc).date() for t in period}),
+            "symbols": _top_symbols(t.get("symbol") for t in period)}
+
+
+def _market(request):
+    """?market= (a group id or a symbol; ?symbol= too)"""
+    return str(request.query_params.get('market') or request.query_params.get('symbol') or '').strip()[:40]
 
 
 @api_view(['GET'])
 def leaderboard(request):
-    """?period=7d|30d|90d|1y|all (30d) &sort=return|profit_factor|win_rate|net &platform=mt5|ctrader &mode=real|demo:
-    the ranked accounts (public: the traders chose to show them)"""
+    """?period=7d|30d|90d|1y|all (30d) &sort=return|profit_factor|win_rate|net &platform=mt5|ctrader &mode=real|demo
+    &market= (a symbol, or a group: forex, metals, crypto, indices, energies, other): the ranked accounts
+    (public: the traders chose to show them), on that market's trades only"""
     from .social import username_of
     period = request.query_params.get('period') or '30d'
     days = PERIODS.get(period, 30)
@@ -336,9 +354,10 @@ def leaderboard(request):
         qs = qs.filter(platform=request.query_params['platform'])
     if request.query_params.get('mode') in ('real', 'demo'):
         qs = qs.filter(mode=request.query_params['mode'])
+    market = _market(request)
     rows = []
     for acc in qs:
-        m = metrics(acc, since)
+        m = metrics(acc, since, market)
         if not m or m["trades"] < LEADERBOARD_MIN_TRADES:
             continue
         preset = prop_rules.PRESETS.get(acc.firm)
@@ -353,7 +372,7 @@ def leaderboard(request):
     rows.sort(key=lambda r: (r[key] is not None, r[key] if r[key] is not None else 0, r["trades"]), reverse=True)
     for i, r in enumerate(rows):
         r["rank"] = i + 1
-    return Response({"period": period if period in PERIODS else "30d", "sort": sort, "min_trades": LEADERBOARD_MIN_TRADES, "rows": rows[:100]})
+    return Response({"period": period if period in PERIODS else "30d", "sort": sort, "market": market, "min_trades": LEADERBOARD_MIN_TRADES, "rows": rows[:100]})
 
 
 BACKTEST_MIN_TRADES = 10
@@ -384,9 +403,10 @@ def backtest_metrics(r):
     return _results([float(t["netPnl"]) for t in trades], r.initial_capital)
 
 
-def session_metrics(r):
-    """A manual backtest's (bar replay session's) results: its own account's closed trades"""
-    trades = [t for t in ((r.book or {}).get("trades") or []) if isinstance(t, dict) and t.get("exitTime") is not None]
+def session_metrics(r, market=""):
+    """A manual backtest's (bar replay session's) results: its own account's closed trades (on one market)"""
+    trades = [t for t in ((r.book or {}).get("trades") or []) if isinstance(t, dict) and t.get("exitTime") is not None
+              and sg.matches(t.get("symbol") or r.symbol, market)]
     trades.sort(key=lambda t: t.get("exitTime") or 0)
     return _results([float(t.get("pnl") or 0) for t in trades], r.initial_balance)
 
@@ -408,21 +428,19 @@ def backtest_leaderboard(request):
     from .social import username_of
     sort = request.query_params.get('sort') or 'return'
     qs = BacktestRun.objects.filter(on_leaderboard=True).select_related('owner')
-    sym = str(request.query_params.get('symbol') or '').strip()
-    if sym:
-        qs = qs.filter(symbol__icontains=sym[:40])
+    market = _market(request)
     published = {(p.owner_id, p.name.strip().lower()): p for p in PublishedScript.objects.filter(owner__in=qs.values('owner'))}
     rows = []
     for r in qs:
         pub = published.get((r.owner_id, (r.script or '').strip().lower()))
-        m = backtest_metrics(r) if pub else None
+        m = backtest_metrics(r) if pub and sg.matches(r.symbol, market) else None
         if not m:
             continue
         rows.append({**m, "id": r.id, "name": r.owner.name, "username": username_of(r.owner), "strategy": r.name, "script": r.script,
                      "language": r.language, "symbol": r.symbol, "timeframe": r.timeframe, "capital": r.initial_capital,
                      "period_from": r.period_from, "period_to": r.period_to, "published": pub.visibility,
                      "script_id": pub.id if pub.visibility == 'public' else None})
-    return Response({"sort": sort, "min_trades": BACKTEST_MIN_TRADES, "rows": _ranked(rows, sort)})
+    return Response({"sort": sort, "market": market, "min_trades": BACKTEST_MIN_TRADES, "rows": _ranked(rows, sort)})
 
 
 @api_view(['GET'])
@@ -433,15 +451,60 @@ def manual_leaderboard(request):
     from .social import username_of
     sort = request.query_params.get('sort') or 'return'
     qs = ReplaySession.objects.filter(on_leaderboard=True).select_related('owner')
-    sym = str(request.query_params.get('symbol') or '').strip()
-    if sym:
-        qs = qs.filter(symbol__icontains=sym[:40])
+    market = _market(request)
     rows = []
     for r in qs:
-        m = session_metrics(r)
+        m = session_metrics(r, market)
         if not m:
             continue
         rows.append({**m, "id": r.id, "name": r.owner.name, "username": username_of(r.owner), "session": r.name, "strategy": r.strategy,
                      "symbol": r.symbol, "timeframe": r.interval_label or r.interval, "capital": r.initial_balance, "status": r.status,
                      "period_from": r.start_time * 1000, "period_to": r.current_time * 1000, "time_spent": r.time_spent})
     return Response({"sort": sort, "min_trades": BACKTEST_MIN_TRADES, "rows": _ranked(rows, sort)})
+
+
+
+
+@api_view(['GET'])
+def markets(request):
+    """The markets to pick from: the groups, and the symbols traded on the boards (most traded first)"""
+    from .models import BacktestRun, ReplaySession
+    seen = []
+    for acc in StatsAccount.objects.filter(on_leaderboard=True).only('trades'):
+        seen += [t.get("symbol") for t in acc.trades or []]
+    for r in ReplaySession.objects.filter(on_leaderboard=True).only('book', 'symbol'):
+        seen += [t.get("symbol") or r.symbol for t in ((r.book or {}).get("trades") or []) if isinstance(t, dict)]
+    seen += list(BacktestRun.objects.filter(on_leaderboard=True).values_list('symbol', flat=True))
+    counts = {}
+    for x in seen:
+        k = sg.normalize(x)
+        if k:
+            counts[k] = counts.get(k, 0) + 1
+    symbols = [{"symbol": k, "group": sg.group_of(k), "count": n} for k, n in sorted(counts.items(), key=lambda kv: -kv[1])[:200]]
+    return Response({"groups": [{"id": g, "label": l} for g, l in sg.GROUPS], "symbols": symbols})
+
+
+@api_view(['GET'])
+def followers_leaderboard(request):
+    """?period=7d|30d|90d|1y|all (all) &sort=followers|gained: the most followed traders (everyone with a
+    follower): their followers, how many they gained in the period, public posts and scripts"""
+    from django.db.models import Count, Q
+    from .models import TraderProfile
+    from .posts import avatar_url
+    from .social import username_of
+    period = request.query_params.get('period') or 'all'
+    days = PERIODS.get(period)
+    since = timezone.now() - timedelta(days=days) if days else None
+    sort = 'gained' if request.query_params.get('sort') == 'gained' and since else 'followers'
+    qs = (TraderProfile.objects.annotate(
+        n_followers=Count('followers_set', distinct=True),
+        n_gained=Count('followers_set', filter=Q(followers_set__created_at__gte=since), distinct=True) if since else Count('followers_set', distinct=True),
+        n_posts=Count('posts', filter=Q(posts__visibility='public'), distinct=True),
+        n_scripts=Count('published_scripts', filter=Q(published_scripts__visibility='public'), distinct=True))
+        .filter(n_followers__gt=0))
+    qs = qs.order_by('-n_gained', '-n_followers', 'name') if sort == 'gained' else qs.order_by('-n_followers', '-n_gained', 'name')
+    rows = []
+    for i, p in enumerate(qs[:100]):
+        rows.append({"rank": i + 1, "name": p.name, "username": username_of(p), "avatar": avatar_url(p), "bio": (p.bio or '')[:120],
+                     "followers": p.n_followers, "gained": p.n_gained if since else None, "posts": p.n_posts, "scripts": p.n_scripts})
+    return Response({"period": period if period in PERIODS else "all", "sort": sort, "rows": rows})

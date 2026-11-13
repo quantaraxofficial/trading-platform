@@ -78,6 +78,7 @@ export type LbSort = "return" | "profit_factor" | "win_rate" | "net";
 export interface LbRow {
   rank: number; id: number; name: string; username: string; platform: Platform; broker: string; mode: string; currency: string; label: string; prop: string;
   return_pct: number; net: number; trades: number; win_rate: number; profit_factor: number | null; max_dd_pct: number; days: number; synced_at: string | null;
+  symbols: string[];   // its most traded symbols in the period
 }
 export interface LbBacktestRow {
   rank: number; id: number; name: string; username: string; strategy: string; script: string; language: string; symbol: string; timeframe: string; capital: number;
@@ -88,12 +89,18 @@ export interface LbManualRow {
   rank: number; id: number; name: string; username: string; session: string; strategy: string; symbol: string; timeframe: string; capital: number; status: string;
   period_from: number; period_to: number; time_spent: number; return_pct: number; net: number; trades: number; win_rate: number; profit_factor: number | null; max_dd_pct: number;
 }
-export const leaderboard = (q: { period: LbPeriod; sort: LbSort; platform?: string; mode?: string }) =>
+// The markets to rank on: a group (forex, metals…) or a symbol traded on the boards
+export interface Markets { groups: { id: string; label: string }[]; symbols: { symbol: string; group: string; count: number }[] }
+export const leaderboardMarkets = () => fetch(`${BACKEND}/api/users/stats/leaderboard/markets/`).then(r => r.json() as Promise<Markets>);
+export interface LbFollowedRow { rank: number; name: string; username: string; avatar: string; bio: string; followers: number; gained: number | null; posts: number; scripts: number }
+export const followersLeaderboard = (q: { period: LbPeriod; sort: "followers" | "gained" }) =>
+  fetch(`${BACKEND}/api/users/stats/leaderboard/followers/?${new URLSearchParams(q)}`).then(r => r.json() as Promise<{ rows: LbFollowedRow[] }>);
+export const leaderboard = (q: { period: LbPeriod; sort: LbSort; platform?: string; mode?: string; market?: string }) =>
   fetch(`${BACKEND}/api/users/stats/leaderboard/?${new URLSearchParams(Object.entries(q).filter(([, v]) => v) as [string, string][])}`)
     .then(r => r.json() as Promise<{ rows: LbRow[]; min_trades: number }>);
-export const manualLeaderboard = (q: { sort: LbSort; symbol?: string }) =>
+export const manualLeaderboard = (q: { sort: LbSort; market?: string }) =>
   fetch(`${BACKEND}/api/users/stats/leaderboard/manual/?${new URLSearchParams(Object.entries(q).filter(([, v]) => v) as [string, string][])}`)
     .then(r => r.json() as Promise<{ rows: LbManualRow[]; min_trades: number }>);
-export const backtestLeaderboard = (q: { sort: LbSort; symbol?: string }) =>
+export const backtestLeaderboard = (q: { sort: LbSort; market?: string }) =>
   fetch(`${BACKEND}/api/users/stats/leaderboard/backtests/?${new URLSearchParams(Object.entries(q).filter(([, v]) => v) as [string, string][])}`)
     .then(r => r.json() as Promise<{ rows: LbBacktestRow[]; min_trades: number }>);

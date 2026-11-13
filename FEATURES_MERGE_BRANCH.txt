@@ -678,6 +678,12 @@ Posting signals out
     - Live accounts: connected accounts put on it (Settings → Show on the leaderboard), by period
       (7 days … all time), real or demo; verified results read from the broker, never the account
       number or balance; at least 5 closed trades in the period
+  - Every board on one market: a group (Forex, Metals, Crypto, Indices, Energies, Stocks & others)
+    or a symbol traded on the boards; only that market's trades count (live accounts and manual
+    backtests recomputed on them). A broker's spelling is the same symbol (XAUUSD+, XAU/USD,
+    OANDA:XAUUSD, XAUUSD.r, XAUUSDm, GOLD → XAUUSD). Live accounts show their main symbols
+  - Most followed: traders by followers, or by followers gained in the last 7 / 30 / 90 days / year,
+    with their public posts and scripts
 
 ======================================================================
 17d. PROFILES, POSTS, LIKES, COMMENTS, SHARING
