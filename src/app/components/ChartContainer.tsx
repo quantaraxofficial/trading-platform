@@ -420,10 +420,18 @@ export function remapDrawingPoints(drawings: any[], stockData: any[], label: str
     ? (stockData[stockData.length - 1].time - stockData[0].time) / (stockData.length - 1)
     : 300; // fallback to 5min
   
-  // Old bar spacing for detecting same-candle drawings
-  const oldBarSpacing = oldStockData && oldStockData.length > 1
-    ? (oldStockData[oldStockData.length - 1].time - oldStockData[0].time) / (oldStockData.length - 1)
-    : null;
+  // A timeframe's own bar length: the commonest gap between bars (the median of the latest ones), not
+  // the average, which nights and weekends stretch well past it (a 4h chart's came to ~5.5 hours)
+  const barLength = (data?: any[]): number | null => {
+    if (!data || data.length < 2) return null;
+    const gaps: number[] = [];
+    for (let i = Math.max(1, data.length - 500); i < data.length; i++) { const g = data[i].time - data[i - 1].time; if (g > 0) gaps.push(g); }
+    if (!gaps.length) return null;
+    gaps.sort((a, b) => a - b);
+    return gaps[Math.floor(gaps.length / 2)];
+  };
+  const oldBarSpacing = barLength(oldStockData);
+  const newBarSpacing = barLength(stockData);
   
   // Helper: compute time from logical index in old data
   const getTimeFromOldLogical = (logical: number): number | null => {
@@ -507,33 +515,35 @@ export function remapDrawingPoints(drawings: any[], stockData: any[], label: str
   return drawings.map(d => {
     if (!d.points) return d;
     
-    // Special handling for fibonacci: when both points share the same time (drawn on one candle),
-    // spread them across the old candle duration so the fib spans the correct range on lower TFs
-    if (d.type === 'fibonacci' && d.points.length === 2 && oldBarSpacing) {
+    // A Fib keeps its territory on every timeframe, after a switch and after a reload alike:
+    // - its saved times are never rewritten (each switch used to stretch them a little further);
+    // - one drawn on a single candle (both ends on it) spreads, on smaller timeframes only, over that
+    //   candle's own length (`fibSpan`: its timeframe's bar length, remembered on the drawing so a reload
+    //   or a second switch spreads it the same), from the candle's first small bar's left edge to its
+    //   last one's right edge; on its own timeframe and larger ones it's back on the one candle;
+    // - its ends aren't moved sideways onto a candle that happens to share their price
+    if (d.type === 'fibonacci' && d.points.length === 2) {
       const pts = d.points;
       let time0 = pts[0].time;
       let time1 = pts[1].time;
-      
-      // Resolve times from logical if missing
       if (!time0 && pts[0].logical !== undefined) time0 = getTimeFromOldLogical(pts[0].logical);
       if (!time1 && pts[1].logical !== undefined) time1 = getTimeFromOldLogical(pts[1].logical);
-      
       if (time0 && time1) {
-        const timeDiff = Math.abs(time1 - time0);
-        
-        // If both points are on the same candle (time difference < old bar spacing),
-        // spread them: point1 gets the candle start time, point2 gets start + old bar spacing
-        if (timeDiff < oldBarSpacing * 0.5) {
-          const baseTime = Math.min(time0, time1);
-          const newTime0 = baseTime;
-          const newTime1 = baseTime + oldBarSpacing;
-          
-          const p0 = remapPoint(pts[0], newTime0, true);
-          const p1 = remapPoint(pts[1], newTime1, true);
-          return { ...d, points: [p0, p1] };
+        const sameCandle = (len: number | null) => !!len && Math.abs(time1 - time0) < len * 0.5;
+        const span: number | null = (d as any).fibSpan ?? (sameCandle(oldBarSpacing) ? oldBarSpacing : null);
+        const keep = (q: any, t: number, at: number) => ({ ...remapPoint(q, at, true), time: q.time ?? t });
+        if (span && sameCandle(span)) {
+          const base = Math.min(time0, time1);
+          if (newBarSpacing && newBarSpacing < span * 0.75) {
+            const a = keep(pts[0], time0, base), z = keep(pts[1], time1, base + span);
+            return { ...d, fibSpan: span, points: [{ ...a, logical: a.logical - 0.5 }, { ...z, logical: z.logical - 0.5 }] };
+          }
+          return { ...d, fibSpan: span, points: [keep(pts[0], time0, time0), keep(pts[1], time1, time1)] };
         }
+        return { ...d, points: [keep(pts[0], time0, time0), keep(pts[1], time1, time1)] };
       }
     }
+    
     
     return {
       ...d,
