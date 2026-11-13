@@ -710,11 +710,16 @@ Posting signals out
   - Community → Posts: global search by words, #hashtags or @author among the posts you may see
     (everyone's public posts, followers-only ones of people you follow), New post there too
   - Notifications for likes, comments and shares lead to the post
+  - Reels (/reels; Community's sidebar and Posts tab): every public post that starts with a video,
+    full screen, newest first, scrolled / swiped (or ↑ ↓) one at a time, each snapping into place.
+    The one in view plays and loops, the others pause; one sound switch (M); a tap pauses, a double
+    tap likes; the author (Follow), caption, like, comments (the post opens), share (link or chats),
+    views (counted once per person). More load near the end; /reels?post=<id> starts at that one
 
 ======================================================================
 18. RUNNING IT (SETUP NOTES)
 ======================================================================
-  - Database: run "python manage.py migrate" (migrations up to 0048)
+  - Database: run "python manage.py migrate" (migrations up to 0049)
   - Live collab / chats: the backend runs under daphne (Django Channels)
   - Copy trading: run "python manage.py run_copier" on the copier server (MT5 installed)
   - Market data: TWELVEDATA_API_KEY (8 requests a minute on the free plan; the optimizer

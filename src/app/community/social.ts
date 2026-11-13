@@ -100,7 +100,7 @@ export interface Post {
   media: PostMediaItem[];
   // its settings (who may comment, whether it may be shared) and what people did with it
   comments_setting: CommentsSetting; allow_sharing: boolean; can_comment: boolean;
-  likes: number; liked: boolean; comments: number; shares: number;
+  likes: number; liked: boolean; comments: number; shares: number; views?: number;
 }
 export interface PostComment { id: number; text: string; author: Person; at: number; can_delete: boolean }
 // A chat to share into: a personal chat or a group chat (kind group), or a collab

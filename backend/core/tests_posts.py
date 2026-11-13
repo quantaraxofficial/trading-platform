@@ -218,3 +218,29 @@ class InteractionTests(PostTests):
         card = ChatGroupMessage.objects.filter(group=grp).last().attachment
         self.assertEqual((card["type"], card["person"]["username"]), ("profile", "asha_t"))
         self.assertEqual(self.api("ben", "post", "people/asha_t/share/", {"targets": []}).status_code, 400)
+
+
+@override_settings(POST_FILES_ROOT=TMP)
+class ReelTests(PostTests):
+    test_photo_reencoded_without_location = test_followers_only_posts_and_their_files = test_search = None
+    test_only_its_author_edits_or_deletes = test_refused_uploads = test_avatar_and_links = None
+
+    def test_reels_are_public_posts_starting_with_a_video(self):
+        a = self.make("asha", "clip one", files=[video(), photo()])
+        self.make("asha", "photo first", files=[photo(), video()])                    # starts with a photo: not a reel
+        self.make("asha", "followers clip", "followers", [video()])                  # not public
+        b = self.make("ben", "clip two", files=[video()])
+        reels = lambda who, **q: self.api(who, "get", "reels/", q).json()
+        got = reels("cara")
+        self.assertEqual([r["caption"] for r in got["reels"]], ["clip two", "clip one"])
+        self.assertEqual(got["reels"][0]["i_follow"], False)
+        self.assertEqual([r["caption"] for r in reels("cara", start=a["id"])["reels"]], ["clip one", "clip two"])   # a shared reel first
+        self.assertEqual([r["caption"] for r in reels("cara", before=b["id"])["reels"]], ["clip one"])
+        self.assertIn("followers clip", [r["caption"] for r in reels("asha")["reels"]])  # your own too
+
+    def test_views_once_per_person(self):
+        a = self.make("asha", "clip", files=[video()])
+        for who in ("ben", "ben", "cara", "asha"):
+            r = self.api(who, "post", f"posts/{a['id']}/view/")
+        self.assertEqual(r.json()["views"], 2)   # Ben once, Cara once, not its author
+        self.assertEqual(self.api("cara", "get", f"posts/{a['id']}/").json()["post"]["views"], 2)

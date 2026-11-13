@@ -979,3 +979,13 @@ class PostComment(models.Model):
 
     class Meta:
         ordering = ['created_at']
+
+
+class PostView(models.Model):
+    """Someone watched a reel (or opened a post): counted once per person"""
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='views_set')
+    profile = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('post', 'profile')

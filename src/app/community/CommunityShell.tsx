@@ -4,7 +4,7 @@
 // profile, Analytics, back to the chart), the page title, and the notifications bell.
 
 import React, { useEffect, useRef, useState } from "react";
-import { ArrowLeft, BarChart3, Bell, LogIn, Search, TrendingUp, User } from "lucide-react";
+import { ArrowLeft, BarChart3, Bell, Clapperboard, LogIn, Search, TrendingUp, User } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { avatarSrc, getNotifications, markNotificationsRead, mySettings, profileUrl, chartUrlForScript, initials, type Notice } from "./social";
 
@@ -40,6 +40,7 @@ export default function CommunityShell({ title, hint, active, children }: { titl
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${active === id ? "bg-gradient-to-r from-purple-600/80 to-indigo-600/80 text-white shadow-lg shadow-purple-700/30" : "text-purple-300 hover:text-white hover:bg-purple-800/25"}`}>
                 {icon}{label}</a>
             ))}
+            <a href="/reels" data-nav="reels" className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-purple-300 hover:text-white hover:bg-purple-800/25"><Clapperboard size={18} />Reels</a>
             <a href="/analytics" className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-purple-300 hover:text-white hover:bg-purple-800/25"><BarChart3 size={18} />Analytics</a>
           </nav>
           <a href="/chart" className="mt-auto flex items-center gap-2 text-sm text-purple-400 hover:text-white"><ArrowLeft size={15} />Back to the chart</a>

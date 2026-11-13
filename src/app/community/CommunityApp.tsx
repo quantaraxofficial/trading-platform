@@ -6,7 +6,7 @@
 
 import { registerVoiceFunctions, VoiceQuestion } from "../lib/voice/registry";
 import React, { useEffect, useState } from "react";
-import { Code2, ImagePlus, Search, Users } from "lucide-react";
+import { Clapperboard, Code2, ImagePlus, Search, Users } from "lucide-react";
 import { Card, Empty, Pills } from "../analytics/ui";
 import CommunityShell, { Avatar } from "./CommunityShell";
 import { chartUrlForScript, followPerson, listScripts, profileUrl, searchPeople, type PublishedScript, type SearchPerson } from "./social";
@@ -129,7 +129,8 @@ function SearchView({ uid }: { uid: string }) {
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <Pills value={tab} onChange={setTab} testId="community-tab" options={[{ id: "posts", label: "Posts" }, { id: "people", label: "People" }, { id: "indicator", label: "Indicators" }, { id: "strategy", label: "Strategies" }]} />
-        {tab === "posts" && <button onClick={() => setComposing(true)} data-testid="new-post" className="ml-auto px-3 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 inline-flex items-center gap-1.5"><ImagePlus size={15} />New post</button>}
+        {tab === "posts" && <a href="/reels" data-testid="watch-reels" className="ml-auto px-3 py-2 rounded-lg text-sm border border-purple-700/50 text-purple-100 hover:bg-purple-800/30 inline-flex items-center gap-1.5"><Clapperboard size={15} />Watch reels</a>}
+        {tab === "posts" && <button onClick={() => setComposing(true)} data-testid="new-post" className=" px-3 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 inline-flex items-center gap-1.5"><ImagePlus size={15} />New post</button>}
       </div>
       {tab === "posts" ? (
         <PostsFeed uid={uid} q={q} refresh={posted}

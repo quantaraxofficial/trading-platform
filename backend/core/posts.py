@@ -13,6 +13,8 @@
 - Likes and comments from people who may see the post; each post says who may comment (everyone
   who sees it, the author's followers, or nobody) and whether it may be shared. Its author is told
   (notifications) and may delete any comment on it; commenters may delete their own.
+- Reels: the public posts that start with a video, newest first, watched one after another; each
+  post counts its views (once per person).
 - Sharing: a post's link (/p/<id>), or the post — or someone's profile — sent into your chats on
   the site (personal chats, group chats, collabs) as a card. Whoever opens it still needs to be
   allowed to see the post (a followers-only post stays with followers).
@@ -36,7 +38,7 @@ from django.utils import timezone
 
 from .auth import require_session
 from .models import (ChatGroup, ChatGroupMember, ChatGroupMessage, CollabMember, CollabMessage, CollabRoom, Follow, Post, PostComment,
-                     PostLike, PostMedia, TraderProfile)
+                     PostLike, PostMedia, PostView, TraderProfile)
 
 MAX_FILES = 10
 MAX_IMAGE_BYTES = 15 * 1024 * 1024
@@ -234,7 +236,7 @@ def post_json(p, viewer, following=None):
         "media": [{"id": m.id, "kind": m.kind, "mime": m.mime, "width": m.width, "height": m.height} for m in p.media.all()],
         "comments_setting": p.comments, "allow_sharing": p.allow_sharing, "can_comment": can_comment(p, viewer, following),
         "likes": p.likes.count(), "liked": p.likes.filter(profile=viewer).exists(),
-        "comments": p.comments_set.count() if p.comments != 'off' else 0, "shares": p.shares,
+        "comments": p.comments_set.count() if p.comments != 'off' else 0, "shares": p.shares, "views": p.views_set.count(),
     }
 
 
@@ -574,3 +576,49 @@ def share_targets(request, uid):
     for m in CollabMember.objects.filter(profile=me, room__active=True).select_related("room").order_by("-room__id"):
         out.append({"kind": "collab", "personal": False, "token": m.room.token, "name": m.room.name})
     return Response({"targets": out})
+
+
+# ---------------------------------------------------------------- reels
+
+def reel_posts(viewer):
+    """Reels: public posts whose first photo / video is a video (and your own)"""
+    from django.db.models import OuterRef, Subquery
+    first_kind = PostMedia.objects.filter(post=OuterRef('pk')).order_by('order').values('kind')[:1]
+    return (Post.objects.filter(Q(visibility='public') | Q(owner=viewer)).annotate(first_kind=Subquery(first_kind))
+            .filter(first_kind='video'))
+
+
+@api_view(['GET'])
+def reels(request, uid):
+    """?before=id (the next page) &start=id (that reel first, then the rest): reels, newest first, 10 at a time"""
+    me, denied = require_session(request, uid)
+    if denied:
+        return denied
+    qs = reel_posts(me).select_related('owner').prefetch_related('media')
+    out, following = [], following_ids(me)
+    try:
+        before, start = int(request.query_params.get('before') or 0), int(request.query_params.get('start') or 0)
+    except ValueError:
+        before = start = 0
+    if start and not before:
+        first = qs.filter(id=start).first()
+        if first:
+            out.append(first)
+            qs = qs.exclude(id=start)
+    if before:
+        qs = qs.filter(id__lt=before)
+    page = list(qs.order_by('-id')[:11 - len(out)])
+    more = len(page) > 10 - len(out)
+    out += page[:10 - len(out)]
+    return Response({"reels": [{**post_json(p, me, following), "i_follow": p.owner_id in following} for p in out], "more": more})
+
+
+@api_view(['POST'])
+def view(request, uid, pid):
+    """Counts a view of the post (once per person); the views now"""
+    me, p, denied = _visible(request, uid, pid)
+    if denied:
+        return denied
+    if p.owner_id != me.id:
+        PostView.objects.get_or_create(post=p, profile=me)
+    return Response({"views": p.views_set.count()})
