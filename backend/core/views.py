@@ -35,6 +35,10 @@ def sync_user(request):
             'last_login': timezone.now()
         }
     )
+    # a new trader: where they came from (an ad, a referral, a link…), noted by their browser
+    if created:
+        from .arrival import record
+        record(profile, data.get('arrival'))
 
     # Session management
     if session_key:

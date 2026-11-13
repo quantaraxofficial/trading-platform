@@ -23,6 +23,15 @@ class TraderProfile(models.Model):
     allow_invites = models.CharField(max_length=10, default='everyone')
     stats_snapshot = models.JSONField(null=True, blank=True)   # the trading stats you chose to show
     stats_updated_at = models.DateTimeField(null=True, blank=True)
+    # Where they came from, kept at sign-up (core/arrival.py): the kind (ad, referral, social, search,
+    # email, campaign link, another website, direct; empty: signed up before this was kept), the source
+    # (instagram, google, a referral code…), the campaign, and what the browser noted
+    source_kind = models.CharField('came from', max_length=12, blank=True, default='', db_index=True, choices=[
+        ('ad', 'Ad'), ('referral', 'Referral'), ('social', 'Social media'), ('search', 'Search'), ('email', 'Email'),
+        ('link', 'Campaign link'), ('website', 'Another website'), ('direct', 'Direct')])
+    source = models.CharField(max_length=80, blank=True, default='')
+    campaign = models.CharField(max_length=120, blank=True, default='')
+    arrival = models.JSONField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.name} ({self.email})"
@@ -831,3 +840,11 @@ class TimeOnSite(SiteTime):
         proxy = True
         verbose_name = "Time on site"
         verbose_name_plural = "Time on site"
+
+
+class TraderSource(TraderProfile):
+    """Where traders came from, seen in Django Admin (core/arrival.py)"""
+    class Meta:
+        proxy = True
+        verbose_name = "Where traders came from"
+        verbose_name_plural = "Where traders came from"

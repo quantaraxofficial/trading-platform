@@ -12,6 +12,7 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
 import { backendFetch } from "@/lib/backend";
+import { noteArrival, arrivalInfo } from "@/app/lib/arrival";
 
 interface AuthContextType {
   user: User | null;
@@ -58,6 +59,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [sessionKey, setSessionKey] = useState<string>('');
 
   useEffect(() => {
+    // where this visitor came from (an ad, a referral, a link…), sent with their sign-up
+    noteArrival();
     // Generate or get session key
     let sk = localStorage.getItem('tv_session_key');
     if (!sk) {
@@ -100,6 +103,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               email: activeUser.email,
               phone: '',
               session_key: sessionKey,
+              arrival: arrivalInfo(),
               id_token: fbUser ? await fbUser.getIdToken() : undefined
             })
           });
@@ -121,6 +125,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                   email: activeUser.email,
                   phone: '',
                   session_key: sessionKey,
+              arrival: arrivalInfo(),
                   id_token: fbUser ? await fbUser.getIdToken() : undefined,
                   force: true
                 })
@@ -183,6 +188,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           email,
           phone,
           session_key: sessionKey,
+              arrival: arrivalInfo(),
           id_token: await res.user.getIdToken()
         })
       });

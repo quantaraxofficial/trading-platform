@@ -1,0 +1,48 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Where traders came from | TradePilot admin{% endblock %}
+{% block breadcrumbs %}
+<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> › Where traders came from</div>
+{% endblock %}
+{% block content %}
+<div id="content-main">
+  <p class="tp-muted">Where each new trader came from, noted by their browser on their first visit and kept when they signed up (Indian time).
+    For an ad or a post, link to the site with <b>?utm_source=instagram&amp;utm_medium=paid&amp;utm_campaign=diwali</b>;
+    for a referral, <b>?ref=CODE</b>. Traders who signed up before this was kept are "Not recorded".</p>
+
+  <h2>Sign-ups by where they came from</h2>
+  <table class="tp-table">
+    <thead><tr><th>Came from</th>{% for key, label in periods %}<th class="tp-num">{{ label }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for c in cards %}
+      <tr><td>{% if c.kind %}<a href="{% url 'admin:core_traderprofile_changelist' %}?source_kind__exact={{ c.kind }}">{{ c.label }}</a>{% else %}<span class="tp-muted">{{ c.label }}</span>{% endif %}</td>
+        {% for n in c.cells %}<td class="tp-num">{{ n }}</td>{% endfor %}</tr>
+    {% endfor %}
+      <tr><td><b>All sign-ups</b></td>{% for n in totals %}<td class="tp-num"><b>{{ n }}</b></td>{% endfor %}</tr>
+    </tbody>
+  </table>
+
+  <h2 style="margin-top:28px">By source and campaign</h2>
+  {% if sources %}
+  <table class="tp-table">
+    <thead><tr><th>Came from</th><th>Source</th><th>Campaign</th>{% for key, label in periods %}<th class="tp-num">{{ label }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for r in sources %}
+      <tr><td>{{ r.kind }}</td><td>{{ r.source }}</td><td>{{ r.campaign }}</td>{% for n in r.cells %}<td class="tp-num">{{ n }}</td>{% endfor %}</tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p>Nothing yet: it's kept from now on, as new traders sign up.</p>{% endif %}
+
+  <h2 style="margin-top:28px">Latest sign-ups</h2>
+  <table class="tp-table">
+    <thead><tr><th>Trader</th><th>Signed up</th><th>Came from</th><th>Campaign</th><th>From the site</th><th>Landed on</th></tr></thead>
+    <tbody>
+    {% for p in latest %}
+      <tr><td><a href="{% url 'admin:core_traderprofile_change' p.id %}">{{ p.name }}</a><div class="tp-muted tp-small">{{ p.email }}</div></td>
+        <td>{{ p.created_at|date:"j M Y, g:i a" }}</td><td>{{ p.came_from }}</td><td>{{ p.campaign|default:"—" }}</td>
+        <td class="tp-small">{{ p.referrer|default:"—" }}</td><td class="tp-small">{{ p.landing|default:"—" }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

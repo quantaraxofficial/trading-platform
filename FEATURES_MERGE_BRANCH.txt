@@ -456,6 +456,12 @@ Posting signals out
     purple, purple-bordered cards, purple-to-indigo buttons, the site's font and logo), its pages,
     menus and lists organised as before
   - Every date and time in the Django admin is in India time (IST)
+  - Where traders came from (Django admin): each new trader's first visit is noted by their browser
+    (a link's utm_source / utm_medium / utm_campaign, a ?ref= referral code, a Google / Meta ad click,
+    the site that sent them) and kept when they sign up, as Ad / Referral / Social media / Search /
+    Email / Campaign link / Another website / Direct with its source and campaign. A report page
+    (sign-ups by kind and by source and campaign: last 30 days, this month, this year, all time; the
+    latest sign-ups), and a "Came from" column, filter and details on Trader profiles
 
 ======================================================================
 16. VOICE ASSISTANT

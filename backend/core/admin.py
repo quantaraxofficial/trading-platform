@@ -4,7 +4,7 @@ from .models import FeedbackMessage, Payment, Earning
 from django.contrib import messages
 from django.template.response import TemplateResponse
 from django.utils import timezone
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 
 
 class ActiveNowFilter(admin.SimpleListFilter):
@@ -50,9 +50,28 @@ class FailedRequestAdmin(admin.ModelAdmin):
 
 @admin.register(TraderProfile)
 class TraderProfileAdmin(admin.ModelAdmin):
-    list_display = ('name', 'online', 'email', 'phone', 'tier', 'created_at', 'last_login', 'presence_dot')
-    list_filter = (ActiveNowFilter, 'tier', 'created_at')
-    search_fields = ('name', 'email', 'phone', 'uid')
+    list_display = ('name', 'online', 'email', 'phone', 'tier', 'came_from', 'created_at', 'last_login', 'presence_dot')
+    list_filter = (ActiveNowFilter, 'tier', 'source_kind', 'created_at')
+    search_fields = ('name', 'email', 'phone', 'uid', 'source', 'campaign')
+    exclude = ('arrival',)
+    readonly_fields = ('arrival_details',)
+
+    @admin.display(description='Came from', ordering='source_kind')
+    def came_from(self, obj):
+        from .arrival import label
+        return label(obj) or '—'
+
+    @admin.display(description='Arrival details')
+    def arrival_details(self, obj):
+        # what their browser noted on the first visit (the link's utm_ fields, a referral code, the site before)
+        names = {'utm_source': 'Source', 'utm_medium': 'Medium', 'utm_campaign': 'Campaign', 'utm_term': 'Term',
+                 'utm_content': 'Content', 'ref': 'Referral code', 'gclid': 'Google ad click', 'fbclid': 'Facebook click',
+                 'referrer': 'From the site', 'landing': 'Landed on', 'at': 'First visit'}
+        a = obj.arrival or {}
+        if not a:
+            return 'Not recorded (signed up before this was kept)' if not obj.source_kind else '—'
+        return format_html_join('', '<div><span class="tp-muted">{}:</span> {}</div>',
+                                ((names.get(k, k), 'yes' if v is True else v) for k, v in a.items()))
     ordering = ('-created_at',)
     inlines = [PaymentInline]
 
@@ -361,7 +380,7 @@ class VoiceRequestAdmin(admin.ModelAdmin):
 
 
 
-from .models import TimeOnSite
+from .models import TimeOnSite, TraderSource
 
 
 @admin.register(TimeOnSite)
@@ -384,6 +403,27 @@ class TimeOnSiteAdmin(admin.ModelAdmin):
         ctx = {**self.admin_site.each_context(request), "title": "Time on site", "opts": self.model._meta,
                **sitetime.report(request.GET.get("sort") or "today")}
         return TemplateResponse(request, "admin/core/time_on_site.html", ctx)
+
+
+@admin.register(TraderSource)
+class TraderSourceAdmin(admin.ModelAdmin):
+    """Where traders came from: sign-ups by kind (ad, referral, social…) and by source and campaign,
+    the last 30 days / this month / this year / all time, and the latest sign-ups (core/arrival.py). Read only."""
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.template.response import TemplateResponse
+        from . import arrival
+        ctx = {**self.admin_site.each_context(request), "title": "Where traders came from", "opts": self.model._meta, **arrival.report()}
+        return TemplateResponse(request, "admin/core/trader_source.html", ctx)
 
 
 # The admin is TradePilot's (its look: core/admin_theme)
