@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { reportServerFailure } from '@/lib/requestTracker';
+import { BLOCK, blockBarStart, inBlocks, intradaySeconds } from '../../lib/barBlocks';
 
 // TwelveData natively supported intervals
 const NATIVE_INTERVALS = new Set([
@@ -69,6 +70,39 @@ function aggregateCandles(values: any[], minutes: number): any[] {
 
   // Return in descending order (newest first) to match TwelveData format
   return aggregated.reverse();
+}
+
+// Bars that restart at each 4-hour boundary (lib/barBlocks: 45m, 50m, 90m…), from finer ones: each
+// finer bar goes into the bar its start falls in
+function aggregateInBlocks(values: any[], secs: number): any[] {
+  const ascending = [...values].reverse();
+  const out: any[] = [];
+  let cur: any = null, key = NaN;
+  for (const v of ascending) {
+    const t = Math.floor(utcMs(v.datetime) / 1000);
+    const k = blockBarStart(secs, t);
+    const o = parseFloat(v.open), h = parseFloat(v.high), l = parseFloat(v.low), c = parseFloat(v.close);
+    if (k !== key) {
+      if (cur) out.push(cur);
+      key = k;
+      const d = new Date(k * 1000).toISOString();
+      cur = { datetime: `${d.slice(0, 10)} ${d.slice(11, 19)}`, open: o, high: h, low: l, close: c, volume: v.volume != null ? parseFloat(v.volume) : undefined };
+    } else {
+      cur.high = Math.max(cur.high, h); cur.low = Math.min(cur.low, l); cur.close = c;
+      if (v.volume != null) cur.volume = (cur.volume ?? 0) + parseFloat(v.volume);
+    }
+  }
+  if (cur) out.push(cur);
+  return out.map(b => ({ datetime: b.datetime, open: b.open.toFixed(5), high: b.high.toFixed(5), low: b.low.toFixed(5), close: b.close.toFixed(5),
+    volume: b.volume != null ? String(b.volume) : undefined })).reverse();
+}
+
+// The finer native bars a 4-hour-block interval is built from: the longest that fits evenly into it and into 4 hours
+function blockBase(secs: number): { name: string; secs: number } {
+  for (const [name, s] of [['1h', 3600], ['30min', 1800], ['15min', 900], ['5min', 300], ['1min', 60]] as [string, number][]) {
+    if (secs % s === 0 && BLOCK % s === 0) return { name, secs: s };
+  }
+  return { name: '1min', secs: 60 };
 }
 
 // Aggregate daily candles into N-calendar-month candles (for custom "3month", "6month", "12month" etc.)
@@ -150,6 +184,30 @@ export async function GET(request: Request) {
       return NextResponse.json({ datetime: data.datetime, unix_time: data.unix_time });
     } catch {
       reportServerFailure({ path: '/api/stock-data', method: 'GET', status_code: 500, reason_code: 'twelve_data_error', reason_message: 'Connection to TwelveData failed (earliest)' });
+      return NextResponse.json({ error: 'Connection to TwelveData failed' }, { status: 500 });
+    }
+  }
+
+  // 45m, 50m, 90m… restart at each 4-hour boundary: built from finer bars (TwelveData's own 45min runs
+  // across the 4-hour candles' edges)
+  const blockSecs = intradaySeconds(interval);
+  if (inBlocks(blockSecs)) {
+    const base = blockBase(blockSecs!);
+    const rawSize = Math.min(Math.ceil(parseInt(outputsize) * blockSecs! / base.secs), 5000);
+    let url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=${base.name}&timezone=UTC&apikey=${apikey}&outputsize=${rawSize}`;
+    if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
+    if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
+    try {
+      const response = await fetch(url);
+      const data = await response.json();
+      if (data.status === 'error') {
+        reportServerFailure({ path: '/api/stock-data', method: 'GET', status_code: 400, reason_code: 'twelve_data_error', reason_message: data.message });
+        return NextResponse.json({ error: data.message }, { status: 400 });
+      }
+      if (!data.values || !Array.isArray(data.values)) return NextResponse.json(data);
+      return NextResponse.json({ meta: { ...data.meta, interval: `${interval} (4-hour blocks)` }, values: aggregateInBlocks(data.values, blockSecs!), status: 'ok' });
+    } catch {
+      reportServerFailure({ path: '/api/stock-data', method: 'GET', status_code: 500, reason_code: 'twelve_data_error', reason_message: 'Connection to TwelveData failed (4-hour blocks)' });
       return NextResponse.json({ error: 'Connection to TwelveData failed' }, { status: 500 });
     }
   }

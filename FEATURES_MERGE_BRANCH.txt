@@ -649,6 +649,16 @@ Posting signals out
   - Flags for China and "Global" events; logo ids no longer differ between server and browser
 
 ======================================================================
+17b2. CANDLES THAT FIT THE 4-HOUR CANDLES
+======================================================================
+  - 45m, 50m, 90m (any timeframe up to 2 hours that doesn't fit evenly into 4 hours) restart at each
+    4-hour boundary (UTC 00:00, 04:00, …, TwelveData's 4-hour candles): five 45-minute candles, then a
+    15-minute one up to the boundary, so none crosses a 4-hour candle and its high and low are always
+    theirs (built from finer TwelveData bars: 15m for 45m and 90m, 5m for 50m). The live candle and
+    the bar-close countdown follow it (the short candle counts down to the boundary). 15m, 30m, 1h,
+    2h, 3h and longer are unchanged. (Unlike TradingView, whose 45m candles run across them.)
+
+======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD
 ======================================================================
   - Analytics → "Connect an account": any broker or prop-firm account (FTMO, FundedNext, The5ers,

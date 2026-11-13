@@ -1,5 +1,6 @@
 "use client";
 
+import { barEnd as blockBarEnd } from "../lib/barBlocks";
 import { useEffect, useRef, useState, useCallback, useMemo, forwardRef, useSyncExternalStore, startTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { createChart, ColorType, ISeriesApi, IChartApi, CandlestickSeries, HistogramSeries, LineSeries, BarSeries, AreaSeries, BaselineSeries, LineType, PriceScaleMode, TickMarkType, LineStyle, createTextWatermark } from "lightweight-charts";
@@ -839,7 +840,8 @@ export default function ChartContainer({
       const chart = chartRef.current;
       if (!data || data.length === 0 || !series || !chart || modeRef.current !== 'idle') { if (countdownRef.current) setCountdown(null); return; }
       const last = data[data.length - 1];
-      const barEnd = last.time + Math.floor(getIntervalMs(intervalRef.current) / 1000);
+      // (the short bar before a 4-hour boundary — 45m's last of each four hours — ends there: lib/barBlocks)
+      const barEnd = blockBarEnd(intervalRef.current, last.time) ?? last.time + Math.floor(getIntervalMs(intervalRef.current) / 1000);
       const remain = barEnd - toChartTime(symbolRef.current, Date.now());
       const y = series.priceToCoordinate(last.close);
       const width = mainPriceScale(chart).width();
@@ -2800,13 +2802,15 @@ export default function ChartContainer({
       if (!(step > 0)) return;
       const last = bars[bars.length - 1];
       const t = toChartTime(d.symbol, d.time);
+      // (45m and the like: the bar before a 4-hour boundary is short, the next starts on it: lib/barBlocks)
+      const end = blockBarEnd(intervalRef.current, last.time) ?? last.time + step;
       let bar: any;
       let opened = false;
-      if (t >= last.time && t < last.time + step) {
+      if (t >= last.time && t < end) {
         bar = { ...last, high: Math.max(last.high, d.price), low: Math.min(last.low, d.price), close: d.price };
         bars[bars.length - 1] = bar;
-      } else if (step < 86400 && t >= last.time + step && t < last.time + 2 * step) {
-        bar = { time: last.time + step, open: last.close, high: Math.max(last.close, d.price), low: Math.min(last.close, d.price), close: d.price };
+      } else if (step < 86400 && t >= end && t < end + step) {
+        bar = { time: end, open: last.close, high: Math.max(last.close, d.price), low: Math.min(last.close, d.price), close: d.price };
         bars.push(bar);
         opened = true;
       } else return;
