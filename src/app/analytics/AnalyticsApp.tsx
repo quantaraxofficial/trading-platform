@@ -5,7 +5,7 @@
 // own look (the landing / login pages).
 
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BarChart3, FlaskConical, LineChart, LogIn, Radio, RefreshCw, TrendingUp, Wallet } from "lucide-react";
+import { ArrowLeft, BarChart3, FlaskConical, LineChart, LogIn, Plus, Radio, RefreshCw, TrendingUp, Trophy, Wallet } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useEngineState } from "../trading/store";
 import { setBrokerUser, useBroker } from "../trading/broker";
@@ -19,6 +19,8 @@ import CopyTrading from "./CopyTrading";
 import { profileUrl, putMyStats, updateMySettings } from "../community/social";
 import type { Stats } from "./stats";
 import TvSelect from "@/app/components/ui/TvSelect";
+import { accountName, accountTrades, getAccount, listAccounts, loadPresets, type Preset, type StatsAccount } from "./accounts";
+import AccountPanel, { ConnectAccount, PlatformBadge } from "./AccountPanel";
 
 type View = "performance" | "trades" | "backtests" | "copy";
 const NAV: { id: View; label: string; icon: React.ReactNode; hint: string }[] = [
@@ -43,17 +45,31 @@ export default function AnalyticsApp() {
     if (v === "trades" || v === "backtests" || v === "copy") setView(v);
     const sid = Number(new URLSearchParams(window.location.search).get("session"));
     if (sid > 0) { setView("backtests"); setOpenSessionId(sid); }
-    try { setAccount(localStorage.getItem(ACCOUNT_KEY) || ""); } catch { /* storage off */ }
+    const acc = new URLSearchParams(window.location.search).get("account");
+    if (acc) setAccount(acc);
+    else { try { setAccount(localStorage.getItem(ACCOUNT_KEY) || ""); } catch { /* storage off */ } }
   }, []);
   const [period, setPeriod] = useState<Period>("30d");
   const [mt5, setMt5] = useState<{ days: number; trades: ATrade[]; currency: string } | null>(null);
   const [mt5Error, setMt5Error] = useState<string | null>(null);
   const [mt5Loading, setMt5Loading] = useState(false);
-  const [journals, setJournals] = useState<Record<Source, Record<string, Journal>>>({ paper: {}, mt5: {}, backtest: {}, session: {} });
+  const [journals, setJournals] = useState<Record<Source, Record<string, Journal>>>({ paper: {}, mt5: {}, backtest: {}, session: {}, account: {} });
+  // Connected accounts (any broker or prop firm, read only: accounts.ts), with their trades once opened
+  const [stats, setStats] = useState<StatsAccount[]>([]);
+  const [ctraderReady, setCtraderReady] = useState(false);
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [openSessionId, setOpenSessionId] = useState<number | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   useEffect(() => { setBrokerUser(uid); }, [uid]);
+  useEffect(() => {
+    if (!uid) return;
+    listAccounts(uid).then(d => { setStats(d.accounts); setCtraderReady(d.ctrader); }, () => {});
+    loadPresets().then(setPresets, () => {});
+  }, [uid]);
+  const putStats = (a: StatsAccount) => setStats(list => list.some(x => x.id === a.id) ? list.map(x => (x.id === a.id ? { ...x, ...a, trades: a.trades ?? x.trades } : x)) : [...list, a]);
   // The view in the address, so a refresh or a shared link opens it
   useEffect(() => {
     const u = new URL(window.location.href);
@@ -68,9 +84,17 @@ export default function AnalyticsApp() {
   const accounts = useMemo(() => !mounted ? [] : [
     ...engineState.accounts.map(a => ({ id: `paper:${a.id}`, label: a.name, sub: "Paper trading", balance: a.initialBalance, currency: a.currency })),
     ...(broker.linked ? [{ id: "mt5", label: `MT5 · ${broker.linked.login}`, sub: `${broker.linked.server} · ${broker.linked.mode}`, balance: 0, currency: broker.linked.currency || "USD" }] : []),
-  ], [mounted, engineState.accounts, broker.linked]);
+    ...stats.map(a => ({ id: `acc:${a.id}`, label: accountName(a), sub: [a.broker || (a.platform === "mt5" ? a.server : "cTrader"), a.mode].filter(Boolean).join(" · "),
+      balance: a.initial_balance || 0, currency: a.currency || "USD", platform: a.platform })),
+  ], [mounted, engineState.accounts, broker.linked, stats]);
   const current = accounts.find(a => a.id === account) || accounts.find(a => a.id === `paper:${engineState.activeAccountId}`) || accounts[0];
-  const source: Source = current?.id === "mt5" ? "mt5" : "paper";
+  const source: Source = current?.id === "mt5" ? "mt5" : current?.id.startsWith("acc:") ? "account" : "paper";
+  const statsAcc = source === "account" ? stats.find(a => `acc:${a.id}` === current?.id) : undefined;
+  // (a connected account's trades: read once it's opened)
+  useEffect(() => {
+    if (!uid || !statsAcc || statsAcc.trades) return;
+    getAccount(uid, statsAcc.id).then(a => { putStats(a); setStatsError(null); }, e => setStatsError(e.message));
+  }, [uid, statsAcc?.id, !!statsAcc?.trades]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (current) { try { localStorage.setItem(ACCOUNT_KEY, current.id); } catch { /* storage off */ } } }, [current?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // MT5: the closed trades over enough days for the period
@@ -90,7 +114,7 @@ export default function AnalyticsApp() {
   // Journal entries of the account's kind, and of backtests
   useEffect(() => {
     if (!uid) return;
-    for (const src of ["paper", "mt5", "backtest", "session"] as Source[]) {
+    for (const src of ["paper", "mt5", "backtest", "session", "account"] as Source[]) {
       loadJournal(uid, src).then(entries => setJournals(j => ({ ...j, [src]: Object.fromEntries(entries.map(e => [e.trade_key, e])) })), () => {});
     }
   }, [uid]);
@@ -103,9 +127,10 @@ export default function AnalyticsApp() {
   const trades: ATrade[] = useMemo(() => {
     if (!current) return [];
     if (current.id === "mt5") return mt5?.trades || [];
+    if (statsAcc) return accountTrades(statsAcc);
     return paperTrades(engineState, current.id.slice(6));
-  }, [current, engineState, mt5]);
-  const currency = current?.id === "mt5" ? mt5?.currency || current.currency : "USD";
+  }, [current, engineState, mt5, statsAcc]);
+  const currency = current?.id === "mt5" ? mt5?.currency || current.currency : statsAcc ? statsAcc.currency || "USD" : "USD";
   const nav = NAV.find(n => n.id === view)!;
   // The voice assistant (lib/voice/registry): this page's views, period, account and MT5 refresh,
   // and the results shown, read out so it can talk about them ("how am I doing this month?")
@@ -180,8 +205,10 @@ export default function AnalyticsApp() {
                 {n.icon}{n.label}
               </button>
             ))}
+            <a href="/leaderboard" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-purple-300 hover:text-white hover:bg-purple-800/25" data-nav="leaderboard">
+              <Trophy size={18} />Leaderboard</a>
           </nav>
-          {view !== "backtests" && view !== "copy" && accounts.length > 0 && (
+          {view !== "backtests" && view !== "copy" && (accounts.length > 0 || uid) && (
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-wider text-purple-400/70 px-3 mb-2">Account</div>
               <div className="space-y-1" data-testid="accounts">
@@ -189,12 +216,18 @@ export default function AnalyticsApp() {
                   <button key={a.id} onClick={() => { setAccount(a.id); setSelectedKey(null); }} data-account={a.id}
                     className={`w-full text-left px-3 py-2 rounded-xl border transition-all ${current?.id === a.id ? "border-purple-500/60 bg-purple-700/20" : "border-transparent hover:bg-purple-800/20"}`}>
                     <div className="flex items-center gap-2 text-sm text-white">
-                      {a.id === "mt5" ? <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-gradient-to-br from-emerald-600 to-blue-600">MT5</span> : <Wallet size={14} className="text-purple-400" />}
+                      {a.id === "mt5" ? <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-gradient-to-br from-emerald-600 to-blue-600">MT5</span>
+                        : "platform" in a && a.platform ? <PlatformBadge platform={a.platform as "mt5" | "ctrader"} /> : <Wallet size={14} className="text-purple-400" />}
                       <span className="truncate">{a.label}</span>
                     </div>
                     <div className="text-[11px] text-purple-300/60 mt-0.5 truncate">{a.sub}</div>
                   </button>
                 ))}
+                {uid && (
+                  <button onClick={() => setConnectOpen(true)} data-testid="connect-account"
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-purple-300 hover:text-white hover:bg-purple-800/20 border border-dashed border-purple-700/50">
+                    <Plus size={14} />Connect an account</button>
+                )}
               </div>
             </div>
           )}
@@ -216,6 +249,12 @@ export default function AnalyticsApp() {
                   {accounts.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
                 </TvSelect>
               )}
+              {uid && view !== "backtests" && view !== "copy" && (
+                <div className="flex gap-2 mt-2">
+                  <button onClick={() => setConnectOpen(true)} className="flex-1 flex items-center justify-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-dashed border-purple-700/50 text-purple-200"><Plus size={14} />Connect an account</button>
+                  <a href="/leaderboard" className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-purple-700/50 text-purple-200"><Trophy size={14} />Leaderboard</a>
+                </div>
+              )}
             </div>
             {source === "mt5" && view !== "backtests" && view !== "copy" && (
               <button onClick={() => fetchMt5(days)} className="ml-auto flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-purple-700/50 text-purple-200 hover:bg-purple-800/30">
@@ -236,20 +275,26 @@ export default function AnalyticsApp() {
             <Backtests uid={uid} journals={journals} onJournal={onJournal} openSessionId={openSessionId} />
           ) : (
             <>
+              {statsAcc && <AccountPanel key={statsAcc.id} uid={uid} account={statsAcc} presets={presets} onChange={putStats}
+                onRemoved={() => { setStats(list => list.filter(x => x.id !== statsAcc.id)); setAccount(""); }} />}
+              {statsAcc && statsError && <div role="alert" className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{statsError}</div>}
               {source === "mt5" && mt5Error && <div role="alert" className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{mt5Error}</div>}
               {source === "mt5" && !mt5 && mt5Loading ? <div className="text-purple-300">Reading your MetaTrader 5 history…</div>
                 : view === "performance"
-                  ? <Performance trades={trades} currency={currency} initialBalance={source === "paper" ? current?.balance || 0 : 0} period={period} onPeriod={setPeriod}
+                  ? <Performance trades={trades} currency={currency} initialBalance={source === "paper" || source === "account" ? current?.balance || 0 : 0} period={period} onPeriod={setPeriod}
                       journals={journals[source]} exportName={current?.label || "Trading"} exportSubtitle={current ? `${current.label} · ${current.sub}` : ""}
                       onShowOnProfile={(s, periodLabel) => showOnProfile(s, `${current?.label || "Trading"} · ${periodLabel}`)}
                       onOpenTrade={t => { setSelectedKey(t.key); setView("trades"); }}
-                      note={source === "mt5" ? `Closed trades from MetaTrader 5 · last ${days >= 3650 ? "10 years" : `${days} days`}` : undefined} />
+                      note={source === "mt5" ? `Closed trades from MetaTrader 5 · last ${days >= 3650 ? "10 years" : `${days} days`}`
+                        : statsAcc ? `Every closed trade on the account, read from ${statsAcc.platform === "mt5" ? "MetaTrader 5" : "cTrader"}` : undefined} />
                   : <TradeAnalysis uid={uid} source={source} trades={trades} journals={journals[source]} onJournal={onJournal(source)} currency={currency} exportName={current?.label || "Trading"}
                       selectedKey={selectedKey} onSelect={setSelectedKey} />}
             </>
           )}
         </main>
       </div>
+      {connectOpen && uid && <ConnectAccount uid={uid} ctraderReady={ctraderReady} onClose={() => setConnectOpen(false)}
+        onConnected={a => { putStats(a); setAccount(`acc:${a.id}`); setConnectOpen(false); setSelectedKey(null); }} />}
       <style>{`
         .an-blob { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.15; animation: an-pulse 6s ease-in-out infinite; }
         .an-blob-1 { width: 360px; height: 360px; background: #581c87; top: -100px; right: -80px; }

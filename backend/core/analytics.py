@@ -22,7 +22,7 @@ TRADE_FIELDS = {   # what's kept of each backtest trade (the report's own names)
     "netPnl": float, "commission": float, "favorableExcursion": float, "adverseExcursion": float,
     "entrySignal": str, "exitSignal": str,
 }
-SOURCES = ("paper", "mt5", "backtest", "session")
+SOURCES = ("paper", "mt5", "backtest", "session", "account")   # (account: a connected account, core/stats_accounts.py)
 TEXT_FIELDS = ("pre_trade", "post_trade", "emotions", "lessons", "rr_notes")
 CHECKS = ("followed_plan", "proper_risk", "good_entry", "patient_exit")
 
@@ -44,10 +44,18 @@ def _clean_trade(t):
     return out
 
 
+def published_as(r):
+    """'public' / 'private' if the backtest's strategy is published (core/social.py) by its author, else ''"""
+    from .models import PublishedScript
+    p = PublishedScript.objects.filter(owner_id=r.owner_id, name__iexact=(r.script or '').strip()).only('visibility').first()
+    return p.visibility if p else ''
+
+
 def _run_json(r, with_trades=False):
-    d = {"id": r.id, "name": r.name, "script": r.script, "language": r.language, "symbol": r.symbol, "timeframe": r.timeframe,
+    d = {"published": published_as(r), "id": r.id, "name": r.name, "script": r.script, "language": r.language, "symbol": r.symbol, "timeframe": r.timeframe,
          "initial_capital": r.initial_capital, "net_profit": r.net_profit, "trade_count": r.trade_count,
-         "period_from": r.period_from, "period_to": r.period_to, "notes": r.notes, "created_at": int(r.created_at.timestamp() * 1000)}
+         "period_from": r.period_from, "period_to": r.period_to, "notes": r.notes, "on_leaderboard": r.on_leaderboard,
+         "created_at": int(r.created_at.timestamp() * 1000)}
     if with_trades:
         d["trades"] = r.trades
     return d
@@ -88,7 +96,7 @@ def backtests(request, uid):
 
 @api_view(['GET', 'PATCH', 'DELETE'])
 def backtest(request, uid, bid):
-    """GET: one saved backtest with its trades. PATCH {name?, notes?}. DELETE: removes it (and its trades' journals)."""
+    """GET: one saved backtest with its trades. PATCH {name?, notes?, on_leaderboard?}. DELETE: removes it (and its trades' journals)."""
     me, denied = require_session(request, uid)
     if denied:
         return denied
@@ -104,7 +112,13 @@ def backtest(request, uid, bid):
             r.name = str(request.data.get('name') or r.name)[:120]
         if 'notes' in request.data:
             r.notes = str(request.data.get('notes') or '')[:5000]
-        r.save(update_fields=['name', 'notes'])
+        if 'on_leaderboard' in request.data:
+            on = bool(request.data.get('on_leaderboard'))
+            if on and not published_as(r):
+                return Response({"error": "Publish the strategy first (privately or publicly) to put its backtests on the leaderboard"},
+                                status=status.HTTP_400_BAD_REQUEST)
+            r.on_leaderboard = on
+        r.save(update_fields=['name', 'notes', 'on_leaderboard'])
     return Response({"backtest": _run_json(r, with_trades=True)})
 
 
@@ -170,7 +184,7 @@ def _session_json(r, full=False):
          "net_pnl": round(sum(float(t.get("pnl") or 0) for t in closed), 2),
          "wins": sum(1 for t in closed if float(t.get("pnl") or 0) > 0),
          "strategy": r.strategy, "description": r.description, "rules": r.rules, "tags": r.tags, "notes": r.notes,
-         "status": r.status, "time_spent": r.time_spent,
+         "status": r.status, "time_spent": r.time_spent, "on_leaderboard": r.on_leaderboard,
          "created_at": int(r.created_at.timestamp() * 1000), "updated_at": int(r.updated_at.timestamp() * 1000)}
     if full:
         d.update(account=r.account, book=r.book)
@@ -250,6 +264,8 @@ def _apply(r, d, creating=False):
                 return f"The backtest length is 1 to {LENGTH_MAX[unit]} {unit}"
             r.length_value, r.length_unit = value, unit
     r.end_time = end_of(r.start_time, r.length_value, r.length_unit) if r.length_value else None
+    if "on_leaderboard" in d:
+        r.on_leaderboard = bool(d.get("on_leaderboard"))
     if "status" in d:
         if d.get("status") not in dict(ReplaySession.STATUSES):
             return "Status is active, paused or completed"

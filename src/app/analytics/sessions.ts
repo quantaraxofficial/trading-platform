@@ -18,6 +18,7 @@ export interface BacktestSession {
   initial_balance: number; balance: number; trade_count: number; open_count: number; net_pnl: number; wins: number;
   strategy: string; description: string; rules: string[]; tags: string[]; notes: string;
   status: SessionStatus; time_spent: number; created_at: number; updated_at: number;
+  on_leaderboard?: boolean;   // shown on the leaderboard's Manual backtests tab
   // How much market time it's meant to cover (optional) and the bar that is (seconds)
   length: SessionLength | null; end_time: number | null;
   account?: Account | null; book?: Book | null;
@@ -50,7 +51,7 @@ async function call<T>(uid: string, rest: string, method = "GET", body?: unknown
 export const listSessions = (uid: string) => call<{ sessions: BacktestSession[] }>(uid, "").then(d => d.sessions);
 export const getSession = (uid: string, id: number) => call<{ session: BacktestSession }>(uid, `${id}/`).then(d => d.session);
 export const createSession = (uid: string, s: NewSession) => call<{ session: BacktestSession }>(uid, "", "POST", s).then(d => d.session);
-export const updateSession = (uid: string, id: number, patch: Partial<NewSession> & SessionProgress & { notes?: string }, keepalive = false) =>
+export const updateSession = (uid: string, id: number, patch: Partial<NewSession> & SessionProgress & { notes?: string; on_leaderboard?: boolean }, keepalive = false) =>
   call<{ session: BacktestSession }>(uid, `${id}/`, "PATCH", patch, keepalive).then(d => d?.session);
 export const deleteSession = (uid: string, id: number) => call(uid, `${id}/`, "DELETE");
 

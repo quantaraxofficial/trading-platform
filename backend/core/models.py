@@ -428,6 +428,8 @@ class BacktestRun(models.Model):
     period_to = models.BigIntegerField(null=True, blank=True)
     trades = models.JSONField(default=list)
     notes = models.TextField(blank=True)
+    # shown on the leaderboard's Backtests tab (core/stats_accounts.backtest_leaderboard)
+    on_leaderboard = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -464,6 +466,8 @@ class ReplaySession(models.Model):
     notes = models.TextField(blank=True)
     status = models.CharField(max_length=10, choices=STATUSES, default='active')
     time_spent = models.IntegerField(default=0)           # seconds spent replaying it
+    # shown on the leaderboard's Manual backtests tab (core/stats_accounts.manual_leaderboard)
+    on_leaderboard = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -864,3 +868,50 @@ class TraderCategory(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class StatsAccount(models.Model):
+    """A trading account connected to read its stats (core/stats_accounts.py), read only: an MT5
+    account (number, server, its investor password, encrypted) or a cTrader one (signed in with
+    cTrader: its account id and tokens, encrypted). Any broker or prop firm; several per trader.
+    Its closed trades are kept (refreshed on demand); its live state is read when shown. Optional
+    prop-firm rules (core/prop_rules.py); shown live or not, and on the leaderboard or not."""
+    PLATFORMS = [('mt5', 'MetaTrader 5'), ('ctrader', 'cTrader')]
+    owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='stats_accounts')
+    platform = models.CharField(max_length=10, choices=PLATFORMS)
+    label = models.CharField(max_length=100, blank=True)
+    login = models.BigIntegerField(default=0)
+    server = models.CharField(max_length=100, blank=True)          # MT5's server
+    password = models.TextField(blank=True)                         # MT5 (encrypted)
+    ctid_account_id = models.BigIntegerField(null=True, blank=True)  # cTrader's account id
+    is_live = models.BooleanField(default=False)                    # cTrader's live servers (else demo)
+    access_token = models.TextField(blank=True)                     # cTrader (encrypted)
+    refresh_token = models.TextField(blank=True)
+    token_expires_at = models.DateTimeField(null=True, blank=True)
+    broker = models.CharField(max_length=100, blank=True)
+    currency = models.CharField(max_length=10, blank=True)
+    mode = models.CharField(max_length=10, blank=True)               # demo / real / contest
+    show_live = models.BooleanField(default=True)
+    on_leaderboard = models.BooleanField(default=False)
+    # prop-firm rules: a preset (core/prop_rules.PRESETS) or "custom"; empty: none
+    firm = models.CharField(max_length=40, blank=True)
+    phase = models.CharField(max_length=20, blank=True)
+    account_size = models.FloatField(null=True, blank=True)
+    profit_target_pct = models.FloatField(null=True, blank=True)
+    daily_loss_pct = models.FloatField(null=True, blank=True)
+    max_loss_pct = models.FloatField(null=True, blank=True)
+    max_loss_trailing = models.BooleanField(default=False)
+    min_trading_days = models.IntegerField(default=0)
+    # the history read last
+    trades = models.JSONField(default=list, blank=True)
+    initial_balance = models.FloatField(null=True, blank=True)
+    balance = models.FloatField(null=True, blank=True)
+    synced_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.owner.name}: {self.get_platform_display()} {self.login}"

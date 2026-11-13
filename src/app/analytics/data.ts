@@ -8,7 +8,7 @@ import { sessionKey } from "@/lib/backend";
 import type { EngineState } from "../trading/engine";
 import type { PineStrategyReport } from "../lib/pineScriptEngine";
 
-export type Source = "paper" | "mt5" | "backtest" | "session";
+export type Source = "paper" | "mt5" | "backtest" | "session" | "account";   // (account: a connected one, accounts.ts)
 
 export interface ATrade {
   key: string;                 // unique within its source (journal entries are keyed by it)
@@ -46,6 +46,8 @@ export interface SavedBacktest {
   id: number; name: string; script: string; language: string; symbol: string; timeframe: string;
   initial_capital: number; net_profit: number; trade_count: number; period_from: number | null; period_to: number | null;
   notes: string; created_at: number; trades?: BacktestTradeRow[];
+  on_leaderboard?: boolean;   // shown on the leaderboard's Algo backtests tab
+  published?: "public" | "private" | "";   // its strategy published (needed for the leaderboard)
 }
 type BacktestTradeRow = {
   type: "Long" | "Short"; entryTime: number; entryPrice?: number; exitTime?: number; exitPrice?: number; qty?: number;
@@ -99,6 +101,7 @@ export async function mt5Trades(uid: string, login: number, days: number): Promi
 export const listBacktests = (uid: string) => api<{ backtests: SavedBacktest[] }>(uid, "analytics/{uid}/backtests/").then(d => d.backtests);
 export const getBacktest = (uid: string, id: number) => api<{ backtest: SavedBacktest }>(uid, `analytics/{uid}/backtests/${id}/`).then(d => d.backtest);
 export const renameBacktest = (uid: string, id: number, name: string) => api(uid, `analytics/{uid}/backtests/${id}/`, { method: "PATCH", body: { name } });
+export const shareBacktest = (uid: string, id: number, on: boolean) => api(uid, `analytics/{uid}/backtests/${id}/`, { method: "PATCH", body: { on_leaderboard: on } });
 export const deleteBacktest = (uid: string, id: number) => api(uid, `analytics/{uid}/backtests/${id}/`, { method: "DELETE" });
 export function backtestTrades(b: SavedBacktest): ATrade[] {
   return (b.trades || []).map((t, i) => ({

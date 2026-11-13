@@ -649,9 +649,40 @@ Posting signals out
   - Flags for China and "Global" events; logo ids no longer differ between server and browser
 
 ======================================================================
+17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD
+======================================================================
+  - Analytics → "Connect an account": any broker or prop-firm account (FTMO, FundedNext, The5ers,
+    FundingPips…), read only, several per trader, apart from the trading link:
+    - MetaTrader 5: account number, investor (read-only) password, server; read through the MT5
+      terminal (as the trading link); the password kept encrypted, never sent back
+    - cTrader: "Connect with cTrader" (cTrader's official Open API): the trader signs in with their
+      cTrader ID and allows view-only access; every account allowed is connected; the tokens kept
+      encrypted and renewed by themselves; the return page refuses a sign-in it didn't start
+  - Every closed trade on the account counts, wherever it was placed (TradePilot, the broker's
+    platform, a phone, an EA): the whole history read on "Refresh history" and kept; Performance,
+    Trade Analysis (with the journal), exports and "Show on my profile" work on it as on any account
+  - Live account (if the trader shows it: Settings → Show the live account): balance, equity,
+    floating P&L and open positions with their P&L, read from the broker every 15 s while looked at
+  - Prop-firm rules: presets (FTMO 2-Step / 1-Step, FundedNext Stellar 2-Step, FundingPips 2-Step,
+    The5ers High Stakes; each phase) fill in the profit target, daily loss limit, maximum loss
+    (static or trailing) and minimum trading days, all editable; "Other firm" for any other. The
+    card shows progress to the target, room left before the daily and maximum loss (against the
+    equity now when live), trading days, and In progress / Target reached / Breached (with when)
+  - Leaderboard (/leaderboard, in the site's top bar and Analytics), ranked by return, profit
+    factor, win rate or net profit; each entry links to its trader's profile:
+    - Manual backtests: bar replay sessions traded by hand, shared from Analytics → Backtests
+      ("Show on the leaderboard"), on their closed trades (at least 10)
+    - Algo backtests: Strategy Tester backtests saved to Analytics, of strategies their authors
+      published, privately or publicly (a private one: its name and results, not its code);
+      sharing one asks to publish the strategy first; at least 10 trades
+    - Live accounts: connected accounts put on it (Settings → Show on the leaderboard), by period
+      (7 days … all time), real or demo; verified results read from the broker, never the account
+      number or balance; at least 5 closed trades in the period
+
+======================================================================
 18. RUNNING IT (SETUP NOTES)
 ======================================================================
-  - Database: run "python manage.py migrate" (migrations up to 0041)
+  - Database: run "python manage.py migrate" (migrations up to 0046)
   - Live collab / chats: the backend runs under daphne (Django Channels)
   - Copy trading: run "python manage.py run_copier" on the copier server (MT5 installed)
   - Market data: TWELVEDATA_API_KEY (8 requests a minute on the free plan; the optimizer
@@ -660,4 +691,8 @@ Posting signals out
     at aistudio.google.com) in backend/quantarax_backend/.env; optional GROQ_MODEL,
     GEMINI_MODEL, VOICE_AI_DAILY_LIMIT (default 100 per user per day). Without a key the
     voice assistant can't answer
+  - cTrader accounts: register an application at openapi.ctrader.com (with a cTrader ID) and set
+    CTRADER_CLIENT_ID, CTRADER_CLIENT_SECRET and CTRADER_REDIRECT_URI (the site's
+    https://<site>/analytics/ctrader, also entered as the application's redirect URI) in
+    backend/quantarax_backend/.env. Without them "Connect with cTrader" says it isn't set up
   - Feature ideas for later are listed in FEATURE_IDEAS.txt

@@ -1,5 +1,5 @@
 from django.urls import path
-from . import presence, voice, views, analytics, broker_algo, broker_mt5, copy_api, copy_share, optimizer_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github, econ_calendar
+from . import presence, voice, views, analytics, broker_algo, broker_mt5, stats_accounts, copy_api, copy_share, optimizer_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github, econ_calendar
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -24,6 +24,16 @@ urlpatterns = [
     path('feedback/', views.submit_feedback, name='submit_feedback'),
     # Voice assistant: what the plain command rules don't understand, answered by an AI (core/voice.py)
     path('voice/ask/<str:uid>/', voice.ask, name='voice_ask'),
+    # Connected accounts for stats, live view, prop rules and the leaderboard (core/stats_accounts.py)
+    path('stats/presets/', stats_accounts.presets, name='stats_presets'),
+    path('stats/leaderboard/', stats_accounts.leaderboard, name='stats_leaderboard'),
+    path('stats/leaderboard/backtests/', stats_accounts.backtest_leaderboard, name='stats_backtest_leaderboard'),
+    path('stats/leaderboard/manual/', stats_accounts.manual_leaderboard, name='stats_manual_leaderboard'),
+    path('stats/<str:uid>/accounts/', stats_accounts.accounts, name='stats_accounts'),
+    path('stats/<str:uid>/accounts/<int:aid>/', stats_accounts.account, name='stats_account'),
+    path('stats/<str:uid>/accounts/<int:aid>/sync/', stats_accounts.sync, name='stats_account_sync'),
+    path('stats/<str:uid>/accounts/<int:aid>/live/', stats_accounts.live, name='stats_account_live'),
+    path('stats/<str:uid>/ctrader/', stats_accounts.ctrader, name='stats_ctrader'),
     # Broker accounts: MetaTrader 5 (core/broker_mt5.py)
     path('broker/<str:uid>/mt5/', broker_mt5.mt5_account, name='broker_mt5_account'),
     path('broker/<str:uid>/mt5/live/', broker_mt5.mt5_live, name='broker_mt5_live'),

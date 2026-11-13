@@ -8,9 +8,9 @@ import Link from "next/link";
 import { Menu, X, Zap } from "lucide-react";
 import SiteUserMenu from "./SiteUserMenu";
 
-const LINKS: [string, string][] = [["/", "Home"], ["/chart", "Chart"], ["/about", "About Us"], ["/contact", "Contact"]];
+const LINKS: [string, string][] = [["/", "Home"], ["/chart", "Chart"], ["/leaderboard", "Leaderboard"], ["/about", "About Us"], ["/contact", "Contact"]];
 
-export default function SiteNav({ active }: { active: "/about" | "/contact" }) {
+export default function SiteNav({ active }: { active: "/about" | "/contact" | "/leaderboard" }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open) return;

@@ -8,8 +8,8 @@
 // Either opens into the full performance analytics and its trades, one at a time with a journal.
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Clock, FlaskConical, Pencil, Play, Plus, Trash2, X } from "lucide-react";
-import { backtestTrades, deleteBacktest, getBacktest, listBacktests, renameBacktest, type ATrade, type Journal, type SavedBacktest, type Source } from "./data";
+import { Clock, FlaskConical, Pencil, Play, Plus, Trash2, Trophy, X } from "lucide-react";
+import { backtestTrades, deleteBacktest, getBacktest, listBacktests, renameBacktest, shareBacktest, type ATrade, type Journal, type SavedBacktest, type Source } from "./data";
 import { chartUrlFor, createSession, deleteSession, endOf, freshAccount, getSession, lengthText, LENGTH_UNITS, listSessions, sessionTrades, spent, timeLeft, updateSession, type BacktestSession, type LengthUnit, type SessionLength } from "./sessions";
 import { money, pnlClass, type Period } from "./stats";
 import Performance from "./Performance";
@@ -215,6 +215,14 @@ export default function Backtests({ uid, journals, onJournal, openSessionId }: {
                   <div><Label>Trades</Label><div className="mt-0.5 text-sm font-semibold text-white">{s.trade_count}{s.open_count ? <span className="text-purple-300/60 text-xs"> +{s.open_count} open</span> : null}</div></div>
                   <div><Label>Time</Label><div className="mt-0.5 text-sm font-semibold text-white">{spent(s.time_spent)}</div></div>
                 </div>
+                {/* (on the leaderboard's Manual backtests tab: its name, symbol and results; at least 10 closed trades) */}
+                <button data-testid="session-share" disabled={s.trade_count < 10 && !s.on_leaderboard}
+                  title={s.trade_count < 10 ? "The leaderboard needs at least 10 closed trades" : undefined}
+                  onClick={e => { e.stopPropagation(); updateSession(uid, s.id, { on_leaderboard: !s.on_leaderboard }).then(reload, x => setError(x.message)); }}
+                  className={`mt-3 w-full flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border disabled:opacity-40 ${s.on_leaderboard
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-300" : "border-purple-700/50 text-purple-300 hover:bg-purple-800/30"}`}>
+                  <Trophy size={13} />{s.on_leaderboard ? "On the leaderboard · remove" : "Show on the leaderboard"}
+                </button>
                 <a href={chartUrlFor(s)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} data-testid="session-card-resume"
                   className="mt-4 flex items-center justify-center gap-1.5 text-sm py-2 rounded-lg border border-purple-600/50 text-purple-100 hover:bg-purple-700/30">
                   <Play size={14} />{s.status === "completed" ? "Open on chart" : "Resume on chart"}</a>
@@ -250,6 +258,16 @@ export default function Backtests({ uid, journals, onJournal, openSessionId }: {
                   <div><Label>Trades</Label><div className="mt-0.5 font-semibold text-white">{b.trade_count}</div></div>
                   <div><Label>Return</Label><div className={`mt-0.5 font-semibold tabular-nums ${pnlClass(b.net_profit)}`}>{b.initial_capital ? `${((b.net_profit / b.initial_capital) * 100).toFixed(2)}%` : "—"}</div></div>
                 </div>
+                {/* (on the leaderboard's Algo backtests tab: its name, symbol and results; its strategy published,
+                    privately or publicly; at least 10 trades) */}
+                <button data-testid="backtest-share" disabled={(b.trade_count < 10 || !b.published) && !b.on_leaderboard}
+                  title={!b.published ? "Publish the strategy (privately or publicly) to put its backtests on the leaderboard"
+                    : b.trade_count < 10 ? "The leaderboard needs at least 10 trades" : undefined}
+                  onClick={e => { e.stopPropagation(); shareBacktest(uid, b.id, !b.on_leaderboard).then(reload, x => setError(x.message)); }}
+                  className={`mt-3 w-full flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border disabled:opacity-40 ${b.on_leaderboard
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-300" : "border-purple-700/50 text-purple-300 hover:bg-purple-800/30"}`}>
+                  <Trophy size={13} />{b.on_leaderboard ? "On the leaderboard · remove" : b.published ? "Show on the leaderboard" : "Publish the strategy to show it on the leaderboard"}
+                </button>
               </div>
             ))}
           </div>
