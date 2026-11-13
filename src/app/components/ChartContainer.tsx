@@ -761,7 +761,7 @@ export default function ChartContainer({
   const setLabelSettings = mapSetter(LABEL_KEYS, labelSettings);
   const setLineSettings = mapSetter(LINE_KEYS, lineSettings);
   const prevCloseLineRef = useRef<any>(null);
-  const [countdown, setCountdown] = useState<{ text: string; top: number; width: number; color: string } | null>(null);
+  const [countdown, setCountdown] = useState<{ text: string; price: string; top: number; width: number; color: string; fontSize: number } | null>(null);
   const countdownRef = useRef(countdown);
   countdownRef.current = countdown;
 
@@ -839,12 +839,17 @@ export default function ChartContainer({
       const m = Math.floor((remain % 3600) / 60), sec = remain % 60;
       const pad = (n: number) => String(n).padStart(2, '0');
       const text = d > 0 ? `${d}d ${h}h` : h > 0 ? `${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
-      const color = last.close >= last.open ? candleColorsRef.current.upColor : candleColorsRef.current.downColor;
+      // (solid: a see-through candle colour made the box see-through, the axis showing through it)
+      const color = opaqueColor(last.close >= last.open ? candleColorsRef.current.upColor : candleColorsRef.current.downColor);
+      let price = '';
+      try { price = series.priceFormatter().format(last.close); } catch { price = String(last.close); }
+      let fontSize = 12;
+      try { fontSize = chart.options().layout.fontSize || 12; } catch { /* chart gone */ }
       // Compared here, not in a setState updater: an updater still makes React render the whole
       // chart before it can tell nothing changed, and this runs on every pan / zoom frame
       const prev = countdownRef.current;
-      if (prev && prev.text === text && prev.top === y && prev.width === width && prev.color === color) return;
-      setCountdown({ text, top: y, width, color });
+      if (prev && prev.text === text && prev.price === price && prev.top === y && prev.width === width && prev.color === color && prev.fontSize === fontSize) return;
+      setCountdown({ text, price, top: y, width, color, fontSize });
     };
     const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(update); };
     update();
@@ -4620,17 +4625,24 @@ export default function ChartContainer({
         );
       })()}
 
-      {/* Countdown to bar close, joined under the last-price label */}
-      {countdown && (
-        <div aria-label="Time to bar close" style={{
-          position: "absolute", ...(scaleSide === 'left' ? { left: 0 } : { right: 0 }), top: Math.round(countdown.top + 10), width: countdown.width, height: 17,
-          background: countdown.color, color: labelTextOn(countdown.color), fontSize: "12px", lineHeight: "15px", textAlign: "center",
-          // (above the price-axis labels of drawings and positions, AxisHighlights z 11: always in sight)
-          borderRadius: "0 0 2px 2px", pointerEvents: "none", zIndex: 12, fontVariantNumeric: "tabular-nums",
-        }}>
-          {countdown.text}
-        </div>
-      )}
+      {/* The last price and the countdown to bar close in one solid box, as on TradingView: it covers
+          the chart's own last-price label. On the price scale only the cursor's label is above it (z 72);
+          the drawings' labels (AxisHighlights, z 11) and the positions' / orders' tags (TradingOverlay,
+          z 70) are under it */}
+      {countdown && (() => {
+        const row = countdown.fontSize + 8;
+        return (
+          <div aria-label={`Last price ${countdown.price}, bar closes in ${countdown.text}`} data-name="last-price-countdown" style={{
+            position: "absolute", ...(scaleSide === 'left' ? { left: 0 } : { right: 0 }), top: Math.round(countdown.top - row / 2), width: countdown.width,
+            background: countdown.color, color: labelTextOn(countdown.color), fontSize: countdown.fontSize, textAlign: "center",
+            borderRadius: 2, pointerEvents: "none", zIndex: 71, fontVariantNumeric: "tabular-nums", overflow: "hidden",
+          }}>
+            <div style={{ height: row, lineHeight: `${row}px` }}>{countdown.price}</div>
+            <div style={{ height: row - 3, lineHeight: `${row - 5}px` }}>{countdown.text}</div>
+          </div>
+        );
+      })()}
+      {chart && series && <CrosshairPriceLabel chart={chart} series={series} side={scaleSide === 'left' ? 'left' : 'right'} />}
 
       {/* Pine script table.new()/table.cell() output — a positioned HTML
           overlay, since this chart has no native drawing-object renderer.
@@ -5163,6 +5175,75 @@ export default function ChartContainer({
 
 // Text colour on a price-axis label, by the chart library's own rule (so the countdown matches
 // the last-price label above it): black on a light label (e.g. white bullish candles), else white
+// A colour without its see-through part (#rrggbbaa → #rrggbb, rgba(…, a) → rgb(…)): labels stay solid
+function opaqueColor(c: string): string {
+  const s = String(c || '').trim();
+  const hex = /^#([0-9a-f]{6})[0-9a-f]{2}$/i.exec(s);
+  if (hex) return `#${hex[1]}`;
+  const hex4 = /^#([0-9a-f]{3})[0-9a-f]$/i.exec(s);
+  if (hex4) return `#${hex4[1]}`;
+  const rgba = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i.exec(s);
+  if (rgba) return `rgb(${rgba[1]}, ${rgba[2]}, ${rgba[3]})`;
+  return s;
+}
+
+// The cursor's price on the price scale, above every other label there, as on TradingView (the
+// chart draws its own one on its canvas, under all the page's labels: the last price and countdown,
+// drawings', positions'). Moved straight in the page on each mouse move: the chart doesn't re-render.
+// Hidden when the crosshair (or its price label) is; in a magnet mode on the price it snaps to.
+function CrosshairPriceLabel({ chart, series, side }: { chart: any; series: any; side: 'left' | 'right' }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const hide = () => { el.style.display = 'none'; };
+    const onMove = (param: any) => {
+      const pt = param?.point;
+      let o: any;
+      try { o = chart.options(); } catch { hide(); return; }
+      const hz = o?.crosshair?.horzLine || {};
+      const mode = o?.crosshair?.mode;
+      if (!pt || (param.paneIndex ?? 0) !== 0 || mode === 2 || hz.visible === false || hz.labelVisible === false) { hide(); return; }
+      let price: number | null = null;
+      try { price = series.coordinateToPrice(pt.y); } catch { /* not ready */ }
+      if (price == null) { hide(); return; }
+      // magnet (1): the bar's close; magnet to OHLC (3): its nearest price
+      const bar = mode === 1 || mode === 3 ? param.seriesData?.get?.(series) : null;
+      if (bar && bar.close != null) {
+        const at = price;
+        price = mode === 1 ? bar.close : [bar.open, bar.high, bar.low, bar.close].filter((v: any) => v != null)
+          .reduce((a: number, b: number) => (Math.abs(b - at) < Math.abs(a - at) ? b : a));
+      }
+      let y: number | null = null, w = 0, text = '', fontSize = 12;
+      try {
+        y = series.priceToCoordinate(price);
+        w = mainPriceScale(chart).width();
+        text = series.priceFormatter().format(price);
+        fontSize = o.layout?.fontSize || 12;
+      } catch { /* chart gone */ }
+      if (y == null || !w) { hide(); return; }
+      const h = fontSize + 8, bg = opaqueColor(hz.labelBackgroundColor || '#131722');
+      el.textContent = text;
+      el.style.top = `${Math.round(y - h / 2)}px`;
+      el.style.width = `${w}px`;
+      el.style.height = `${h}px`;
+      el.style.lineHeight = `${h}px`;
+      el.style.fontSize = `${fontSize}px`;
+      el.style.background = bg;
+      el.style.color = labelTextOn(bg);
+      el.style.display = 'block';
+    };
+    chart.subscribeCrosshairMove(onMove);
+    return () => { try { chart.unsubscribeCrosshairMove(onMove); } catch { /* chart gone */ } hide(); };
+  }, [chart, series]);
+  return (
+    <div ref={ref} aria-hidden data-name="crosshair-price-label" style={{
+      position: 'absolute', [side]: 0, display: 'none', textAlign: 'center', borderRadius: 2, pointerEvents: 'none',
+      zIndex: 72, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden',
+    }} />
+  );
+}
+
 function labelTextOn(bg: string): string {
   let r = 0, g = 0, b = 0;
   const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i.exec(bg.trim());
