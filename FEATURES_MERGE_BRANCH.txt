@@ -89,6 +89,8 @@ flyouts and quick search.
     selection (an invisible input takes the keys), so it doesn't move when Enter / a click
     outside ends typing; a click in the text moves the caret; Escape takes the typing back
   - A trend line's text sits 7px clear above the line (TradingView's gap), more lines going up
+  - A shape's "+ Add text" hint is in its text's own colour and size (a red line's is red), so
+    it looks the same before, while and after typing
   - Points placed to the right of the latest candle land on the future bars' times
   - Dragged shapes follow the pointer without ever jumping back to where the drag began
     (the Long/Short position "dancing"); Long/Short moves are logged in the browser console

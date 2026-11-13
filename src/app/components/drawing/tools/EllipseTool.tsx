@@ -219,8 +219,8 @@ export function EllipseTool({
               height={radiusY * 2}
               align="center"
               verticalAlign="middle"
-              fill="#2962ff"
-              opacity={0.7}
+              fill={textColor || stroke} // (the hint is in the text's own colour and size, as the text typed there will be)
+              opacity={0.6}
               fontSize={fontSize || 14}
               onClick={(e) => { e.cancelBubble = true; onTextEdit && onTextEdit(); }}
               onTap={(e) => { e.cancelBubble = true; onTextEdit && onTextEdit(); }}

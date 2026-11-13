@@ -23,7 +23,7 @@ const boxSize = (t: string, fontSize: number, padX: number, padY: number, minW =
 };
 const textNode = (x: number, y: number, t: string, fontSize: number, fill: string, onClick?: () => void, key?: string, bold = false, name?: string) => (
   <Text key={key} name={name} x={x} y={y} text={t || PLACEHOLDER} fontSize={fontSize} lineHeight={1.25} fontFamily={SHAPE_FONT}
-    fontStyle={bold ? 'bold' : 'normal'} fill={t ? fill : '#9598a1'} onClick={onClick} onTap={onClick} />
+    fontStyle={bold ? 'bold' : 'normal'} fill={fill} opacity={t ? 1 : 0.6} onClick={onClick} onTap={onClick} />
 );
 
 // ---- Note: a white box at the second point, joined by a thin line to the first

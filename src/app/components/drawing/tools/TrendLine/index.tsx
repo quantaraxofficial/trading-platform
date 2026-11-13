@@ -321,7 +321,8 @@ export function TrendLine({
         // which sits 20px above it, passed through a gap with no hit-test coverage
         // and made the placeholder vanish before the click ever landed.
         if ((isSelected || isHovering) && !text) {
-          const placeholderWidth = '+ Add text'.length * 12 * 0.6;
+          // (in the line's colour and the text's size and place: typing there changes nothing else)
+          const placeholderWidth = Math.max(measureLabel('+ Add text', 14) + 2, 10);
           return (
             <Group
               x={mx}
@@ -332,12 +333,13 @@ export function TrendLine({
             >
               <Text
                 text="+ Add text"
-                fill="#2962ff"
-                opacity={0.7}
-                fontSize={12}
+                fill={stroke}
+                opacity={0.6}
+                fontSize={14}
                 width={placeholderWidth}
                 offsetX={placeholderWidth / 2}
-                offsetY={12 + LABEL_GAP}
+                offsetY={14 + LABEL_GAP}
+                wrap="none"
                 align="center"
               />
             </Group>
