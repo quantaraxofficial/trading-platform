@@ -97,14 +97,22 @@ export function TextEditorOverlay({ initialText, x, y, onCommit, onCancel, onDra
     return () => layers.forEach(l => l.off('draw.tvTextEdit'));
   }, [stage]);
 
+  // Focused a moment later, not at once: the Text tool opens this from the very click that places
+  // the text, and that click's own focus change (to the chart) would otherwise take the focus
+  // straight back, ending the typing before it began and dropping the empty text
+  const ready = useRef(false);
   useLayoutEffect(() => {
     const el = areaRef.current;
     if (!el) return;
     el.value = initialText;
-    el.focus({ preventScroll: true });
-    el.setSelectionRange(initialText.length, initialText.length); // caret at the end, as on TradingView
     onDraft(initialText);
-    requestAnimationFrame(() => measureRef.current());
+    const t = setTimeout(() => {
+      el.focus({ preventScroll: true });
+      el.setSelectionRange(initialText.length, initialText.length); // caret at the end, as on TradingView
+      ready.current = true;
+      measureRef.current();
+    }, 50);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -156,7 +164,7 @@ export function TextEditorOverlay({ initialText, x, y, onCommit, onCancel, onDra
           e.stopPropagation(); // typing isn't a chart shortcut
           if (e.key === 'Escape') { e.preventDefault(); finish(false); }
         }}
-        onBlur={() => finish(true)}
+        onBlur={() => { if (ready.current) finish(true); }}
         style={{
           // invisible, as TradingView's: the shape draws the text; this only takes the keys
           position: 'absolute', left: x, top: y, width: 2, height: 2, opacity: 0, padding: 0, border: 0,
