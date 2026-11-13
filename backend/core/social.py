@@ -58,7 +58,8 @@ def username_of(profile):
 
 
 def person_json(p):
-    return {"username": username_of(p), "name": display_name(p), "bio": p.bio}
+    from .posts import avatar_url
+    return {"username": username_of(p), "name": display_name(p), "bio": p.bio, "avatar": avatar_url(p)}
 
 
 def allowed(setting, owner, viewer):
@@ -149,7 +150,9 @@ def profile(request, uid, username):
     if not p:
         return Response({"error": "No one has that username"}, status=status.HTTP_404_NOT_FOUND)
     is_me = p.id == me.id
-    out = {**person_json(p), "joined": int(p.created_at.timestamp() * 1000), "is_me": is_me,
+    from .posts import links_json, visible_posts
+    out = {**person_json(p), "joined": int(p.created_at.timestamp() * 1000), "is_me": is_me, "links": links_json(p),
+           "posts": visible_posts(me).filter(owner=p).count(),
            "followers": Follow.objects.filter(following=p).count(), "following": Follow.objects.filter(follower=p).count(),
            "i_follow": Follow.objects.filter(follower=me, following=p).exists(), "follows_me": Follow.objects.filter(follower=p, following=me).exists(),
            "can_message": allowed(p.allow_messages, p, me), "can_invite": allowed(p.allow_invites, p, me),
@@ -175,8 +178,8 @@ def profile(request, uid, username):
 
 @api_view(['GET', 'PATCH'])
 def me_settings(request, uid):
-    """Your profile settings. PATCH: username, bio, show_trading_stats, show_backtests,
-    show_sessions, allow_messages, allow_invites"""
+    """Your profile settings. PATCH: username, bio, links ([{kind, url}]: a handle or a link),
+    show_trading_stats, show_backtests, show_sessions, allow_messages, allow_invites"""
     me, denied = require_session(request, uid)
     if denied:
         return denied
@@ -191,6 +194,12 @@ def me_settings(request, uid):
             me.username = u
         if 'bio' in d:
             me.bio = str(d.get('bio') or '')[:300]
+        if 'links' in d:
+            from .posts import clean_links
+            links, err = clean_links(d.get('links'))
+            if err:
+                return Response({"error": err}, status=status.HTTP_400_BAD_REQUEST)
+            me.links = links
         for f in ('show_trading_stats', 'show_backtests', 'show_sessions'):
             if f in d:
                 setattr(me, f, d.get(f) is True)
@@ -201,7 +210,8 @@ def me_settings(request, uid):
                 setattr(me, f, d.get(f))
         me.save()
     username_of(me)
-    return Response({"me": {**person_json(me), "show_trading_stats": me.show_trading_stats, "show_backtests": me.show_backtests,
+    from .posts import links_json
+    return Response({"me": {**person_json(me), "links": links_json(me), "show_trading_stats": me.show_trading_stats, "show_backtests": me.show_backtests,
                             "show_sessions": me.show_sessions, "allow_messages": me.allow_messages, "allow_invites": me.allow_invites,
                             "stats_updated_at": int(me.stats_updated_at.timestamp() * 1000) if me.stats_updated_at else None}})
 

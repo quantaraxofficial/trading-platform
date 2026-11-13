@@ -6,9 +6,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ArrowLeft, BarChart3, Bell, LogIn, Search, TrendingUp, User } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { getNotifications, markNotificationsRead, mySettings, profileUrl, chartUrlForScript, initials, type Notice } from "./social";
+import { avatarSrc, getNotifications, markNotificationsRead, mySettings, profileUrl, chartUrlForScript, initials, type Notice } from "./social";
 
-export function Avatar({ name, size = 40 }: { name: string; size?: number }) {
+// Their photo, or their initials when they have none (src: the photo's address from the backend)
+export function Avatar({ name, size = 40, src }: { name: string; size?: number; src?: string }) {
+  if (src) return <img src={avatarSrc(src)} alt="" width={size} height={size} className="rounded-full object-cover shrink-0 shadow-lg shadow-purple-900/40 bg-purple-900" style={{ width: size, height: size }} />;
   return (
     <div className="rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-bold flex items-center justify-center shrink-0 shadow-lg shadow-purple-900/40"
       style={{ width: size, height: size, fontSize: size * 0.36 }}>{initials(name)}</div>
@@ -72,6 +74,7 @@ export default function CommunityShell({ title, hint, active, children }: { titl
 
 // Where a notification leads: the script on the chart, the person's profile, or the collab
 export function noticeHref(n: Notice) {
+  if (n.data?.post) return `/p/${n.data.post}`;   // a like, comment or share of your post
   if (n.data?.script && (n.kind === "script" || n.kind === "shared")) return chartUrlForScript(n.data.script);
   if (n.kind === "invite" && n.data?.token) return `/?collab=${encodeURIComponent(n.data.token)}`;
   if (n.data?.username) return profileUrl(n.data.username);
@@ -114,7 +117,7 @@ export function NotificationsBell({ uid }: { uid: string }) {
             const href = noticeHref(n);
             const body = (
               <div className={`flex gap-3 px-4 py-3 border-b border-purple-900/40 ${n.read ? "" : "bg-purple-800/15"}`}>
-                <Avatar name={n.actor?.name || "TradePilot"} size={32} />
+                <Avatar name={n.actor?.name || "TradePilot"} src={n.actor?.avatar} size={32} />
                 <div className="min-w-0">
                   <div className="text-sm text-purple-50">{n.text}</div>
                   <div className="text-[11px] text-purple-300/60 mt-0.5">{new Date(n.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</div>

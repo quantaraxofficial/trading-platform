@@ -1,5 +1,5 @@
 from django.urls import path
-from . import presence, voice, views, analytics, broker_algo, broker_mt5, stats_accounts, copy_api, copy_share, optimizer_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github, econ_calendar
+from . import presence, voice, views, analytics, broker_algo, broker_mt5, stats_accounts, posts, copy_api, copy_share, optimizer_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github, econ_calendar
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -46,6 +46,18 @@ urlpatterns = [
     # People, profiles, follows, notifications and published scripts (core/social.py)
     path('social/<str:uid>/search/', social.search, name='social_search'),
     path('social/<str:uid>/me/', social.me_settings, name='social_me'),
+    # Profile photos, social links and posts (core/posts.py)
+    path('social/<str:uid>/me/avatar/', posts.my_avatar, name='social_my_avatar'),
+    path('social/avatar/<str:username>/', posts.avatar, name='social_avatar'),
+    path('social/<str:uid>/posts/', posts.posts, name='social_posts'),
+    path('social/<str:uid>/posts/<int:pid>/', posts.post, name='social_post'),
+    path('social/<str:uid>/posts/<int:pid>/media/<int:mid>/', posts.post_media, name='social_post_media'),
+    path('social/<str:uid>/posts/<int:pid>/like/', posts.like, name='social_post_like'),
+    path('social/<str:uid>/posts/<int:pid>/comments/', posts.comments, name='social_post_comments'),
+    path('social/<str:uid>/posts/<int:pid>/comments/<int:cid>/', posts.comment, name='social_post_comment'),
+    path('social/<str:uid>/posts/<int:pid>/share/', posts.share_post, name='social_post_share'),
+    path('social/<str:uid>/people/<str:username>/share/', posts.share_profile, name='social_profile_share'),
+    path('social/<str:uid>/share-targets/', posts.share_targets, name='social_share_targets'),
     path('social/<str:uid>/me/stats/', social.me_stats, name='social_me_stats'),
     path('social/<str:uid>/notifications/', social.notifications, name='social_notifications'),
     path('social/<str:uid>/scripts/', social.scripts, name='social_scripts'),

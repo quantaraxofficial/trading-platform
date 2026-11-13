@@ -77,6 +77,7 @@ def sync_user(request):
 
 @api_view(['GET'])
 def get_user_data(request, uid):
+    from .posts import avatar_url
     profile, denied = require_session(request, uid)
     if denied:
         return denied
@@ -87,7 +88,9 @@ def get_user_data(request, uid):
             "phone": profile.phone,
             "tier": profile.tier,
             "created_at": profile.created_at,
-            "last_login": profile.last_login
+            "last_login": profile.last_login,
+            # the photo they uploaded on their profile (core/posts.py), else ""
+            "avatar": avatar_url(profile),
         })
     except TraderProfile.DoesNotExist:
         return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)

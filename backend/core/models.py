@@ -25,6 +25,11 @@ class TraderProfile(models.Model):
     allow_invites = models.CharField(max_length=10, default='everyone')
     stats_snapshot = models.JSONField(null=True, blank=True)   # the trading stats you chose to show
     stats_updated_at = models.DateTimeField(null=True, blank=True)
+    # Their photo (core/posts.py: re-encoded, kept outside the public media folder, served to everyone)
+    # and links to their other social media ([{kind, url}]: instagram, x, youtube…)
+    avatar = models.CharField(max_length=200, blank=True)
+    avatar_version = models.IntegerField(default=0)
+    links = models.JSONField(default=list, blank=True)
     # Where they came from, kept at sign-up (core/arrival.py): the kind (ad, referral, social, search,
     # email, campaign link, another website, direct; empty: signed up before this was kept), the source
     # (instagram, google, a referral code…), the campaign, and what the browser noted
@@ -286,8 +291,9 @@ class CollabMessage(models.Model):
     caption), or a notice such as "Asha joined"."""
     room = models.ForeignKey(CollabRoom, on_delete=models.CASCADE, related_name='messages')
     author = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
-    # ('signal': a copy channel's signal posted here, its card in `attachment`, see copy_share.py)
-    kind = models.CharField(max_length=10, choices=[('text', 'Text'), ('system', 'System'), ('file', 'File'), ('signal', 'Signal')], default='text')
+    # ('signal': a copy channel's signal posted here, its card in `attachment`, see copy_share.py;
+    #  'share': a post or profile shared here, its card in `attachment`, see posts.py)
+    kind = models.CharField(max_length=10, choices=[('text', 'Text'), ('system', 'System'), ('file', 'File'), ('signal', 'Signal'), ('share', 'Share')], default='text')
     text = models.TextField(blank=True)
     # A shared file: {path (in the private collab-files folder), name, size, type, image, width, height}
     attachment = models.JSONField(null=True, blank=True)
@@ -338,7 +344,7 @@ class ChatGroupMessage(models.Model):
     chats), or a notice such as "Asha added Ravi"."""
     group = models.ForeignKey(ChatGroup, on_delete=models.CASCADE, related_name='messages')
     author = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
-    kind = models.CharField(max_length=10, choices=[('text', 'Text'), ('system', 'System'), ('file', 'File'), ('signal', 'Signal')], default='text')
+    kind = models.CharField(max_length=10, choices=[('text', 'Text'), ('system', 'System'), ('file', 'File'), ('signal', 'Signal'), ('share', 'Share')], default='text')
     text = models.TextField(blank=True)
     attachment = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -915,3 +921,61 @@ class StatsAccount(models.Model):
 
     def __str__(self):
         return f"{self.owner.name}: {self.get_platform_display()} {self.login}"
+
+
+class Post(models.Model):
+    """A post on someone's profile (core/posts.py): photos and / or videos with a caption, public
+    (everyone, and found by everyone's search) or for their followers only"""
+    VISIBILITY = [('public', 'Public'), ('followers', 'Followers only')]
+    owner = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='posts')
+    caption = models.TextField(blank=True)
+    visibility = models.CharField(max_length=10, choices=VISIBILITY, default='public', db_index=True)
+    tags = models.CharField(max_length=600, blank=True)   # its #hashtags, " gold xauusd " (for search)
+    # Its settings: who may comment (everyone who can see it, the author's followers, nobody) and
+    # whether it may be shared (a link, or into the site's chats)
+    COMMENTS = [('everyone', 'Everyone'), ('followers', 'Followers'), ('off', 'Off')]
+    comments = models.CharField(max_length=10, choices=COMMENTS, default='everyone')
+    allow_sharing = models.BooleanField(default=True)
+    shares = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.owner.name}: {self.caption[:40]}"
+
+
+class PostMedia(models.Model):
+    """One photo or video of a post, in order (the file in core/posts.storage())"""
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='media')
+    kind = models.CharField(max_length=5)          # image / video
+    path = models.CharField(max_length=300)
+    mime = models.CharField(max_length=40)
+    width = models.IntegerField(null=True, blank=True)
+    height = models.IntegerField(null=True, blank=True)
+    size = models.BigIntegerField(default=0)
+    order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+
+class PostLike(models.Model):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='likes')
+    profile = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('post', 'profile')
+
+
+class PostComment(models.Model):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments_set')
+    author = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='+')
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']

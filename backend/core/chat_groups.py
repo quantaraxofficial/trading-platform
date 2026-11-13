@@ -49,6 +49,8 @@ def message_json(m):
     }
     if m.kind == 'signal':
         out["signal"] = m.attachment   # a copy channel's signal (copy_share.py), shown as a card
+    elif m.kind == 'share':
+        out["share"] = m.attachment   # a post or profile shared here (posts.py), shown as a card
     elif m.attachment:
         out["attachment"] = {**{k: m.attachment.get(k) for k in ('name', 'size', 'type', 'image', 'width', 'height')},
                              **({"audio": True, "duration": m.attachment.get('duration')} if m.attachment.get('audio') else {})}

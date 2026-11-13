@@ -63,10 +63,16 @@ export interface ChatSignal {
   signal: number; kind: "open" | "modify" | "close"; ref: string; symbol: string; side: string; entry: number | null; sl: number | null;
   tp: number | null; risk: number | null; fraction: number | null; channel: { id: number; name: string; code: string; owner: string }; test?: boolean;
 }
+// A post or someone's profile shared in the chat (backend core/posts.py)
+export type ChatShare = { note?: string } & (
+  | { type: "post"; post: number; author: { username: string; name: string; avatar?: string }; caption: string; visibility: "public" | "followers";
+      media: { id: number; kind: "image" | "video"; width: number | null; height: number | null } | null; count: number }
+  | { type: "profile"; person: { username: string; name: string; bio: string; avatar?: string }; followers: number; posts: number });
 export interface ChatMessage {
-  id: number | string; kind: "text" | "system" | "file" | "signal"; text: string; time: number; author: string | null; author_name: string | null; pending?: boolean;
+  id: number | string; kind: "text" | "system" | "file" | "signal" | "share"; text: string; time: number; author: string | null; author_name: string | null; pending?: boolean;
   attachment?: ChatAttachment;
   signal?: ChatSignal;
+  share?: ChatShare;
   // A file still on its way up from here: how far (0..1), the picture to show meanwhile, or why it failed
   upload?: { progress: number; preview?: string; error?: string; file: File };
   // A private message: to whom (empty: the group's chat)

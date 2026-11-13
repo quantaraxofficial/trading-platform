@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { useEscapeClose } from "../../lib/useEscapeClose";
 import "./collab.css";
 import SignalCard from "./SignalCard";
+import ShareCard from "./ShareCard";
 import { collab, useCollab, chatFileProblem, CHAT_FILE_ACCEPT, type ChatMessage, type Peer, type SharedAlert } from "../../lib/collab/session";
 import { useAlerts } from "@/context/AlertsContext";
 import { Avatar } from "./CollabDialog";
@@ -313,6 +314,7 @@ export function Message({ m, prev, mine, color, onView, files = groupFiles, onAu
             <span>{timeOf(m.time)}</span>
           </div>}
           {m.signal ? <SignalCard s={m.signal} mine={mine} />
+            : m.share ? <ShareCard s={m.share} />
             : m.attachment ? <Attachment m={m} onView={onView} files={files} /> : <div className="tv-co-msg-text">{m.text}</div>}
           {status && <div className="tv-co-msg-status" data-name="msg-status">{status}</div>}
         </div>

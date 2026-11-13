@@ -167,6 +167,8 @@ def message_json(msg):
     }
     if msg.kind == 'signal':
         out["signal"] = msg.attachment   # a copy channel's signal (copy_share.py), shown as a card
+    elif msg.kind == 'share':
+        out["share"] = msg.attachment   # a post or profile shared here (posts.py), shown as a card
     elif msg.attachment:
         a = msg.attachment
         out["attachment"] = {**{k: a.get(k) for k in ('name', 'size', 'type', 'image', 'width', 'height')},

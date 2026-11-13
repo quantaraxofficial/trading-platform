@@ -1,16 +1,18 @@
 "use client";
 
-// Community search: people by name or @username, and published indicators / strategies by name,
-// description or author.
+// Community search: people by name or @username, published indicators / strategies by name,
+// description or author, and posts (caption words, #hashtags, @author) among those you may see:
+// everyone's public posts, and the followers-only posts of people you follow.
 
 import { registerVoiceFunctions, VoiceQuestion } from "../lib/voice/registry";
 import React, { useEffect, useState } from "react";
-import { Code2, Search, Users } from "lucide-react";
+import { Code2, ImagePlus, Search, Users } from "lucide-react";
 import { Card, Empty, Pills } from "../analytics/ui";
 import CommunityShell, { Avatar } from "./CommunityShell";
 import { chartUrlForScript, followPerson, listScripts, profileUrl, searchPeople, type PublishedScript, type SearchPerson } from "./social";
+import { PostComposer, PostsFeed } from "./Posts";
 
-type Tab = "people" | "indicator" | "strategy";
+type Tab = "posts" | "people" | "indicator" | "strategy";
 
 export function ScriptCard({ s, showAuthor = true }: { s: PublishedScript; showAuthor?: boolean }) {
   return (
@@ -30,7 +32,7 @@ export function ScriptCard({ s, showAuthor = true }: { s: PublishedScript; showA
       {s.description && <p className="text-sm text-purple-100/80 line-clamp-3">{s.description}</p>}
       <div className="flex items-center gap-2 mt-auto">
         {showAuthor && <a href={profileUrl(s.author.username)} className="flex items-center gap-2 min-w-0 flex-1 hover:underline" data-testid="script-author">
-          <Avatar name={s.author.name} size={24} /><span className="text-sm text-purple-200 truncate">{s.author.name}</span></a>}
+          <Avatar name={s.author.name} src={s.author.avatar} size={24} /><span className="text-sm text-purple-200 truncate">{s.author.name}</span></a>}
         {!showAuthor && <span className="flex-1 text-xs text-purple-300/60">Updated {new Date(s.updated_at).toLocaleDateString()}</span>}
         <a href={chartUrlForScript(s.id)} target="_blank" rel="noreferrer" data-testid="script-add"
           className="text-sm px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 font-semibold whitespace-nowrap">Add to chart</a>
@@ -43,7 +45,7 @@ export function PersonCard({ uid, p, onChange }: { uid: string; p: SearchPerson;
   const [busy, setBusy] = useState(false);
   return (
     <div className="bg-black/50 backdrop-blur-xl border border-purple-800/40 rounded-2xl p-5 flex items-center gap-4" data-testid="person-card" data-username={p.username}>
-      <a href={profileUrl(p.username)}><Avatar name={p.name} size={48} /></a>
+      <a href={profileUrl(p.username)}><Avatar name={p.name} src={p.avatar} size={48} /></a>
       <div className="min-w-0 flex-1">
         <a href={profileUrl(p.username)} className="text-white font-semibold hover:underline truncate block">{p.name}</a>
         <div className="text-xs text-purple-300/70">@{p.username} · {p.followers} follower{p.followers === 1 ? "" : "s"} · {p.scripts} script{p.scripts === 1 ? "" : "s"}</div>
@@ -62,7 +64,7 @@ export function PersonCard({ uid, p, onChange }: { uid: string; p: SearchPerson;
 
 export default function CommunityApp() {
   return (
-    <CommunityShell title="Community" hint="Find traders and the indicators and strategies they publish" active="search">
+    <CommunityShell title="Community" hint="Find traders, their posts, and the indicators and strategies they publish" active="search">
       {uid => <SearchView uid={uid} />}
     </CommunityShell>
   );
@@ -70,18 +72,25 @@ export default function CommunityApp() {
 
 function SearchView({ uid }: { uid: string }) {
   const [q, setQ] = useState("");
-  const [tab, setTab] = useState<Tab>("people");
+  const [tab, setTab] = useState<Tab>("posts");
+  const [composing, setComposing] = useState(false);
+  const [posted, setPosted] = useState(0);
   const [people, setPeople] = useState<SearchPerson[] | null>(null);
   const [scripts, setScripts] = useState<PublishedScript[] | null>(null);
-  useEffect(() => { const v = new URLSearchParams(window.location.search).get("q"); if (v) setQ(v); }, []);
+  useEffect(() => {
+    const qs = new URLSearchParams(window.location.search);
+    const v = qs.get("q"), t = qs.get("tab");
+    if (v) setQ(v);
+    if (t === "posts" || t === "people" || t === "indicator" || t === "strategy") setTab(t);
+  }, []);
   // The voice assistant: search here, and open someone's profile (lib/voice/registry)
   useEffect(() => {
     registerVoiceFunctions("community", [
-      { name: "community_search", signature: "community_search(query, kind?) searches the community; kind people|indicator|strategy",
+      { name: "community_search", signature: "community_search(query, kind?) searches the community; kind posts|people|indicator|strategy",
         run: a => {
-          const kind = a.kind === "indicator" || a.kind === "strategy" ? a.kind : "people";
+          const kind: Tab = a.kind === "indicator" || a.kind === "strategy" || a.kind === "posts" ? a.kind : "people";
           setTab(kind); setQ(String(a.query || ""));
-          return `Searching ${kind === "people" ? "people" : kind + "s"} for ${String(a.query || "")}.`;
+          return `Searching ${kind === "people" || kind === "posts" ? kind : kind + "s"} for ${String(a.query || "")}.`;
         } },
       { name: "open_profile", signature: "open_profile(person) opens someone's community profile",
         run: async a => {
@@ -100,6 +109,7 @@ function SearchView({ uid }: { uid: string }) {
   useEffect(() => {
     let gone = false;
     const t = setTimeout(() => {
+      if (tab === "posts") return;   // (PostsFeed loads them)
       if (tab === "people") {
         if (!q.trim()) { setPeople(null); return; }
         searchPeople(uid, q.trim()).then(r => { if (!gone) setPeople(r); }, () => {});
@@ -113,12 +123,18 @@ function SearchView({ uid }: { uid: string }) {
     <div className="space-y-5">
       <div className="relative max-w-2xl">
         <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-purple-400" />
-        <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder={tab === "people" ? "Search people by name or @username" : `Search ${tab === "indicator" ? "indicators" : "strategies"} by name or author`}
+        <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder={tab === "posts" ? "Search posts: words, #hashtags or @someone" : tab === "people" ? "Search people by name or @username" : `Search ${tab === "indicator" ? "indicators" : "strategies"} by name or author`}
           data-testid="community-search" aria-label="Search"
           className="w-full bg-gray-900/60 border border-purple-700/50 rounded-xl pl-11 pr-4 py-3 text-white placeholder-purple-500/80 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20" />
       </div>
-      <Pills value={tab} onChange={setTab} testId="community-tab" options={[{ id: "people", label: "People" }, { id: "indicator", label: "Indicators" }, { id: "strategy", label: "Strategies" }]} />
-      {tab === "people" ? (
+      <div className="flex flex-wrap items-center gap-3">
+        <Pills value={tab} onChange={setTab} testId="community-tab" options={[{ id: "posts", label: "Posts" }, { id: "people", label: "People" }, { id: "indicator", label: "Indicators" }, { id: "strategy", label: "Strategies" }]} />
+        {tab === "posts" && <button onClick={() => setComposing(true)} data-testid="new-post" className="ml-auto px-3 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 inline-flex items-center gap-1.5"><ImagePlus size={15} />New post</button>}
+      </div>
+      {tab === "posts" ? (
+        <PostsFeed uid={uid} q={q} refresh={posted}
+          empty={<Card><Empty icon={<ImagePlus size={22} />}>{q.trim() ? <>No posts you can see match &ldquo;{q}&rdquo;</> : "No posts yet: share the first one"}</Empty></Card>} />
+      ) : tab === "people" ? (
         !q.trim() ? <Card><Empty icon={<Users size={22} />}>Type a name or @username to find traders</Empty></Card>
           : people === null ? <Card><Empty>Searching…</Empty></Card>
           : people.length === 0 ? <Card><Empty>No one matches &ldquo;{q}&rdquo;</Empty></Card>
@@ -128,6 +144,7 @@ function SearchView({ uid }: { uid: string }) {
           : scripts.length === 0 ? <Card><Empty icon={<Code2 size={22} />}>No published {tab === "indicator" ? "indicators" : "strategies"}{q ? ` matching “${q}”` : " yet"}</Empty></Card>
           : <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4" data-testid="script-results">{scripts.map(s => <ScriptCard key={s.id} s={s} />)}</div>
       )}
+      {composing && <PostComposer uid={uid} onClose={() => setComposing(false)} onPosted={() => setPosted(n => n + 1)} />}
     </div>
   );
 }

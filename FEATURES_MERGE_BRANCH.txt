@@ -680,9 +680,35 @@ Posting signals out
       number or balance; at least 5 closed trades in the period
 
 ======================================================================
+17d. PROFILES, POSTS, LIKES, COMMENTS, SHARING
+======================================================================
+  - Profile photo: upload or remove (Edit profile); re-encoded on the server (at most 512 px, the
+    camera's location / device data dropped); shown on the profile, in search, beside comments,
+    posts, chat cards and in the site's account menu (instead of the Google photo)
+  - Bio over several lines (300 characters), and links to other social media: Instagram, X,
+    YouTube, TikTok, Telegram, Facebook, LinkedIn, Discord, Threads, a website; typed as an
+    @handle or a link (checked: a network's link must be on its site); shown as badges
+  - Posts: up to 10 photos and videos (photos 15 MB, re-encoded without location data; videos
+    MP4 / MOV / WebM up to 100 MB) with a caption (#hashtags and @mentions become links); Public
+    (everyone, found in search) or Followers only. Each post's settings: who may comment
+    (everyone who sees it, followers, nobody) and whether it may be shared; editable later. The
+    files are served only to people who may see the post (videos can be skipped through)
+  - On profiles: the posts the viewer may see (with a count), New post on your own; a post opens
+    in a viewer (arrows / keys through its photos and videos, double-click to like) and on its own
+    page /p/<id>
+  - Like (its author told once per person), comment (as the post's settings allow; the writer or
+    the post's author can delete a comment; the author is told), share
+  - Share (posts, and anyone's profile): copy the link, or send it with a note into your chats on
+    the site (personal chats, group chats, collab chats; several at once) as a card that opens it;
+    a followers-only post's card shows its picture only to followers
+  - Community → Posts: global search by words, #hashtags or @author among the posts you may see
+    (everyone's public posts, followers-only ones of people you follow), New post there too
+  - Notifications for likes, comments and shares lead to the post
+
+======================================================================
 18. RUNNING IT (SETUP NOTES)
 ======================================================================
-  - Database: run "python manage.py migrate" (migrations up to 0046)
+  - Database: run "python manage.py migrate" (migrations up to 0048)
   - Live collab / chats: the backend runs under daphne (Django Channels)
   - Copy trading: run "python manage.py run_copier" on the copier server (MT5 installed)
   - Market data: TWELVEDATA_API_KEY (8 requests a minute on the free plan; the optimizer

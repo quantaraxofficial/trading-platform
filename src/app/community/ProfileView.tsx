@@ -7,12 +7,15 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Activity, Code2, FlaskConical, MessageCircle, Settings2, UserPlus, Users, X } from "lucide-react";
+import { Activity, Camera, Code2, FlaskConical, ImagePlus, MessageCircle, Plus, Settings2, Share2, Trash2, UserPlus, Users, X } from "lucide-react";
 import { Card, EquityChart, Empty, Label } from "../analytics/ui";
 import { money, pnlClass } from "../analytics/stats";
 import CommunityShell, { Avatar } from "./CommunityShell";
 import { ScriptCard } from "./CommunityApp";
+import { PostComposer, PostsFeed } from "./Posts";
+import ShareDialog from "./ShareDialog";
 import {
+  LINK_KINDS, removeAvatar, shareProfile, uploadAvatar, type LinkKind, type SocialLink,
   chartUrlForChat, followList, followPerson, getProfile, inviteOptions, invitePerson, messagePerson, mySettings, profileUrl,
   unpublishScript, updateMySettings, updateScript, deleteMyStats, type CodeAccess, type MySettings, type Person, type Privacy, type Profile, type PublishedScript,
 } from "./social";
@@ -38,6 +41,9 @@ function ProfileBody({ uid, username }: { uid: string; username: string }) {
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [inviting, setInviting] = useState(false);
   const [list, setList] = useState<"followers" | "following" | null>(null);
+  const [composing, setComposing] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [posted, setPosted] = useState(0);
   const load = useCallback(() => getProfile(uid, username).then(setP, e => setError(e.message)), [uid, username]);
   useEffect(() => { load(); }, [load]);
   if (error) return <Card><Empty>{error}</Empty></Card>;
@@ -59,29 +65,46 @@ function ProfileBody({ uid, username }: { uid: string; username: string }) {
     <div className="space-y-5" data-testid="profile">
       <Card pad={false}>
         <div className="p-6 flex flex-wrap items-center gap-5">
-          <Avatar name={p.name} size={76} />
+          <Avatar name={p.name} src={p.avatar} size={76} />
           <div className="min-w-0 flex-1">
             <h2 className="text-2xl font-bold text-white" data-testid="profile-name">{p.name}</h2>
             <div className="text-purple-300/80 text-sm">@{p.username} · joined {new Date(p.joined).toLocaleDateString([], { month: "long", year: "numeric" })}{p.follows_me ? " · follows you" : ""}</div>
-            {p.bio && <p className="text-purple-100/90 mt-2 max-w-2xl" data-testid="profile-bio">{p.bio}</p>}
+            {p.bio && <p className="text-purple-100/90 mt-2 max-w-2xl whitespace-pre-line" data-testid="profile-bio">{p.bio}</p>}
+            {p.links?.length > 0 && <Links links={p.links} />}
             <div className="flex gap-4 mt-3 text-sm">
               <button onClick={() => setList("followers")} className="text-purple-200 hover:text-white"><b className="text-white" data-testid="profile-followers">{p.followers}</b> follower{p.followers === 1 ? "" : "s"}</button>
               <button onClick={() => setList("following")} className="text-purple-200 hover:text-white"><b className="text-white">{p.following}</b> following</button>
+              <span className="text-purple-200"><b className="text-white">{p.posts}</b> post{p.posts === 1 ? "" : "s"}</span>
               <span className="text-purple-200"><b className="text-white">{p.scripts.filter(s => s.visibility === "public").length}</b> public scripts</span>
             </div>
           </div>
+          <div className="flex flex-wrap gap-2">
+            <button className={ghost} onClick={() => setSharing(true)} data-testid="profile-share"><Share2 size={15} />Share</button>
           {!p.is_me && (
-            <div className="flex flex-wrap gap-2">
+            <>
               <button className={p.i_follow ? ghost : btn} onClick={follow} data-testid="profile-follow"><Users size={15} />{p.i_follow ? "Following" : "Follow"}</button>
               <button className={ghost} onClick={message} disabled={!p.can_message} title={p.can_message ? "Open a private chat" : `${p.name} doesn't take messages from you`} data-testid="profile-message"><MessageCircle size={15} />Message</button>
               <button className={ghost} onClick={() => setInviting(true)} disabled={!p.can_invite} title={p.can_invite ? "Add them to one of your collabs" : `${p.name} doesn't take collab invites from you`} data-testid="profile-invite"><UserPlus size={15} />Invite to collab</button>
-            </div>
+            </>
           )}
+          </div>
         </div>
         {note && <div className={`px-6 pb-4 text-sm ${note.ok ? "text-emerald-300" : "text-rose-400"}`} data-testid="profile-note">{note.text}</div>}
       </Card>
 
-      {p.is_me && <EditProfile uid={uid} onSaved={u => { if (u !== p.username) window.location.href = profileUrl(u); else load(); }} />}
+      {p.is_me && <EditProfile uid={uid} avatar={p.avatar} name={p.name} onSaved={u => { if (u !== p.username) window.location.href = profileUrl(u); else load(); }} />}
+
+      <section>
+        <div className="flex items-center gap-3 mb-3">
+          <h3 className="text-lg font-semibold flex items-center gap-2"><ImagePlus size={18} className="text-purple-400" />Posts</h3>
+          {p.is_me && <button className={`${btn} ml-auto`} onClick={() => setComposing(true)} data-testid="profile-new-post"><Plus size={15} />New post</button>}
+        </div>
+        <PostsFeed uid={uid} author={p.username} refresh={posted}
+          empty={<Card><Empty icon={<ImagePlus size={22} />}>{p.is_me ? "Share photos and videos with a caption: New post" : p.i_follow || !p.posts ? "No posts yet" : "No public posts yet"}</Empty></Card>} />
+      </section>
+      {sharing && <ShareDialog uid={uid} title={p.is_me ? "Share your profile" : `Share ${p.name}'s profile`} link={profileUrl(p.username)} onClose={() => setSharing(false)}
+        onSend={(targets, note) => shareProfile(uid, p.username, { targets, note })} />}
+      {composing && <PostComposer uid={uid} onClose={() => setComposing(false)} onPosted={() => { setPosted(n => n + 1); load(); }} />}
 
       <section>
         <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Code2 size={18} className="text-purple-400" />Scripts</h3>
@@ -209,7 +232,45 @@ function CodeAccessControl({ uid, s, onChange }: { uid: string; s: PublishedScri
   );
 }
 
-function EditProfile({ uid, onSaved }: { uid: string; onSaved: (username: string) => void }) {
+// Links to their other social media, as small badges in each network's colour
+function Links({ links }: { links: SocialLink[] }) {
+  return (
+    <div className="flex flex-wrap gap-2 mt-3" data-testid="profile-links">
+      {links.map((l, i) => {
+        const k = LINK_KINDS.find(x => x.kind === l.kind);
+        return (
+          <a key={i} href={l.url} target="_blank" rel="noopener noreferrer nofollow" title={l.url}
+            className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-white/5 border border-purple-700/40 hover:border-purple-400/60 text-xs text-purple-100">
+            <span className="h-5 min-w-5 px-1 rounded-full text-[9px] font-bold text-white flex items-center justify-center" style={{ background: k?.color || "#7c3aed" }}>{k?.short || "↗"}</span>
+            {k?.label || "Link"}
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
+// Your photo: change (re-encoded on the server, its location data dropped) or remove it
+function PhotoEditor({ uid, name, avatar, onChange }: { uid: string; name: string; avatar?: string; onChange: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const input = React.useRef<HTMLInputElement>(null);
+  const run = (f: () => Promise<unknown>) => { setBusy(true); setErr(null); f().then(onChange, e => setErr(e.message)).finally(() => setBusy(false)); };
+  return (
+    <div className="flex items-center gap-4">
+      <Avatar name={name} src={avatar} size={64} />
+      <div className="flex flex-wrap gap-2">
+        <button className={ghost} disabled={busy} onClick={() => input.current?.click()} data-testid="avatar-change"><Camera size={15} />{avatar ? "Change photo" : "Add a photo"}</button>
+        {avatar && <button className={ghost} disabled={busy} onClick={() => run(() => removeAvatar(uid))} data-testid="avatar-remove"><Trash2 size={15} />Remove</button>}
+      </div>
+      <input ref={input} type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden data-testid="avatar-file"
+        onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) run(() => uploadAvatar(uid, f)); }} />
+      {err && <div className="text-sm text-rose-400">{err}</div>}
+    </div>
+  );
+}
+
+function EditProfile({ uid, name, avatar, onSaved }: { uid: string; name: string; avatar?: string; onSaved: (username: string) => void }) {
   const [m, setM] = useState<MySettings | null>(null);
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -217,8 +278,11 @@ function EditProfile({ uid, onSaved }: { uid: string; onSaved: (username: string
   if (!m) return null;
   const save = async () => {
     setErr(null);
-    try { const r = await updateMySettings(uid, m); setOpen(false); onSaved(r.username); } catch (e: any) { setErr(e.message); }
+    try { const r = await updateMySettings(uid, { ...m, links: (m.links || []).filter(l => l.url.trim()) }); setOpen(false); onSaved(r.username); } catch (e: any) { setErr(e.message); }
   };
+  const links = m.links || [];
+  const setLink = (i: number, l: Partial<SocialLink>) => setM({ ...m, links: links.map((x, k) => (k === i ? { ...x, ...l } : x)) });
+  const freeKind = (LINK_KINDS.find(k => !links.some(l => l.kind === k.kind)) || LINK_KINDS[LINK_KINDS.length - 1]).kind;
   const privacy = (key: "allow_messages" | "allow_invites", label: string) => (
     <label><Label>{label}</Label>
       <TvSelect className={`${field} mt-1`} value={m[key]} onChange={e => setM({ ...m, [key]: e.target.value as Privacy })} data-testid={`edit-${key}`}>
@@ -241,7 +305,23 @@ function EditProfile({ uid, onSaved }: { uid: string; onSaved: (username: string
       ) : (
         <div className="grid md:grid-cols-2 gap-4" onKeyDown={e => e.stopPropagation()}>
           <label><Label>Username</Label><input className={`${field} mt-1`} value={m.username} onChange={e => setM({ ...m, username: e.target.value })} data-testid="edit-username" /></label>
-          <label><Label>Bio</Label><input className={`${field} mt-1`} value={m.bio} maxLength={300} onChange={e => setM({ ...m, bio: e.target.value })} placeholder="What you trade, your style…" data-testid="edit-bio" /></label>
+          <div className="md:col-span-2"><Label>Photo</Label><div className="mt-1"><PhotoEditor uid={uid} name={name} avatar={avatar} onChange={() => onSaved(m.username)} /></div></div>
+          <label className="md:col-span-2"><Label>Bio</Label>
+            <textarea className={`${field} mt-1 resize-y`} rows={3} value={m.bio} maxLength={300} onChange={e => setM({ ...m, bio: e.target.value })} placeholder="What you trade, your style…" data-testid="edit-bio" />
+            <div className="text-right text-[11px] text-purple-300/50">{m.bio.length} / 300</div></label>
+          <div className="md:col-span-2"><Label>Links to your other social media</Label>
+            <div className="space-y-2 mt-1" data-testid="edit-links">
+              {links.map((l, i) => (
+                <div key={i} className="flex gap-2">
+                  <TvSelect value={l.kind} onChange={e => setLink(i, { kind: e.target.value as LinkKind })} className={`${field} !w-40 shrink-0`} aria-label="Network">
+                    {LINK_KINDS.map(k => <option key={k.kind} value={k.kind} className="bg-gray-900">{k.label}</option>)}
+                  </TvSelect>
+                  <input className={field} value={l.url} onChange={e => setLink(i, { url: e.target.value })} placeholder={LINK_KINDS.find(k => k.kind === l.kind)?.hint} data-testid="edit-link-url" />
+                  <button aria-label="Remove link" className={ghost} onClick={() => setM({ ...m, links: links.filter((_, k) => k !== i) })}><X size={14} /></button>
+                </div>
+              ))}
+              {links.length < 10 && <button className={ghost} onClick={() => setM({ ...m, links: [...links, { kind: freeKind, url: "" }] })} data-testid="edit-link-add"><Plus size={14} />Add a link</button>}
+            </div></div>
           <div className="md:col-span-2"><Label>On my profile</Label>
             <div className="grid sm:grid-cols-3 gap-2 mt-1">{toggle("show_trading_stats", "Trading stats")}{toggle("show_backtests", "Strategy backtests")}{toggle("show_sessions", "Backtest sessions")}</div></div>
           {privacy("allow_messages", "Who can message me")}
@@ -306,7 +386,7 @@ function PeopleDialog({ uid, username, which, onClose }: { uid: string; username
       {!people ? <div className="text-purple-300 text-sm">Loading…</div> : people.length === 0 ? <div className="text-purple-300 text-sm">Nobody yet</div> : (
         <div className="space-y-2">{people.map(x => (
           <a key={x.username} href={profileUrl(x.username)} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-purple-800/25">
-            <Avatar name={x.name} size={36} /><div><div className="text-white text-sm font-medium">{x.name}</div><div className="text-xs text-purple-300/70">@{x.username}</div></div></a>
+            <Avatar name={x.name} src={x.avatar} size={36} /><div><div className="text-white text-sm font-medium">{x.name}</div><div className="text-xs text-purple-300/70">@{x.username}</div></div></a>
         ))}</div>
       )}
     </Modal>

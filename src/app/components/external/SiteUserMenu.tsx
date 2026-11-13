@@ -12,6 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 // Accounts made with a user ID instead of an email are stored as <id>@this domain
 const USER_ID_DOMAIN = 'id.tradepilot.invalid';
 import { useEscapeClose } from '../../lib/useEscapeClose';
+import { BACKEND } from '../../lib/collab/session';
 
 // The name to show, and the sign-in shown under it (a user ID account's made-up email reads as its ID)
 export function accountName(user: { displayName?: string | null; email?: string | null } | null, userData?: { name?: string } | null) {
@@ -28,7 +29,9 @@ export function Avatar({ size = 40, className = '' }: { size?: number; className
   const { user, userData } = useAuth();
   const [broken, setBroken] = useState(false);
   const name = accountName(user, userData);
-  const photo = !broken ? user?.photoURL : null;
+  // (the photo uploaded on their TradePilot profile first, else their Google one)
+  const uploaded = (userData as { avatar?: string } | null)?.avatar;
+  const photo = !broken ? (uploaded ? `${BACKEND}${uploaded}` : user?.photoURL) : null;
   return photo ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img src={photo} alt="" width={size} height={size} referrerPolicy="no-referrer" onError={() => setBroken(true)}
