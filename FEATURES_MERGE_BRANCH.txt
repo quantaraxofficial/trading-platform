@@ -682,6 +682,10 @@ Posting signals out
     or a symbol traded on the boards; only that market's trades count (live accounts and manual
     backtests recomputed on them). A broker's spelling is the same symbol (XAUUSD+, XAU/USD,
     OANDA:XAUUSD, XAUUSD.r, XAUUSDm, GOLD → XAUUSD). Live accounts show their main symbols
+  - Live algos: every algo trading a connected account on the board, each ranked on its own trades:
+    TradePilot's algo strategies (by name), Expert Advisors (by magic number, named from their trades'
+    comment) and cBots (by label); trades placed by hand, from the site's order ticket or copied from
+    a channel are left out; several algos on one account count apart; period, market, real / demo
   - Most followed: traders by followers, or by followers gained in the last 7 / 30 / 90 days / year,
     with their public posts and scripts
 

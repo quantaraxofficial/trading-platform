@@ -10,23 +10,25 @@
 //   by period; never an account number or balance. At least 5 closed trades in the period.
 // Ranked by return (or profit factor, win rate, net profit), on every market or one: a group (forex,
 // metals, crypto, indices, energies, stocks & others) or a symbol (only its trades counted).
+// - Live algos: each algo trading a live account on the board — a TradePilot algo strategy, an Expert
+//   Advisor (its magic number) or a cBot (its label) — on its own trades (hand-placed and copied ones apart).
 // - Most followed: traders by followers, or by followers gained over a period.
 // In the site pages' look (About / Contact).
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { BadgeCheck, Bot, Hand, Lock, Medal, Trophy, Users } from "lucide-react";
+import { BadgeCheck, Bot, Cpu, Hand, Lock, Medal, Trophy, Users } from "lucide-react";
 import SiteNav from "../components/external/SiteNav";
 import {
-  backtestLeaderboard, followersLeaderboard, leaderboard, leaderboardMarkets, manualLeaderboard,
-  type LbBacktestRow, type LbFollowedRow, type LbManualRow, type LbPeriod, type LbRow, type LbSort, type Markets,
+  algoLeaderboard, backtestLeaderboard, followersLeaderboard, leaderboard, leaderboardMarkets, manualLeaderboard,
+  type LbAlgoRow, type LbBacktestRow, type LbFollowedRow, type LbManualRow, type LbPeriod, type LbRow, type LbSort, type Markets,
 } from "../analytics/accounts";
 import { avatarSrc, initials } from "../community/social";
 import TvSelect from "../components/ui/TvSelect";
 import { PlatformBadge } from "../analytics/AccountPanel";
 import { profileUrl } from "../community/social";
 
-type Tab = "manual" | "algo" | "accounts" | "followed";
+type Tab = "manual" | "algo" | "accounts" | "algos" | "followed";
 const TABS: { id: Tab; label: string; icon: React.ReactNode; intro: string }[] = [
   { id: "manual", label: "Manual backtests", icon: <Hand size={15} />,
     intro: "Backtests traded by hand in bar replay, ranked on their closed trades." },
@@ -34,6 +36,8 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode; intro: string }[] =
     intro: "Strategy Tester backtests of published strategies (public or private), ranked on their trades." },
   { id: "accounts", label: "Live accounts", icon: <BadgeCheck size={15} />,
     intro: "Real broker and prop-firm accounts, ranked on results read straight from MetaTrader 5 and cTrader." },
+  { id: "algos", label: "Live algos", icon: <Cpu size={15} />,
+    intro: "Algos trading real broker and prop-firm accounts (TradePilot algos, Expert Advisors, cBots), each ranked on its own trades." },
   { id: "followed", label: "Most followed", icon: <Users size={15} />,
     intro: "The traders most people follow: all time, or who gained the most followers lately." },
 ];
@@ -75,6 +79,7 @@ export default function LeaderboardPage() {
   const [algo, setAlgo] = useState<LbBacktestRow[] | null>(null);
   const [accounts, setAccounts] = useState<LbRow[] | null>(null);
   const [followed, setFollowed] = useState<LbFollowedRow[] | null>(null);
+  const [algos, setAlgos] = useState<LbAlgoRow[] | null>(null);
   const [market, setMarket] = useState("");
   const [markets, setMarkets] = useState<Markets | null>(null);
   const [followSort, setFollowSort] = useState<"followers" | "gained">("followers");
@@ -86,7 +91,7 @@ export default function LeaderboardPage() {
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const t = q.get("tab");
-    if (t === "algo" || t === "accounts" || t === "manual" || t === "followed") setTab(t);
+    if (t === "algo" || t === "accounts" || t === "algos" || t === "manual" || t === "followed") setTab(t);
     const m = q.get("market");
     if (m) setMarket(m);
     setReady(true);
@@ -99,6 +104,7 @@ export default function LeaderboardPage() {
     if (tab === "manual") { setManual(null); manualLeaderboard({ sort, market }).then(d => { setManual(d.rows || []); setMin(d.min_trades); }, failed); }
     else if (tab === "algo") { setAlgo(null); backtestLeaderboard({ sort, market }).then(d => { setAlgo(d.rows || []); setMin(d.min_trades); }, failed); }
     else if (tab === "accounts") { setAccounts(null); leaderboard({ period, sort, mode, market }).then(d => { setAccounts(d.rows || []); setMin(d.min_trades); }, failed); }
+    else if (tab === "algos") { setAlgos(null); algoLeaderboard({ period, sort, mode, market }).then(d => { setAlgos(d.rows || []); setMin(d.min_trades); }, failed); }
     else { setFollowed(null); followersLeaderboard({ period: followSort === "gained" && period === "all" ? "30d" : period, sort: followSort }).then(d => setFollowed(d.rows || []), failed); }
     const u = new URL(window.location.href);
     u.searchParams.set("tab", tab);
@@ -152,7 +158,7 @@ export default function LeaderboardPage() {
               )}
             </>
           )}
-          {tab === "accounts" && (
+          {(tab === "accounts" || tab === "algos") && (
             <div className="flex gap-1 overflow-x-auto max-w-full" aria-label="Period">
               {PERIODS.map(([id, label]) => <button key={id} onClick={() => setPeriod(id)} className={chip(period === id)}>{label}</button>)}
             </div>
@@ -162,7 +168,7 @@ export default function LeaderboardPage() {
               {SORTS.map(([id, label]) => <button key={id} onClick={() => setSort(id)} className={chip(sort === id)}>{label}</button>)}
             </div>
           )}
-          {tab === "accounts" && (
+          {(tab === "accounts" || tab === "algos") && (
             <div className="flex gap-1" aria-label="Accounts">
               {([["", "All"], ["real", "Real"], ["demo", "Demo / challenge"]] as const).map(([id, label]) => <button key={id} onClick={() => setMode(id)} className={chip(mode === id)}>{label}</button>)}
             </div>
@@ -189,6 +195,27 @@ export default function LeaderboardPage() {
                       {followSort === "gained" && <td className="px-2 text-right tabular-nums text-emerald-400">+{(r.gained ?? 0).toLocaleString()}</td>}
                       <td className="px-2 text-right tabular-nums">{r.posts}</td>
                       <td className="px-4 text-right tabular-nums">{r.scripts}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          ) : tab === "algos" ? (
+            algos === null ? loading : algos.length === 0 ? <Empty text={`No algos with at least ${min} closed trades${market ? ` on ${marketName}` : ""} in this period yet. Connect the account an algo trades in Analytics and put it on the leaderboard.`} /> : (
+              <table className="w-full text-sm min-w-[860px]">
+                <thead><tr className="text-left text-xs uppercase tracking-wider text-slate-400">
+                  <th className="px-4 py-3 w-12">#</th><th className="px-2">Algo</th><th className="px-2">Trader</th><th className="px-2">Account</th>{RESULT_HEADS}</tr></thead>
+                <tbody>
+                  {algos.map(r => (
+                    <tr key={r.id} className="border-t border-slate-700/40 hover:bg-white/[0.03]">
+                      <td className="px-4 py-3"><Rank n={r.rank} /></td>
+                      <td className="px-2 font-medium">{r.algo}<div className="text-xs text-slate-400 font-normal">{r.kind}</div></td>
+                      <td className="px-2"><Who name={r.name} username={r.username} /></td>
+                      <td className="px-2">
+                        <div className="flex items-center gap-1.5"><PlatformBadge platform={r.platform} /><span>{r.broker || (r.platform === "mt5" ? "MetaTrader 5" : "cTrader")}</span></div>
+                        <div className="text-xs text-slate-400">{[r.mode, r.symbols?.join(", ")].filter(Boolean).join(" · ")}</div>
+                      </td>
+                      <ResultCells r={r} />
                     </tr>
                   ))}
                 </tbody>
@@ -256,7 +283,8 @@ export default function LeaderboardPage() {
           )}
         </div>
         <p className="text-xs text-slate-500 mt-4 text-center">
-          {tab === "followed" ? "Followers are people who follow the trader on TradePilot's community. Gained: new followers in the period."
+          {tab === "algos" ? "Each algo's own trades on the account (trades placed by hand or copied from a channel left out); return is on the account's balance at the start of the period."
+            : tab === "followed" ? "Followers are people who follow the trader on TradePilot's community. Gained: new followers in the period."
             : market ? `Ranked on ${marketName} only: the other trades left out. ` + (tab === "accounts" ? "Return is on the account's balance at the start of the period." : "Return is on the backtest's starting balance.")
             : tab === "accounts"
             ? "Return is on the account's balance at the start of the period; drawdown is the largest drop from a high. Join from Analytics: connect your account, then Settings → Show on the leaderboard."

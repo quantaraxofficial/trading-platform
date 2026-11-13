@@ -95,6 +95,11 @@ export const leaderboardMarkets = () => fetch(`${BACKEND}/api/users/stats/leader
 export interface LbFollowedRow { rank: number; name: string; username: string; avatar: string; bio: string; followers: number; gained: number | null; posts: number; scripts: number }
 export const followersLeaderboard = (q: { period: LbPeriod; sort: "followers" | "gained" }) =>
   fetch(`${BACKEND}/api/users/stats/leaderboard/followers/?${new URLSearchParams(q)}`).then(r => r.json() as Promise<{ rows: LbFollowedRow[] }>);
+// Algos trading live accounts: each TradePilot algo strategy, Expert Advisor (magic number) or cBot (label), on its own trades
+export type LbAlgoRow = Omit<LbRow, "label" | "prop" | "synced_at" | "id"> & { id: string; algo: string; kind: string };
+export const algoLeaderboard = (q: { period: LbPeriod; sort: LbSort; mode?: string; market?: string }) =>
+  fetch(`${BACKEND}/api/users/stats/leaderboard/algos/?${new URLSearchParams(Object.entries(q).filter(([, v]) => v) as [string, string][])}`)
+    .then(r => r.json() as Promise<{ rows: LbAlgoRow[]; min_trades: number }>);
 export const leaderboard = (q: { period: LbPeriod; sort: LbSort; platform?: string; mode?: string; market?: string }) =>
   fetch(`${BACKEND}/api/users/stats/leaderboard/?${new URLSearchParams(Object.entries(q).filter(([, v]) => v) as [string, string][])}`)
     .then(r => r.json() as Promise<{ rows: LbRow[]; min_trades: number }>);

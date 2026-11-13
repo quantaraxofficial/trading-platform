@@ -310,13 +310,13 @@ def _top_symbols(syms, n=3):
     return [k for k, _ in sorted(counts.items(), key=lambda kv: -kv[1])[:n]]
 
 
-def metrics(acc, since_ms, market=""):
+def metrics(acc, since_ms, market="", pick=None):
     """The account's results over the period (and on one market: a symbol or a group of them, its
     other trades left out): return on its balance at the period's start, net, win rate, profit
     factor, the largest drop from a high (% of that high), trades, trading days, its main symbols"""
     trades = sorted((t for t in acc.trades or [] if t.get("exit_time")), key=lambda t: t["exit_time"])
     start = (acc.initial_balance or 0) + sum(t["pnl"] for t in trades if since_ms and t["exit_time"] < since_ms)
-    period = [t for t in trades if (not since_ms or t["exit_time"] >= since_ms) and sg.matches(t.get("symbol"), market)]
+    period = [t for t in trades if (not since_ms or t["exit_time"] >= since_ms) and sg.matches(t.get("symbol"), market) and (pick is None or pick(t))]
     if not period or start <= 0:
         return None
     wins = [t["pnl"] for t in period if t["pnl"] > 0]
@@ -508,3 +508,85 @@ def followers_leaderboard(request):
         rows.append({"rank": i + 1, "name": p.name, "username": username_of(p), "avatar": avatar_url(p), "bio": (p.bio or '')[:120],
                      "followers": p.n_followers, "gained": p.n_gained if since else None, "posts": p.n_posts, "scripts": p.n_scripts})
     return Response({"period": period if period in PERIODS else "all", "sort": sort, "rows": rows})
+
+
+# ---------------------------------------------------------------- algos trading live accounts
+
+SITE_MANUAL_MAGIC = 26092026          # an order placed by hand from the site (broker_mt5.MAGIC)
+ALGO_MAGIC_FROM, ALGO_MAGIC_TO = 26100000, 26300000   # TradePilot algo strategies (broker_algo.ALGO_MAGIC + id)
+COPY_MAGIC_FROM, COPY_MAGIC_TO = 26300000, 26400000   # copied trades (copier.COPY_MAGIC + channel)
+
+
+def algo_key(t):
+    """Which algo traded it: ("tp", strategy id), ("ea", magic) or ("cbot", label); None for a trade placed
+    by hand (magic 0, the site's own orders) or copied from a channel"""
+    label = str(t.get("label") or "").strip()
+    if label:
+        return ("cbot", label)
+    try:
+        magic = int(t.get("magic") or 0)
+    except (TypeError, ValueError):
+        return None
+    if not magic or magic == SITE_MANUAL_MAGIC or COPY_MAGIC_FROM <= magic < COPY_MAGIC_TO:
+        return None
+    if ALGO_MAGIC_FROM <= magic < ALGO_MAGIC_TO:
+        return ("tp", magic - ALGO_MAGIC_FROM)
+    return ("ea", magic)
+
+
+def _algo_name(key, trades, strategies):
+    kind, ident = key
+    if kind == "tp":
+        s = strategies.get(ident)
+        return s.name if s else f"TradePilot algo #{ident}"
+    if kind == "cbot":
+        return ident
+    # an EA: the comment its trades carry most (EAs usually write their name there), else its magic number
+    counts = {}
+    for t in trades:
+        c = str(t.get("comment") or "").strip()
+        if c and not c.lower().startswith(("sl ", "tp ", "[sl", "[tp", "so:")):
+            counts[c] = counts.get(c, 0) + 1
+    best = max(counts.items(), key=lambda kv: kv[1])[0] if counts else ""
+    return f"{best[:60]} (EA #{ident})" if best else f"EA #{ident}"
+
+
+@api_view(['GET'])
+def algo_leaderboard(request):
+    """?period= &sort= &market= &platform= &mode=: every algo trading a connected account that's on the
+    leaderboard — TradePilot's algo strategies, Expert Advisors (by magic number) and cBots (by label) —
+    ranked on its own trades (several algos on one account each count apart); at least 5 in the period"""
+    from .models import AlgoStrategy
+    from .social import username_of
+    period = request.query_params.get('period') or '30d'
+    days = PERIODS.get(period, 30)
+    since = int((time.time() - days * 86400) * 1000) if days else None
+    sort = request.query_params.get('sort') or 'return'
+    market = _market(request)
+    qs = StatsAccount.objects.filter(on_leaderboard=True).select_related('owner')
+    if request.query_params.get('platform') in ('mt5', 'ctrader'):
+        qs = qs.filter(platform=request.query_params['platform'])
+    if request.query_params.get('mode') in ('real', 'demo'):
+        qs = qs.filter(mode=request.query_params['mode'])
+    rows = []
+    for acc in qs:
+        groups = {}
+        for t in acc.trades or []:
+            k = algo_key(t)
+            if k:
+                groups.setdefault(k, []).append(t)
+        if not groups:
+            continue
+        strategies = {s.id: s for s in AlgoStrategy.objects.filter(owner=acc.owner)} if any(k[0] == "tp" for k in groups) else {}
+        for key, trades in groups.items():
+            m = metrics(acc, since, market, pick=lambda t, key=key: algo_key(t) == key)
+            if not m or m["trades"] < LEADERBOARD_MIN_TRADES:
+                continue
+            rows.append({
+                **m, "id": f"{acc.id}:{key[0]}:{key[1]}", "algo": _algo_name(key, trades, strategies),
+                "kind": {"tp": "TradePilot algo", "ea": "Expert Advisor", "cbot": "cBot"}[key[0]],
+                "name": acc.owner.name, "username": username_of(acc.owner), "platform": acc.platform, "broker": acc.broker,
+                "mode": acc.mode, "currency": acc.currency or "USD",
+            })
+    return Response({"period": period if period in PERIODS else "30d", "sort": sort, "market": market,
+                     "min_trades": LEADERBOARD_MIN_TRADES, "rows": _ranked(rows, sort)})

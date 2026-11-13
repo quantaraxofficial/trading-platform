@@ -249,3 +249,33 @@ class MarketTests(TestCase):
         self.assertEqual([(r["username"], r["followers"]) for r in rows], [("aa", 3), ("bb", 2)])
         rows = APIClient().get("/api/users/stats/leaderboard/followers/", {"period": "30d", "sort": "gained"}).json()["rows"]
         self.assertEqual([(r["username"], r["gained"]) for r in rows], [("bb", 2), ("aa", 0)])
+
+
+class AlgoBoardTests(TestCase):
+    """Each algo on a live account ranked on its own trades; manual, site-placed and copied trades left out"""
+    def test_algos_apart(self):
+        from .models import AlgoStrategy
+        now = int(time.time() * 1000)
+        p = TraderProfile.objects.create(uid="al", name="AL", email="al@test.invalid")
+        strat = AlgoStrategy.objects.create(owner=p, key="SMC|XAUUSD|15", name="SMC sweeps", symbol="XAUUSD")
+        def t(i, magic, pnl, comment="", label="", sym="XAUUSD"):
+            return {"symbol": sym, "magic": magic, "comment": comment, "label": label, "entry_time": now - (20 - i) * D - H, "exit_time": now - (20 - i) * D, "pnl": pnl}
+        trades = ([t(i, 0, 500) for i in range(6)]                                   # by hand: not an algo
+                  + [t(i, 26092026, 400) for i in range(6)]                          # placed from the site by hand
+                  + [t(i, 26300004, 300) for i in range(6)]                          # copied from a channel
+                  + [t(i, 26100000 + strat.id, 100 if i % 3 else -50) for i in range(6)]   # the site's algo
+                  + [t(i, 777, 200, "GoldBot v2") for i in range(6)]                 # an EA
+                  + [t(i, 888, 50) for i in range(3)])                               # an EA with too few trades
+        StatsAccount.objects.create(owner=p, platform="mt5", login=1, on_leaderboard=True, mode="real", trades=trades, initial_balance=10000, broker="FTMO")
+        rows = APIClient().get("/api/users/stats/leaderboard/algos/", {"period": "30d"}).json()["rows"]
+        self.assertEqual([(r["algo"], r["kind"], r["trades"], r["net"]) for r in rows],
+                         [("GoldBot v2 (EA #777)", "Expert Advisor", 6, 1200.0), ("SMC sweeps", "TradePilot algo", 6, 300.0)])
+        self.assertEqual(APIClient().get("/api/users/stats/leaderboard/algos/", {"period": "30d", "market": "forex"}).json()["rows"], [])
+
+    def test_cbots_by_label(self):
+        now = int(time.time() * 1000)
+        p = TraderProfile.objects.create(uid="cb", name="CB", email="cb@test.invalid")
+        trades = [{"symbol": "EURUSD", "label": "TrendRider", "magic": 0, "entry_time": now - (9 - i) * D - H, "exit_time": now - (9 - i) * D, "pnl": 40} for i in range(5)]
+        StatsAccount.objects.create(owner=p, platform="ctrader", login=2, on_leaderboard=True, mode="demo", trades=trades, initial_balance=5000)
+        rows = APIClient().get("/api/users/stats/leaderboard/algos/").json()["rows"]
+        self.assertEqual((rows[0]["algo"], rows[0]["kind"], rows[0]["return_pct"]), ("TrendRider", "cBot", 4.0))

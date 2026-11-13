@@ -253,6 +253,8 @@ def to_trades(deals, names):
             "exit_time": int(d.get("executionTimestamp") or d.get("createTimestamp") or 0), "exit_price": float(d.get("executionPrice") or 0),
             "profit": round(gross, 2), "commission": round(comm, 2), "swap": round(swap, 2),
             "pnl": round(gross + swap + comm, 2), "balance_after": round(_money(c.get("balance"), md), 2), "comment": d.get("comment") or "",
+            # (a cBot's label on its trades: the algo leaderboard's name for it)
+            "label": (d.get("label") or (op.get("label") if op else "") or "")[:100],
         })
     trades.sort(key=lambda t: t["exit_time"])
     for t in trades:

@@ -31,6 +31,7 @@ urlpatterns = [
     path('stats/leaderboard/manual/', stats_accounts.manual_leaderboard, name='stats_manual_leaderboard'),
     path('stats/leaderboard/markets/', stats_accounts.markets, name='stats_leaderboard_markets'),
     path('stats/leaderboard/followers/', stats_accounts.followers_leaderboard, name='stats_followers_leaderboard'),
+    path('stats/leaderboard/algos/', stats_accounts.algo_leaderboard, name='stats_algo_leaderboard'),
     path('stats/<str:uid>/accounts/', stats_accounts.accounts, name='stats_accounts'),
     path('stats/<str:uid>/accounts/<int:aid>/', stats_accounts.account, name='stats_account'),
     path('stats/<str:uid>/accounts/<int:aid>/sync/', stats_accounts.sync, name='stats_account_sync'),
