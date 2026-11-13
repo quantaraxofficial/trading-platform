@@ -403,6 +403,7 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
         <ReplayDateDialog
           intraday={intraday}
           firstDay={firstDay}
+          initial={replayPosition(intraday)}
           onCancel={() => setShowDateDialog(false)}
           onSelect={(date, time) => {
             setShowDateDialog(false);
@@ -412,6 +413,23 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
       )}
     </div>
   );
+}
+
+// Where the running replay is, as the date dialog reads dates (ChartContainer's "tv:replay-start"
+// turns a date + time into chart time the same way: local time on intraday charts, the UTC date on
+// daily ones), so "Date…" opens on it rather than on today; null when no replay is running
+function replayPosition(intraday: boolean): { date: string; time: string } | null {
+  const w = window as any;
+  const data: { time: number }[] | undefined = w.__chartFullData;
+  const idx = w.__replayVisibleCutoff;
+  const t = typeof w.__replayNow === "number" && w.__replayLive ? w.__replayNow
+    : typeof idx === "number" && data?.[idx] ? data[idx].time : null;
+  if (t == null) return null;
+  const d = new Date(t * 1000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return intraday
+    ? { date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, time: `${p(d.getHours())}:${p(d.getMinutes())}` }
+    : { date: d.toISOString().slice(0, 10), time: "00:00" };
 }
 
 // Starting-point icons (TradingView's: bar with arrow, calendar, flag, dice)

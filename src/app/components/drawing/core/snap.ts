@@ -6,6 +6,8 @@ export type MagnetMode = 'off' | 'weak' | 'strong';
 export type SnappedPoint = { logical: number; price: number; time: number | null };
 
 const WEAK_MAGNET_PX = 30;
+// Magnet off: this close to a candle's open / high / low / close, a point takes its exact price
+const PRECISION_SNAP_PX = 3;
 
 // Holding Ctrl inverts the magnet: off becomes strong, weak/strong become off
 export function effectiveMagnet(mode: MagnetMode, ctrl: boolean): MagnetMode {
@@ -46,18 +48,23 @@ export function snapToChart(chart: any, series: any, x: number, y: number, magne
   if (!candle) return { logical, price, time };
 
   let onCandle = !freehand;
+  let best = { val: rawPrice, dist: Infinity };
+  for (const val of [candle.open, candle.high, candle.low, candle.close]) {
+    const py = priceToPixel(series, val);
+    if (py === null) continue;
+    const dist = Math.abs(y - py);
+    if (dist < best.dist) best = { val, dist };
+  }
   if (magnet !== 'off') {
-    let best = { val: rawPrice, dist: Infinity };
-    for (const val of [candle.open, candle.high, candle.low, candle.close]) {
-      const py = priceToPixel(series, val);
-      if (py === null) continue;
-      const dist = Math.abs(y - py);
-      if (dist < best.dist) best = { val, dist };
-    }
     if (magnet === 'strong' || best.dist < WEAK_MAGNET_PX) {
       price = best.val;
       onCandle = true;
     }
+  } else if (!freehand && best.dist <= PRECISION_SNAP_PX) {
+    // With the magnet off a point lands on the pixel, which is a price a little off the candle's own
+    // (a Fib from a 4h high to its low ended 0.02 short of both, plain to see on 45-minute candles):
+    // within a few pixels of the candle's open / high / low / close it takes that exact price
+    price = best.val;
   }
   if (onCandle) {
     logical = idx;

@@ -25,19 +25,23 @@ function parseDate(s: string): { y: number; m: number; d: number } | null {
 }
 const validTime = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s.trim());
 
-export default function ReplayDateDialog({ intraday, firstDay, onCancel, onSelect }: {
+export default function ReplayDateDialog({ intraday, firstDay, initial: start, onCancel, onSelect }: {
   intraday: boolean;
   firstDay: string | null;   // YYYY-MM-DD of the first bar with data, once known
+  // where it opens: the replay's own date and time when one is running (else today)
+  initial?: { date: string; time: string } | null;
   onCancel: () => void;
   onSelect: (date: string, time: string) => void;
 }) {
   useEscapeClose(onCancel);
   const today = todayStr();
-  const [dateText, setDateText] = useState(today);
-  const [lastValid, setLastValid] = useState(today);
-  const [timeText, setTimeText] = useState("00:00");
-  const initial = parseDate(today)!;
-  const [view, setView] = useState({ y: initial.y, m: initial.m });
+  const opening = start && parseDate(start.date) && start.date <= today ? start.date : today;
+  const [dateText, setDateText] = useState(opening);
+  const [lastValid, setLastValid] = useState(opening);
+  const [timeText, setTimeText] = useState(start && validTime(start.time) ? start.time : "00:00");
+  const initial = parseDate(today)!;   // (the calendar goes no further than today's month)
+  const shown = parseDate(opening)!;
+  const [view, setView] = useState({ y: shown.y, m: shown.m });
 
   const inRange = (s: string) => s <= today && (!firstDay || s >= firstDay);
   const dateOk = !!parseDate(dateText) && inRange(dateText);
