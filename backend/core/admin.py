@@ -215,18 +215,57 @@ class TradeJournalAdmin(admin.ModelAdmin):
     list_filter = ("source",)
 
 
+def _india(unix_s):
+    """A unix time (seconds) as a date and time in India (the admin's time zone)"""
+    if not unix_s:
+        return "—"
+    from datetime import datetime, timezone as dt_timezone
+    return timezone.localtime(datetime.fromtimestamp(unix_s, tz=dt_timezone.utc)).strftime("%d %b %Y, %H:%M")
+
+
+def _duration(seconds):
+    """Seconds as 3 h 50 min, 6 min or 40 s"""
+    seconds = int(seconds or 0)
+    h, m = seconds // 3600, (seconds % 3600) // 60
+    if h:
+        return f"{h} h {m} min"
+    return f"{m} min" if m else f"{seconds} s"
+
+
 @admin.register(ReplaySession)
 class ReplaySessionAdmin(admin.ModelAdmin):
-    list_display = ("owner", "name", "symbol", "interval", "status", "time_spent", "updated_at")
+    list_display = ("owner", "name", "symbol", "interval", "status", "spent", "at_bar", "updated_at")
     list_filter = ("status",)
     search_fields = ("owner__name", "name", "symbol")
     exclude = ("account", "book")
+    readonly_fields = ("spent", "started_at_bar", "at_bar")
+
+    @admin.display(description="Time spent", ordering="time_spent")
+    def spent(self, obj):
+        return _duration(obj.time_spent)
+
+    @admin.display(description="Started at (bar)", ordering="start_time")
+    def started_at_bar(self, obj):
+        return _india(obj.start_time)
+
+    @admin.display(description="Now at (bar)", ordering="current_time")
+    def at_bar(self, obj):
+        return _india(obj.current_time)
 
 
 @admin.register(SavedReplay)
 class SavedReplayAdmin(admin.ModelAdmin):
-    list_display = ("owner", "symbol", "interval", "time", "saved_at")
+    list_display = ("owner", "symbol", "interval", "bar_time", "saved")
     search_fields = ("owner__name", "symbol")
+    readonly_fields = ("bar_time", "saved")
+
+    @admin.display(description="Replay at (bar)", ordering="time")
+    def bar_time(self, obj):
+        return _india(obj.time)
+
+    @admin.display(description="Saved at", ordering="saved_at")
+    def saved(self, obj):
+        return _india((obj.saved_at or 0) / 1000)
 
 
 @admin.register(CopyChannel)

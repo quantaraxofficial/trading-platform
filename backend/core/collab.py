@@ -320,6 +320,20 @@ def collab_room_summary(request, uid, token):
     return Response(room_summary(room))
 
 
+@api_view(['GET'])
+def collab_preview(request, token):
+    """What a collab link is, for its preview where it's shared (WhatsApp, Telegram…) and the invite
+    text: its name, what's shared, who invites and how many are in it. Public (whoever has the link
+    can already ask to join and see the owner's name); never the others' names. An ended collab: 404."""
+    room = CollabRoom.objects.filter(token=str(token)[:32], active=True).select_related('owner').first()
+    if not room:
+        return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+    joined = room.members.filter(Q(role='owner') | Q(last_seen__isnull=False)).count()
+    owner = room.owner.name or (room.owner.email or '').split('@')[0] or 'A trader'
+    return Response({"name": room.name, "kind": room.kind, "symbol": room.symbol, "interval": room.interval,
+                     "owner_name": owner, "people": joined})
+
+
 @api_view(['GET', 'PATCH', 'DELETE'])
 def collab_room(request, uid, token):
     """GET: opens a collab chart (joining it through the link when its access allows); ?peek=1 only

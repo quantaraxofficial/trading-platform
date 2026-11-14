@@ -725,6 +725,19 @@ Posting signals out
     Django's admin login cookie
 
 ======================================================================
+17b6. COLLAB INVITES, ADMIN TIMES
+======================================================================
+  - Collab → "Copy invite": a message to send with the link: who's inviting, the collab's name,
+    what's shared (the XAUUSD 15m chart / a Pine script), how many are in it and a few of their
+    names. "Copy link" still copies the link alone
+  - A collab link pasted in WhatsApp, Telegram and the like shows "<owner> is inviting you to collab
+    on TradePilot", the collab's name, what's shared and how many are in it (public
+    /api/users/collab/preview/<token>/: never the others' names; an ended collab shows the plain page)
+  - Django admin: backtest sessions are listed as "Backtest sessions" (the old unused telemetry table
+    is "Old telemetry sessions (unused)"), time spent as "3 h 50 min", the bars as India dates;
+    saved replays' bar and save times as India dates
+
+======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD
 ======================================================================
   - Analytics → "Connect an account": any broker or prop-firm account (FTMO, FundedNext, The5ers,

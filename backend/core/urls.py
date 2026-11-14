@@ -114,6 +114,8 @@ urlpatterns = [
     path('github/<str:uid>/files/', github.github_files, name='github_files'),
     path('github/<str:uid>/file/', github.github_file, name='github_file'),
     # Collab charts (the live part is the WebSocket in consumers.py)
+    # (before the collab/<uid>/… paths: "preview" would be taken for a uid)
+    path('collab/preview/<str:token>/', collab.collab_preview, name='collab_preview'),
     path('collab/<str:uid>/rooms/', collab.collab_rooms, name='collab_rooms'),
     path('collab/<str:uid>/ice/', turn.ice_servers, name='collab_ice'),   # voice: STUN + the TURN relay (core/turn.py)
     path('collab/<str:uid>/people/', collab.collab_people, name='collab_people'),

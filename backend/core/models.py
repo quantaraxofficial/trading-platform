@@ -130,6 +130,11 @@ class BacktestSession(models.Model):
     end_time = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
 
+    class Meta:
+        # (an early telemetry table nothing writes to now: the backtest sessions are ReplaySession)
+        verbose_name = "old telemetry session (unused)"
+        verbose_name_plural = "old telemetry sessions (unused)"
+
     def __str__(self):
         return f"{self.user.name} - {self.symbol} ({self.start_time})"
 
@@ -479,6 +484,9 @@ class ReplaySession(models.Model):
 
     class Meta:
         ordering = ['-updated_at']
+        # (the Analytics page's backtest sessions)
+        verbose_name = "backtest session"
+        verbose_name_plural = "backtest sessions"
 
 
 class SavedReplay(models.Model):

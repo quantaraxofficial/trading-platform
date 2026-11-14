@@ -14,6 +14,7 @@ import { AddPersonIcon, CloseIcon, CollabIcon, CopyIcon, GlobeIcon, LinkIcon, Lo
 import { openCollab } from "./CollabController";
 import { RoleBadge } from "./CollabList";
 import { collabRoleOf } from "../../lib/collab/roles";
+import { inviteText } from "../../lib/collab/invite";
 import TvMenu, { type TvMenuItem } from "../ui/TvMenu";
 import { displaySymbol } from "@/app/lib/symbolDisplay";
 import { ThemeEditor } from "./ChatThemeMenu";
@@ -261,7 +262,8 @@ function ManageRoom({ uid, room, onClose, setRoom, live = false, onLeft }: {
   const [menuFor, setMenuFor] = useState<{ uid: string; x: number; y: number } | null>(null);
   const [transferTo, setTransferTo] = useState<Member | null>(null);
   const link = useMemo(() => collabLink(room.token), [room.token]);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"link" | "invite" | null>(null);
+  const { user } = useAuth();
   const [chips, setChips] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [inviteRole, setInviteRole] = useState<"editor" | "viewer">(isOwner ? "editor" : "viewer");
@@ -286,8 +288,17 @@ function ManageRoom({ uid, room, onClose, setRoom, live = false, onLeft }: {
     return () => clearTimeout(t);
   }, [query, uid, room.members]);
 
-  const copy = () => {
-    navigator.clipboard?.writeText(link).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {});
+  const copy = (what: "link" | "invite") => {
+    // The invite: who's inviting, what's shared and who's in it already (the people who've joined),
+    // then the link
+    const me = room.members.find(m => m.uid === uid);
+    const inviter = me?.name || user?.displayName || "A trader";
+    const text = what === "link" ? link : inviteText({
+      inviter, room, link,
+      // (the inviter first: the one the reader knows)
+      names: [inviter, ...room.members.filter(m => !m.pending && m.uid !== uid).map(m => m.name)],
+    });
+    navigator.clipboard?.writeText(text).then(() => { setCopied(what); setTimeout(() => setCopied(null), 1500); }).catch(() => {});
   };
 
   const addChip = (value: string) => {
@@ -661,7 +672,11 @@ function ManageRoom({ uid, room, onClose, setRoom, live = false, onLeft }: {
         />
       )}
       <div className="tv-co-footer">
-        <button className="tv-co-btn secondary" onClick={copy}>{copied ? <><CopyIcon />Copied</> : <><LinkIcon />Copy link</>}</button>
+        <button className="tv-co-btn secondary" data-name="collab-copy-invite" onClick={() => copy("invite")}
+          title="Copies a message to send: who's inviting, what's shared and who's in it, with the link">
+          {copied === "invite" ? <><CopyIcon />Copied</> : <><CopyIcon />Copy invite</>}
+        </button>
+        <button className="tv-co-btn secondary" data-name="collab-copy-link" onClick={() => copy("link")}>{copied === "link" ? <><CopyIcon />Copied</> : <><LinkIcon />Copy link</>}</button>
         {isOwner && <button className="tv-co-btn danger" onClick={endCollab}>End collab</button>}
         {!isOwner && room.role && (
           <button className="tv-co-btn danger" data-name="collab-leave" onClick={async () => {
