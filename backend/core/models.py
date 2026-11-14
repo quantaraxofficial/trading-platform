@@ -488,6 +488,9 @@ class ReplaySession(models.Model):
         verbose_name = "backtest session"
         verbose_name_plural = "backtest sessions"
 
+    def __str__(self):
+        return f"{self.name or self.symbol} ({self.owner.name or self.owner.email})"
+
 
 class SavedReplay(models.Model):
     """Bar replay's "Save this replay" (when leaving one): per symbol, the bar it was on and the
@@ -500,6 +503,9 @@ class SavedReplay(models.Model):
 
     class Meta:
         unique_together = ('owner', 'symbol')
+
+    def __str__(self):
+        return f"{self.symbol} {self.interval} ({self.owner.name or self.owner.email})"
 
 
 class TradeJournal(models.Model):

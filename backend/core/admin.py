@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin
 from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest, CollabRoom, CollabMember, CollabMessage, CollabJoinRequest, GitHubLink, BrokerAccount, AlgoStrategy, AlgoLog, BacktestRun, TradeJournal, ReplaySession, SavedReplay, CopyChannel, CopySubscription, CopySignal, CopyExecution, Follow, PublishedScript, Notification
 from .models import FeedbackMessage, Payment, Earning
@@ -215,6 +216,79 @@ class TradeJournalAdmin(admin.ModelAdmin):
     list_filter = ("source",)
 
 
+class _UnixTimesForm(forms.ModelForm):
+    """Unix-time number fields edited as dates and times in India (the admin's time zone), and
+    second counts as h:mm:ss; saved back as the same numbers. UNIX: {field: 1 (seconds) or 1000
+    (milliseconds)}; SECONDS: duration fields"""
+    UNIX: dict = {}
+    SECONDS: tuple = ()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from datetime import datetime, timedelta, timezone as dt_timezone
+        from django.contrib.admin.widgets import AdminSplitDateTime
+        for name, scale in self.UNIX.items():
+            if name not in self.fields:
+                continue
+            old = self.fields[name]
+            self.fields[name] = forms.SplitDateTimeField(label=old.label, required=old.required, widget=AdminSplitDateTime,
+                                                         help_text="India time")
+            v = self.initial.get(name)
+            if isinstance(v, (int, float)) and v:
+                self.initial[name] = timezone.localtime(datetime.fromtimestamp(v / scale, tz=dt_timezone.utc))
+        for name in self.SECONDS:
+            if name not in self.fields:
+                continue
+            old = self.fields[name]
+            self.fields[name] = forms.DurationField(label=old.label, required=old.required, help_text="hours:minutes:seconds")
+            v = self.initial.get(name)
+            if isinstance(v, (int, float)):
+                self.initial[name] = timedelta(seconds=int(v))
+
+    def clean(self):
+        data = super().clean()
+        for name, scale in self.UNIX.items():
+            v = data.get(name)
+            if v is not None and hasattr(v, "timestamp"):
+                data[name] = int(round(v.timestamp() * scale))
+        for name in self.SECONDS:
+            v = data.get(name)
+            if v is not None and hasattr(v, "total_seconds"):
+                data[name] = int(v.total_seconds())
+        return data
+
+
+class ReplaySessionForm(_UnixTimesForm):
+    UNIX = {"start_time": 1, "current_time": 1, "end_time": 1}
+    SECONDS = ("time_spent",)
+    LISTS = ("rules", "tags")   # (empty is fine: saved as [])
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name in self.LISTS:
+            if name in self.fields:
+                self.fields[name].required = False
+
+    def clean(self):
+        data = super().clean()
+        for name in self.LISTS:
+            if name in self.fields and not data.get(name):
+                data[name] = []
+        return data
+
+    class Meta:
+        model = ReplaySession
+        exclude = ("account", "book")
+
+
+class SavedReplayForm(_UnixTimesForm):
+    UNIX = {"time": 1, "saved_at": 1000}
+
+    class Meta:
+        model = SavedReplay
+        fields = "__all__"
+
+
 def _india(unix_s):
     """A unix time (seconds) as a date and time in India (the admin's time zone)"""
     if not unix_s:
@@ -234,11 +308,11 @@ def _duration(seconds):
 
 @admin.register(ReplaySession)
 class ReplaySessionAdmin(admin.ModelAdmin):
+    form = ReplaySessionForm
     list_display = ("owner", "name", "symbol", "interval", "status", "spent", "at_bar", "updated_at")
     list_filter = ("status",)
     search_fields = ("owner__name", "name", "symbol")
     exclude = ("account", "book")
-    readonly_fields = ("spent", "started_at_bar", "at_bar")
 
     @admin.display(description="Time spent", ordering="time_spent")
     def spent(self, obj):
@@ -255,9 +329,9 @@ class ReplaySessionAdmin(admin.ModelAdmin):
 
 @admin.register(SavedReplay)
 class SavedReplayAdmin(admin.ModelAdmin):
+    form = SavedReplayForm
     list_display = ("owner", "symbol", "interval", "bar_time", "saved")
     search_fields = ("owner__name", "symbol")
-    readonly_fields = ("bar_time", "saved")
 
     @admin.display(description="Replay at (bar)", ordering="time")
     def bar_time(self, obj):
@@ -288,7 +362,14 @@ class CopySignalAdmin(admin.ModelAdmin):
 
 @admin.register(CopyExecution)
 class CopyExecutionAdmin(admin.ModelAdmin):
-    list_display = ("signal", "subscription", "status", "symbol", "volume", "price", "latency_ms", "created_at")
+    list_display = ("signal", "subscription", "status", "symbol", "volume", "price", "latency", "created_at")
+
+    @admin.display(description="Latency", ordering="latency_ms")
+    def latency(self, obj):
+        ms = obj.latency_ms
+        if ms is None:
+            return "—"
+        return f"{ms} ms" if ms < 1000 else f"{ms / 1000:.1f} s"
     list_filter = ("status",)
 
 
@@ -472,3 +553,56 @@ class TraderSourceAdmin(admin.ModelAdmin):
 # The admin is TradePilot's (its look: core/admin_theme)
 admin.site.site_title = "TradePilot admin"
 admin.site.site_header = "TradePilot admin"
+
+
+# ---- No raw unix times anywhere: machine-written JSON shown readable ------------------------------
+# These fields are written by the site (a chart's drawings, a collab's alerts, logs, snapshots…);
+# here they're shown read-only, laid out, with every time in them (a key like time / at / ts /
+# created_at… holding unix seconds or milliseconds) as a date and time in India
+import json as _json
+import re as _re
+
+_TIME_KEY = _re.compile(r"(^|_)(time|t|at|ts|stamp|until|since|seen|expires?|date|updated|created|opened|closed|start|end)$", _re.I)
+READABLE_JSON = {"drawings", "alerts", "action_data", "market_state", "stats_snapshot", "data", "arrival", "attachment"}
+
+
+def _readable_value(v, key=""):
+    if isinstance(v, dict):
+        return {k: _readable_value(x, str(k)) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_readable_value(x, key) for x in v]
+    if isinstance(v, (int, float)) and not isinstance(v, bool) and key and _TIME_KEY.search(key):
+        if 1e9 <= v < 1e10:
+            return _india(v) + " IST"
+        if 1e12 <= v < 1e13:
+            return _india(v / 1000) + " IST"
+    return v
+
+
+def _json_block(value):
+    if value in (None, "", [], {}):
+        return "—"
+    text = _json.dumps(_readable_value(value), indent=2, ensure_ascii=False, default=str)
+    return format_html('<pre style="white-space:pre-wrap;max-height:420px;overflow:auto;margin:0;font-size:12px">{}</pre>', text)
+
+
+def _readable_json_fields(site):
+    for model, model_admin in list(site._registry.items()):
+        if model._meta.app_label != "core":
+            continue
+        excluded = set(model_admin.exclude or ())
+        names = [f.name for f in model._meta.fields
+                 if f.get_internal_type() == "JSONField" and f.name in READABLE_JSON and f.name not in excluded]
+        if not names:
+            continue
+        shown = []
+        for name in names:
+            def show(obj, _name=name):
+                return _json_block(getattr(obj, _name, None))
+            show.short_description = model._meta.get_field(name).verbose_name
+            shown.append(show)
+        model_admin.exclude = tuple(excluded) + tuple(names)
+        model_admin.readonly_fields = tuple(model_admin.readonly_fields or ()) + tuple(shown)
+
+
+_readable_json_fields(admin.site)

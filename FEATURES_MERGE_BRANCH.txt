@@ -736,6 +736,12 @@ Posting signals out
   - Django admin: backtest sessions are listed as "Backtest sessions" (the old unused telemetry table
     is "Old telemetry sessions (unused)"), time spent as "3 h 50 min", the bars as India dates;
     saved replays' bar and save times as India dates
+  - No raw unix times anywhere in Django admin: a backtest session's start / current / end bars are
+    edited as India dates and times and its time spent as h:mm:ss (saved back as the same numbers);
+    a saved replay's times the same; machine-written JSON (drawings, alerts, logs, snapshots,
+    notification data, arrival, attachments) shown read-only and laid out, its times as India dates;
+    copy-trade latency as ms / s; pages titled by name ("XAUUSD (Aditya Singh)"), not "object (2)";
+    a session with no rules or tags can be saved
 
 ======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD
