@@ -20,6 +20,8 @@ export const MARK_NAMES: Record<MarkKind, string> = {
   premium_discount: "premium and discount zones", breakers: "breaker blocks", bpr: "balanced price ranges", displacement: "displacement candles",
   killzones: "kill zones", key_levels: "key levels", swing_points: "swing points", trendlines: "trend lines", supply_demand: "supply and demand zones",
   candle_patterns: "candle patterns", chart_patterns: "chart patterns", ranges: "ranges",
+  msnr_levels: "MSNR A and V levels", msnr_gaps: "MSNR gap levels", msnr_flips: "SBR and RBS levels", msnr_qm: "Quasimodo levels",
+  msnr_compression: "compressions",
 };
 const GROUP_NAMES: Record<MarkKind, string> = {
   order_blocks: "Order blocks", fvg: "Fair value gaps", ifvg: "Inverse FVGs", support_resistance: "Support / resistance", structure: "BOS / CHoCH",
@@ -27,6 +29,8 @@ const GROUP_NAMES: Record<MarkKind, string> = {
   bpr: "Balanced price ranges", displacement: "Displacement", killzones: "Kill zones", key_levels: "Key levels (PDH / PDL / PWH / PWL)",
   swing_points: "Swing points (HH / HL / LH / LL)", trendlines: "Trend lines", supply_demand: "Supply / demand", candle_patterns: "Candle patterns",
   chart_patterns: "Chart patterns", ranges: "Ranges",
+  msnr_levels: "MSNR A / V levels", msnr_gaps: "MSNR gap levels", msnr_flips: "MSNR SBR / RBS", msnr_qm: "MSNR QM (Quasimodo)",
+  msnr_compression: "MSNR compression (CP)",
 };
 export const GROUP_PREFIX = "voice-marks-";
 const groupId = (k: MarkKind) => `${GROUP_PREFIX}${k}`;
@@ -41,9 +45,12 @@ const COLORS: Record<string, Record<Zone["side"], string>> = {
   kz: { bull: "#42a5f5", bear: "#ffa726" }, key: { bull: "#546e7a", bear: "#546e7a" }, swing: { bull: GREEN, bear: RED },
   trend: { bull: GREEN, bear: RED }, sd: { bull: GREEN, bear: RED }, candle: { bull: GREEN, bear: RED },
   pattern: { bull: "#2962ff", bear: "#e91e63" }, neck: { bull: "#787b86", bear: "#787b86" }, range: { bull: "#9e9e9e", bear: "#9e9e9e" },
+  // MSNR: fresh levels strong, unfresh ones muted; flips, QM and compression each their own
+  msnr: { bull: GREEN, bear: RED }, msnr_gap: { bull: "#00acc1", bear: "#fb8c00" }, msnr_old: { bull: "#80cbc4", bear: "#ef9a9a" },
+  msnr_flip: { bull: "#26a69a", bear: "#ef5350" }, msnr_qm: { bull: "#7e57c2", bear: "#ab47bc" }, msnr_cp: { bull: "#fbc02d", bear: "#fbc02d" },
 };
 // Box fill (alpha) by kind: the wide context zones lighter
-const FILL: Record<string, string> = { sr: "22", pd: "14", kz: "1c", range: "1c", ote: "2a" };
+const FILL: Record<string, string> = { sr: "22", pd: "14", kz: "1c", range: "1c", ote: "2a", msnr_gap: "26", msnr_old: "14", msnr_cp: "1c" };
 
 // The bars to look at: what's on screen, and at least 150 bars back from its right edge
 function analysisStart(bars: { length: number }): number {
@@ -72,6 +79,14 @@ function summarise(kind: MarkKind, zones: Zone[]): string {
     case "premium_discount": return "the premium and discount zones, equilibrium and the OTE zone of the current dealing range";
     case "killzones": case "key_levels": case "candle_patterns": case "chart_patterns": case "swing_points": detail = labels(z => z.shape !== "line" || kind === "key_levels"); break;
     case "poi": detail = shown.map(z => z.label.replace("POI · ", "")).join("; "); break;
+    case "msnr_levels": case "msnr_gaps": {
+      const fresh = n(z => /fresh/.test(z.label) && !/unfresh/.test(z.label));
+      detail = `${n(z => z.side === "bear")} resistance above, ${n(z => z.side === "bull")} support below; ${fresh} fresh`;
+      break;
+    }
+    case "msnr_flips": detail = `${n(z => z.side === "bull")} RBS, ${n(z => z.side === "bear")} SBR`; break;
+    case "msnr_qm": return `${n(z => z.shape === "line")} Quasimodo level${n(z => z.shape === "line") === 1 ? "" : "s"} (${n(z => z.shape === "line" && z.side === "bear")} sell, ${n(z => z.shape === "line" && z.side === "bull")} buy)`;
+    case "msnr_compression": detail = shown.map(z => z.label.replace("CP → A", "into resistance").replace("CP → V", "into support")).join("; "); break;
     default: detail = `${n(z => z.side === "bull")} bullish, ${n(z => z.side === "bear")} bearish`;
   }
   return `${count} ${count === 1 ? one : name}${detail ? ` (${detail})` : ""}`;

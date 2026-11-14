@@ -787,6 +787,19 @@ Posting signals out
     without an end still shows the whole line
 
 ======================================================================
+17b9. VOICE ASSISTANT: MALAYSIAN SNR (MSNR)
+======================================================================
+  - The voice assistant knows MSNR and explains it: levels from candle bodies on the line chart (A
+    levels: resistance, V levels: support), gap levels, fresh / unfresh (a wick touch) / broken (only
+    a body close), SBR / RBS role reversal, QM (Quasimodo / QML), compression (CP), the storyline
+    (higher timeframes first) and how traders use them (entry, stop, target)
+  - "Mark MSNR" / "Mark the Malaysian SNR" (or each one: A and V levels, gap levels, SBR / RBS, QM,
+    compression) marks them from the chart's bars, each kind its own Object tree group: fresh levels
+    solid, unfresh dashed and lighter with their touches, flips with their retests, QML with its head,
+    CP boxes into the level; levels of a kind within 0.2 ATR drawn once ("+2"); it says what it found
+    (how many, resistance above / support below, how many fresh)
+
+======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD
 ======================================================================
   - Analytics → "Connect an account": any broker or prop-firm account (FTMO, FundedNext, The5ers,

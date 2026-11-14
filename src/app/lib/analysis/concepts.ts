@@ -41,22 +41,31 @@
 //                     the middle one highest, the shoulders within 0.5 ATR), with their necklines;
 //                     "confirmed" once a close breaks the neckline
 //   Ranges            consolidation: at least 12 bars inside 2.5 ATR of high-to-low
+// MSNR (Malaysian support and resistance: ./msnr, levels from candle bodies on the line chart)
+//   A / V levels      line-chart peaks (A, resistance) and troughs (V, support), fresh or unfresh
+//   Gap levels        open-close gaps (a close and the next open apart)
+//   SBR / RBS         broken levels that flipped (role reversal), untested or retested
+//   QM                Quasimodo levels (the left shoulder of H L HH LL, or L H LL HH)
+//   Compression       CP: small overlapping candles drifting into a fresh level
 
 import {
   atr, swings, swingSize, fairValueGaps, inverseFairValueGaps, marketStructure, orderBlocks, allOrderBlocks, supportResistance,
   type Bar, type Side, type Zone,
 } from "./smc";
 import { candlePatterns } from "./candles";
+import { msnrAV, msnrCompression, msnrFlips, msnrGaps, msnrQuasimodo } from "./msnr";
 
 export type MarkKind =
   | "order_blocks" | "fvg" | "ifvg" | "support_resistance" | "structure"
   | "poi" | "liquidity" | "sweeps" | "premium_discount" | "breakers" | "bpr" | "displacement" | "killzones" | "key_levels"
-  | "swing_points" | "trendlines" | "supply_demand" | "candle_patterns" | "chart_patterns" | "ranges";
+  | "swing_points" | "trendlines" | "supply_demand" | "candle_patterns" | "chart_patterns" | "ranges"
+  | "msnr_levels" | "msnr_gaps" | "msnr_flips" | "msnr_qm" | "msnr_compression";
 
 export const ALL_MARK_KINDS: MarkKind[] = [
   "order_blocks", "fvg", "ifvg", "support_resistance", "structure",
   "poi", "liquidity", "sweeps", "premium_discount", "breakers", "bpr", "displacement", "killzones", "key_levels",
   "swing_points", "trendlines", "supply_demand", "candle_patterns", "chart_patterns", "ranges",
+  "msnr_levels", "msnr_gaps", "msnr_flips", "msnr_qm", "msnr_compression",
 ];
 
 export function analyse(kind: MarkKind, bars: Bar[], from: number, opts: { patterns?: string[] } = {}): Zone[] {
@@ -81,6 +90,11 @@ export function analyse(kind: MarkKind, bars: Bar[], from: number, opts: { patte
     case "candle_patterns": return candlePatterns(bars, from, { patterns: opts.patterns });
     case "chart_patterns": return chartPatterns(bars, from);
     case "ranges": return ranges(bars, from);
+    case "msnr_levels": return msnrAV(bars, from);
+    case "msnr_gaps": return msnrGaps(bars, from);
+    case "msnr_flips": return msnrFlips(bars, from);
+    case "msnr_qm": return msnrQuasimodo(bars, from);
+    case "msnr_compression": return msnrCompression(bars, from);
   }
 }
 
