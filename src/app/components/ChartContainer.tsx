@@ -336,6 +336,7 @@ import type { DateRangeSpan } from "./BottomPanel";
 import { detectPrecision, simulatedQuote } from "@/app/utils/pricePrecision";
 import { feedTimeToUnix } from "../utils/feedTime";
 import { backendFetch } from "@/lib/backend";
+import { fetchVantageCandles, isVantageSymbol, vantageBarEnd, vantageBarTime, vantageInterval, vantageServing } from "../lib/vantageFeed";
 import { CollabIcon } from "./collab/icons";
 import { useCollabAlerts } from "../lib/collab/session";
 export { getCacheKey, getCachedData, setCachedData } from "../lib/stockDataCache";
@@ -360,6 +361,18 @@ export function fetchStockData(symbol: string = 'AAPL', interval: string = '1min
 }
 
 async function fetchStockDataUncached(symbol: string = 'AAPL', interval: string = '1min', endDate?: string, lastPrice?: number, startDate?: string) {
+  // Our own gold and forex pairs (Vantage, lib/vantageFeed): our server's candles on every timeframe,
+  // never a browser cache. Once the store has answered in this page, a failed request is retried
+  // and then nothing is shown rather than TwelveData's other prices; where the store isn't set up
+  // (no ClickHouse) the chart uses TwelveData as before
+  if (isVantageSymbol(symbol) && vantageInterval(interval)) {
+    for (const wait of vantageServing(symbol) ? [0, 700, 2000] : [0]) {
+      if (wait) await new Promise(r => setTimeout(r, wait));
+      const bars = await fetchVantageCandles(symbol, interval, endDate, startDate);
+      if (bars) return bars;
+    }
+    if (vantageServing(symbol)) return [];
+  }
   const cacheKey = getCacheKey(symbol, interval, endDate, startDate);
   
   // Check cache first
@@ -841,7 +854,9 @@ export default function ChartContainer({
       if (!data || data.length === 0 || !series || !chart || modeRef.current !== 'idle') { if (countdownRef.current) setCountdown(null); return; }
       const last = data[data.length - 1];
       // (the short bar before a 4-hour boundary — 45m's last of each four hours — ends there: lib/barBlocks)
-      const barEnd = blockBarEnd(intervalRef.current, last.time) ?? last.time + Math.floor(getIntervalMs(intervalRef.current) / 1000);
+      // (our own feed's bars end on its own session boundaries: lib/vantageFeed)
+      const barEnd = (vantageServing(symbolRef.current) ? vantageBarEnd(intervalRef.current, last.time) : null)
+        ?? blockBarEnd(intervalRef.current, last.time) ?? last.time + Math.floor(getIntervalMs(intervalRef.current) / 1000);
       const remain = barEnd - toChartTime(symbolRef.current, Date.now());
       const y = series.priceToCoordinate(last.close);
       const width = mainPriceScale(chart).width();
@@ -2802,14 +2817,26 @@ export default function ChartContainer({
       if (!(step > 0)) return;
       const last = bars[bars.length - 1];
       const t = toChartTime(d.symbol, d.time);
+      // A batch of ticks carries its own high / low (and first price, for a bar it opens)
+      const hi = Math.max(d.price, typeof d.high === 'number' ? d.high : d.price);
+      const lo = Math.min(d.price, typeof d.low === 'number' ? d.low : d.price);
+      const vol = (b: any) => (typeof d.ticks === 'number' && typeof b.volume === 'number' ? b.volume + d.ticks : b.volume);
+      // Our own feed's bars (Vantage) start on its own boundaries (17:00 New York sessions), so the
+      // bar a tick belongs to is computed, not stepped
+      const start = d.source === 'vantage' && vantageServing(d.symbol) ? vantageBarTime(intervalRef.current, d.time) : null;
       // (45m and the like: the bar before a 4-hour boundary is short, the next starts on it: lib/barBlocks)
       const end = blockBarEnd(intervalRef.current, last.time) ?? last.time + step;
       let bar: any;
       let opened = false;
-      if (t >= last.time && t < end) {
-        bar = { ...last, high: Math.max(last.high, d.price), low: Math.min(last.low, d.price), close: d.price };
+      if (start !== null ? start === last.time : t >= last.time && t < end) {
+        bar = { ...last, high: Math.max(last.high, hi), low: Math.min(last.low, lo), close: d.price, volume: vol(last) };
         bars[bars.length - 1] = bar;
-      } else if (step < 86400 && t >= end && t < end + step) {
+      } else if (start !== null && start > last.time) {
+        const open = typeof d.open === 'number' ? d.open : d.price;
+        bar = { time: start, open, high: Math.max(open, hi), low: Math.min(open, lo), close: d.price, volume: d.ticks };
+        bars.push(bar);
+        opened = true;
+      } else if (start === null && step < 86400 && t >= end && t < end + step) {
         bar = { time: end, open: last.close, high: Math.max(last.close, d.price), low: Math.min(last.close, d.price), close: d.price };
         bars.push(bar);
         opened = true;
@@ -2821,9 +2848,13 @@ export default function ChartContainer({
         if (volumeSeriesRef.current) volumeSeriesRef.current.setData(volumeHistogram(fullDataRef.current, volumeConfigRef.current.upColor, volumeConfigRef.current.downColor));
       } else {
         try { cs.update(bar); } catch { return; }
+        const vs = volumeSeriesRef.current;
+        const vp = vs && typeof bar.volume === 'number'
+          ? volumeHistogram([bar], volumeConfigRef.current.upColor, volumeConfigRef.current.downColor)[0] : null;
+        if (vs && vp) { try { vs.update(vp); } catch { /* the volume pane is being rebuilt */ } }
       }
       updateEmaData(fullDataRef.current);
-      setLastPriceData({ price: d.price, prevPrice: titleBaseClose(bars, intervalRef.current) ?? (bars.length > 1 ? bars[bars.length - 2].close : d.price) });
+      setLastPriceData({ price: d.price, prevPrice: titleBaseClose(bars, intervalRef.current, symbolRef.current) ?? (bars.length > 1 ? bars[bars.length - 2].close : d.price) });
       // Script execution "On realtime bar tick": the strategy recalculates on each real-time update
       // (at most every 1.5 s, one run at a time)
       // (and, whatever that setting, on each bar's close: the new bar opening closes the last one)
@@ -3127,7 +3158,7 @@ export default function ChartContainer({
       if (stockData.length > 1) {
         setLastPriceData({
           price: stockData[stockData.length - 1].close,
-          prevPrice: titleBaseClose(stockData, intervalRef.current) ?? stockData[stockData.length - 2].close
+          prevPrice: titleBaseClose(stockData, intervalRef.current, symbolRef.current) ?? stockData[stockData.length - 2].close
         });
       }
 
@@ -3365,7 +3396,7 @@ export default function ChartContainer({
         if (stockData.length > 1) {
           setLastPriceData({
             price: stockData[stockData.length - 1].close,
-            prevPrice: titleBaseClose(stockData, intervalRef.current) ?? stockData[stockData.length - 2].close
+            prevPrice: titleBaseClose(stockData, intervalRef.current, symbolRef.current) ?? stockData[stockData.length - 2].close
           });
         }
         return stockData;
@@ -3805,7 +3836,7 @@ export default function ChartContainer({
           if (stockData.length > 1) {
             setLastPriceData({
               price: stockData[stockData.length - 1].close,
-              prevPrice: titleBaseClose(stockData, intervalRef.current) ?? stockData[stockData.length - 2].close
+              prevPrice: titleBaseClose(stockData, intervalRef.current, symbolRef.current) ?? stockData[stockData.length - 2].close
             });
           }
 
@@ -5297,11 +5328,12 @@ function previousDayClose(bars: { time: number; close: number }[], idx: number, 
 // The tab title's change is since the previous trading day's close, as on TradingView (the bar
 // before the last one moved it by ~0.00% on a minute chart). A day: the UTC date; daily and longer
 // bars compare with the bar before.
-function titleBaseClose(bars: { time: number; close: number }[], interval: string): number | null {
+function titleBaseClose(bars: { time: number; close: number }[], interval: string, symbol = ''): number | null {
   const n = bars.length;
   if (n < 2) return null;
   if (/day|week|month/.test(interval)) return bars[n - 2].close;
-  const dayOf = (t: number) => Math.floor(t / 86400);
+  // (our own feed's days start at 17:00 New York: lib/vantageFeed)
+  const dayOf = (t: number) => (vantageServing(symbol) ? vantageBarTime("1day", t * 1000) : null) ?? Math.floor(t / 86400) * 86400;
   const today = dayOf(bars[n - 1].time);
   for (let i = n - 2; i >= 0; i--) if (dayOf(bars[i].time) !== today) return bars[i].close;
   return null;

@@ -29,6 +29,9 @@ export interface Quote {
 }
 
 // Forex and metals trade Sunday 22:00 to Friday 22:00 UTC, whatever the upstream flag says
+// Our own gold (Vantage's, lib/vantageFeed): open by Vantage's hours once our store answers
+import { fetchVantageCandles, isVantageSymbol, vantageMarketOpen, vantageServing } from "../../lib/vantageFeed";
+
 function forexOpenNow(): boolean {
   const now = new Date(), day = now.getUTCDay(), hour = now.getUTCHours();
   if (day === 6) return false;
@@ -53,7 +56,7 @@ export function parseQuote(sym: string, d: any): Quote | null {
     volume: num(d.volume), averageVolume: num(d.average_volume),
     week52: d.fifty_two_week && num(d.fifty_two_week.low) !== undefined ? { low: num(d.fifty_two_week.low)!, high: num(d.fifty_two_week.high)! } : undefined,
     lastUpdate: num(d.last_quote_at) ?? num(d.timestamp),
-    isMarketOpen: d.exchange === "Forex" ? forexOpenNow() : !!d.is_market_open,
+    isMarketOpen: isVantageSymbol(sym) && vantageServing(sym) ? vantageMarketOpen(Date.now()) : d.exchange === "Forex" ? forexOpenNow() : !!d.is_market_open,
   };
 }
 
@@ -67,6 +70,22 @@ function cache(sym: string, q: Quote) { try { localStorage.setItem(ROW_KEY + sym
 // After the data plan's per-minute limit is hit, row fetches wait a minute
 let limitedUntil = 0;
 export async function fetchQuote(sym: string): Promise<Quote | null> {
+  // Our own gold (Vantage's, the chart's prices): its price, change and day from our own candles; the
+  // other feed's quote only for its name and exchange (when it answers)
+  // (where the store isn't set up, the other feed's quote as before)
+  if (isVantageSymbol(sym)) {
+    let meta: any = null;
+    if (Date.now() >= limitedUntil) {
+      try {
+        const d = await (await fetch(`/api/quote?symbol=${encodeURIComponent(sym)}`)).json();
+        if (!d.error) meta = d;
+        else if (/limit|credits/i.test(String(d.error))) limitedUntil = Date.now() + 60000;
+      } catch { /* name only */ }
+    }
+    const q = await vantageQuote(sym, meta);
+    if (q) { cache(sym, q); if (meta) rememberFromQuote(sym, meta, q.isMarketOpen); }
+    return q;
+  }
   try {
     const d = await (await fetch(`/api/quote?symbol=${encodeURIComponent(sym)}`)).json();
     if (d.error) { if (/limit|credits/i.test(String(d.error))) limitedUntil = Date.now() + 60000; return null; }
@@ -74,6 +93,32 @@ export async function fetchQuote(sym: string): Promise<Quote | null> {
     if (q) { cache(sym, q); rememberFromQuote(sym, d, q.isMarketOpen); }
     return q;
   } catch { return null; }
+}
+
+// A quote from our own candles: the last price, the change from the previous day's close, the day's
+// open / high / low and its tick volume, the 52-week range, and when the last price came (the end of
+// the last minute with prices)
+async function vantageQuote(sym: string, meta: any): Promise<Quote | null> {
+  const days = await fetchVantageCandles(sym, "1day");
+  if (!days || !days.length) return meta ? parseQuote(sym, meta) : null;
+  const day = days[days.length - 1], prev = days.length > 1 ? days[days.length - 2] : null;
+  // (the last day's minutes only: a daily bar is labelled with its date at 00:00 UTC)
+  const mins = await fetchVantageCandles(sym, "1min", undefined, new Date(day.time * 1000).toISOString().slice(0, 10));
+  const lastMin = mins && mins.length ? mins[mins.length - 1] : null;
+  const close = lastMin ? lastMin.close : day.close;
+  const year = days.slice(-260);
+  const base = meta ? parseQuote(sym, meta) : null;
+  return {
+    symbol: base?.symbol || sym, name: base?.name || sym, exchange: base?.exchange || "", currency: base?.currency || "USD",
+    close,
+    change: prev ? close - prev.close : 0,
+    percentChange: prev && prev.close ? ((close - prev.close) / prev.close) * 100 : 0,
+    open: day.open, high: Math.max(day.high, close), low: Math.min(day.low, close), previousClose: prev?.close,
+    volume: day.volume, averageVolume: base?.averageVolume,
+    week52: { low: Math.min(...year.map(b => b.low)), high: Math.max(...year.map(b => b.high)) },
+    lastUpdate: lastMin ? lastMin.time + 60 : base?.lastUpdate,
+    isMarketOpen: vantageMarketOpen(Date.now()),
+  };
 }
 
 // Row quotes, one request at a time (at most 3 a minute), refreshed after 15 minutes. The chart's
@@ -188,17 +233,26 @@ export function useDetailsAnalytics(symbol: string): DetailsAnalytics | null {
     setA(null);
     (async () => {
       try {
-        const d = await (await fetch(`/api/stock-data?symbol=${encodeURIComponent(symbol)}&interval=1day&outputsize=800`)).json();
-        if (cancelled || !Array.isArray(d.values)) return;
-        const bars: DailyBar[] = d.values.map((x: any) => ({
-          time: feedTimeToUnix(x.datetime), open: +x.open, high: +x.high, low: +x.low, close: +x.close,
-          volume: x.volume != null ? +x.volume : undefined,
-        })).reverse();
+        // Our own gold and forex pairs (Vantage): the same daily bars their chart shows, from our own
+        // store; the rest (and these where the store isn't set up) from TwelveData
+        const own = isVantageSymbol(symbol) ? await fetchVantageCandles(symbol, "1day") : null;
+        let bars: DailyBar[];
+        if (own && own.length) {
+          bars = own.map(b => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume }));
+        } else {
+          const d = await (await fetch(`/api/stock-data?symbol=${encodeURIComponent(symbol)}&interval=1day&outputsize=800`)).json();
+          if (cancelled || !Array.isArray(d.values)) return;
+          bars = d.values.map((x: any) => ({
+            time: feedTimeToUnix(x.datetime), open: +x.open, high: +x.high, low: +x.low, close: +x.close,
+            volume: x.volume != null ? +x.volume : undefined,
+          })).reverse();
+        }
+        if (cancelled) return;
         const vols = bars.slice(-30).map(b => b.volume).filter((x): x is number => x != null && x > 0);
         const v: DetailsAnalytics = {
           perf: performance(bars), seasonals: seasonals(bars), rating: technicalRating(bars),
           avgVolume30: vols.length === Math.min(30, bars.length) && vols.length ? vols.reduce((a, b) => a + b, 0) / vols.length : undefined,
-          // the latest session's volume, for quotes without one
+          // the latest session's volume (our gold's: its ticks, as OANDA's on TradingView), for quotes without one
           dayVolume: bars.length && bars[bars.length - 1].volume ? bars[bars.length - 1].volume : undefined,
         };
         // Seasonals are thinned for the cache (one point in three is plenty for the small chart)

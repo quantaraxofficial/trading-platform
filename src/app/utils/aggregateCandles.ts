@@ -63,6 +63,11 @@ export function aggregateFromMinuteData(
   return result;
 }
 
+// Our own feed's symbols (Vantage: XAUUSD…) are never built or kept here: the server builds every
+// timeframe on Vantage's own sessions (17:00 New York), with volume; these UTC-aligned 1m
+// aggregates would show different candles
+import { isVantageSymbol } from "@/app/lib/vantageFeed";
+
 // LocalStorage helpers for aggregated cache
 const AGG_CACHE_PREFIX = 'tv_agg2_';   // (2: bar times are real UTC now)
 
@@ -71,6 +76,7 @@ export function getAggCacheKey(symbol: string, interval: string): string {
 }
 
 export function getAggCachedData(symbol: string, interval: string): CandleData[] | null {
+  if (isVantageSymbol(symbol)) return null;
   try {
     const key = getAggCacheKey(symbol, interval);
     const raw = localStorage.getItem(key);
@@ -87,6 +93,7 @@ export function getAggCachedData(symbol: string, interval: string): CandleData[]
 }
 
 export function setAggCachedData(symbol: string, interval: string, data: CandleData[]): void {
+  if (isVantageSymbol(symbol)) return;
   try {
     const key = getAggCacheKey(symbol, interval);
     let merged = data;
@@ -109,6 +116,7 @@ export function setAggCachedData(symbol: string, interval: string, data: CandleD
 }
 
 export function precomputeAllTimeframes(symbol: string, minuteData: CandleData[]): void {
+  if (isVantageSymbol(symbol)) return;
   setTimeout(() => {
     const start = performance.now();
     for (const [interval, minutes] of Object.entries(AGGREGATABLE_INTERVALS)) {

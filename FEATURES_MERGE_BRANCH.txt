@@ -670,6 +670,22 @@ Posting signals out
     2h, 3h and longer are unchanged. (Unlike TradingView, whose 45m candles run across them.)
 
 ======================================================================
+17b3. OUR OWN GOLD AND FOREX PRICES (VANTAGE, as on the live site)
+======================================================================
+  - Gold (XAUUSD) and EUR/USD, GBP/USD, USD/JPY, USD/CHF, USD/CAD, AUD/USD come from our own store
+    (Vantage's MT5 prices, the live site's): every timeframe's candles (bars on Vantage's sessions,
+    17:00 New York; 45m and the like restart at each of its 4-hour boundaries), live ticks over the
+    WebSocket ws/ticks/<symbol>/, the bar-close countdown, Pine's other timeframes, paper trading's
+    prices and the symbol details card (price and change from the previous day's close, day range,
+    tick volume against its 30-day average, 52-week range, last update, Performance / Seasonals /
+    Technicals, market open by Vantage's hours)
+  - Backend: /api/users/live/candles/, /live/ingest/ (the MT5 collector's posts, X-Ingest-Token),
+    /live/ticks/ (raw ticks); the collector and backfills are in backend/pipeline/
+  - Where the store isn't set up (no ClickHouse: a development machine) these symbols use TwelveData
+    as before; once the store has answered in a page, a failed request shows nothing rather than
+    TwelveData's other prices
+
+======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD
 ======================================================================
   - Analytics → "Connect an account": any broker or prop-firm account (FTMO, FundedNext, The5ers,
@@ -749,6 +765,9 @@ Posting signals out
   - Copy trading: run "python manage.py run_copier" on the copier server (MT5 installed)
   - Market data: TWELVEDATA_API_KEY (8 requests a minute on the free plan; the optimizer
     waits these out automatically)
+  - Our own gold / forex prices (17b3): ClickHouse (CLICKHOUSE_HOST, CLICKHOUSE_PORT,
+    CLICKHOUSE_DATABASE, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD) and LIVE_INGEST_TOKEN (32+ characters) for
+    the MT5 collector (backend/pipeline/start_live_collector.ps1); without them TwelveData
   - Voice assistant AI: set GROQ_API_KEY (free at console.groq.com) and / or GEMINI_API_KEY (free
     at aistudio.google.com) in backend/quantarax_backend/.env; optional GROQ_MODEL,
     GEMINI_MODEL, VOICE_AI_DAILY_LIMIT (default 100 per user per day). Without a key the

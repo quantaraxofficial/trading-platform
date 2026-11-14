@@ -3,9 +3,14 @@
 // the page is visible, and only the symbols that matter: the chart's and any symbol with an
 // open position or working order (or an active alert), one request every few seconds. Each price goes to the
 // engine (fills, P&L), to the chart (live last candle) and to the watchlist.
+//
+// Our own feed's symbols (Vantage: XAUUSD…) stream tick by tick over our own WebSocket
+// (lib/vantageFeed) instead, once the store answers; both feed the same "tv:live-price" event
+// the chart already listens for.
 
 import { engine, tradingUi } from "./store";
 import { rememberFromQuote } from "../utils/symbolInfo";
+import { isVantageSymbol, vantageServing, watchVantageSymbols } from "../lib/vantageFeed";
 
 const POLL_MS = 60000;
 const SPACING_MS = 7000;
@@ -72,7 +77,7 @@ export function startQuoteFeed(): () => void {
     await sleep(FIRST_POLL_MS);
     while (!stopped) {
       if (document.visibilityState === "visible" && Date.now() >= backoffUntil) {
-        for (const sym of symbolsToWatch()) {
+        for (const sym of symbolsToWatch().filter(s => !(isVantageSymbol(s) && vantageServing(s)))) {
           if (stopped || Date.now() < backoffUntil) break;
           await fetchOne(sym);
           await sleep(SPACING_MS);
@@ -83,5 +88,8 @@ export function startQuoteFeed(): () => void {
   };
   loop();
 
-  return () => { stopped = true; if (timer) clearTimeout(timer); };
+  // The streamed symbols follow the watch list (chart symbol, positions, orders, alerts)
+  const streams = setInterval(() => watchVantageSymbols(symbolsToWatch().filter(vantageServing)), 2000);
+
+  return () => { stopped = true; if (timer) clearTimeout(timer); clearInterval(streams); watchVantageSymbols([]); };
 }
