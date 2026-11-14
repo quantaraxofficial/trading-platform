@@ -864,6 +864,16 @@ Posting signals out
     "no lean". Also said: the target (the nearest liquidity its way), where it's wrong, and a usual
     move. Drawn: the window read, the window ahead, and the target and invalidation lines. During a
     replay it reads only up to the replay bar. "Clear the bias" removes the drawings
+  - Copy a chart's theme from a picture: send a screenshot in the voice panel (the picture button by
+    the text box, a paste or a drop) and say or type "make my chart look like this". The site reads
+    the colours from the picture's pixels, not a guess by the AI: the background (solid or a
+    gradient), grid lines, scale text and separator lines, the candles' body / border / wick colours,
+    and the light / dark page around the chart. It tells up candles from down ones by how the candles
+    join (each opens where the one before closed), so white / black or blue / orange work too. Volume
+    bars, legends and panels' text are ignored. Compressed (JPEG) screenshots work; their thin
+    text's colour is left as it was. Applied at once and said ("Copied from your picture: background
+    #dbdbdb, …"), then "Keep it?": no puts the colours and page theme back, yes keeps them (they're
+    in Settings like any colours). "Only the candle colours" / "only the background" copy just that part
 
 ======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD

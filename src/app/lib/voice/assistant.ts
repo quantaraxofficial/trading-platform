@@ -30,6 +30,7 @@ import { backendFetch } from "@/lib/backend";
 import { tradingUi } from "../../trading/store";
 import { displaySymbol } from "../symbolDisplay";
 import { biasOnChart } from "./bias";
+import { applyImageTheme, THEME_PARTS, type ThemePart } from "./imageTheme";
 
 export type VoiceMessage = {
   id: number;
@@ -37,6 +38,7 @@ export type VoiceMessage = {
   text: string;
   spokenTo?: number;                          // while being spoken: how much of it has been said
   link?: { label: string; href: string };     // e.g. a new tab the browser wouldn't open by itself
+  image?: string;                             // a picture sent with it (its object URL)
 };
 
 export type VoiceState = {
@@ -52,6 +54,7 @@ export type VoiceState = {
   lang: string;
   messages: VoiceMessage[];
   error: string | null;
+  attachment: { url: string; name: string } | null;   // a picture waiting to go with the next message
 };
 
 // The languages it hears (the browser's speech recognition) and answers in (the AI writes its reply
@@ -96,7 +99,7 @@ const recognitionClass = (): any =>
   typeof window === "undefined" ? null : (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
 
 let state: VoiceState = {
-  supported: false, canSpeak: false, listening: false, hearing: "", speaking: false, thinking: false, pending: null, replies: true, lang: "en-US", messages: [], error: null,
+  supported: false, canSpeak: false, listening: false, hearing: "", speaking: false, thinking: false, pending: null, replies: true, lang: "en-US", messages: [], error: null, attachment: null,
 };
 let initialised = false;
 const listeners = new Set<() => void>();
@@ -456,7 +459,8 @@ const spokenDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateStr
 // Creating a backtest session and clearing all the marks are asked first ("… Say yes or no"). The
 // answer is read here, not by the AI: a yes runs it (and any actions the AI asked for after it),
 // a no drops it, anything else drops it and goes to the AI as usual.
-type Confirm = { intent: Intent; then: Intent[]; at: number; reply?: string };   // reply: the AI's words, said once it's done
+type Confirm = { intent: Intent; then: Intent[]; at: number; reply?: string;   // reply: the AI's words, said once it's done
+  onYes?: () => void; onNo?: () => void };                                        // (a change already made: kept, or put back)
 let confirmPending: Confirm | null = null;
 const CONFIRM_MS = 120_000;
 // Yes / no in the languages it speaks (the answer's first word or phrase)
@@ -472,6 +476,12 @@ const YES = { test: startsWithWord(YES_WORDS) };
 const NO = { test: startsWithWord(NO_WORDS) };
 function askConfirm(question: string, intent: Intent) {
   confirmPending = { intent, then: [], at: Date.now() };
+  set({ pending: { question, options: ["Yes", "No"] } });
+  say(question);
+}
+// Something already done, kept on a yes, put back on a no (anything else keeps it)
+function askKeep(question: string, intent: Intent, onYes: () => void, onNo: () => void) {
+  confirmPending = { intent, then: [], at: Date.now(), onYes, onNo };
   set({ pending: { question, options: ["Yes", "No"] } });
   say(question);
 }
@@ -542,6 +552,18 @@ async function run(intent: Intent, reply?: string, quiet = false, confirmed = fa
       const result = (done.length ? `Marked ${done.join(" and ")} on the visible bars.` : "")
         + (none.length ? ` I found no ${none.join(" or ")} still in play there; zoom out to look further back.` : "");
       if (!quiet) say(result.trim());
+      return;
+    }
+    case "theme_from_image": {
+      if (!sentImage) { say("Send me a screenshot of the chart first: the picture button next to the text box, or paste it there, then ask again."); return; }
+      set({ thinking: true });
+      const done = await applyImageTheme(sentImage, intent.parts?.length ? intent.parts : THEME_PARTS).catch(() => null);
+      set({ thinking: false });
+      if (!done) { say("I couldn't find a chart in that picture. Send a screenshot with the chart's candles and background in it."); return; }
+      if (!done.summary) { say("I found the chart but no colours to copy for that."); return; }
+      askKeep(`Copied from your picture: ${done.summary}. Keep it? Say yes or no.`, intent,
+        () => say("Kept. They're in Settings like any colours."),
+        () => { done.undo(); say("Put your colours back."); });
       return;
     }
     case "bias": {
@@ -802,6 +824,10 @@ function intentOf(a: any): Intent | null {
       return what.length ? { kind: "mark", what, ...(patterns.length ? { patterns } : {}), ...(setups.length ? { setups } : {}), ...(state ? { state } : {}) } : null;
     }
     case "clear_marks": return { kind: "clear_marks", what: Array.isArray(a.what) && a.what.length ? a.what as (MarkKind | "bias")[] : undefined };
+    case "theme_from_image": {
+      const parts = Array.isArray(a.parts) ? (a.parts as string[]).filter((p): p is ThemePart => (THEME_PARTS as string[]).includes(p)) : [];
+      return { kind: "theme_from_image", ...(parts.length ? { parts } : {}) };
+    }
     case "bias": {
       const span = (v: any): BiasSpan | null => v && Number.isFinite(+v.value) && +v.value > 0 && ["minute", "hour", "day", "week"].includes(v.unit) ? { value: +v.value, unit: v.unit } : null;
       const window = span(a.window) ?? span(a.horizon) ?? { value: 1, unit: "hour" as const };
@@ -851,7 +877,18 @@ async function createBacktest(plan: BacktestPlan) {
   }
 }
 
-async function askAI(text: string, alternatives: string[] = []) {
+// A picture to go with the next message (the panel's picture button, a paste or a drop); null: none
+let attached: Blob | null = null;
+let sentImage: Blob | null = null;
+export function attachImage(file: Blob | null, name = "image") {
+  init();
+  if (state.attachment && !state.messages.some(m => m.image === state.attachment!.url)) URL.revokeObjectURL(state.attachment.url);
+  if (!file || !file.type.startsWith("image/")) { attached = null; set({ attachment: null }); return; }
+  attached = file;
+  set({ attachment: { url: URL.createObjectURL(file), name } });
+}
+
+async function askAI(text: string, alternatives: string[] = [], image = false) {
   if (!voiceUid) { say("Sign in to use the voice assistant: it answers through your account."); return; }
   const p = currentPrice();
   const chart = getChartInfo();
@@ -869,6 +906,7 @@ async function askAI(text: string, alternatives: string[] = []) {
         functions: voiceFunctions().map(f => f.signature),
         collab: collab.get().room ? { name: collab.get().room!.name, role: collab.get().room!.role } : null,
         lang: state.lang, language: VOICE_LANGS.find(l => l.value === state.lang)?.name ?? "English",
+        image: image || undefined, image_earlier: !image && !!sentImage ? true : undefined,
       } }),
     });
     const data = await res.json().catch(() => ({}));
@@ -896,14 +934,27 @@ async function askAI(text: string, alternatives: string[] = []) {
 export function handleText(text: string, alternatives: string[] = []) {
   init();
   const t = text.trim();
-  if (!t) return;
+  const picture = attached;
+  if (!t && !picture) return;
   if (state.speaking || speakingNow) interruptSpeaking();
+  if (picture) {
+    // (it goes with this message: the next ones are about it too, until another is sent)
+    sentImage = picture;
+    attached = null;
+    push({ from: "user", text: t, image: state.attachment?.url });
+    set({ attachment: null, error: null });
+    clearConfirm();
+    queue(() => askAI(t || "(a picture, no words)", alternatives, true));
+    return;
+  }
   push({ from: "user", text: t });
   set({ error: null });
   if (confirmPending && Date.now() - confirmPending.at > CONFIRM_MS) clearConfirm();
   if (confirmPending) {
     const c = confirmPending;
     const low = t.toLowerCase().replace(/[.!?,।。！？、]+/g, " ").replace(/\s+/g, " ").trim();
+    if (YES.test(low) && c.onYes) { clearConfirm(); c.onYes(); return; }
+    if (NO.test(low) && c.onNo) { clearConfirm(); c.onNo(); return; }
     if (YES.test(low)) {
       clearConfirm();
       queue(() => runChain([c.intent, ...c.then], c.intent.kind === "command" ? c.reply : undefined, true));
@@ -965,4 +1016,9 @@ async function chartSettled(it: Intent, before: { symbol: string; interval: stri
   }
 }
 
-export function clearVoiceChat() { clearConfirm(); set({ messages: [] }); }
+export function clearVoiceChat() {
+  clearConfirm();
+  state.messages.forEach(m => { if (m.image && m.image !== state.attachment?.url) URL.revokeObjectURL(m.image); });
+  sentImage = null;
+  set({ messages: [] });
+}

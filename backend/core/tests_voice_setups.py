@@ -74,3 +74,11 @@ class BiasActionTests(SimpleTestCase):
     def test_bias_drawings_clear(self):
         self.assertEqual(clean_action({"type": "clear_marks", "what": ["bias"]})["what"], ["bias"])
         self.assertIsNone(clean_action({"type": "mark", "what": ["bias"]}))
+
+
+class ImageThemeActionTests(SimpleTestCase):
+    """A chart screenshot's colours on this chart: all of it, or only some parts"""
+
+    def test_parts_kept_and_unknown_dropped(self):
+        self.assertEqual(clean_action({"type": "theme_from_image"}), {"type": "theme_from_image"})
+        self.assertEqual(clean_action({"type": "theme_from_image", "parts": ["candles", "logo", "candles"]}), {"type": "theme_from_image", "parts": ["candles"]})

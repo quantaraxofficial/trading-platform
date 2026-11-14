@@ -19,6 +19,8 @@ export type Intent =
   | { kind: "mark"; what: MarkKind[]; patterns?: string[]; setups?: string[]; state?: "live" | "fresh" | "tapped" | "all" }
   | { kind: "clear_marks"; what?: (MarkKind | "bias")[] }
   | { kind: "bias"; window: BiasSpan; horizon: BiasSpan }
+  // the attached screenshot's colours on this chart (lib/voice/imageTheme)
+  | { kind: "theme_from_image"; parts?: ("chart" | "candles" | "page")[] }
   | { kind: "indicator"; name: string; remove?: boolean }
   | { kind: "chart_type"; type: string; label: string }
   | { kind: "replay"; date?: string; random?: boolean }

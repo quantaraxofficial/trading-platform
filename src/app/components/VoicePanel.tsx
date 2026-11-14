@@ -8,8 +8,17 @@
 import React, { useEffect, useRef, useState } from "react";
 import TvSelect from "@/app/components/ui/TvSelect";
 import {
-  useVoice, toggleListening, handleText, setVoicePrefs, clearVoiceChat, VOICE_LANGS, type VoiceMessage,
+  useVoice, toggleListening, handleText, setVoicePrefs, clearVoiceChat, attachImage, VOICE_LANGS, type VoiceMessage,
 } from "../lib/voice/assistant";
+
+// (a picture from a paste or a drop: the first image in it)
+const imageIn = (items: DataTransferItemList | FileList | null | undefined): File | null => {
+  for (const it of Array.from(items ?? []) as (DataTransferItem | File)[]) {
+    const f = it instanceof File ? it : it.kind === "file" ? it.getAsFile() : null;
+    if (f && f.type.startsWith("image/")) return f;
+  }
+  return null;
+};
 
 export function VoiceAssistantIcon({ size = 28 }: { size?: number }) {
   return (
@@ -35,13 +44,24 @@ export default function VoicePanel() {
   const scroll = useRef<HTMLDivElement>(null);
   useEffect(() => { scroll.current?.scrollTo({ top: scroll.current.scrollHeight }); }, [v.messages, v.hearing]);
 
-  const send = (t: string) => { if (t.trim()) { handleText(t); setText(""); } };
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const send = (t: string) => { if (t.trim() || v.attachment) { handleText(t); setText(""); } };
+  const canSend = !!text.trim() || !!v.attachment;
   const status = v.thinking ? "Thinking…" : v.speaking ? "Speaking…" : v.listening ? (v.hearing ? "Hearing you…" : "Listening… say a command") : v.supported ? "Click the microphone and speak" : "Type a command below";
 
   const iconBtn: React.CSSProperties = { width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 6, border: "none", background: "transparent", color: "var(--tv-color-text)", cursor: "pointer", padding: 0 };
 
   return (
-    <div data-name="voice-panel" style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--tv-color-pane-bg)", color: "var(--tv-color-text)" }}>
+    <div data-name="voice-panel" style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--tv-color-pane-bg)", color: "var(--tv-color-text)", position: "relative" }}
+      // (a picture dropped on the panel goes with the next message)
+      onDragOver={e => { if (Array.from(e.dataTransfer.types).includes("Files")) { e.preventDefault(); setDragging(true); } }}
+      onDragLeave={e => { if (e.currentTarget === e.target) setDragging(false); }}
+      onDrop={e => { const f = imageIn(e.dataTransfer.files); setDragging(false); if (f) { e.preventDefault(); attachImage(f, f.name); } }}>
+      {dragging && (
+        <div aria-hidden style={{ position: "absolute", inset: 6, zIndex: 2, borderRadius: 8, border: "2px dashed var(--tv-color-accent)", background: "rgba(41, 98, 255, 0.08)",
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "var(--tv-color-accent)", pointerEvents: "none" }}>Drop the picture here</div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "12px 12px 8px" }}>
         <span style={{ flex: 1, fontSize: 16, fontWeight: 600 }}>Voice assistant</span>
         <button type="button" className="tv-icon-btn" style={iconBtn} aria-pressed={v.replies} disabled={!v.canSpeak}
@@ -84,6 +104,7 @@ export default function VoicePanel() {
             style={{ alignSelf: m.from === "user" ? "flex-end" : "flex-start", maxWidth: "88%", padding: "7px 10px", borderRadius: 10, fontSize: 13, lineHeight: "19px",
               background: m.from === "user" ? "var(--tv-color-accent)" : "var(--tv-color-item-hover)", color: m.from === "user" ? "#fff" : "var(--tv-color-text)",
               borderBottomRightRadius: m.from === "user" ? 3 : 10, borderBottomLeftRadius: m.from === "user" ? 10 : 3 }}>
+            {m.image && <img src={m.image} alt="Picture sent" data-name="voice-image" style={{ display: "block", maxWidth: "100%", maxHeight: 140, borderRadius: 6, marginBottom: m.text ? 6 : 0 }} />}
             {m.from === "assistant" ? <Subtitle m={m} /> : m.text}
             {m.link && (
               <a href={m.link.href} target="_blank" rel="noopener noreferrer"
@@ -127,11 +148,32 @@ export default function VoicePanel() {
           <VoiceAssistantIcon size={30} />
         </button>
         <div aria-live="polite" style={{ fontSize: 12, color: "var(--tv-color-text-muted)", minHeight: 16 }}>{status}</div>
+        {/* a picture waiting to go with the next message (said or typed) */}
+        {v.attachment && (
+          <div data-name="voice-attachment" style={{ alignSelf: "stretch", display: "flex", alignItems: "center", gap: 8, padding: 6, borderRadius: 6, border: "1px solid var(--tv-color-border)" }}>
+            <img src={v.attachment.url} alt="" style={{ width: 48, height: 32, objectFit: "cover", borderRadius: 4 }} />
+            <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: "var(--tv-color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {v.attachment.name} · goes with your next message
+            </span>
+            <button type="button" className="tv-icon-btn" style={{ ...iconBtn, width: 24, height: 24 }} title="Remove the picture" aria-label="Remove the picture" onClick={() => attachImage(null)}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden><path d="M2 2l8 8M10 2l-8 8" /></svg>
+            </button>
+          </div>
+        )}
         <form onSubmit={e => { e.preventDefault(); send(text); }} style={{ display: "flex", gap: 6, width: "100%" }}>
-          <input value={text} onChange={e => setText(e.target.value)} placeholder="Or type a command…" aria-label="Type a command"
+          <input ref={fileRef} type="file" accept="image/*" hidden data-name="voice-image-input"
+            onChange={e => { const f = e.target.files?.[0]; if (f) attachImage(f, f.name); e.target.value = ""; }} />
+          <button type="button" className="tv-icon-btn" style={{ ...iconBtn, width: 32, height: 32, border: "1px solid var(--tv-color-border)" }} data-name="voice-attach"
+            title="Send a picture (or paste one): e.g. a screenshot of your chart to copy its colours" aria-label="Send a picture" onClick={() => fileRef.current?.click()}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden>
+              <rect x="2.5" y="3.5" width="13" height="11" rx="1.5" /><circle cx="6.5" cy="7.5" r="1.3" /><path d="M3 13l4-4 3 3 2-2 3.5 3.5" />
+            </svg>
+          </button>
+          <input value={text} onChange={e => setText(e.target.value)} placeholder={v.attachment ? "Say or type what to do with it…" : "Or type a command…"} aria-label="Type a command"
+            onPaste={e => { const f = imageIn(e.clipboardData?.items); if (f) { e.preventDefault(); attachImage(f, f.name && f.name !== "image.png" ? f.name : "Pasted picture"); } }}
             style={{ flex: 1, minWidth: 0, height: 32, borderRadius: 6, border: "1px solid var(--tv-color-border)", background: "transparent", color: "var(--tv-color-text)", padding: "0 10px", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
-          <button type="submit" disabled={!text.trim()}
-            style={{ height: 32, padding: "0 12px", borderRadius: 6, border: "none", background: "var(--tv-color-accent)", color: "#fff", fontSize: 13, cursor: text.trim() ? "pointer" : "default", opacity: text.trim() ? 1 : 0.5, fontFamily: "inherit" }}>Send</button>
+          <button type="submit" disabled={!canSend}
+            style={{ height: 32, padding: "0 12px", borderRadius: 6, border: "none", background: "var(--tv-color-accent)", color: "#fff", fontSize: 13, cursor: canSend ? "pointer" : "default", opacity: canSend ? 1 : 0.5, fontFamily: "inherit" }}>Send</button>
         </form>
       </div>
     </div>
