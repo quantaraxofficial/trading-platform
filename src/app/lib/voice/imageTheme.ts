@@ -4,11 +4,13 @@
 // to match the page around the chart. Applied at once (as the Settings dialog does); a no puts the
 // colours and the theme back as they were.
 
-import { readThemeImage, type ImageTheme, type Pixels } from "../analysis/themeImage";
+import { scanChartImage, type ImageTheme, type Pixels } from "../analysis/themeImage";
+import { copyImageDrawings } from "./imageDrawings";
 import { chartSettings, takeSnapshot, applySnapshot, type ChartSettings } from "../chartSettings";
 
-export type ThemePart = "chart" | "candles" | "page";
-export const THEME_PARTS: ThemePart[] = ["chart", "candles", "page"];
+// (drawings: the picture's drawings placed on this chart, and their looks made the tools' defaults)
+export type ThemePart = "chart" | "candles" | "page" | "drawings";
+export const THEME_PARTS: ThemePart[] = ["chart", "candles", "page", "drawings"];
 
 // The image's pixels (a very large one halved: plenty for a chart's colours)
 export async function imagePixels(file: Blob): Promise<Pixels> {
@@ -29,8 +31,9 @@ export type ThemeApplied = { theme: ImageTheme; summary: string; undo: () => voi
 
 // Reads the image and applies what it found (only the parts asked for); null: no chart found in it
 export async function applyImageTheme(file: Blob, parts: ThemePart[] = THEME_PARTS): Promise<ThemeApplied | null> {
-  const t = readThemeImage(await imagePixels(file));
-  if (!t) return null;
+  const scanned = scanChartImage(await imagePixels(file));
+  if (!scanned) return null;
+  const t = scanned.theme;
   const before = takeSnapshot();
   const pageBefore = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
   const want = new Set(parts);
@@ -65,7 +68,11 @@ export async function applyImageTheme(file: Blob, parts: ThemePart[] = THEME_PAR
     said.push(`up candles ${t.up.body}${extra(t.up)}, down candles ${t.down.body}${extra(t.down)}`
       + (t.upBy === "joins" ? "" : ", up told apart by colour, not by how the candles join: check it"));
   }
-  if (!Object.keys(patch).length && !switchPage) return { theme: t, summary: "", undo: () => {} };
+  // the drawings (first: placing them may switch the chart's timeframe)
+  const drawings = want.has("drawings") ? await copyImageDrawings(scanned.scan).catch(() => null) : null;
+  if (drawings) said.push(drawings.summary);
+  else if (want.has("drawings") && want.size === 1) said.push("no drawings I can copy (Fibs, trend lines, horizontal lines and rays, vertical lines, rectangles)");
+  if (!Object.keys(patch).length && !switchPage) return { theme: t, summary: said.join(", "), undo: () => drawings?.undo() };
 
   chartSettings.set(patch);
   if (switchPage) {
@@ -78,6 +85,7 @@ export async function applyImageTheme(file: Blob, parts: ThemePart[] = THEME_PAR
     theme: t,
     summary: said.join(", "),
     undo: () => {
+      drawings?.undo();
       if (switchPage) window.dispatchEvent(new CustomEvent("tv:set-theme", { detail: { theme: pageBefore } }));
       applySnapshot({ chart: { ...before.chart, colorsTheme: pageBefore } });
       setTimeout(() => applySnapshot({ chart: { ...before.chart, colorsTheme: pageBefore } }), 400);

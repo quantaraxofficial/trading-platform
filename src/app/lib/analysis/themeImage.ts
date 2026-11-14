@@ -58,7 +58,24 @@ function groupColors<T>(items: T[], color: (t: T) => RGB, tol: number): { color:
   return groups;
 }
 
+// What the scan found besides the colours, for reading the drawings on the chart (./drawingsImage):
+// the plot area, the background, the tolerances for this image, the candles (each body's middle, top,
+// bottom and direction) and the colours that are the chart's own (candles, volume, grid)
+export type ChartScan = {
+  at: (x: number, y: number) => RGB;
+  rowBg: (RGB | null)[];
+  noise: number; inkTol: number; stepTol: number; sameTol: number; lineTol: number;
+  plot: { x0: number; x1: number; y0: number; y1: number };          // the candles' area (no scales)
+  candles: { x: number; top: number; bottom: number; up: boolean }[];
+  step: number;                                                      // pixels from one candle to the next
+  chartColors: RGB[];                                                // candles', volume bars', grid's
+};
+
 export function readThemeImage(img: Pixels): ImageTheme | null {
+  return scanChartImage(img)?.theme ?? null;
+}
+
+export function scanChartImage(img: Pixels): { theme: ImageTheme; scan: ChartScan } | null {
   const { width: W, height: H, data } = img;
   if (W < 80 || H < 60) return null;
   const at = (x: number, y: number): RGB => { const i = (y * W + x) * 4; return [data[i], data[i + 1], data[i + 2]]; };
@@ -71,10 +88,12 @@ export function readThemeImage(img: Pixels): ImageTheme | null {
     for (let x = cx0; x < cx1; x += 2) cs.push(at(x, y));
     rowBg[y] = modeColor(cs);
   }
+  // (noise: how much neighbouring near-background pixels differ — a clean image's don't; a flat
+  // shaded area, a drawing's see-through fill, isn't noise)
   const devs: number[] = [];
   for (let y = Math.floor(H * 0.3); y < H * 0.7; y += 7) for (let x = cx0; x < cx1; x += 7) {
-    const d = dist(at(x, y), rowBg[y]!);
-    if (d <= 24) devs.push(d);
+    const p = at(x, y), q = at(x + 1, y), b = rowBg[y]!;
+    if (dist(p, b) <= 24 && dist(q, b) <= 24) devs.push(dist(p, q));
   }
   const noise = [...devs].sort((a, b) => a - b)[Math.floor(devs.length * 0.9)] ?? 0;
   const bgTol = Math.max(6, noise * 1.5 + 2);       // still the background
@@ -88,9 +107,10 @@ export function readThemeImage(img: Pixels): ImageTheme | null {
   // ---- where the chart is: the columns mostly background around the middle; the rows out from the
   // middle while the background stays the chart's (changing gently: a gradient). A row whose most
   // common colour isn't it (a grid line, the crosshair, volume bars) keeps the row before's.
-  const ys = Math.floor(H * 0.25), ye = Math.floor(H * 0.75);
+  // (over nearly the whole height: a big drawing — a Fib's shaded bands — covers the middle of its columns)
+  const ys = Math.floor(H * 0.08), ye = Math.floor(H * 0.92);
   const colShare = (x: number) => { let n = 0, t = 0; for (let y = ys; y < ye; y += 2) { t++; if (bgLike(x, y)) n++; } return n / t; };
-  const colFlags = Array.from({ length: W }, (_, x) => colShare(x) >= 0.35);
+  const colFlags = Array.from({ length: W }, (_, x) => colShare(x) >= 0.2);
   const cols = runAround(colFlags, Math.floor(W / 2), 4);
   if (!cols) return null;
   const [x0, x1] = cols;
@@ -146,8 +166,22 @@ export function readThemeImage(img: Pixels): ImageTheme | null {
   const isGrid = (c: RGB) => (!!gridH && dist(c, gridH) <= lineTol) || (!!gridV && dist(c, gridV) <= lineTol);
 
   // ---- candles: bodies (3+ px wide, filled) with thin wicks, by colour ------------------------------
-  const ax0 = x0 + 1, ax1 = (sepV ? sepV.at : x1 - Math.max(30, Math.floor(cw * 0.04))) - 1;
-  const ay0 = y0 + 1, ay1 = (sepH ? sepH.at : y1 - Math.max(12, Math.floor(ch * 0.03))) - 1;
+  // (the grid's lines run exactly across the plot: their ends are its edges — the price scale's and
+  // the time scale's start, and a panel beside the chart that shares its background stays out)
+  const extent = (ls: Line[], grid: RGB | null, horizontal: boolean): [number, number] | null => {
+    if (!grid) return null;
+    const lo: number[] = [], hi: number[] = [];
+    for (const l of ls.filter(l => dist(l.color, grid) <= lineTol)) {
+      const n = horizontal ? cw : ch, get = (i: number) => (horizontal ? at(x0 + i, l.at) : at(l.at, y0 + i));
+      let a = -1, b = -1;
+      for (let i = 0; i < n; i++) if (dist(get(i), grid) <= lineTol) { if (a < 0) a = i; b = i; }
+      if (a >= 0) { lo.push((horizontal ? x0 : y0) + a); hi.push((horizontal ? x0 : y0) + b); }
+    }
+    return lo.length >= 3 ? [median(lo), median(hi)] : null;
+  };
+  const gx = extent(hl, gridH, true), gy = extent(vl, gridV, false);
+  const ax0 = gx ? gx[0] : x0 + 1, ax1 = gx ? gx[1] : (sepV ? sepV.at : x1 - Math.max(30, Math.floor(cw * 0.04))) - 1;
+  const ay0 = gy ? gy[0] : y0 + 1, ay1 = gy ? gy[1] : (sepH ? sepH.at : y1 - Math.max(12, Math.floor(ch * 0.03))) - 1;
   const aw = ax1 - ax0 + 1, ah = ay1 - ay0 + 1;
   if (aw < 20 || ah < 20) return null;
   const seen = new Uint8Array(aw * ah);
@@ -219,11 +253,13 @@ export function readThemeImage(img: Pixels): ImageTheme | null {
     return null;
   };
   // grouped by colour; volume bars (standing on one line, no wicks) and letters (short) aren't candles
+  const volumeColors: RGB[] = [];
   const candleGroups = groupColors(bodies, b => b.color, groupTol).filter(g => {
     if (g.list.length < 2) return false;
     const base = median(g.list.map(b => b.bottom));
     const standing = g.list.filter(b => Math.abs(b.bottom - base) <= 2).length;
-    return !(standing / g.list.length >= 0.6 && g.list.length >= 4);
+    if (standing / g.list.length >= 0.6 && g.list.length >= 4) { volumeColors.push(g.color); return false; }
+    return true;
   }).map(g => {
     // (a chart draws its candles one width: the bodies at the group's usual width)
     const wMode = modeOf(g.list.map(b => b.xb - b.xa + 1))!;
@@ -254,6 +290,7 @@ export function readThemeImage(img: Pixels): ImageTheme | null {
   };
 
   let up: CandleColors | null = null, down: CandleColors | null = null, upBy: ImageTheme["upBy"] = null, candles = 0;
+  let scanCandles: ChartScan["candles"] = [], scanStep = 0;
   // up and down: the strongest group, and the strongest other one drawn at the same width
   const A0 = candleGroups[0], B0 = A0 && candleGroups.slice(1).find(g => Math.abs(g.wMode - A0.wMode) <= 1);
   if (A0 && B0) {
@@ -283,6 +320,8 @@ export function readThemeImage(img: Pixels): ImageTheme | null {
     }
     up = colorsOf(aUp ? A : B); down = colorsOf(aUp ? B : A);
     candles = A.list.length + B.list.length;
+    scanCandles = all.map(p => ({ x: p.b.x, top: p.b.top, bottom: p.b.bottom, up: p.a === aUp }));
+    scanStep = step;
   }
 
   // ---- the price scale's text: right of the candles, the colour whose glyphs run down most of the
@@ -321,7 +360,7 @@ export function readThemeImage(img: Pixels): ImageTheme | null {
   const pageC = page.length >= 40 ? modeColor(page) : null;
   const chartDark = lum(midBg) < 0.5;
 
-  return {
+  const theme: ImageTheme = {
     chart: { x0, y0, x1, y1 },
     background: hex(gradient ? topBg : midBg), background2: hex(gradient ? botBg : midBg), gradient,
     gridHorz: gridH ? hex(gridH) : null, gridVert: gridV ? hex(gridV) : null,
@@ -330,6 +369,13 @@ export function readThemeImage(img: Pixels): ImageTheme | null {
     up, down, candles, upBy,
     pageDark: pageC ? lum(pageC) < 0.5 : chartDark,
     chartDark, noise,
+  };
+  const hexToRgb = (h: string): RGB => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const chartColors: RGB[] = [...volumeColors, ...(gridH ? [gridH] : []), ...(gridV ? [gridV] : []),
+    ...[up, down].filter(Boolean).flatMap(c => [c!.body, c!.border, c!.wick].map(hexToRgb))];
+  return {
+    theme,
+    scan: { at, rowBg, noise, inkTol, stepTol, sameTol, lineTol, plot: { x0: ax0, x1: ax1, y0: ay0, y1: ay1 }, candles: scanCandles, step: scanStep, chartColors },
   };
 }
 

@@ -874,6 +874,17 @@ Posting signals out
     text's colour is left as it was. Applied at once and said ("Copied from your picture: background
     #dbdbdb, …"), then "Keep it?": no puts the colours and page theme back, yes keeps them (they're
     in Settings like any colours). "Only the candle colours" / "only the background" copy just that part
+  - The picture's drawings are copied too: Fib retracements (each level's ratio and colour, the
+    shaded bands and their see-through, the trend line), trend lines, horizontal lines and rays,
+    vertical lines and rectangles (border, see-through fill), with their widths and solid / dashed /
+    dotted lines. They're placed at the same bars and prices: the picture's candles are lined up
+    with this chart's bars (the same run of up / down candles, the bodies fitted to the opens and
+    closes), so no axis numbers are read. If they match another timeframe of the symbol, the chart
+    switches to it ("your picture is the 2 hour chart"). The drawings' looks become the tools'
+    defaults, so new Fibs and lines come out the same. They're one group, "From your picture". No
+    removes them, puts the defaults and timeframe back. Ignored: the page's own panels over the chart
+    (toolbars, tables, banners, ads), the legend and its buy / sell buttons, the last price line and
+    the crosshair. "Copy my drawings" copies only them
 
 ======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD

@@ -82,3 +82,6 @@ class ImageThemeActionTests(SimpleTestCase):
     def test_parts_kept_and_unknown_dropped(self):
         self.assertEqual(clean_action({"type": "theme_from_image"}), {"type": "theme_from_image"})
         self.assertEqual(clean_action({"type": "theme_from_image", "parts": ["candles", "logo", "candles"]}), {"type": "theme_from_image", "parts": ["candles"]})
+
+    def test_drawings_part(self):
+        self.assertEqual(clean_action({"type": "theme_from_image", "parts": ["drawings"]}), {"type": "theme_from_image", "parts": ["drawings"]})

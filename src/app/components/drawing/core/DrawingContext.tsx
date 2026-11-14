@@ -268,6 +268,31 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
       }, 600);
     }
   };
+  // Tools' default styles set from outside (the voice assistant copying a picture's drawings' look,
+  // lib/voice/imageDrawings): tv:set-tool-defaults { defaults: { [tool]: style | null }, replace? }
+  // merges each into the tool's default (replace: puts exactly that back, null: none). The
+  // current ones are readable as window.__drawingDefaults (to put them back)
+  const updateDefaultsRef = useRef(updateDefaultSettings);
+  updateDefaultsRef.current = updateDefaultSettings;
+  useEffect(() => { (window as any).__drawingDefaults = defaultSettings; }, [defaultSettings]);
+  useEffect(() => {
+    const onSet = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      if (!d.defaults || typeof d.defaults !== 'object') return;
+      for (const [type, style] of Object.entries(d.defaults as Record<string, Partial<BaseDrawing> | null>)) {
+        if (d.replace) {
+          // (exactly as given: what's not in it is no longer part of the default)
+          const t = type as DrawingType;
+          defaultSettingsRef.current = { ...defaultSettingsRef.current, [t]: {} };
+          setDefaultSettings(prev => ({ ...prev, [t]: {} }));
+          updateDefaultsRef.current(t, style || {});
+        } else if (style) updateDefaultsRef.current(type as DrawingType, style);
+      }
+    };
+    window.addEventListener('tv:set-tool-defaults', onSet);
+    return () => window.removeEventListener('tv:set-tool-defaults', onSet);
+  }, []);
+
   // (a save still waiting when the page goes is sent at once)
   useEffect(() => {
     const flush = () => {
