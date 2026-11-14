@@ -845,6 +845,14 @@ Posting signals out
     breakout, flag, Wyckoff spring / upthrust (25 in all; families ICT, SMC, price action, MSNR, liquidity)
   - The AI's long knowledge (MSNR, setups, liquidity) goes with a request only when the conversation is
     about it: everyday commands stay small for the free AI tier's token limits
+  - Order blocks, FVGs, IFVGs and POIs carry their state in the label: fresh (untouched), tapped ×N
+    (each return into the zone after price left it; "past 50%" when it went beyond the middle) or
+    broken / filled (used: drawn grey, ending at the candle that used it). Tapped zones are a lighter
+    shade. By voice: "only fresh order blocks", "tapped FVGs", "all IFVGs including the broken ones";
+    by default the zones still valid (fresh and tapped)
+  - Mitigation blocks, a mark of their own: an order block that failed after a lower high / higher low
+    (no liquidity taken), now working the other way until a close back through it. Breakers are the
+    ones that failed after taking liquidity (a higher high / lower low)
 
 ======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD

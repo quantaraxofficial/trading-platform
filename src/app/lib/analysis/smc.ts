@@ -111,26 +111,27 @@ function gaps(bars: Bar[], from: number, minSize: number): Gap[] {
   return out;
 }
 
-export function fairValueGaps(bars: Bar[], from: number, opts: { max?: number } = {}): Zone[] {
+export function fairValueGaps(bars: Bar[], from: number, opts: { max?: number; state?: ZoneState } = {}): Zone[] {
   const last = bars.length - 1;
   if (last - from < 5) return [];
   const unit = mean(atr(bars).slice(from)) || 1;
-  const open: Zone[] = [];
+  const state = opts.state ?? "live";
+  const out: Zone[] = [];
   for (const g of gaps(bars, from, unit * 0.1)) {
-    let filled = false;
-    for (let j = g.at + 3; j <= last && !filled; j++) {
-      // filled once price trades through the gap's far edge
-      if (g.side === "bull" ? bars[j].low <= g.bottom : bars[j].high >= g.top) filled = true;
-    }
-    if (!filled) open.push({ kind: "fvg", side: g.side, from: g.at, to: last, top: g.top, bottom: g.bottom, label: g.side === "bull" ? "Bullish FVG" : "Bearish FVG" });
+    // (the third candle left it already: every return into it is a tap; filled once price trades through it)
+    const life = zoneLife(bars, g, g.at + 3, "trade", true);
+    if (!wanted(life, state)) continue;
+    out.push({ kind: life.used >= 0 ? "zone_used" : life.taps ? "fvg_tapped" : "fvg", side: g.side, from: g.at, to: life.used >= 0 ? life.used : last,
+      top: g.top, bottom: g.bottom, extend: life.used < 0, label: `${g.side === "bull" ? "Bullish FVG" : "Bearish FVG"} · ${stateText(life, "filled")}` });
   }
-  return open.slice(-(opts.max ?? 8));
+  return out.slice(-(opts.max ?? (state === "all" ? 12 : 8)));
 }
 
-export function inverseFairValueGaps(bars: Bar[], from: number, opts: { max?: number } = {}): Zone[] {
+export function inverseFairValueGaps(bars: Bar[], from: number, opts: { max?: number; state?: ZoneState } = {}): Zone[] {
   const last = bars.length - 1;
   if (last - from < 5) return [];
   const unit = mean(atr(bars).slice(from)) || 1;
+  const state = opts.state ?? "live";
   const live: Zone[] = [];
   for (const g of gaps(bars, from, unit * 0.1)) {
     // the close that goes through the gap the wrong way turns it around
@@ -140,15 +141,14 @@ export function inverseFairValueGaps(bars: Bar[], from: number, opts: { max?: nu
     }
     if (flipped < 0) continue;
     const side: Side = g.side === "bull" ? "bear" : "bull";
-    // over once price closes back through it
-    let over = false;
-    for (let j = flipped + 1; j <= last && !over; j++) {
-      if (side === "bear" ? bars[j].close > g.top : bars[j].close < g.bottom) over = true;
-    }
-    // (drawn from the gap itself, where it formed, on to the latest bar)
-    if (!over) live.push({ kind: "ifvg", side, from: g.at, to: last, top: g.top, bottom: g.bottom, label: side === "bull" ? "Bullish IFVG" : "Bearish IFVG" });
+    // after the flip: once price has left it, each return is a tap; over once price closes back through it
+    const life = zoneLife(bars, { side, top: g.top, bottom: g.bottom }, flipped + 1, "close");
+    if (!wanted(life, state)) continue;
+    // (drawn from the gap itself, where it formed, on to the latest bar, or to the close that ended it)
+    live.push({ kind: life.used >= 0 ? "zone_used" : life.taps ? "ifvg_tapped" : "ifvg", side, from: g.at, to: life.used >= 0 ? life.used : last,
+      top: g.top, bottom: g.bottom, extend: life.used < 0, label: `${side === "bull" ? "Bullish IFVG" : "Bearish IFVG"} · ${stateText(life, "broken")}` });
   }
-  return live.slice(-(opts.max ?? 6));
+  return live.slice(-(opts.max ?? (state === "all" ? 10 : 6)));
 }
 
 // ---- market structure: breaks of structure and changes of character ---------------------------------
@@ -188,17 +188,53 @@ export function marketStructure(bars: Bar[], from: number, opts: { max?: number 
 }
 
 // ---- order blocks --------------------------------------------------------------------------------
-export function orderBlocks(bars: Bar[], from: number, opts: { perSide?: number } = {}): Zone[] {
+// Which zones to show: live (fresh and tapped: the default), only fresh, only tapped, or all (with the
+// used ones: an OB closed through, an FVG traded through)
+export type ZoneState = "live" | "fresh" | "tapped" | "all";
+export type ZoneLife = { taps: number; firstTap: number; deepest: number; used: number };
+
+// A zone's life after it formed: once price has left it, each return into it is a tap (how deep: 0.5 =
+// its middle, the CE); `used` the candle that ended it: a close through its far edge (an order block's
+// end) or any trade through it (an FVG filled)
+export function zoneLife(bars: Bar[], z: { side: Side; top: number; bottom: number }, start: number, end: "close" | "trade", leftAlready = false): ZoneLife {
+  const bull = z.side === "bull", h = Math.max(z.top - z.bottom, 1e-9);
+  let left = leftAlready, inside = false, taps = 0, firstTap = -1, deepest = 0, used = -1;
+  for (let j = start; j < bars.length; j++) {
+    const b = bars[j];
+    const through = end === "close" ? (bull ? b.close < z.bottom : b.close > z.top) : (bull ? b.low <= z.bottom : b.high >= z.top);
+    if (left && through) { used = j; break; }
+    if (!left) { if (bull ? b.low > z.top : b.high < z.bottom) left = true; continue; }
+    const enters = bull ? b.low <= z.top : b.high >= z.bottom;
+    if (enters) {
+      if (!inside) { taps++; if (firstTap < 0) firstTap = j; }
+      inside = true;
+      deepest = Math.max(deepest, Math.min(1, bull ? (z.top - Math.max(b.low, z.bottom)) / h : (Math.min(b.high, z.top) - z.bottom) / h));
+    } else inside = false;
+  }
+  return { taps, firstTap, deepest, used };
+}
+
+export function stateText(life: ZoneLife, usedWord: string): string {
+  if (life.used >= 0) return usedWord;
+  if (!life.taps) return "fresh";
+  return `tapped ×${life.taps}${life.deepest >= 0.5 ? " (past 50%)" : ""}`;
+}
+
+const wanted = (life: ZoneLife, state: ZoneState) =>
+  state === "all" ? true : life.used >= 0 ? false : state === "fresh" ? life.taps === 0 : state === "tapped" ? life.taps > 0 : true;
+
+export function orderBlocks(bars: Bar[], from: number, opts: { perSide?: number; state?: ZoneState } = {}): Zone[] {
   const last = bars.length - 1;
   if (last - from < 20) return [];
-  const blocks = allOrderBlocks(bars, from);
-  // still in play: no close through the block's far edge since it formed
-  const live = blocks.filter(b => {
-    for (let j = b.from + 1; j <= last; j++) if (b.side === "bull" ? bars[j].close < b.bottom : bars[j].close > b.top) return false;
-    return true;
-  });
-  const perSide = opts.perSide ?? 3;
-  return [...live.filter(b => b.side === "bull").slice(-perSide), ...live.filter(b => b.side === "bear").slice(-perSide)];
+  const state = opts.state ?? "live";
+  const blocks = allOrderBlocks(bars, from).map(b => {
+    const life = zoneLife(bars, b, b.from + 1, "close");
+    const name = b.side === "bull" ? "Bullish OB" : "Bearish OB";
+    return { b, life, z: { ...b, kind: life.used >= 0 ? "zone_used" : life.taps ? "ob_tapped" : "ob", label: `${name} · ${stateText(life, "broken")}`,
+      to: life.used >= 0 ? life.used : last, extend: life.used < 0 } as Zone };
+  }).filter(x => wanted(x.life, state));
+  const perSide = opts.perSide ?? (state === "all" ? 5 : 3);
+  return [...blocks.filter(x => x.b.side === "bull").slice(-perSide), ...blocks.filter(x => x.b.side === "bear").slice(-perSide)].map(x => x.z);
 }
 
 // Every order block formed in the window, broken or not (breaker blocks are the broken ones)

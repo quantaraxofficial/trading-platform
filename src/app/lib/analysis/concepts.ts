@@ -54,7 +54,7 @@
 
 import {
   atr, swings, swingSize, fairValueGaps, inverseFairValueGaps, marketStructure, orderBlocks, allOrderBlocks, supportResistance,
-  type Bar, type Side, type Zone,
+  type Bar, type Side, type Zone, type ZoneState,
 } from "./smc";
 import { candlePatterns } from "./candles";
 import { msnrAV, msnrCompression, msnrFlips, msnrGaps, msnrQuasimodo } from "./msnr";
@@ -66,6 +66,7 @@ export type MarkKind =
   | "poi" | "liquidity" | "sweeps" | "premium_discount" | "breakers" | "bpr" | "displacement" | "killzones" | "key_levels"
   | "swing_points" | "trendlines" | "supply_demand" | "candle_patterns" | "chart_patterns" | "ranges"
   | "msnr_levels" | "msnr_gaps" | "msnr_flips" | "msnr_qm" | "msnr_compression"
+  | "mitigation_blocks"
   | "session_liquidity" | "inducement" | "trendline_liquidity" | "liquidity_voids" | "round_numbers" | "draw_on_liquidity"
   | "setups";
 
@@ -74,22 +75,24 @@ export const ALL_MARK_KINDS: MarkKind[] = [
   "poi", "liquidity", "sweeps", "premium_discount", "breakers", "bpr", "displacement", "killzones", "key_levels",
   "swing_points", "trendlines", "supply_demand", "candle_patterns", "chart_patterns", "ranges",
   "msnr_levels", "msnr_gaps", "msnr_flips", "msnr_qm", "msnr_compression",
+  "mitigation_blocks",
   "session_liquidity", "inducement", "trendline_liquidity", "liquidity_voids", "round_numbers", "draw_on_liquidity",
   "setups",
 ];
 
-export function analyse(kind: MarkKind, bars: Bar[], from: number, opts: { patterns?: string[]; setups?: SetupId[] } = {}): Zone[] {
+export function analyse(kind: MarkKind, bars: Bar[], from: number, opts: { patterns?: string[]; setups?: SetupId[]; state?: ZoneState } = {}): Zone[] {
   switch (kind) {
-    case "order_blocks": return orderBlocks(bars, from);
-    case "fvg": return fairValueGaps(bars, from);
-    case "ifvg": return inverseFairValueGaps(bars, from);
+    case "order_blocks": return orderBlocks(bars, from, { state: opts.state });
+    case "fvg": return fairValueGaps(bars, from, { state: opts.state });
+    case "ifvg": return inverseFairValueGaps(bars, from, { state: opts.state });
     case "support_resistance": return supportResistance(bars, from);
     case "structure": return marketStructure(bars, from);
-    case "poi": return pointsOfInterest(bars, from);
+    case "poi": return pointsOfInterest(bars, from, opts.state);
     case "liquidity": return liquidity(bars, from);
     case "sweeps": return liquiditySweeps(bars, from);
     case "premium_discount": return premiumDiscount(bars, from);
     case "breakers": return breakerBlocks(bars, from);
+    case "mitigation_blocks": return mitigationBlocks(bars, from);
     case "bpr": return balancedPriceRanges(bars, from);
     case "displacement": return displacement(bars, from);
     case "killzones": return killZones(bars, from);
@@ -124,15 +127,16 @@ const line = (kind: string, side: Side, from: number, to: number, p1: number, p2
   ({ kind, side, from, to, top: p1, bottom: p2, label: text, shape: "line", dashed });
 
 // ---- POI ------------------------------------------------------------------------------------
-export function pointsOfInterest(bars: Bar[], from: number): Zone[] {
+export function pointsOfInterest(bars: Bar[], from: number, state: ZoneState = "live"): Zone[] {
   const last = bars.length - 1;
   if (last - from < 20) return [];
   const price = bars[last].close;
   const unit = unitOf(bars, from);
+  const zoneState: ZoneState = state === "all" ? "live" : state;   // (a used zone is no POI)
   const cands = [
-    ...orderBlocks(bars, from, { perSide: 6 }).map(z => ({ z, what: "OB" })),
-    ...fairValueGaps(bars, from, { max: 12 }).map(z => ({ z, what: "FVG" })),
-    ...supplyDemand(bars, from).map(z => ({ z, what: z.side === "bull" ? "demand" : "supply" })),
+    ...orderBlocks(bars, from, { perSide: 6, state: zoneState }).map(z => ({ z, what: "OB" })),
+    ...fairValueGaps(bars, from, { max: 12, state: zoneState }).map(z => ({ z, what: "FVG" })),
+    ...(state === "tapped" ? [] : supplyDemand(bars, from).map(z => ({ z, what: z.side === "bull" ? "demand" : "supply" }))),
   ];
   const range = dealingRange(bars, from);
   const eq = range ? (range.top + range.bottom) / 2 : price;
@@ -161,7 +165,11 @@ export function pointsOfInterest(bars: Bar[], from: number): Zone[] {
       picked.push(c);
       if (picked.length === 2) break;
     }
-    picked.forEach(p => out.push({ ...p.z, kind: "poi", label: `${side === "bull" ? "Buy" : "Sell"} POI · ${p.why}` }));
+    // (its zone's state: fresh or tapped)
+    picked.forEach(p => {
+      const st = p.z.label.split(" · ")[1] || "fresh";
+      out.push({ ...p.z, kind: /tapped/.test(st) ? "poi_tapped" : "poi", label: `${side === "bull" ? "Buy" : "Sell"} POI · ${p.why} · ${st}` });
+    });
   }
   return out;
 }
@@ -265,7 +273,49 @@ export function premiumDiscount(bars: Bar[], from: number): Zone[] {
   ];
 }
 
-// ---- breakers, BPR, displacement ----------------------------------------------------------------
+// ---- mitigation blocks, breakers, BPR, displacement ----------------------------------------------------------------
+// Mitigation blocks: an order block that failed WITHOUT taking liquidity first: from a swing low, the
+// rally makes a lower high (not above the swing high before it), then price closes below the block:
+// it's resistance now (a bearish mitigation block); the mirror from a swing high. (With a higher high
+// first, the liquidity taken, it's a breaker instead.) Live until a close back through it
+export function mitigationBlocks(bars: Bar[], from: number): Zone[] {
+  const last = bars.length - 1;
+  if (last - from < 30) return [];
+  const k = swingSize(last - from);
+  const { highs, lows } = swings(bars, k, Math.max(0, from - 200), last);
+  const out: Zone[] = [];
+  for (const bullOrigin of [true, false]) {
+    const origins = bullOrigin ? lows : highs, others = bullOrigin ? highs : lows;
+    for (const o of origins) {
+      if (o < from - 50) continue;
+      const before = others.filter(x => x < o).pop();
+      if (before === undefined) continue;
+      // the block: the last candle against the move at the swing (down before a rally, up before a drop)
+      let blk = o;
+      for (let j = o; j >= Math.max(0, o - 4); j--) if (bullOrigin ? bars[j].close < bars[j].open : bars[j].close > bars[j].open) { blk = j; break; }
+      const top = bars[blk].high, bottom = bars[blk].low;
+      // the close through it, and the move's extreme before that
+      let broke = -1, ext = bullOrigin ? -Infinity : Infinity;
+      for (let j = o + 1; j <= last; j++) {
+        if (bullOrigin ? bars[j].close < bottom : bars[j].close > top) { broke = j; break; }
+        ext = bullOrigin ? Math.max(ext, bars[j].high) : Math.min(ext, bars[j].low);
+      }
+      if (broke < 0 || !isFinite(ext)) continue;
+      const lowerHigh = bullOrigin ? ext <= bars[before].high : ext >= bars[before].low;
+      if (!lowerHigh) continue;    // (it took the liquidity first: a breaker, not this)
+      const side: Side = bullOrigin ? "bear" : "bull";
+      let over = -1;
+      for (let j = broke + 1; j <= last; j++) if (side === "bear" ? bars[j].close > top : bars[j].close < bottom) { over = j; break; }
+      if (over >= 0) continue;
+      out.push({ kind: "mitigation", side, from: blk, to: last, top, bottom,
+        label: `${side === "bear" ? "Bearish" : "Bullish"} mitigation block · ${bullOrigin ? "after a lower high" : "after a higher low"}` });
+    }
+  }
+  return [...out.filter(z => z.side === "bull").slice(-3), ...out.filter(z => z.side === "bear").slice(-3)];
+}
+
+// Breakers: an order block made by a break of structure (the liquidity above / below taken: a higher
+// high or lower low) that then failed, closed through: it flips and works the other way
 export function breakerBlocks(bars: Bar[], from: number): Zone[] {
   const last = bars.length - 1;
   if (last - from < 20) return [];

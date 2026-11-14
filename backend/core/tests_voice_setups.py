@@ -37,3 +37,20 @@ class KnowledgeTests(SimpleTestCase):
         self.assertEqual(len(a["what"]), 6)
         b = clean_action({"type": "mark", "what": ["setups"], "setups": ["liquidity", "pa_orb", "pa_flag", "pa_wyckoff", "liq_idm_poi"]})
         self.assertEqual(b["setups"], ["liquidity", "pa_orb", "pa_flag", "pa_wyckoff", "liq_idm_poi"])
+
+
+class ZoneStateTests(SimpleTestCase):
+    """Order blocks, FVGs, IFVGs and POIs by state (fresh, tapped, all); mitigation blocks a mark of their own"""
+
+    def test_state_kept_for_zone_marks(self):
+        a = clean_action({"type": "mark", "what": ["order_blocks", "fvg", "ifvg", "poi"], "state": "tapped"})
+        self.assertEqual(a["state"], "tapped")
+        self.assertEqual(clean_action({"type": "mark", "what": ["fvg"], "state": "all"})["state"], "all")
+
+    def test_state_dropped_when_unknown_or_unrelated(self):
+        self.assertNotIn("state", clean_action({"type": "mark", "what": ["fvg"], "state": "weird"}))
+        self.assertNotIn("state", clean_action({"type": "mark", "what": ["structure"], "state": "fresh"}))
+
+    def test_mitigation_blocks_known(self):
+        a = clean_action({"type": "mark", "what": ["mitigation_blocks", "breakers"]})
+        self.assertEqual(a["what"], ["mitigation_blocks", "breakers"])

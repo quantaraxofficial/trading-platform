@@ -25,6 +25,7 @@ export const MARK_NAMES: Record<MarkKind, string> = {
   candle_patterns: "candle patterns", chart_patterns: "chart patterns", ranges: "ranges",
   msnr_levels: "MSNR A and V levels", msnr_gaps: "MSNR gap levels", msnr_flips: "SBR and RBS levels", msnr_qm: "Quasimodo levels",
   msnr_compression: "compressions", setups: "trade setups",
+  mitigation_blocks: "mitigation blocks",
   session_liquidity: "session highs and lows", inducement: "inducements", trendline_liquidity: "trend line liquidity lines",
   liquidity_voids: "liquidity voids", round_numbers: "round numbers", draw_on_liquidity: "the draw on liquidity",
 };
@@ -36,6 +37,7 @@ const GROUP_NAMES: Record<MarkKind, string> = {
   chart_patterns: "Chart patterns", ranges: "Ranges",
   msnr_levels: "MSNR A / V levels", msnr_gaps: "MSNR gap levels", msnr_flips: "MSNR SBR / RBS", msnr_qm: "MSNR QM (Quasimodo)",
   msnr_compression: "MSNR compression (CP)", setups: "Trade setups",
+  mitigation_blocks: "Mitigation blocks",
   session_liquidity: "Session liquidity (Asia / London / NY, PMH / PML)", inducement: "Inducement (IDM)", trendline_liquidity: "Trend line liquidity",
   liquidity_voids: "Liquidity voids", round_numbers: "Round numbers", draw_on_liquidity: "Draw on liquidity (ERL / IRL)",
 };
@@ -56,11 +58,14 @@ const COLORS: Record<string, Record<Zone["side"], string>> = {
   msnr: { bull: GREEN, bear: RED }, msnr_gap: { bull: "#00acc1", bear: "#fb8c00" }, msnr_old: { bull: "#80cbc4", bear: "#ef9a9a" },
   msnr_flip: { bull: "#26a69a", bear: "#ef5350" }, msnr_qm: { bull: "#7e57c2", bear: "#ab47bc" }, msnr_cp: { bull: "#fbc02d", bear: "#fbc02d" },
   setup: { bull: "#089981", bear: "#f23645" },
-  idm: { bull: "#ff9800", bear: "#ff9800" }, void: { bull: "#5c6bc0", bear: "#5c6bc0" }, round: { bull: "#9e9e9e", bear: "#9e9e9e" },
+  idm: { bull: "#ff9800", bear: "#ff9800" },
+  // tapped zones lighter, used ones grey; mitigation blocks their own
+  ob_tapped: { bull: GREEN, bear: RED }, fvg_tapped: { bull: "#2962ff", bear: "#ff9800" }, ifvg_tapped: { bull: "#00bcd4", bear: "#e91e63" }, poi_tapped: { bull: "#00897b", bear: "#d81b60" },
+  zone_used: { bull: "#787b86", bear: "#787b86" }, mitigation: { bull: "#00acc1", bear: "#8e24aa" }, void: { bull: "#5c6bc0", bear: "#5c6bc0" }, round: { bull: "#9e9e9e", bear: "#9e9e9e" },
   erl: { bull: "#ab47bc", bear: "#ab47bc" }, irl: { bull: "#2962ff", bear: "#ff9800" },
 };
 // Box fill (alpha) by kind: the wide context zones lighter
-const FILL: Record<string, string> = { void: "1c", irl: "22", sr: "22", pd: "14", kz: "1c", range: "1c", ote: "2a", msnr_gap: "26", msnr_old: "14", msnr_cp: "1c" };
+const FILL: Record<string, string> = { void: "1c", irl: "22", ob_tapped: "16", fvg_tapped: "16", ifvg_tapped: "16", poi_tapped: "16", zone_used: "10", sr: "22", pd: "14", kz: "1c", range: "1c", ote: "2a", msnr_gap: "26", msnr_old: "14", msnr_cp: "1c" };
 
 // The bars to look at: what's on screen, and at least 150 bars back from its right edge
 function analysisStart(bars: { length: number }): number {
@@ -94,6 +99,11 @@ function summarise(kind: MarkKind, zones: Zone[]): string {
       detail = `${n(z => z.side === "bear")} resistance above, ${n(z => z.side === "bull")} support below; ${fresh} fresh`;
       break;
     }
+    case "order_blocks": case "fvg": case "ifvg": case "poi": {
+      const fresh = n(z => /· fresh/.test(z.label)), tapped = n(z => /tapped/.test(z.label)), used = n(z => /broken|filled/.test(z.label));
+      detail = `${n(z => z.side === "bull")} bullish, ${n(z => z.side === "bear")} bearish: ${fresh} fresh, ${tapped} tapped${used ? `, ${used} used` : ""}`;
+      break;
+    }
     case "session_liquidity": detail = `${n(z => /resting/.test(z.label))} still resting, ${n(z => /taken/.test(z.label))} taken`; break;
     case "inducement": detail = `${n(z => /not taken/.test(z.label))} not taken yet, ${n(z => /swept/.test(z.label))} swept`; break;
     case "liquidity_voids": detail = `${n(z => /open/.test(z.label))} open, ${n(z => /filled/.test(z.label))} filled`; break;
@@ -119,7 +129,7 @@ function setupSummary(results: SetupResult[]): string {
   return `${results.length} trade setup${results.length === 1 ? "" : "s"} (${won.length} reached the target, ${lost.length} the stop, net ${net >= 0 ? "+" : ""}${net.toFixed(1)}R)${liveText}`;
 }
 
-export function markOnChart(kind: MarkKind, opts: { patterns?: string[]; setups?: SetupId[] } = {}): MarkResult {
+export function markOnChart(kind: MarkKind, opts: { patterns?: string[]; setups?: SetupId[]; state?: "live" | "fresh" | "tapped" | "all" } = {}): MarkResult {
   const bars = getChartBars();
   if (bars.length < 30) return { ok: false, reason: "no_data" };
   const setups = kind === "setups" ? setupMarks(bars, analysisStart(bars), opts.setups) : null;

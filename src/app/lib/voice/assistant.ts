@@ -531,7 +531,8 @@ async function run(intent: Intent, reply?: string, quiet = false, confirmed = fa
       const done: string[] = [];
       const none: string[] = [];
       for (const k of intent.what) {
-        const r = markOnChart(k, k === "candle_patterns" ? { patterns: intent.patterns } : k === "setups" ? { setups: intent.setups as any } : {});
+        const r = markOnChart(k, k === "candle_patterns" ? { patterns: intent.patterns } : k === "setups" ? { setups: intent.setups as any }
+          : ["order_blocks", "fvg", "ifvg", "poi"].includes(k) && intent.state ? { state: intent.state } : {});
         if (!r.ok) { say("The chart has no bars to look at yet."); return; }
         if (!r.count) { none.push(MARK_NAMES[k]); continue; }
         done.push(r.summary);
@@ -787,7 +788,9 @@ function intentOf(a: any): Intent | null {
       const patterns = Array.isArray(a.patterns) ? (a.patterns as string[]).filter(p => CANDLE_PATTERN_IDS.includes(p)) : [];
       // (which setups, when named: ids, or a family's — ict, smc, price_action, msnr)
       const setups = Array.isArray(a.setups) ? Array.from(new Set((a.setups as string[]).flatMap(x => SETUP_FAMILIES[x] ?? ((SETUP_IDS as string[]).includes(x) ? [x] : [])))) : [];
-      return what.length ? { kind: "mark", what, ...(patterns.length ? { patterns } : {}), ...(setups.length ? { setups } : {}) } : null;
+      // (fresh, tapped or all: which order blocks, FVGs, IFVGs and POIs)
+      const state = ["fresh", "tapped", "all"].includes(a.state) ? a.state : undefined;
+      return what.length ? { kind: "mark", what, ...(patterns.length ? { patterns } : {}), ...(setups.length ? { setups } : {}), ...(state ? { state } : {}) } : null;
     }
     case "clear_marks": return { kind: "clear_marks", what: Array.isArray(a.what) && a.what.length ? a.what as MarkKind[] : undefined };
     case "indicator": return typeof a.name === "string" ? { kind: "indicator", name: a.name, remove: !!a.remove } : null;
