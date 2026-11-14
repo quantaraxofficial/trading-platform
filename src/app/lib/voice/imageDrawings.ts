@@ -90,6 +90,42 @@ function place(found: FoundDrawing[], scan: ChartScan, loc: NonNullable<Awaited<
       out.push({ type: "rectangle", points: [pt(d.x0, d.y0), pt(d.x1, d.y1)],
         style: { stroke: d.border, strokeWidth: d.width, fill: d.fill ?? "rgba(0, 0, 0, 0)", backgroundVisible: !!d.fill },
         said: `a rectangle from ${fmt(priceAt(al, d.y0))} to ${fmt(priceAt(al, d.y1))}` });
+    } else if (d.kind === "position") {
+      // (entry at both ends, the target and the stop at the start, as the position tool keeps them)
+      out.push({ type: d.long ? "long_position" : "short_position", points: [pt(d.x0, d.entry), pt(d.x1, d.entry), pt(d.x0, d.target), pt(d.x0, d.stop)],
+        style: { accountSize: 1000, lotSize: 1, risk: 25, riskType: "%" },
+        said: `a ${d.long ? "long" : "short"} position from ${fmt(priceAt(al, d.entry))}, target ${fmt(priceAt(al, d.target))}, stop ${fmt(priceAt(al, d.stop))}` });
+    } else if (d.kind === "channel") {
+      out.push({ type: "parallel_channel", points: [pt(d.a.x, d.a.y), pt(d.b.x, d.b.y), pt(d.c.x, d.c.y)],
+        style: { stroke: d.color, strokeWidth: Math.max(1, d.width), ...(d.fill ? { fill: d.fill } : {}) }, said: "a parallel channel" });
+    } else if (d.kind === "arrow") {
+      out.push({ type: "arrow", points: [pt(d.a.x, d.a.y), pt(d.b.x, d.b.y)], style: { stroke: d.color, strokeWidth: d.width, lineStyle: d.style },
+        said: `an arrow from ${fmt(priceAt(al, d.a.y))} to ${fmt(priceAt(al, d.b.y))}` });
+    } else if (d.kind === "path") {
+      out.push({ type: d.brush ? "brush" : d.arrow ? "path" : "polyline", points: d.pts.map(p => pt(p.x, p.y)), style: { stroke: d.color, strokeWidth: d.width },
+        said: d.brush ? "a brush stroke" : d.arrow ? `a path of ${d.pts.length - 1} legs` : `a polyline of ${d.pts.length - 1} legs` });
+    } else if (d.kind === "triangle") {
+      out.push({ type: "triangle", points: d.pts.map(p => pt(p.x, p.y)), style: { stroke: d.color, strokeWidth: Math.max(1, d.width), fill: d.fill ?? "rgba(0, 0, 0, 0)", backgroundVisible: !!d.fill },
+        said: "a triangle" });
+    } else if (d.kind === "ellipse") {
+      const style = { stroke: d.color, strokeWidth: d.width, fill: d.fill ?? "rgba(0, 0, 0, 0)", backgroundVisible: !!d.fill };
+      if (d.circle) {
+        // (the centre and a point on the edge: the radius in pixels, as drawn)
+        out.push({ type: "circle", points: [pt(d.cx, d.cy), pt(d.cx + d.ra, d.cy)], style, said: "a circle" });
+      } else {
+        // (the long axis' two ends, and how far it bulges: the end of the short one)
+        const ux = Math.cos(d.angle), uy = Math.sin(d.angle);
+        out.push({ type: "ellipse", points: [pt(d.cx - d.ra * ux, d.cy - d.ra * uy), pt(d.cx + d.ra * ux, d.cy + d.ra * uy), pt(d.cx - d.rb * uy, d.cy + d.rb * ux)], style, said: "an ellipse" });
+      }
+    } else if (d.kind === "cross") {
+      out.push({ type: "cross_line", points: [pt(d.x, d.y)], style: { stroke: d.color, strokeWidth: d.width, lineStyle: d.style }, said: `a cross line at ${fmt(priceAt(al, d.y))}` });
+    } else if (d.kind === "marker") {
+      out.push({ type: d.up ? "arrow_mark_up" : "arrow_mark_down", points: [pt(d.x, d.y)], style: { stroke: d.color }, said: `an arrow mark ${d.up ? "up" : "down"}` });
+    } else if (d.kind === "range") {
+      // (from where it was started to where it was dragged: the arrow's tail to its head)
+      const fromY = d.up ? d.y1 : d.y0, toY = d.up ? d.y0 : d.y1, fromX = d.right ? d.x0 : d.x1, toX = d.right ? d.x1 : d.x0;
+      out.push({ type: d.price && d.date ? "date_and_price_range" : d.date ? "date_range" : "price_range", points: [pt(fromX, fromY), pt(toX, toY)],
+        style: { stroke: d.color, ...(d.fill ? { fill: d.fill } : {}) }, said: d.date && !d.price ? "a date range" : `a price range from ${fmt(priceAt(al, fromY))} to ${fmt(priceAt(al, toY))}` });
     }
   }
   return out;
@@ -118,7 +154,8 @@ function fibStyle(d: Extract<FoundDrawing, { kind: "fib" }>, scan: ChartScan) {
 function defaultsOf(placed: Placed[]): Record<string, Record<string, unknown>> {
   const out: Record<string, Record<string, unknown>> = {};
   for (const p of placed) {
-    if (out[p.type]) continue;
+    // (a position's look is its risk settings, the trader's own: not changed)
+    if (out[p.type] || p.type === "long_position" || p.type === "short_position") continue;
     const { extendLeft, extendRight, ...look } = p.style as any;
     void extendLeft; void extendRight;
     out[p.type] = p.type === "fibonacci" ? { ...(p.style as any), extendLeft: false, extendRight: false } : look;
@@ -146,7 +183,10 @@ export async function copyImageDrawings(scan: ChartScan): Promise<DrawingsCopy |
   for (const t of Object.keys(looks)) prev[t] = before[t] ?? null;
   window.dispatchEvent(new CustomEvent("tv:set-tool-defaults", { detail: { defaults: looks } }));
 
-  const kinds: Record<string, string> = { fibonacci: "Fibs", trendline: "trend lines", horizontal_line: "horizontal lines", horizontal_ray: "horizontal rays", vertical_line: "vertical lines", rectangle: "rectangles" };
+  const kinds: Record<string, string> = { fibonacci: "Fibs", trendline: "trend lines", horizontal_line: "horizontal lines", horizontal_ray: "horizontal rays", vertical_line: "vertical lines", rectangle: "rectangles",
+    long_position: "long positions", short_position: "short positions", parallel_channel: "channels", arrow: "arrows", path: "paths", polyline: "polylines", brush: "brush strokes",
+    triangle: "triangles", circle: "circles", ellipse: "ellipses", cross_line: "cross lines", arrow_mark_up: "up arrow marks", arrow_mark_down: "down arrow marks",
+    price_range: "price ranges", date_range: "date ranges", date_and_price_range: "date and price ranges" };
   const lookText = Object.keys(looks).map(t => kinds[t]).filter(Boolean);
   const iv = loc?.switchedTo ? intervalByValue(loc.switchedTo) : undefined;
   const summary = placed.length

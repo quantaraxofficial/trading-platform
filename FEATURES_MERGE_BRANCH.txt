@@ -885,6 +885,17 @@ Posting signals out
     removes them, puts the defaults and timeframe back. Ignored: the page's own panels over the chart
     (toolbars, tables, banners, ads), the legend and its buy / sell buttons, the last price line and
     the crosshair. "Copy my drawings" copies only them
+  - More tools are copied from a picture:
+    - long / short positions (the profit and stop boxes: entry, target, stop);
+    - parallel channels (both lines, the fill, the dashed middle);
+    - arrows (the head found at the tip), paths (with their arrowhead), polylines, brush strokes;
+    - triangles, circles and ellipses (outline and see-through fill);
+    - cross lines, price / date ranges, up / down arrow marks.
+    Shapes cut by candles, the legend, labels or panels drawn over them are put back together:
+    lines are joined across what hides them, and corners hidden under the legend are worked out
+    from the sides. Text drawings are left out (words can't be read from a picture). Tested on
+    TradingView Desktop's own drawings: placed within a few points of TradingView's own values.
+  - VOICE_COMMANDS.txt lists everything that can be said to the voice assistant, kept up to date
 
 ======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD

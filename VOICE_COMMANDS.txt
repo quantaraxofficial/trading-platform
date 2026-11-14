@@ -1,0 +1,181 @@
+TRADEPILOT VOICE ASSISTANT: EVERYTHING YOU CAN SAY
+==================================================
+
+Open it with the microphone button in the right toolbar. Speak or type; any of the 27 languages in
+its Language box works. The AI understands what you mean, so these are examples, not exact
+wordings. It does up to 8 things from one sentence, in order ("switch to euro hourly, mark the
+order blocks and add RSI"). Big actions ask "yes or no" first. If something needed is missing, it
+asks. Anything about trading it can't do yet is noted for the team (Django Admin: voice requests).
+This file is kept up to date: every new voice feature is added here.
+
+
+1. CHART
+--------
+- Symbol: "open gold", "show me EUR/USD on the 15 minute", "Apple daily".
+- Timeframe: "switch to 1 hour" (1m 5m 15m 30m 45m 1h 2h 4h daily weekly monthly).
+- Chart type: "Heikin Ashi", "hollow candles", "line chart", "Renko"... (candles, hollow candles,
+  volume candles, bars, line, line with markers, step line, area, HLC area, baseline, columns,
+  high-low, Heikin Ashi, Renko, line break, Kagi, point and figure, range).
+- Theme: "dark mode", "light theme", "switch theme".
+- Price: "what's the price".
+- "Reset the chart view". "Go to 1 March 2024 at 10:30".
+- Date range: "show 1 day / 5 days / 1 month / 3 months / 6 months / YTD / 1 year / 5 years / all".
+- Snapshot: "take a snapshot", "copy the chart image".
+- "Download the chart data".
+- Layouts: "new layout", "save the layout", "open my scalping layout".
+- Settings: "open chart settings" (each tab).
+
+
+2. COPY A CHART FROM A PICTURE
+------------------------------
+Send a screenshot (the picture button by the text box, paste it, or drop it on the panel), then:
+- "Make my chart look like this", "use this theme", "same colours as my TradingView".
+  Copies the background (solid / gradient), grid, scale text and lines, the candles' body / border /
+  wick colours, and the light / dark page.
+- "Only the candle colours", "only the background".
+- "Copy my drawings", "copy my fib", "copy my positions". Copied:
+  - Fibs (each level's colour, the shading, the trend line);
+  - trend lines, horizontal lines and rays, vertical lines, cross lines;
+  - rectangles, triangles, circles, ellipses (outline and see-through fill);
+  - long and short positions (entry, target, stop);
+  - parallel channels, arrows, paths, polylines, brush strokes;
+  - price / date ranges, up / down arrow marks.
+  They're placed at the same candles and prices. If the picture is another timeframe, the chart
+  switches to it. Their looks become the tools' defaults. Text drawings aren't copied: words can't
+  be read from a picture.
+- It asks "Keep it?": "no" puts everything back.
+
+
+3. INDICATORS
+-------------
+- "Add RSI", "remove the MACD", "remove all indicators".
+- Available: ATR, Awesome Oscillator, Bull Bear Power, Donchian Channels, Asian Session Range,
+  Ichimoku, MACD, Momentum, EMA, SMA, Pivot Points, Price Channel, Rate of Change, RSI, Volume,
+  Volume Profile, VWAP, Williams %R.
+- Settings: "set the RSI length to 21", "make the EMA 50", "change the MACD fast length to 8".
+
+
+4. DRAWINGS
+-----------
+- Pick a tool: "trend line", "fib retracement", "rectangle", "brush", "long position"... (any tool).
+- Place one: "draw a rectangle around the latest order block", "put a fire emoji on the last bar",
+  "write 'buy zone' at the top", "underline the low with the brush", "put a fib on the chart".
+- "Undo", "redo", "remove all drawings" (asks first).
+- "Lock / unlock all drawings", "hide / show all drawings".
+- Magnet: "magnet weak", "magnet strong", "magnet off".
+
+
+5. ANALYSIS: MARKING THE CHART FROM ITS BARS
+--------------------------------------------
+"Mark ..." analyses the bars on screen and draws the result. "Clear the marks" (or "clear the
+order blocks") removes them.
+
+SMC / ICT:
+- Order blocks, fair value gaps (FVG), inverse FVGs (IFVG), BOS / CHoCH (market structure).
+- POIs, buy-side / sell-side liquidity (EQH / EQL), liquidity sweeps / stop hunts.
+- Premium / discount with OTE, breaker blocks, mitigation blocks, balanced price ranges (BPR).
+- Displacement, kill zones / sessions, key levels (PDH / PDL, PWH / PWL, daily open).
+- "Mark all SMC concepts".
+- Order blocks, FVGs, IFVGs and POIs show their state (fresh, tapped ×N, past 50%,
+  broken / filled):
+  - "only fresh order blocks", "tapped FVGs", "all IFVGs including the broken ones".
+
+Price action:
+- Support and resistance, swing points (HH HL LH LL), trend lines, supply and demand zones.
+- Candlestick patterns: all, or only some ("mark the dojis", "pin bars", "engulfing").
+  The patterns: abandoned baby, belt hold, dark cloud cover, doji (dragonfly / gravestone /
+  long-legged, doji star), engulfing, evening / morning star, hammer, hanging man, harami
+  (and cross), inside / outside bar, inverted hammer, kicker, marubozu, piercing line, shooting
+  star, spinning top, three black crows, three white soldiers, three inside / outside, three
+  methods, tweezer.
+- Chart patterns (double top / bottom, head and shoulders with necklines), ranges / consolidation.
+- "Mark all price action".
+
+MSNR (Malaysian SNR):
+- A / V levels (fresh / unfresh), gap levels, SBR / RBS flips, QM / Quasimodo, compression.
+- "Mark all MSNR".
+
+Liquidity:
+- Session highs and lows (Asia, London, New York, PMH / PML), inducement (IDM).
+- Trend line liquidity, liquidity voids, round numbers.
+- Draw on liquidity (ERL / IRL, "where is price going").
+- "Mark all liquidity".
+
+Trade setups:
+- "Find setups", "any trades?", "show me Silver Bullets", "MSNR setups". Found as complete trades
+  (entry, stop, target), drawn as positions and followed to now (won, lost, in trade, waiting,
+  missed).
+- ICT: Silver Bullet, Unicorn, Judas swing, OTE, Turtle soup, ICT 2022 model.
+- SMC: CHoCH + OB, BOS + OB pullback, Sweep + CHoCH.
+- Price action: pin bar at S/R, engulfing at S/R, break and retest, inside bar breakout,
+  false breakout, double top / bottom, opening range breakout, flag, Wyckoff spring / upthrust.
+- MSNR: fresh rejection, CP into level, SBR / RBS retest, QM.
+- Liquidity: EQH / EQL sweep, IDM + POI, London sweep in the NY open.
+
+Bias:
+- "Analyse the last hour and predict the next hour", "bias for the next 4 hours", "today's bias".
+- It reads the last window (move, close, sweep / break, structure on two timeframes, premium /
+  discount), gives the lean with how often such reads were right on this market (tested on its
+  history), a target, where it's wrong and a usual move, and draws it.
+- "Clear the bias" removes the drawing.
+
+Knowledge:
+- Ask about any candlestick or chart pattern, SMC / ICT, price action, MSNR, liquidity or setup:
+  "what is a breaker block", "how do I trade the silver bullet".
+
+
+6. REPLAY AND BACKTESTING
+-------------------------
+- Replay:
+  - Start: "start replay from 1 March 2024", "replay from a random date".
+  - Controls: "play", "pause", "step forward / back", "skip to the end", "speed 3x".
+  - Bar and exit: "select the bar", "exit replay", "exit and save".
+- Backtest: "backtest gold from 1 March 2024 with 10k for 3 months" (asks yes / no, then creates
+  and opens it).
+- "Open my backtest sessions".
+
+
+7. ALERTS
+---------
+- "Alert at 2400" (opens one to confirm).
+- "Set an alert when gold crosses up 2450 that lasts 7 days with message breakout" (sets it).
+- "List my alerts", "what alerts went off", "clear the alerts log".
+- "Change alert 2 to 2500", "stop / restart / delete the 2400 alert".
+
+
+8. WATCHLISTS AND PANELS
+------------------------
+- Watchlists: "add EUR/USD to my watchlist", "add it to metals", "remove TSLA",
+  "create a watchlist called scalps", "open my metals list".
+- Panels: "open the watchlist / alerts / object tree / collab / backtest sessions".
+- Economic calendar: "open / close the economic calendar", "show / hide economic events on the
+  chart".
+- Pages: "open analytics".
+
+
+9. PAPER TRADING
+----------------
+- "Open paper trading".
+- "Buy 2 lots of gold at market", "sell limit 0.5 at 2450" (fills in the order ticket for you to
+  place).
+
+
+10. COLLAB (SHARE THE CHART LIVE)
+---------------------------------
+- "Start a collab": it asks its name and who to invite (editor or viewer); "defaults" is fine.
+- "Invite Rahul as viewer", "copy the collab link", "tell the group I'm in a trade".
+
+
+11. PINE SCRIPT
+---------------
+- "Open the Pine Editor", "close it".
+- "Write an RSI divergence indicator", "write a moving average crossover strategy" (writes the
+  whole script and opens it).
+- "Add it to the chart", "save the script", "open a script", "new indicator", "new strategy".
+
+
+12. OTHER
+---------
+- "Send feedback: the alerts panel is slow" (can attach a chart screenshot).
+- "Stop listening".
+- Answers are spoken with subtitles as they're said. The speaker button switches to subtitles only.
