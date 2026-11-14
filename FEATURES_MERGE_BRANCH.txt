@@ -832,6 +832,21 @@ Posting signals out
     live now. The rules are in src/app/lib/analysis/setups.ts
 
 ======================================================================
+17b11. VOICE ASSISTANT: LIQUIDITY, AND MORE SETUPS
+======================================================================
+  - It knows liquidity fully (BSL / SSL, EQH / EQL, ERL / IRL and the draw on liquidity, sweeps vs
+    runs, stop hunts, inducement, trend line liquidity, session and previous day / week / month highs
+    and lows, voids, round numbers, SFP) and more setups (liquidity setups, ORB, flags, Wyckoff, MMXM,
+    CBDR, NWOG / NDOG, triangles, wedges, three drives, cup and handle, VWAP, MA crossovers, gap and go)
+  - New marks: session liquidity (Asia / London / NY highs and lows, PMH / PML: resting or taken),
+    inducement (IDM: swept or not), trend line liquidity (3+ touches), liquidity voids (open or filled),
+    round numbers, the draw on liquidity (ERL with the likely draw, IRL open FVGs)
+  - New setups found and followed: EQH / EQL sweep, IDM + POI, London sweep in the NY open, opening range
+    breakout, flag, Wyckoff spring / upthrust (25 in all; families ICT, SMC, price action, MSNR, liquidity)
+  - The AI's long knowledge (MSNR, setups, liquidity) goes with a request only when the conversation is
+    about it: everyday commands stay small for the free AI tier's token limits
+
+======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD
 ======================================================================
   - Analytics → "Connect an account": any broker or prop-firm account (FTMO, FundedNext, The5ers,

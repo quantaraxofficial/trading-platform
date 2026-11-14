@@ -17,3 +17,23 @@ class SetupActionTests(SimpleTestCase):
     def test_msnr_kinds_are_known(self):
         a = clean_action({"type": "mark", "what": ["msnr_levels", "msnr_gaps", "msnr_flips", "msnr_qm", "msnr_compression"]})
         self.assertEqual(len(a["what"]), 5)
+
+
+class KnowledgeTests(SimpleTestCase):
+    """The long knowledge (MSNR, setups, liquidity) goes with a request only when it's the subject"""
+
+    def test_only_when_it_comes_up(self):
+        from .voice import knowledge_for
+        self.assertEqual(knowledge_for(["open gold on the 15 minute"]), [])
+        msnr = knowledge_for(["mark the malaysian s and r"])
+        self.assertTrue(any("A level" in k for k in msnr))
+        self.assertTrue(any("Silver Bullet" in k for k in knowledge_for(["how do I trade the silver bullet"])))
+        self.assertTrue(any("inducement" in k.lower() for k in knowledge_for(["where is the sell side liquidity"])))
+        # (misheard: "kazi modo" is Quasimodo)
+        self.assertTrue(knowledge_for(["what is a kazi modo"]))
+
+    def test_liquidity_marks_known(self):
+        a = clean_action({"type": "mark", "what": ["session_liquidity", "inducement", "trendline_liquidity", "liquidity_voids", "round_numbers", "draw_on_liquidity"]})
+        self.assertEqual(len(a["what"]), 6)
+        b = clean_action({"type": "mark", "what": ["setups"], "setups": ["liquidity", "pa_orb", "pa_flag", "pa_wyckoff", "liq_idm_poi"]})
+        self.assertEqual(b["setups"], ["liquidity", "pa_orb", "pa_flag", "pa_wyckoff", "liq_idm_poi"])

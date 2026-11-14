@@ -47,6 +47,8 @@
 //   SBR / RBS         broken levels that flipped (role reversal), untested or retested
 //   QM                Quasimodo levels (the left shoulder of H L HH LL, or L H LL HH)
 //   Compression       CP: small overlapping candles drifting into a fresh level
+// Liquidity (./liquidity): session highs / lows (Asia, London, NY) and the previous month's, inducement
+// (IDM), trend line liquidity (3+ touches), liquidity voids, round numbers, the draw on liquidity (ERL / IRL)
 // Setups (./setups): complete trades (entry, stop, target) of the SMC, ICT, price-action and MSNR
 // setups, each followed on the bars after it
 
@@ -57,12 +59,14 @@ import {
 import { candlePatterns } from "./candles";
 import { msnrAV, msnrCompression, msnrFlips, msnrGaps, msnrQuasimodo } from "./msnr";
 import { setupMarks, type SetupId } from "./setups";
+import { drawOnLiquidity, inducement, liquidityVoids, roundNumbers, sessionLiquidity, trendlineLiquidity } from "./liquidity";
 
 export type MarkKind =
   | "order_blocks" | "fvg" | "ifvg" | "support_resistance" | "structure"
   | "poi" | "liquidity" | "sweeps" | "premium_discount" | "breakers" | "bpr" | "displacement" | "killzones" | "key_levels"
   | "swing_points" | "trendlines" | "supply_demand" | "candle_patterns" | "chart_patterns" | "ranges"
   | "msnr_levels" | "msnr_gaps" | "msnr_flips" | "msnr_qm" | "msnr_compression"
+  | "session_liquidity" | "inducement" | "trendline_liquidity" | "liquidity_voids" | "round_numbers" | "draw_on_liquidity"
   | "setups";
 
 export const ALL_MARK_KINDS: MarkKind[] = [
@@ -70,6 +74,7 @@ export const ALL_MARK_KINDS: MarkKind[] = [
   "poi", "liquidity", "sweeps", "premium_discount", "breakers", "bpr", "displacement", "killzones", "key_levels",
   "swing_points", "trendlines", "supply_demand", "candle_patterns", "chart_patterns", "ranges",
   "msnr_levels", "msnr_gaps", "msnr_flips", "msnr_qm", "msnr_compression",
+  "session_liquidity", "inducement", "trendline_liquidity", "liquidity_voids", "round_numbers", "draw_on_liquidity",
   "setups",
 ];
 
@@ -100,6 +105,12 @@ export function analyse(kind: MarkKind, bars: Bar[], from: number, opts: { patte
     case "msnr_flips": return msnrFlips(bars, from);
     case "msnr_qm": return msnrQuasimodo(bars, from);
     case "msnr_compression": return msnrCompression(bars, from);
+    case "session_liquidity": return sessionLiquidity(bars, from);
+    case "inducement": return inducement(bars, from);
+    case "trendline_liquidity": return trendlineLiquidity(bars, from);
+    case "liquidity_voids": return liquidityVoids(bars, from);
+    case "round_numbers": return roundNumbers(bars, from);
+    case "draw_on_liquidity": return drawOnLiquidity(bars, from);
     case "setups": return setupMarks(bars, from, opts.setups).zones;
   }
 }

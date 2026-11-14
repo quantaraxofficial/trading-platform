@@ -36,6 +36,25 @@
 //                    2R; each level faded once
 //   Double top / bottom  two swing points within 0.3u, then a close through the neckline: enter at that
 //                    close, stop beyond the tops, target the pattern's height (at least 1R, else 2R)
+// Liquidity
+//   EQH / EQL sweep  equal highs (lows): two swing points within 0.1u, then a candle through them that
+//                    closes back: enter at the close, stop beyond its wick, target the other side's
+//                    liquidity (else 2R)
+//   IDM + POI        after a break of structure, price takes the inducement (the leg's first pullback)
+//                    and comes to the leg's order block: a limit at its edge, stop beyond it, target the
+//                    leg's end (else 2R)
+//   London sweep     in the New York open (07–10), a false move through London's (02–05) high or low
+//                    that closes back inside within 3 candles: enter at that close, stop beyond the
+//                    move, target London's other side (else 2R)
+//   (the price-action extras)
+//   Opening range    the first half hour of New York's cash session (09:30–10:00): a stop order past
+//                    the side broken first (before 12:00), stop at the other side, 2R
+//   Flag             a pole (3u+ in 8 candles or fewer), then 4–15 candles holding within its upper
+//                    (lower) half: a stop order past the flag in the pole's direction, stop at the
+//                    flag's other end, target the pole's length
+//   Wyckoff spring   a range of 20+ candles (within 3u), then a candle through its low (high: an
+//                    upthrust) that closes back inside: enter at the close, stop beyond the wick,
+//                    target the range's other side (else 2R)
 // MSNR
 //   Fresh rejection  the first touch of a fresh A (V) level, closing back: enter at the close, stop
 //                    beyond the wick, target the next fresh level the other way (else 2R)
@@ -52,7 +71,8 @@ export type SetupId =
   | "ict_silver_bullet" | "ict_unicorn" | "ict_judas" | "ict_ote" | "ict_turtle_soup" | "ict_2022"
   | "smc_choch_ob" | "smc_bos_ob" | "smc_sweep_choch"
   | "pa_pin_bar" | "pa_engulfing" | "pa_break_retest" | "pa_inside_bar" | "pa_false_break" | "pa_double"
-  | "msnr_rejection" | "msnr_cp" | "msnr_flip_retest" | "msnr_qm";
+  | "msnr_rejection" | "msnr_cp" | "msnr_flip_retest" | "msnr_qm"
+  | "liq_eq_sweep" | "liq_idm_poi" | "liq_session_sweep" | "pa_orb" | "pa_flag" | "pa_wyckoff";
 
 export const SETUP_NAMES: Record<SetupId, string> = {
   ict_silver_bullet: "Silver Bullet", ict_unicorn: "Unicorn", ict_judas: "Judas swing", ict_ote: "OTE", ict_turtle_soup: "Turtle soup",
@@ -60,12 +80,15 @@ export const SETUP_NAMES: Record<SetupId, string> = {
   pa_pin_bar: "Pin bar at S/R", pa_engulfing: "Engulfing at S/R", pa_break_retest: "Break & retest", pa_inside_bar: "Inside bar breakout",
   pa_false_break: "False breakout", pa_double: "Double top / bottom",
   msnr_rejection: "MSNR fresh rejection", msnr_cp: "MSNR CP into level", msnr_flip_retest: "MSNR SBR / RBS retest", msnr_qm: "MSNR QM",
+  liq_eq_sweep: "EQH / EQL sweep", liq_idm_poi: "IDM + POI", liq_session_sweep: "London sweep (NY open)",
+  pa_orb: "Opening range breakout", pa_flag: "Flag", pa_wyckoff: "Wyckoff spring / upthrust",
 };
 export const SETUP_IDS = Object.keys(SETUP_NAMES) as SetupId[];
 export const SETUP_FAMILIES: Record<string, SetupId[]> = {
   ict: ["ict_silver_bullet", "ict_unicorn", "ict_judas", "ict_ote", "ict_turtle_soup", "ict_2022"],
   smc: ["smc_choch_ob", "smc_bos_ob", "smc_sweep_choch"],
-  price_action: ["pa_pin_bar", "pa_engulfing", "pa_break_retest", "pa_inside_bar", "pa_false_break", "pa_double"],
+  price_action: ["pa_pin_bar", "pa_engulfing", "pa_break_retest", "pa_inside_bar", "pa_false_break", "pa_double", "pa_orb", "pa_flag", "pa_wyckoff"],
+  liquidity: ["liq_eq_sweep", "liq_idm_poi", "liq_session_sweep", "ict_turtle_soup", "ict_judas", "smc_sweep_choch"],
   msnr: ["msnr_rejection", "msnr_cp", "msnr_flip_retest", "msnr_qm"],
 };
 
@@ -160,23 +183,32 @@ function unicorn(c: Ctx): Trade[] {
 }
 
 function judas(c: Ctx): Trade[] {
+  return rangeFakeout(c, "ict_judas", [20 * 60, 24 * 60], [[120, 300], [420, 600]], "a false move through the Asian range");
+}
+
+function londonSweep(c: Ctx): Trade[] {
+  return rangeFakeout(c, "liq_session_sweep", [120, 300], [[420, 600]], "a false move through London's range in the New York open");
+}
+
+// A session's range (New York minutes [a, b)), and in the windows after it a false move through it that
+// closes back inside within 3 candles: enter at that close, stop beyond the move, target the range's
+// other side (else 2R). One each way per day
+function rangeFakeout(c: Ctx, id: SetupId, range: [number, number], windows: [number, number][], why: string): Trade[] {
   if (!nyFmt || spacing(c.bars) > 3600 + 1) return [];
   const out: Trade[] = [];
-  // the Asian range of each night (New York 20:00–24:00), then the London and New York opens after it
   let asia: { hi: number; lo: number; day: string } | null = null;
   let building: { hi: number; lo: number; day: string } | null = null;
   const used = new Set<string>();
-  for (let i = Math.max(1, c.from - 50); i <= c.last; i++) {
+  for (let i = Math.max(1, c.from - 80); i <= c.last; i++) {
     const b = c.bars[i], t = ny(b.time);
-    if (t.min >= 20 * 60) {
+    if (t.min >= range[0] && t.min < range[1]) {
       if (!building || building.day !== t.day) building = { hi: b.high, lo: b.low, day: t.day };
       else { building.hi = Math.max(building.hi, b.high); building.lo = Math.min(building.lo, b.low); }
       continue;
     }
     if (building) { asia = building; building = null; }
     if (!asia || i < c.from) continue;
-    const open = (t.min >= 120 && t.min < 300) || (t.min >= 420 && t.min < 600);
-    if (!open) continue;
+    if (!windows.some(([a, w]) => t.min >= a && t.min < w)) continue;
     for (const side of ["bear", "bull"] as Side[]) {
       const key = `${asia.day}-${side}`;
       if (used.has(key)) continue;
@@ -187,8 +219,8 @@ function judas(c: Ctx): Trade[] {
         const back = side === "bear" ? c.bars[j].close < asia.hi : c.bars[j].close > asia.lo;
         if (!back) continue;
         const extreme = side === "bear" ? Math.max(...c.bars.slice(i, j + 1).map(x => x.high)) : Math.min(...c.bars.slice(i, j + 1).map(x => x.low));
-        const tr = withTarget({ id: "ict_judas", side, signal: j, type: "market", entry: c.bars[j].close,
-          stop: side === "bear" ? extreme + c.u * 0.05 : extreme - c.u * 0.05, why: "a false move through the Asian range" }, side === "bear" ? asia.lo : asia.hi);
+        const tr = withTarget({ id, side, signal: j, type: "market", entry: c.bars[j].close,
+          stop: side === "bear" ? extreme + c.u * 0.05 : extreme - c.u * 0.05, why }, side === "bear" ? asia.lo : asia.hi);
         if (tr) { out.push(tr); used.add(key); }
         break;
       }
@@ -433,6 +465,156 @@ function doubles(c: Ctx): Trade[] {
   return out;
 }
 
+// ---------------------------------------------------------------------------------------------- liquidity
+function eqSweep(c: Ctx): Trade[] {
+  const out: Trade[] = [];
+  const used = new Set<string>();
+  for (let i = Math.max(c.from, 10); i <= c.last; i++) {
+    const b = c.bars[i];
+    for (const side of ["bear", "bull"] as Side[]) {
+      // equal highs (lows) confirmed before this bar, not taken since the second one
+      const pts = confirmed(c, side === "bear" ? c.highs : c.lows, i).slice(-6);
+      const px = (x: number) => (side === "bear" ? c.bars[x].high : c.bars[x].low);
+      for (let n = pts.length - 1; n > 0; n--) {
+        const a = pts[n - 1], z = pts[n];
+        if (Math.abs(px(a) - px(z)) > c.u * 0.1) continue;
+        const lvl = side === "bear" ? Math.max(px(a), px(z)) : Math.min(px(a), px(z));
+        const key = `${side}${a}-${z}`;
+        if (used.has(key)) continue;
+        let takenBefore = false;
+        for (let x = z + 1; x < i && !takenBefore; x++) if (side === "bear" ? c.bars[x].high > lvl : c.bars[x].low < lvl) takenBefore = true;
+        if (takenBefore) { used.add(key); continue; }
+        const sweep = side === "bear" ? b.high > lvl && b.close < lvl : b.low < lvl && b.close > lvl;
+        if (!sweep) continue;
+        used.add(key);
+        // the other side's liquidity: the latest swing the other way
+        const opp = confirmed(c, side === "bear" ? c.lows : c.highs, i).slice(-1)[0];
+        const t = withTarget({ id: "liq_eq_sweep", side, signal: i, type: "market", entry: b.close,
+          stop: side === "bear" ? b.high + c.u * 0.05 : b.low - c.u * 0.05, why: `a sweep of equal ${side === "bear" ? "highs" : "lows"}` },
+          opp !== undefined ? (side === "bear" ? c.bars[opp].low : c.bars[opp].high) : undefined);
+        if (t) out.push(t);
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+function idmPoi(c: Ctx): Trade[] {
+  const out: Trade[] = [];
+  for (const s of c.structure) {
+    if (s.to < c.from - 30) continue;
+    const brk = s.to, bull = s.side === "bull";
+    const ob = c.obs.filter(o => o.side === s.side && o.from < brk && o.from >= brk - 40).pop();
+    if (!ob) continue;
+    // the inducement: the leg's first pullback (a minor swing the other way, 2 bars each side)
+    let idm = -1;
+    for (let i = brk + 1; i <= Math.min(c.last - 2, brk + 30); i++) {
+      const p = bull ? c.bars[i].low : c.bars[i].high;
+      if ([i - 1, i + 1, i + 2].every(j => bull ? c.bars[j].low >= p : c.bars[j].high <= p)) { idm = i; break; }
+    }
+    if (idm < 0) continue;
+    const idmP = bull ? c.bars[idm].low : c.bars[idm].high;
+    // its sweep (the stops taken), still above (below) the order block
+    let sweep = -1;
+    for (let j = idm + 3; j <= Math.min(c.last, idm + 40); j++) {
+      if (bull ? c.bars[j].low < idmP : c.bars[j].high > idmP) { sweep = j; break; }
+    }
+    if (sweep < 0 || sweep < c.from) continue;
+    const legEnd = bull ? Math.max(...c.bars.slice(brk, sweep + 1).map(b => b.high)) : Math.min(...c.bars.slice(brk, sweep + 1).map(b => b.low));
+    const t = withTarget({ id: "liq_idm_poi", side: s.side, signal: sweep, type: "limit", fillWithin: 30,
+      entry: bull ? ob.top : ob.bottom, stop: bull ? ob.bottom - c.u * 0.05 : ob.top + c.u * 0.05,
+      why: "the inducement taken, on to the order block" }, legEnd);
+    if (t) out.push(t);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------------------- price action extras
+function openingRange(c: Ctx): Trade[] {
+  if (!nyFmt || spacing(c.bars) > 900 + 1) return [];
+  const out: Trade[] = [];
+  let day = "", hi = -Infinity, lo = Infinity, endI = -1;
+  for (let i = Math.max(1, c.from - 40); i <= c.last; i++) {
+    const t = ny(c.bars[i].time);
+    if (t.day !== day) { day = t.day; hi = -Infinity; lo = Infinity; endI = -1; }
+    if (t.min >= 570 && t.min < 600) { hi = Math.max(hi, c.bars[i].high); lo = Math.min(lo, c.bars[i].low); endI = i; continue; }
+    if (endI < 0 || i !== endI + 1 || endI < c.from || !isFinite(hi)) continue;
+    // the side broken first, before 12:00
+    for (let j = i; j <= c.last; j++) {
+      if (ny(c.bars[j].time).min >= 720 || ny(c.bars[j].time).day !== day) break;
+      const up = c.bars[j].high > hi, down = c.bars[j].low < lo;
+      if (!up && !down) continue;
+      if (up && down) break;                       // both in one candle: no clear break
+      const side: Side = up ? "bull" : "bear";
+      const tr = withTarget({ id: "pa_orb", side, signal: endI, type: "stop", fillWithin: j - endI + 1,
+        entry: up ? hi + c.u * 0.02 : lo - c.u * 0.02, stop: up ? lo - c.u * 0.02 : hi + c.u * 0.02, why: "the New York opening range broken" });
+      if (tr) out.push(tr);
+      break;
+    }
+  }
+  return out;
+}
+
+function flags(c: Ctx): Trade[] {
+  const out: Trade[] = [];
+  let i = Math.max(c.from - 20, 10);
+  while (i <= c.last - 5) {
+    let found = false;
+    for (let len = 3; len <= 8 && !found; len++) {
+      const a = i - len;
+      if (a < 0) break;
+      const up = c.bars[i].close - c.bars[a].open;
+      if (Math.abs(up) < c.u * 3) continue;
+      const bull = up > 0;
+      const poleTop = bull ? Math.max(...c.bars.slice(a, i + 1).map(b => b.high)) : Math.min(...c.bars.slice(a, i + 1).map(b => b.low));
+      const poleLen = Math.abs(poleTop - c.bars[a].open);
+      // the flag: 4–15 candles holding in the pole's upper (lower) half, without a new extreme
+      let end = -1, fHi = -Infinity, fLo = Infinity;
+      for (let j = i + 1; j <= Math.min(c.last, i + 15); j++) {
+        const b = c.bars[j];
+        if (bull ? b.high > poleTop + c.u * 0.1 : b.low < poleTop - c.u * 0.1) break;
+        if (bull ? b.low < poleTop - poleLen * 0.5 : b.high > poleTop + poleLen * 0.5) break;
+        fHi = Math.max(fHi, b.high); fLo = Math.min(fLo, b.low);
+        if (j - i >= 4) end = j;
+      }
+      if (end < 0 || end < c.from) continue;
+      const t = withTarget({ id: "pa_flag", side: bull ? "bull" : "bear", signal: end, type: "stop", fillWithin: 10,
+        entry: bull ? fHi + c.u * 0.02 : fLo - c.u * 0.02, stop: bull ? fLo - c.u * 0.02 : fHi + c.u * 0.02,
+        why: `a ${bull ? "bull" : "bear"} flag after a strong move` }, bull ? fHi + poleLen : fLo - poleLen);
+      if (t) out.push(t);
+      found = true;
+      i = end + 1;
+    }
+    if (!found) i++;
+  }
+  return out;
+}
+
+function wyckoff(c: Ctx): Trade[] {
+  const out: Trade[] = [];
+  let i = Math.max(c.from - 60, 0);
+  while (i <= c.last - 21) {
+    // a range: 20+ candles within 3u
+    let hi = c.bars[i].high, lo = c.bars[i].low, j = i;
+    while (j + 1 <= c.last && Math.max(hi, c.bars[j + 1].high) - Math.min(lo, c.bars[j + 1].low) <= c.u * 3) {
+      j++; hi = Math.max(hi, c.bars[j].high); lo = Math.min(lo, c.bars[j].low);
+    }
+    if (j - i + 1 < 20 || j + 1 > c.last) { i++; continue; }
+    // the candle after it: through the low (a spring) or the high (an upthrust), closing back inside
+    const b = c.bars[j + 1];
+    const spring = b.low < lo - c.u * 0.1 && b.close > lo, upthrust = b.high > hi + c.u * 0.1 && b.close < hi;
+    if ((spring || upthrust) && j + 1 >= c.from) {
+      const t = withTarget({ id: "pa_wyckoff", side: spring ? "bull" : "bear", signal: j + 1, type: "market", entry: b.close,
+        stop: spring ? b.low - c.u * 0.05 : b.high + c.u * 0.05, why: spring ? "a Wyckoff spring below the range" : "a Wyckoff upthrust above the range" },
+        spring ? hi : lo);
+      if (t) out.push(t);
+    }
+    i = j + 1;
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------------------------- MSNR
 function msnrRejection(c: Ctx): Trade[] {
   const out: Trade[] = [];
@@ -506,6 +688,7 @@ const DETECT: Record<SetupId, (c: Ctx) => Trade[]> = {
   smc_choch_ob: c => structureOb(c, "choch"), smc_bos_ob: c => structureOb(c, "bos"), smc_sweep_choch: sweepChoch,
   pa_pin_bar: pinBars, pa_engulfing: engulfings, pa_break_retest: breakRetest, pa_inside_bar: insideBars, pa_false_break: c => fades(c, "pa_false_break"), pa_double: doubles,
   msnr_rejection: msnrRejection, msnr_cp: msnrCp, msnr_flip_retest: msnrFlipRetest, msnr_qm: msnrQm,
+  liq_eq_sweep: eqSweep, liq_idm_poi: idmPoi, liq_session_sweep: londonSweep, pa_orb: openingRange, pa_flag: flags, pa_wyckoff: wyckoff,
 };
 
 // How a trade went on the bars after its signal: filled (market at once; a limit when price comes

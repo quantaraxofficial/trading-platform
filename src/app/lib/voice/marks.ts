@@ -25,6 +25,8 @@ export const MARK_NAMES: Record<MarkKind, string> = {
   candle_patterns: "candle patterns", chart_patterns: "chart patterns", ranges: "ranges",
   msnr_levels: "MSNR A and V levels", msnr_gaps: "MSNR gap levels", msnr_flips: "SBR and RBS levels", msnr_qm: "Quasimodo levels",
   msnr_compression: "compressions", setups: "trade setups",
+  session_liquidity: "session highs and lows", inducement: "inducements", trendline_liquidity: "trend line liquidity lines",
+  liquidity_voids: "liquidity voids", round_numbers: "round numbers", draw_on_liquidity: "the draw on liquidity",
 };
 const GROUP_NAMES: Record<MarkKind, string> = {
   order_blocks: "Order blocks", fvg: "Fair value gaps", ifvg: "Inverse FVGs", support_resistance: "Support / resistance", structure: "BOS / CHoCH",
@@ -34,6 +36,8 @@ const GROUP_NAMES: Record<MarkKind, string> = {
   chart_patterns: "Chart patterns", ranges: "Ranges",
   msnr_levels: "MSNR A / V levels", msnr_gaps: "MSNR gap levels", msnr_flips: "MSNR SBR / RBS", msnr_qm: "MSNR QM (Quasimodo)",
   msnr_compression: "MSNR compression (CP)", setups: "Trade setups",
+  session_liquidity: "Session liquidity (Asia / London / NY, PMH / PML)", inducement: "Inducement (IDM)", trendline_liquidity: "Trend line liquidity",
+  liquidity_voids: "Liquidity voids", round_numbers: "Round numbers", draw_on_liquidity: "Draw on liquidity (ERL / IRL)",
 };
 export const GROUP_PREFIX = "voice-marks-";
 const groupId = (k: MarkKind) => `${GROUP_PREFIX}${k}`;
@@ -52,9 +56,11 @@ const COLORS: Record<string, Record<Zone["side"], string>> = {
   msnr: { bull: GREEN, bear: RED }, msnr_gap: { bull: "#00acc1", bear: "#fb8c00" }, msnr_old: { bull: "#80cbc4", bear: "#ef9a9a" },
   msnr_flip: { bull: "#26a69a", bear: "#ef5350" }, msnr_qm: { bull: "#7e57c2", bear: "#ab47bc" }, msnr_cp: { bull: "#fbc02d", bear: "#fbc02d" },
   setup: { bull: "#089981", bear: "#f23645" },
+  idm: { bull: "#ff9800", bear: "#ff9800" }, void: { bull: "#5c6bc0", bear: "#5c6bc0" }, round: { bull: "#9e9e9e", bear: "#9e9e9e" },
+  erl: { bull: "#ab47bc", bear: "#ab47bc" }, irl: { bull: "#2962ff", bear: "#ff9800" },
 };
 // Box fill (alpha) by kind: the wide context zones lighter
-const FILL: Record<string, string> = { sr: "22", pd: "14", kz: "1c", range: "1c", ote: "2a", msnr_gap: "26", msnr_old: "14", msnr_cp: "1c" };
+const FILL: Record<string, string> = { void: "1c", irl: "22", sr: "22", pd: "14", kz: "1c", range: "1c", ote: "2a", msnr_gap: "26", msnr_old: "14", msnr_cp: "1c" };
 
 // The bars to look at: what's on screen, and at least 150 bars back from its right edge
 function analysisStart(bars: { length: number }): number {
@@ -87,6 +93,13 @@ function summarise(kind: MarkKind, zones: Zone[]): string {
       const fresh = n(z => /fresh/.test(z.label) && !/unfresh/.test(z.label));
       detail = `${n(z => z.side === "bear")} resistance above, ${n(z => z.side === "bull")} support below; ${fresh} fresh`;
       break;
+    }
+    case "session_liquidity": detail = `${n(z => /resting/.test(z.label))} still resting, ${n(z => /taken/.test(z.label))} taken`; break;
+    case "inducement": detail = `${n(z => /not taken/.test(z.label))} not taken yet, ${n(z => /swept/.test(z.label))} swept`; break;
+    case "liquidity_voids": detail = `${n(z => /open/.test(z.label))} open, ${n(z => /filled/.test(z.label))} filled`; break;
+    case "draw_on_liquidity": {
+      const draw = shown.find(z => /likely draw/.test(z.label));
+      return `the external range liquidity${draw ? ` (the likely draw: ${draw.side === "bear" ? "the buy-side above" : "the sell-side below"})` : ""} and ${n(z => z.kind === "irl")} internal FVGs`;
     }
     case "msnr_flips": detail = `${n(z => z.side === "bull")} RBS, ${n(z => z.side === "bear")} SBR`; break;
     case "msnr_qm": return `${n(z => z.shape === "line")} Quasimodo level${n(z => z.shape === "line") === 1 ? "" : "s"} (${n(z => z.shape === "line" && z.side === "bear")} sell, ${n(z => z.shape === "line" && z.side === "bull")} buy)`;
