@@ -8,6 +8,8 @@ export type PanelId = "watchlist" | "alerts" | "object_tree" | "collab" | "chats
 export type { MarkKind } from "../analysis/concepts";
 import type { MarkKind } from "../analysis/concepts";
 export type LengthUnit = "hours" | "days" | "weeks" | "months" | "years";
+// The bias's window read and the one ahead (lib/voice/bias)
+export type BiasSpan = { value: number; unit: "minute" | "hour" | "day" | "week" };
 
 export type Intent =
   | { kind: "symbol"; symbol: string; interval?: Interval }
@@ -15,7 +17,8 @@ export type Intent =
   | { kind: "pine"; open: boolean }
   | { kind: "backtest_new"; symbol?: string; interval?: Interval; start?: string; balance?: number; length?: { value: number; unit: LengthUnit } }
   | { kind: "mark"; what: MarkKind[]; patterns?: string[]; setups?: string[]; state?: "live" | "fresh" | "tapped" | "all" }
-  | { kind: "clear_marks"; what?: MarkKind[] }
+  | { kind: "clear_marks"; what?: (MarkKind | "bias")[] }
+  | { kind: "bias"; window: BiasSpan; horizon: BiasSpan }
   | { kind: "indicator"; name: string; remove?: boolean }
   | { kind: "chart_type"; type: string; label: string }
   | { kind: "replay"; date?: string; random?: boolean }

@@ -853,6 +853,17 @@ Posting signals out
   - Mitigation blocks, a mark of their own: an order block that failed after a lower high / higher low
     (no liquidity taken), now working the other way until a close back through it. Breakers are the
     ones that failed after taking liquidity (a higher high / lower low)
+  - Bias for the next hour / 4 hours / day by voice ("analyse the last hour and predict the next
+    hour", "bias for the next 4 hours", "today's bias"): the last window is read from candles of a
+    suitable timeframe, whatever the chart shows (5 min for an hour, 15 min for 4 hours, 1 h for a
+    day). It reads the move, where it closed, a sweep or break of the previous window's high / low,
+    the lower and higher timeframe structure, and premium / discount. Each reading is weighted by how
+    it has actually played out on this market lately. The lean is tested walk-forward on that history
+    (each past call made only with what was known then) and said with its hit rate. A record that's
+    no better than a coin flip is said plainly ("no proven edge, don't trade on it alone"), as is
+    "no lean". Also said: the target (the nearest liquidity its way), where it's wrong, and a usual
+    move. Drawn: the window read, the window ahead, and the target and invalidation lines. During a
+    replay it reads only up to the replay bar. "Clear the bias" removes the drawings
 
 ======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD

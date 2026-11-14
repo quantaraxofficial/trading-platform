@@ -42,7 +42,7 @@ const GROUP_NAMES: Record<MarkKind, string> = {
   liquidity_voids: "Liquidity voids", round_numbers: "Round numbers", draw_on_liquidity: "Draw on liquidity (ERL / IRL)",
 };
 export const GROUP_PREFIX = "voice-marks-";
-const groupId = (k: MarkKind) => `${GROUP_PREFIX}${k}`;
+const groupId = (k: MarkKind | "bias") => `${GROUP_PREFIX}${k}`;
 
 const GREEN = "#089981", RED = "#f23645";
 const COLORS: Record<string, Record<Zone["side"], string>> = {
@@ -65,7 +65,7 @@ const COLORS: Record<string, Record<Zone["side"], string>> = {
   erl: { bull: "#ab47bc", bear: "#ab47bc" }, irl: { bull: "#2962ff", bear: "#ff9800" },
 };
 // Box fill (alpha) by kind: the wide context zones lighter
-const FILL: Record<string, string> = { void: "1c", irl: "22", ob_tapped: "16", fvg_tapped: "16", ifvg_tapped: "16", poi_tapped: "16", zone_used: "10", sr: "22", pd: "14", kz: "1c", range: "1c", ote: "2a", msnr_gap: "26", msnr_old: "14", msnr_cp: "1c" };
+const FILL: Record<string, string> = { bias_window: "12", bias: "1f", void: "1c", irl: "22", ob_tapped: "16", fvg_tapped: "16", ifvg_tapped: "16", poi_tapped: "16", zone_used: "10", sr: "22", pd: "14", kz: "1c", range: "1c", ote: "2a", msnr_gap: "26", msnr_old: "14", msnr_cp: "1c" };
 
 // The bars to look at: what's on screen, and at least 150 bars back from its right edge
 function analysisStart(bars: { length: number }): number {
@@ -134,12 +134,25 @@ export function markOnChart(kind: MarkKind, opts: { patterns?: string[]; setups?
   if (bars.length < 30) return { ok: false, reason: "no_data" };
   const setups = kind === "setups" ? setupMarks(bars, analysisStart(bars), opts.setups) : null;
   const zones = setups ? setups.zones : analyse(kind, bars, analysisStart(bars), opts);
-  const group = { id: groupId(kind), name: `${GROUP_NAMES[kind]} · voice assistant` };
+  drawZones(groupId(kind), `${GROUP_NAMES[kind]} · voice assistant`, zones, bars);
+  const count = setups ? setups.results.length : kind === "sweeps" ? zones.filter(z => z.shape === "label").length : kind === "chart_patterns" ? zones.filter(z => z.kind === "pattern").length : zones.length;
+  return { ok: true, count, bull: zones.filter(z => z.side === "bull").length, bear: zones.filter(z => z.side === "bear").length,
+    bos: zones.filter(z => z.kind === "bos").length, choch: zones.filter(z => z.kind === "choch").length,
+    summary: setups ? setupSummary(setups.results) : summarise(kind, zones) };
+}
+
+// Zones as drawings in one Object tree group, replacing the group's old ones (one undo takes them
+// back). Bar indexes past the last bar are the bars to come (their times stepped on from the last).
+// (the bias's forecast is drawn this way too: lib/voice/bias)
+export function drawZones(gid: string, name: string, zones: Zone[], bars: { time: number }[]) {
+  const group = { id: gid, name };
   const stamp = Date.now().toString(36);
-  const pt = (i: number, price: number) => ({ logical: i, price, time: bars[Math.min(Math.max(i, 0), bars.length - 1)]?.time });
+  const last = bars.length - 1;
+  const step = last > 0 ? bars[last].time - bars[last - 1].time : 60;
+  const pt = (i: number, price: number) => ({ logical: i, price, time: i > last ? bars[last]?.time + (i - last) * step : bars[Math.max(i, 0)]?.time });
   const drawings = zones.map((z, i) => {
-    const color = (COLORS[z.kind] || COLORS.ob)[z.side];
-    const id = `${groupId(kind)}-${stamp}-${i}`;
+    const color = z.color || (COLORS[z.kind] || COLORS.ob)[z.side];
+    const id = `${gid}-${stamp}-${i}`;
     const base = { id, visible: true, locked: false, group };
     // A level or a slanted line (structure breaks, liquidity, trend lines, necklines…), labelled
     if (z.kind === "bos" || z.kind === "choch" || z.shape === "line") {
@@ -166,10 +179,6 @@ export function markOnChart(kind: MarkKind, opts: { patterns?: string[]; setups?
   });
   // (the old marks of this kind go in the same step: one undo takes the whole marking back)
   fire("tv:add-drawings", { drawings, replaceGroup: group.id });
-  const count = setups ? setups.results.length : kind === "sweeps" ? zones.filter(z => z.shape === "label").length : kind === "chart_patterns" ? zones.filter(z => z.kind === "pattern").length : zones.length;
-  return { ok: true, count, bull: zones.filter(z => z.side === "bull").length, bear: zones.filter(z => z.side === "bear").length,
-    bos: zones.filter(z => z.kind === "bos").length, choch: zones.filter(z => z.kind === "choch").length,
-    summary: setups ? setupSummary(setups.results) : summarise(kind, zones) };
 }
 
 // How many of the assistant's marks are on the chart (one kind, or all)
@@ -179,7 +188,7 @@ export function countMarks(kind?: MarkKind): number {
 }
 
 // Removes the assistant's marks: one kind, or all of them
-export function clearMarks(kind?: MarkKind) {
+export function clearMarks(kind?: MarkKind | "bias") {
   fire("tv:remove-drawings", { groupPrefix: kind ? groupId(kind) : GROUP_PREFIX });
 }
 

@@ -15,7 +15,7 @@
 // The state lives here, not in the panel: listening carries on while another panel is open.
 
 import { useSyncExternalStore } from "react";
-import { intervalByValue, type Intent, type Interval, type MarkKind, type Invitee } from "./commands";
+import { intervalByValue, type Intent, type Interval, type MarkKind, type Invitee, type BiasSpan } from "./commands";
 import { voiceCommand, voiceCommands, voiceContext, pickTool, voiceFunction, voiceFunctions, VoiceQuestion } from "./registry";
 import { findTool } from "./tools";
 import { collab, collabApi, collabLink, type Person, type RoomInfo, type Member } from "../collab/session";
@@ -29,6 +29,7 @@ import { createSession, freshAccount, endOf, OPEN_SESSION_EVENT } from "../../an
 import { backendFetch } from "@/lib/backend";
 import { tradingUi } from "../../trading/store";
 import { displaySymbol } from "../symbolDisplay";
+import { biasOnChart } from "./bias";
 
 export type VoiceMessage = {
   id: number;
@@ -543,10 +544,18 @@ async function run(intent: Intent, reply?: string, quiet = false, confirmed = fa
       if (!quiet) say(result.trim());
       return;
     }
+    case "bias": {
+      // (worked out here from the candles: said even when the AI had its own words, and after a chain's earlier steps)
+      set({ thinking: true });
+      const r = await biasOnChart(intent.window, intent.horizon, displaySymbol).catch(() => ({ ok: false, text: "I couldn't read the candles just now." }));
+      set({ thinking: false });
+      say(r.text);
+      return;
+    }
     case "clear_marks": {
       if (intent.what?.length) {
         intent.what.forEach(k => clearMarks(k));
-        confirm(`Cleared the ${intent.what.map(k => MARK_NAMES[k]).join(" and ")}.`);
+        confirm(`Cleared the ${intent.what.map(k => (k === "bias" ? "bias" : MARK_NAMES[k])).join(" and ")}.`);
         return;
       }
       const n = countMarks();
@@ -792,7 +801,12 @@ function intentOf(a: any): Intent | null {
       const state = ["fresh", "tapped", "all"].includes(a.state) ? a.state : undefined;
       return what.length ? { kind: "mark", what, ...(patterns.length ? { patterns } : {}), ...(setups.length ? { setups } : {}), ...(state ? { state } : {}) } : null;
     }
-    case "clear_marks": return { kind: "clear_marks", what: Array.isArray(a.what) && a.what.length ? a.what as MarkKind[] : undefined };
+    case "clear_marks": return { kind: "clear_marks", what: Array.isArray(a.what) && a.what.length ? a.what as (MarkKind | "bias")[] : undefined };
+    case "bias": {
+      const span = (v: any): BiasSpan | null => v && Number.isFinite(+v.value) && +v.value > 0 && ["minute", "hour", "day", "week"].includes(v.unit) ? { value: +v.value, unit: v.unit } : null;
+      const window = span(a.window) ?? span(a.horizon) ?? { value: 1, unit: "hour" as const };
+      return { kind: "bias", window, horizon: span(a.horizon) ?? window };
+    }
     case "indicator": return typeof a.name === "string" ? { kind: "indicator", name: a.name, remove: !!a.remove } : null;
     case "chart_type": return typeof a.chart_type === "string" ? { kind: "chart_type", type: a.chart_type, label: String(a.label || a.chart_type) } : null;
     case "theme": return typeof a.id === "string" ? { kind: "theme", id: a.id, base: a.base === "light" ? "light" : "dark", label: String(a.label || a.id) } : null;

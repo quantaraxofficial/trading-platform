@@ -54,3 +54,23 @@ class ZoneStateTests(SimpleTestCase):
     def test_mitigation_blocks_known(self):
         a = clean_action({"type": "mark", "what": ["mitigation_blocks", "breakers"]})
         self.assertEqual(a["what"], ["mitigation_blocks", "breakers"])
+
+
+class BiasActionTests(SimpleTestCase):
+    """"Analyse the last hour and predict the next": the window read and the one ahead"""
+
+    def test_window_and_horizon(self):
+        a = clean_action({"type": "bias", "window": {"value": 1, "unit": "hour"}, "horizon": {"value": 4, "unit": "hours"}})
+        self.assertEqual(a, {"type": "bias", "window": {"value": 1, "unit": "hour"}, "horizon": {"value": 4, "unit": "hour"}})
+
+    def test_one_given_is_both_and_none_is_an_hour(self):
+        self.assertEqual(clean_action({"type": "bias", "horizon": {"value": 4, "unit": "hour"}})["window"], {"value": 4, "unit": "hour"})
+        self.assertEqual(clean_action({"type": "bias"})["horizon"], {"value": 1, "unit": "hour"})
+
+    def test_out_of_range_spans_dropped(self):
+        a = clean_action({"type": "bias", "window": {"value": 5, "unit": "minute"}, "horizon": {"value": 3, "unit": "month"}})
+        self.assertEqual(a["window"], {"value": 1, "unit": "hour"})
+
+    def test_bias_drawings_clear(self):
+        self.assertEqual(clean_action({"type": "clear_marks", "what": ["bias"]})["what"], ["bias"])
+        self.assertIsNone(clean_action({"type": "mark", "what": ["bias"]}))
