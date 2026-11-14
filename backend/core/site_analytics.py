@@ -17,7 +17,7 @@ from . import traffic
 from .models import (BacktestRun, ChartState, CollabMessage, CollabRoom, FailedRequest, FeedbackMessage, PineScript,
                      ReplaySession, SavedReplay, ServerMinute, SiteTime, TradeJournal, TraderProfile, TrafficSlot, UserSession,
                      Payment, Post, PostComment, ChatGroupMessage, CopyChannel, CopySignal, BrokerAccount, OptimizerRun,
-                     Visitor, VisitorSlot, EndpointMinute)
+                     Visitor, VisitorSlot, EndpointMinute, ClientLag)
 
 IST = ZoneInfo("Asia/Kolkata")
 SLOT = traffic.SLOT_SECONDS
@@ -311,6 +311,7 @@ def report(days=30, now=None):
     out["not_premium"] = _not_premium(now)
     out["at_risk"] = _at_risk(today)
     out["endpoints"] = _endpoints(since)
+    out["health"] = _health(since, now)
     out["insights"] = _insights(out)
     return out
 
@@ -362,6 +363,22 @@ def _insights(r):
     total_dev = sum(n for _, n in r["devices"])
     if total_dev:
         out.append(("devices", f"{100 * mobile / total_dev:.0f}% of sign-ins are on phones."))
+    h = r.get("health") or {}
+    bad = (h.get("people_bad") or {})
+    for kind, word in (("overloaded", "overloaded"), ("slow", "slow")):
+        if kind in bad:
+            b = bad[kind]
+            ok = h.get("people_ok") or {}
+            out.append(("critical" if kind == "overloaded" else "warning",
+                        f"The site was {word} for {b['minutes']} minute{'s' if b['minutes'] != 1 else ''} in the period, with {b['min']}–{b['max']} people on it "
+                        f"(usually {b['median']})" + (f"; normally {ok['median']} (up to {ok['max']}) with no trouble." if ok else ".")))
+            break
+    if (h.get("minutes") or {}).get("down"):
+        out.append(("critical", f"The server didn't answer for {h['minutes']['down']} minute(s) in the period (down or hung): see Slow or down."))
+    fz = h.get("freezes") or {}
+    if fz.get("reports"):
+        top = fz["pages"][0][0] if fz.get("pages") else ""
+        out.append(("warning", f"Pages froze in {fz['browsers']} browser(s) ({fz['reports']} reports, the worst {round((fz['worst_ms'] or 0) / 1000, 1)} s), most on {top}."))
     v = r.get("visitors") or {}
     if v.get("new"):
         best = max(v.get("referrers") or [["", 0, 0, 0]], key=lambda x: (x[2], x[1]))
@@ -486,4 +503,148 @@ def _endpoints(since):
             "share": round(100 * r["total"] / grand, 1), "total_s": round(r["total"] / 1000, 1)} for r in rows]
     out.sort(key=lambda r: -r["total_s"])
     return out[:20]
+
+
+# ------------------------------------------------------------------ slow or down: and how many were on
+
+STATUS_ORDER = ["ok", "lag", "errors", "slow", "overloaded", "down"]   # worst last
+
+
+def _minute_status(m):
+    """A written minute's state: overloaded (CPU or memory near full), slow (responses or the server
+    itself), errors, browsers freezing, or ok"""
+    load = m["peak_load"] if m["peak_load"] is not None else m["load_pct"]
+    mem = m["peak_mem"] if m["peak_mem"] is not None else m["mem_pct"]
+    if (load or 0) >= 85 or (mem or 0) >= 90:
+        return "overloaded"
+    if m["avg_ms"] >= 1000 or m["max_ms"] >= 5000 or m["stall_ms"] >= 2000:
+        return "slow"
+    if m["errors"] >= 3 or (m["requests"] and m["errors"] / m["requests"] >= 0.05):
+        return "errors"
+    if m["lag_reports"]:
+        return "lag"
+    return "ok"
+
+
+def _load_of(r):
+    return r["peak_load"] if r["peak_load"] is not None else r["load_pct"]
+
+
+def _mem_of(r):
+    return r["peak_mem"] if r["peak_mem"] is not None else r["mem_pct"]
+
+
+def _bigger(a, b):
+    return b if a is None else a if b is None else max(a, b)
+
+
+def _health(since, now):
+    """Every minute's state (a minute with no row since the sampler started: the server was down or
+    hung), the last 48 hours in 5-minute cells, the bad stretches in the period with how many people
+    were on the site then, and the browsers' own freezes"""
+    rows = list(ServerMinute.objects.filter(minute__gte=since).order_by("minute").values(
+        "minute", "requests", "errors", "avg_ms", "max_ms", "load_pct", "mem_pct", "peak_load", "peak_mem", "stall_ms",
+        "users", "visitors", "lag_reports", "lag_max_ms"))
+    by_min = {int(r["minute"].timestamp()) // 60: r for r in rows}
+    # the sampler writes every minute (its rows know who was on): gaps after it began are downtime
+    sampled = [k for k, r in by_min.items() if r["users"] is not None]
+    start = min(sampled) if sampled else None
+    end = int(now.timestamp()) // 60 - 2          # (the last minute or two aren't written yet)
+    minutes = []                                  # (unix minute, state, row or None)
+    if start is not None:
+        for k in range(start, end + 1):
+            r = by_min.get(k)
+            minutes.append((k, _minute_status(r) if r else "down", r))
+    else:
+        minutes = [(int(r["minute"].timestamp()) // 60, _minute_status(r), r) for r in rows]
+
+    # the last 48 hours, 5 minutes a cell: the worst state in it, and the most people on
+    idx = {k: (st, r) for k, st, r in minutes}
+    first = (int(now.timestamp()) // 300 - 575) * 5
+    cells = []
+    for c in range(576):
+        m0 = first + c * 5
+        states, u, v, load, mem, slowest, errs, lags = [], None, None, None, None, 0, 0, 0
+        for k in range(m0, m0 + 5):
+            if k not in idx:
+                continue
+            st, r = idx[k]
+            states.append(st)
+            if r:
+                u, v = _bigger(u, r["users"]), _bigger(v, r["visitors"])
+                load, mem = _bigger(load, _load_of(r)), _bigger(mem, _mem_of(r))
+                slowest = max(slowest, r["max_ms"])
+                errs += r["errors"]
+                lags += r["lag_reports"]
+        cells.append({"t": m0 * 60000, "s": max(states, key=STATUS_ORDER.index) if states else None, "u": u, "v": v,
+                      "load": load, "mem": mem, "max_ms": round(slowest), "err": errs, "lag": lags})
+
+    # bad stretches (a one-minute ok in between doesn't split one)
+    stretches, cur = [], None
+    for k, st, r in minutes:
+        if st == "ok":
+            if cur and k - cur["end"] > 1:
+                stretches.append(cur)
+                cur = None
+            continue
+        if cur and k - cur["end"] <= 2:
+            cur["end"] = k
+        else:
+            if cur:
+                stretches.append(cur)
+            cur = {"start": k, "end": k, "kinds": Counter(), "users": None, "visitors": None, "load": None, "mem": None,
+                   "max_ms": 0, "errors": 0, "lag": 0, "stall_ms": 0}
+        cur["kinds"][st] += 1
+        if r:
+            cur["users"], cur["visitors"] = _bigger(cur["users"], r["users"]), _bigger(cur["visitors"], r["visitors"])
+            cur["load"], cur["mem"] = _bigger(cur["load"], _load_of(r)), _bigger(cur["mem"], _mem_of(r))
+            cur["max_ms"] = max(cur["max_ms"], r["max_ms"])
+            cur["errors"] += r["errors"]
+            cur["lag"] += r["lag_reports"]
+            cur["stall_ms"] = max(cur["stall_ms"], r["stall_ms"])
+    if cur:
+        stretches.append(cur)
+    for st in stretches:
+        # (down: its own minutes have no row; who was on just before it)
+        if st["users"] is None:
+            before = by_min.get(st["start"] - 1)
+            if before:
+                st["users"], st["visitors"] = before["users"], before["visitors"]
+    problems = [{"start": st["start"] * 60000, "end": (st["end"] + 1) * 60000, "minutes": st["end"] - st["start"] + 1,
+                 "kind": max(st["kinds"], key=STATUS_ORDER.index), "kinds": dict(st["kinds"]),
+                 "users": st["users"], "visitors": st["visitors"], "load": st["load"], "mem": st["mem"],
+                 "max_ms": round(st["max_ms"]), "errors": st["errors"], "lag": st["lag"], "stall_ms": round(st["stall_ms"])}
+                for st in stretches]
+
+    # how many were on: in bad minutes (by kind) and in ok ones
+    def people(r):
+        return (r["users"] or 0) + (r["visitors"] or 0) if r and r["users"] is not None else None
+    ok_people = sorted(x for x in (people(r) for _, st, r in minutes if st == "ok") if x is not None)
+    by_kind = {}
+    for kind in ("slow", "overloaded", "errors", "lag"):
+        xs = sorted(x for x in (people(r) for _, st, r in minutes if st == kind) if x is not None)
+        if xs:
+            by_kind[kind] = {"minutes": len(xs), "min": xs[0], "median": xs[len(xs) // 2], "max": xs[-1]}
+    counts = Counter(st for _, st, _ in minutes)
+
+    # the browsers' own freezes
+    lags = ClientLag.objects.filter(at__gte=since)
+    pages, devices = Counter(), Counter()
+    for where, ua in lags.values_list("where", "device"):
+        pages[(where or "/").split("?")[0]] += 1
+        devices[_device(ua)[0]] += 1
+    recent = [{"at": _ms(x.at), "who": (x.profile.name or x.profile.email.split("@")[0]) if x.profile else "a visitor",
+               "where": x.where, "worst_ms": x.worst_ms, "count": x.count, "device": _device(x.device)[0]}
+              for x in lags.select_related("profile")[:25]]
+    return {
+        "since_sampler": start * 60000 if start is not None else None,
+        "minutes": {k: counts.get(k, 0) for k in STATUS_ORDER}, "cells": cells,
+        "problems": sorted(problems, key=lambda x: (-STATUS_ORDER.index(x["kind"]), -x["minutes"]))[:30],
+        "recent_problems": problems[-30:][::-1],
+        "people_ok": {"median": ok_people[len(ok_people) // 2], "max": ok_people[-1]} if ok_people else None,
+        "people_bad": by_kind,
+        "freezes": {"reports": lags.count(), "browsers": lags.values("vid", "profile_id").distinct().count(),
+                    "worst_ms": lags.aggregate(m=Max("worst_ms"))["m"], "pages": pages.most_common(8),
+                    "devices": devices.most_common(), "recent": recent},
+    }
 

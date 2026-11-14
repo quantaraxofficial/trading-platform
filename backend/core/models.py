@@ -1030,6 +1030,17 @@ class ServerMinute(models.Model):
     ws_ticks = models.PositiveIntegerField(default=0)           # live price sockets open
     load_pct = models.FloatField(null=True, blank=True)         # 1-minute load average ÷ CPU cores, %
     mem_pct = models.FloatField(null=True, blank=True)          # the machine's memory in use, %
+    # (the sampler, every 10 s: the minute's busiest moment, and a freeze of the server itself)
+    peak_load = models.FloatField(null=True, blank=True)        # the CPUs' busiest 10 s of the minute, %
+    peak_mem = models.FloatField(null=True, blank=True)
+    stall_ms = models.FloatField(default=0)                     # the server didn't run for this long
+    # who was on the site then (open in the last 2 minutes): what the load came with
+    users = models.PositiveIntegerField(null=True, blank=True)
+    visitors = models.PositiveIntegerField(null=True, blank=True)
+    # browsers whose page froze in the minute (their own reports: ClientLag)
+    lag_reports = models.PositiveIntegerField(default=0)
+    lag_max_ms = models.FloatField(default=0)
+
 
     class Meta:
         ordering = ['-minute']
@@ -1076,6 +1087,23 @@ class EndpointMinute(models.Model):
 
     class Meta:
         unique_together = ('minute', 'route', 'method')
+
+
+class ClientLag(models.Model):
+    """A browser's page that froze (didn't respond) for a second or more, as it reported it
+    (core/presence.py lag): when, where, for how long, on what device, and whose (signed in) or which
+    visitor's (Django Admin → Site analytics: slow or down)"""
+    at = models.DateTimeField(db_index=True)
+    profile = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='lags')
+    vid = models.CharField(max_length=40, blank=True, default='')
+    where = models.CharField(max_length=80, blank=True, default='')
+    worst_ms = models.PositiveIntegerField(default=0)    # its longest freeze in the report
+    total_ms = models.PositiveIntegerField(default=0)    # all its freezes together
+    count = models.PositiveIntegerField(default=0)       # how many
+    device = models.CharField(max_length=255, blank=True, default='')
+
+    class Meta:
+        ordering = ['-at']
 
 
 class SiteAnalytics(ServerMinute):

@@ -95,6 +95,19 @@
   <h2>Key numbers <small>for the period</small></h2>
   <div class="sa-tiles" id="t-kpis"></div>
 
+  <h2>Slow or down <small>every minute: the server, the machine, the browsers, and how many people were on</small></h2>
+  <div class="sa-tiles" id="t-health"></div>
+  <div class="sa-grid wide" style="margin-top:14px">
+    <div class="sa-card" style="grid-column:1/-1"><h3>Last 48 hours: people on the site and how the site held up</h3>
+      <div class="sub">people on the site (signed in and visitors), and under it each 5 minutes' state; hover for the details</div>
+      <div id="c-healthline"></div><div id="c-healthstrip"></div><div id="c-healthlegend"></div></div>
+    <div class="sa-card" style="grid-column:1/-1"><h3>Problem times</h3><div class="sub">the worst first; people on = the most on the site at once then (signed in + visitors)</div><div id="c-problems"></div></div>
+    <div class="sa-card"><h3>How many were on when it struggled</h3><div class="sub">people on the site in each kind of minute, against the normal ones</div><div id="c-peoplebad"></div></div>
+    <div class="sa-card"><h3>Pages that froze in browsers</h3><div class="sub">reports of a second or more without responding</div><div id="c-freezepages"></div></div>
+    <div class="sa-card"><h3>Freezes by device</h3><div class="sub">the browsers that reported them</div><div id="c-freezedev"></div></div>
+    <div class="sa-card" style="grid-column:1/-1"><h3>Latest freezes</h3><div class="sub">who, where, how long</div><div id="c-freezes"></div></div>
+  </div>
+
   <h2>Traffic: when people are on the site <small>India time</small></h2>
   <div class="sa-grid wide">
     <div class="sa-card" style="grid-column:1/-1"><h3>Busy hours (weekday × hour)</h3><div class="sub">average people on the site at once in each hour; hover for the peak</div><div id="c-heat"></div></div>
@@ -559,6 +572,74 @@
     hbar($("c-failing"), r.failing, { color: C("--critical") });
     donut($("c-devices"), r.devices); donut($("c-browsers"), r.browsers); donut($("c-systems"), r.systems); donut($("c-tiers"), r.tiers);
     drawMore(r);
+    drawHealth(r.health);
+  }
+
+  // ---- slow or down
+  const STATE = {
+    ok: { name: "OK", color: "rgba(12,163,12,0.55)" }, lag: { name: "Browsers froze", color: "#9085e9" },
+    errors: { name: "Server errors", color: "#ec835a" }, slow: { name: "Slow", color: "#fab219" },
+    overloaded: { name: "Overloaded (CPU / memory)", color: "#d03b3b" }, down: { name: "No answer (down or hung)", color: "#7f1d1d" },
+  };
+  const secs = ms => ms == null ? "—" : ms >= 1000 ? (ms / 1000).toFixed(1) + " s" : Math.round(ms) + " ms";
+  const span = (a, b) => `${fmtDT(a)} – ${new Date(b).toLocaleTimeString("en-IN", { ...tz, hour: "2-digit", minute: "2-digit", hour12: false })}`;
+  function drawHealth(h) {
+    if (!h) return;
+    const mins = h.minutes || {};
+    const bad = h.people_bad || {};
+    const worstKind = ["overloaded", "slow"].find(k => bad[k]);
+    tiles($("t-health"), [
+      { k: "Minutes OK", v: fmtN(mins.ok || 0) },
+      { k: "Slow", v: fmtN(mins.slow || 0), n: "responses over 1 s, or the server froze" },
+      { k: "Overloaded", v: fmtN(mins.overloaded || 0), n: "CPU ≥ 85% or memory ≥ 90%" },
+      { k: "No answer (down / hung)", v: fmtN(mins.down || 0) },
+      { k: "Browser freezes", v: fmtN((h.freezes || {}).reports || 0), n: `${(h.freezes || {}).browsers || 0} browsers` },
+      { k: worstKind ? `People on when ${worstKind}` : "People on when it struggled", v: worstKind ? `${bad[worstKind].min}–${bad[worstKind].max}` : "—",
+        n: h.people_ok ? `normally ${h.people_ok.median} (up to ${h.people_ok.max})` : "" },
+    ]);
+    const cells = h.cells || [];
+    if (!cells.some(c => c.s)) {
+      empty($("c-healthline"), h.since_sampler ? "No data in the last 48 hours" : "Recorded from the next deploy on: every minute's state and who was on");
+      $("c-healthstrip").innerHTML = ""; $("c-healthlegend").innerHTML = "";
+    } else {
+      lineChart($("c-healthline"), { x: cells.map(c => c.t), series: [
+        { name: "Signed in", color: C("--s1"), values: cells.map(c => c.u) },
+        { name: "Visitors", color: C("--s2"), values: cells.map(c => c.v) }], h: 170, xfmt: fmtWT });
+      // the strip, on the line chart's own x axis (the same left / right margins)
+      const host = $("c-healthstrip"); host.innerHTML = "";
+      const w = Math.max(240, host.clientWidth || 300), L = 44, R = 8, H = 22;
+      const sv = el("svg", { width: w, height: H, viewBox: `0 0 ${w} ${H}` }, host);
+      const cw = (w - L - R) / cells.length;
+      cells.forEach((c, i) => {
+        const st = c.s ? STATE[c.s] : null;
+        const rect = el("rect", { x: L + i * cw, y: 2, width: Math.max(1, cw - (cw > 3 ? 0.5 : 0)), height: H - 4, fill: st ? st.color : "rgba(255,255,255,0.04)" }, sv);
+        rect.addEventListener("mousemove", e => showTip(e, fmtDT(c.t), [
+          { name: "State", value: st ? st.name : "no data", color: st ? st.color : null },
+          { name: "Signed in on the site", value: c.u == null ? "—" : String(c.u) },
+          { name: "Visitors", value: c.v == null ? "—" : String(c.v) },
+          { name: "CPU (peak)", value: c.load == null ? "—" : Math.round(c.load) + "%" },
+          { name: "Memory (peak)", value: c.mem == null ? "—" : Math.round(c.mem) + "%" },
+          { name: "Slowest response", value: secs(c.max_ms) },
+          { name: "Server errors", value: String(c.err) }, { name: "Browser freezes", value: String(c.lag) }]));
+        rect.addEventListener("mouseleave", hideTip);
+      });
+      $("c-healthlegend").innerHTML = `<div class="sa-legend">${Object.values(STATE).map(s => `<span><b style="background:${s.color}"></b>${esc(s.name)}</span>`).join("")}</div>`;
+    }
+    const badge = k => `<span style="display:inline-flex;align-items:center;gap:6px"><b style="width:9px;height:9px;border-radius:2px;display:inline-block;background:${STATE[k].color}"></b>${esc(STATE[k].name)}</span>`;
+    table($("c-problems"), [{ t: "When (India)" }, { t: "Length", num: 1 }, { t: "What" }, { t: "People on", num: 1 }, { t: "CPU", num: 1 }, { t: "Memory", num: 1 }, { t: "Slowest", num: 1 }, { t: "Errors", num: 1 }, { t: "Freezes", num: 1 }],
+      (h.problems || []).map(p => [esc(span(p.start, p.end)), p.minutes + " min", badge(p.kind),
+        p.users == null ? "—" : `<b>${(p.users || 0) + (p.visitors || 0)}</b> <span style="color:var(--text-3)">(${p.users} in, ${p.visitors || 0} visitors)</span>`,
+        p.load == null ? "—" : Math.round(p.load) + "%", p.mem == null ? "—" : Math.round(p.mem) + "%", secs(p.max_ms), fmtN(p.errors), fmtN(p.lag)]),
+      h.since_sampler ? "No trouble in this period: every minute was OK" : "Recorded from the next deploy on", 460);
+    const rows = Object.entries(bad).map(([k, b]) => [badge(k), fmtN(b.minutes), `${b.min}–${b.max}`, String(b.median)]);
+    if (h.people_ok) rows.push([badge("ok"), fmtN(mins.ok || 0), `0–${h.people_ok.max}`, String(h.people_ok.median)]);
+    table($("c-peoplebad"), [{ t: "Minutes that were" }, { t: "Minutes", num: 1 }, { t: "People on", num: 1 }, { t: "Usually", num: 1 }], rows, "Recorded from the next deploy on");
+    const fz = h.freezes || {};
+    hbar($("c-freezepages"), fz.pages || [], { color: "#9085e9" });
+    donut($("c-freezedev"), fz.devices || []);
+    table($("c-freezes"), [{ t: "When (India)" }, { t: "Who" }, { t: "Page" }, { t: "Longest", num: 1 }, { t: "Times", num: 1 }, { t: "Device" }],
+      (fz.recent || []).map(x => [esc(fmtDT(x.at)), esc(x.who), `<code>${esc(x.where || "/")}</code>`, secs(x.worst_ms), String(x.count), esc(x.device)]),
+      "No browser has reported a freeze in this period", 360);
   }
 
   const mail = p => `<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>`;

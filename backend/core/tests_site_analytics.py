@@ -182,3 +182,67 @@ class EndpointAndPeopleTests(TestCase):
             d = store_health.report()
         self.assertFalse(d["clickhouse"]["ok"])
         self.assertIn("symbols", d["collector"])
+
+
+class HealthTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        traffic._minute = None
+        traffic._buf.update(requests=0, errors=0, ms_total=0.0, ms_max=0.0)
+        traffic._routes.clear()
+        traffic._peaks.update(load=None, mem=None, stall_ms=0.0)
+        traffic._lag.update(reports=0, max_ms=0.0)
+
+    def test_minute_row_has_peaks_and_who_was_on(self):
+        import time as _t
+        from datetime import datetime, timezone as dt_timezone
+        p = TraderProfile.objects.create(uid="u1", name="A", email="a@example.com")
+        TraderProfile.objects.filter(pk=p.pk).update(last_seen=timezone.now())
+        base = int(_t.time() // 60) - 3
+        with patch("core.traffic.time.time", return_value=base * 60 + 1):
+            traffic.note_request(30, 200)
+            with traffic._lock:
+                traffic._peaks.update(load=91.0, mem=60.0, stall_ms=3500.0)
+            traffic.note_client_lag(2400)
+        with patch("core.traffic.time.time", return_value=(base + 1) * 60 + 1):
+            traffic.note_request(10, 200)
+        row = ServerMinute.objects.get(minute=datetime.fromtimestamp(base * 60, tz=dt_timezone.utc))
+        self.assertEqual((row.peak_load, row.stall_ms, row.users, row.lag_reports, row.lag_max_ms), (91.0, 3500.0, 1, 1, 2400.0))
+
+    def test_lag_report(self):
+        from .models import ClientLag
+        url = "/api/users/lag/"
+        self.assertEqual(self.client.post(url, {"worst_ms": 200, "count": 1}, content_type="application/json").status_code, 400)
+        r = self.client.post(url, {"vid": "abcd1234efgh", "where": "/chart", "worst_ms": 2300, "total_ms": 4100, "count": 2},
+                             content_type="application/json", HTTP_USER_AGENT="Mozilla/5.0 (iPhone) Mobile")
+        self.assertEqual(r.status_code, 200)
+        x = ClientLag.objects.get()
+        self.assertEqual((x.where, x.worst_ms, x.total_ms, x.count, x.vid), ("/chart", 2300, 4100, 2, "abcd1234efgh"))
+
+    def test_down_and_problem_stretches_with_people(self):
+        now = timezone.now().replace(second=30, microsecond=0)
+        t0 = now.replace(second=0) - timedelta(minutes=30)
+        def row(k, **kw):
+            d = dict(minute=t0 + timedelta(minutes=k), requests=20, errors=0, avg_ms=40, max_ms=200, load_pct=20, mem_pct=50,
+                     peak_load=25, peak_mem=50, stall_ms=0, users=3, visitors=1, lag_reports=0)
+            d.update(kw)
+            ServerMinute.objects.create(**d)
+        for k in range(0, 29):                              # (up to the last minute the check covers)
+            if k in (10, 11):
+                continue                                    # no row: down
+            if k in (20, 21, 22):
+                row(k, peak_load=95, users=40, visitors=12)   # overloaded with 52 people on
+            elif k == 25:
+                row(k, avg_ms=1500, users=30, visitors=5)     # slow
+            else:
+                row(k)
+        h = site_analytics._health(now - timedelta(days=1), now)
+        self.assertEqual(h["minutes"]["down"], 2)
+        self.assertEqual(h["minutes"]["overloaded"], 3)
+        kinds = {p["kind"]: p for p in h["problems"]}
+        self.assertEqual((kinds["overloaded"]["users"], kinds["overloaded"]["visitors"], kinds["overloaded"]["minutes"]), (40, 12, 3))
+        self.assertEqual(kinds["down"]["users"], 3)           # who was on just before it went down
+        self.assertEqual(h["people_bad"]["overloaded"]["min"], 52)
+        self.assertEqual(h["people_ok"]["median"], 4)
+        self.assertTrue(any(c["s"] == "overloaded" and c["u"] == 40 for c in h["cells"]))

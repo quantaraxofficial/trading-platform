@@ -776,6 +776,22 @@ Posting signals out
     the MT5 collector last posted, its price's age and how far the stored bars are behind
 
 ======================================================================
+17b7a. SITE ANALYTICS: SLOW OR DOWN, AND HOW MANY WERE ON
+======================================================================
+  - The server checks the machine every 10 s (the minute's peak CPU and memory, and whether the
+    server itself froze) and writes every minute, requests or not, with how many people were on the
+    site then (signed in and visitors): a minute with no row means the server was down or hung
+  - Browsers report their own freezes (the page not responding for a second or more: a timer that
+    ticks late, no animation loop), with the page, the device, who or which visitor
+  - Site analytics → Slow or down: each minute OK, browsers froze, server errors, slow (responses
+    over 1 s or a server freeze), overloaded (CPU ≥ 85% or memory ≥ 90%) or no answer; the last 48
+    hours as people on the site over a strip of each 5 minutes' state (hover: people, CPU, memory,
+    slowest response, errors, freezes); the problem times with how many were on (signed in +
+    visitors), CPU, memory, slowest response; how many were on when it struggled against normal;
+    the pages and devices that froze and the latest freezes; insights ("overloaded with 32–44 on it,
+    normally 4 with no trouble")
+
+======================================================================
 17b8. VOICE ASSISTANT: SUBTITLES AS IT SPEAKS
 ======================================================================
   - The answer's words show while it's spoken, not after: with voices that say where they are (word

@@ -15,6 +15,7 @@ import { AlertsProvider } from "@/context/AlertsContext";
 import { PaperTradingProvider } from "@/context/PaperTradingContext";
 import CloudSync from "./components/CloudSync";
 import VisitPing from "./components/VisitPing";
+import LagReporter from "./components/LagReporter";
 import PresencePing from "./components/PresencePing";
 import SiteThemeVars from "./components/SiteThemeVars";
 import VoiceDock from "./components/VoiceDock";
@@ -35,6 +36,7 @@ export default function RootLayout({
           <CloudSync />
           <PresencePing />
           <VisitPing />
+          <LagReporter />
           <SiteThemeVars />
           <PaperTradingProvider>
             <AlertsProvider>

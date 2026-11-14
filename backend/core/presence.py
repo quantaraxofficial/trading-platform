@@ -84,3 +84,27 @@ def visit(request):
     note_visit(vid, where, host, request.headers.get("User-Agent") or "", timezone.now())
     return Response({"ok": True})
 
+@api_view(["POST"])
+def lag(request):
+    """POST {vid?, uid?, session_key?, where, worst_ms, total_ms, count}: this browser's page froze
+    (didn't respond) for a second or more in the last minute, as the page itself measured it. Signed
+    in: with their session; otherwise the visitor's random id. Kept for Site analytics (slow or down)"""
+    from .auth import session_owner
+    from .models import ClientLag
+    from .traffic import note_client_lag
+    data = request.data if isinstance(request.data, dict) else {}
+    try:
+        worst = int(float(data.get("worst_ms") or 0))
+        total = int(float(data.get("total_ms") or 0))
+        count = int(data.get("count") or 0)
+    except (TypeError, ValueError):
+        return Response({"ok": False}, status=400)
+    if not (1000 <= worst <= 600000) or count < 1:
+        return Response({"ok": False}, status=400)
+    vid = str(data.get("vid") or "")
+    ClientLag.objects.create(at=timezone.now(), profile=session_owner(request), vid=vid if _VID.match(vid) else "",
+                             where=str(data.get("where") or "")[:80], worst_ms=worst, total_ms=min(max(total, worst), 3600000),
+                             count=min(count, 1000), device=(request.headers.get("User-Agent") or "")[:255])
+    note_client_lag(worst)
+    return Response({"ok": True})
+
