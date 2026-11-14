@@ -373,6 +373,26 @@ export class PaperTradingEngine {
     }, false);
   }
 
+  // A replay "like the live market": a batch of its ticks (one frame's) in one go, each in order at
+  // its own price and time (an order fills at the tick that reaches it), with one copy of the state
+  // and one update of the screen for all of them, not one per tick
+  setReplayQuotes(symbol: string, quotes: { price: number; time: number }[]) {
+    const qs = quotes.filter(q => isFinite(q.price) && q.price > 0);
+    if (!this.live || !qs.length) return;
+    this.run(d => {
+      for (const q of qs) {
+        this.clock = q.time;
+        d.now = q.time;
+        d.s.quotes[symbol] = { price: q.price, time: q.time };
+        for (const accId of Object.keys(d.s.books)) {
+          expireOrders(d, accId);
+          processSymbol(d, accId, symbol);
+          trackExcursions(d, accId, symbol, q.price);
+        }
+      }
+    }, false);
+  }
+
   // ----- connection & accounts -----
 
   setConnected(connected: boolean) {

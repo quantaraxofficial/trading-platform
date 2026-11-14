@@ -851,13 +851,17 @@ export default function ChartContainer({
       const data = fullDataRef.current;
       const series = candleSeriesRef.current;
       const chart = chartRef.current;
-      if (!data || data.length === 0 || !series || !chart || modeRef.current !== 'idle') { if (countdownRef.current) setCountdown(null); return; }
-      const last = data[data.length - 1];
+      // (a replay "like the live market" counts down its forming candle on the replay's clock)
+      const replayLive = modeRef.current !== 'idle' && (window as any).__replayLive && typeof (window as any).__replayNow === 'number';
+      if (!data || data.length === 0 || !series || !chart || (modeRef.current !== 'idle' && !replayLive)) { if (countdownRef.current) setCountdown(null); return; }
+      const shown = replayLive ? (series.data() as any[]) : null;
+      const last = replayLive ? shown![shown!.length - 1] : data[data.length - 1];
+      if (!last) { if (countdownRef.current) setCountdown(null); return; }
       // (the short bar before a 4-hour boundary — 45m's last of each four hours — ends there: lib/barBlocks)
       // (our own feed's bars end on its own session boundaries: lib/vantageFeed)
       const barEnd = (vantageServing(symbolRef.current) ? vantageBarEnd(intervalRef.current, last.time) : null)
         ?? blockBarEnd(intervalRef.current, last.time) ?? last.time + Math.floor(getIntervalMs(intervalRef.current) / 1000);
-      const remain = barEnd - toChartTime(symbolRef.current, Date.now());
+      const remain = Math.floor(barEnd - (replayLive ? (window as any).__replayNow : toChartTime(symbolRef.current, Date.now())));
       const y = series.priceToCoordinate(last.close);
       const width = mainPriceScale(chart).width();
       // Nothing to count down once the bar has closed (e.g. the market is shut)
@@ -883,8 +887,14 @@ export default function ChartContainer({
     const id = setInterval(update, 1000);
     const chart = chartRef.current;
     chart?.timeScale().subscribeVisibleLogicalRangeChange(schedule);
+    // Each live tick moves the last-price label: the countdown under it moves in the same frame
+    window.addEventListener('tv:live-price', schedule);
+    // (a live replay's ticks move the price and its clock)
+    window.addEventListener('tv:replay-ticks', schedule);
     return () => {
       clearInterval(id);
+      window.removeEventListener('tv:live-price', schedule);
+      window.removeEventListener('tv:replay-ticks', schedule);
       cancelAnimationFrame(frame);
       try { chart?.timeScale().unsubscribeVisibleLogicalRangeChange(schedule); } catch { /* chart gone */ }
     };
@@ -2730,8 +2740,19 @@ export default function ChartContainer({
     else engine.endReplaySession();
   }, [mode]);
   useEffect(() => () => engine.endReplaySession(), []);
+  // (a replay "like the live market" sends its prices as they happen instead, a frame's at a time:
+  // tv:replay-ticks)
   useEffect(() => {
-    if (mode !== 'active') return;
+    const onTicks = (e: Event) => {
+      const ticks = (e as CustomEvent).detail?.ticks;
+      if (Array.isArray(ticks) && ticks.length) engine.setReplayQuotes(symbolRef.current, ticks.map((t: any) => ({ price: t.price, time: t.time * 1000 })));
+    };
+    window.addEventListener("tv:replay-ticks", onTicks);
+    return () => window.removeEventListener("tv:replay-ticks", onTicks);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (mode !== 'active' || (window as any).__replayLive) return;
     const bar = fullDataRef.current[replayIndex];
     if (!bar) return;
     const t = (bar.time as number) * 1000;
@@ -4347,7 +4368,8 @@ export default function ChartContainer({
         const sl = statusLineSettings;
         const bars = fullDataRef.current;
         const hoverIdx = hoveredBarData ? barIndexAtTime(bars, hoveredBarData.time as number) : -1;
-        const idx = hoverIdx >= 0 ? hoverIdx : bars.length - 1;
+        // (in a replay: its last bar, not the latest loaded one, which is in the replay's future)
+        const idx = hoverIdx >= 0 ? hoverIdx : mode !== 'idle' && replayIndex >= 0 ? Math.min(replayIndex, bars.length - 1) : bars.length - 1;
         const bar = idx >= 0 ? bars[idx] : null;
         const prev = idx > 0 ? bars[idx - 1] : null;
         const upColor = candleColors.upColor, downColor = candleColors.downColor;

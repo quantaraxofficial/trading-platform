@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useSyncExternalStore, useState, useRef, useEffect, useCallback } from "react";
-import { useReplay, type ReplayStartMode } from "./ReplayContext";
+import { createPortal } from "react-dom";
+import { useReplay, LIVE_SPEEDS, type ReplayStartMode } from "./ReplayContext";
+import { liveReplaySupported } from "../lib/replayLive";
 import ReplayDateDialog from "./ReplayDateDialog";
 import { getEarliestBarTime } from "../utils/earliestBar";
 import { useEscapeClose } from "../lib/useEscapeClose";
@@ -22,6 +24,9 @@ const SPEED_OPTIONS = [
   { label: "0.1x", desc: "1 upd per 10 sec", value: 0.1 },
 ];
 
+// Replaying like the live market: the speed is a multiple of real time
+const LIVE_SPEED_OPTIONS = LIVE_SPEEDS.map(v => ({ label: `${v}x`, desc: v === 1 ? "real time" : `${v}× real time`, value: v }));
+
 // TradingView's "Select starting point" modes: the main button shows the current one and repeats
 // it; the arrow beside it opens the menu
 const START_MODES: { id: ReplayStartMode; menu: string; label: string; icon: (size: number) => React.ReactNode }[] = [
@@ -34,8 +39,11 @@ const START_MODES: { id: ReplayStartMode; menu: string; label: string; icon: (si
 export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol = "" }: { intervalLabel?: string; interval?: string; symbol?: string }) {
   const {
     mode, isPlaying, replaySpeed, hasStarted, startMode, setStartMode,
-    stopReplay, togglePlay, stepForward, skipToEnd, setSpeed, reSelectBar
+    stopReplay, togglePlay, stepForward, skipToEnd, setSpeed, reSelectBar,
+    live, askLive, liveLoading, liveError, setLive, dismissAskLive,
   } = useReplay();
+  // Replaying like the live market: on symbols with stored ticks (our own feed's, lib/replayLive)
+  const liveAvailable = liveReplaySupported(symbol);
   // In a collab: the replay everyone follows, and whether this person is driving or following it
   const { status: collabStatus, replay: shared, replayDetached, you } = useCollab();
   const inCollab = collabStatus === "live";
@@ -106,7 +114,8 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
 
   if (mode === 'idle' && !following) return null;
 
-  const speedLabel = SPEED_OPTIONS.find(s => s.value === replaySpeed)?.label ?? "1x";
+  const speedOptions = live ? LIVE_SPEED_OPTIONS : SPEED_OPTIONS;
+  const speedLabel = speedOptions.find(s => s.value === replaySpeed)?.label ?? `${replaySpeed}x`;
   const current = START_MODES.find(m => m.id === startMode) ?? START_MODES[0];
   const runStartMode = (m: ReplayStartMode) => {
     if (m === "bar") { if (mode !== "selecting") reSelectBar(); return; }
@@ -339,6 +348,17 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
           </svg>
         </IconButton>
 
+        {/* Like the live market: on / off */}
+        {liveAvailable && controlsOn && (
+          <button type="button" data-testid="replay-live-toggle" aria-pressed={live} onClick={() => setLive(!live)} disabled={liveLoading}
+            title={live ? "Replaying like the live market: candles form as they did at the time. Click for bar by bar" : "Replay like the live market: candles form as they did at the time"}
+            style={{ marginLeft: 12, height: 26, padding: "0 10px", borderRadius: 13, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6,
+              border: `1px solid ${live ? "#f23645" : "var(--tv-color-border)"}`, background: live ? "rgba(242, 54, 69, 0.12)" : "transparent", color: live ? "#f23645" : "var(--tv-hdr-text)" }}>
+            <span aria-hidden style={{ width: 7, height: 7, borderRadius: "50%", background: live ? "#f23645" : "var(--tv-legend-args)" }} />
+            {liveLoading ? "Loading…" : "Live market"}
+          </button>
+        )}
+
         {/* Speed Label */}
         <div ref={speedMenuRef} style={{ position: "relative", marginLeft: "12px" }}>
           <button
@@ -350,9 +370,9 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
           {showSpeedMenu && (
             <div style={{ position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", backgroundColor: "var(--tv-color-pane-bg)", border: "1px solid var(--tv-color-border)", borderRadius: "6px", marginBottom: "8px", overflow: "hidden", zIndex: 1001, boxShadow: "0 4px 12px rgba(0,0,0,0.15)", minWidth: "200px" }}>
               <div style={{ padding: "10px 16px", fontSize: "11px", fontWeight: 700, color: "#787b86", textTransform: "uppercase", borderBottom: "1px solid var(--tv-color-border)" }}>
-                Replay Speed
+                {live ? "Speed (× real time)" : "Replay Speed"}
               </div>
-              {SPEED_OPTIONS.map(opt => (
+              {speedOptions.map(opt => (
                 <div
                   key={opt.value}
                   onClick={() => { setSpeed(opt.value); setShowSpeedMenu(false); }}
@@ -398,6 +418,11 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
           <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
         </svg>
       </IconButton>
+
+      {askLive && liveAvailable && <LiveChoice onPick={live => { if (live) void setLive(true); else dismissAskLive(); }} />}
+      {liveError && (
+        <div role="status" data-testid="replay-live-error" style={{ position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 8, padding: "6px 12px", borderRadius: 6, fontSize: 12, whiteSpace: "nowrap", background: "var(--tv-color-pane-bg)", color: "var(--tv-hdr-text)", border: "1px solid var(--tv-color-border)", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>{liveError}</div>
+      )}
 
       {showDateDialog && (
         <ReplayDateDialog
@@ -468,5 +493,36 @@ function IconButton({ children, onClick, title, disabled }: { children: React.Re
     >
       {children}
     </button>
+  );
+}
+
+// Asked as a replay starts (where there are ticks): play it like the live market, or bar by bar.
+// Escape, the ✕ or a click outside keeps bar by bar.
+function LiveChoice({ onPick }: { onPick: (live: boolean) => void }) {
+  useEscapeClose(() => onPick(false));
+  const option = (live: boolean, title: string, text: string) => (
+    <button type="button" data-testid={live ? "replay-choice-live" : "replay-choice-bars"} onClick={() => onPick(live)} autoFocus={live}
+      style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, width: "100%", padding: "12px 14px", borderRadius: 8, cursor: "pointer", textAlign: "left",
+        border: `1px solid ${live ? "#2962ff" : "var(--tv-color-border)"}`, background: live ? "rgba(41, 98, 255, 0.08)" : "transparent", color: "var(--tv-color-text)", fontFamily: "inherit" }}>
+      <span style={{ fontSize: 14, fontWeight: 600 }}>{title}</span>
+      <span style={{ fontSize: 12, lineHeight: "17px", color: "var(--tv-color-text-muted)" }}>{text}</span>
+    </button>
+  );
+  return createPortal(
+    <div onMouseDown={e => { if (e.target === e.currentTarget) onPick(false); }}
+      style={{ position: "fixed", inset: 0, zIndex: 10050, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div role="dialog" aria-label="How should the replay run?" data-testid="replay-live-choice"
+        style={{ width: 400, maxWidth: "100%", padding: "18px 20px 20px", borderRadius: 8, background: "var(--tv-color-pane-bg)", color: "var(--tv-color-text)", boxShadow: "0 8px 32px rgba(0,0,0,0.35)" }}>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
+          <span style={{ flex: 1, fontSize: 17, fontWeight: 600 }}>How should the replay run?</span>
+          <button type="button" aria-label="Close" onClick={() => onPick(false)} style={{ width: 28, height: 28, border: "none", background: "transparent", color: "var(--tv-color-text)", cursor: "pointer", fontSize: 18 }}>✕</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {option(true, "Like the live market", "Each candle forms from the real ticks of the time: every price change in its own order, at the market's own pace (1× is real time). Orders fill at the price of that moment.")}
+          {option(false, "Bar by bar", "Whole candles appear one at a time, as before.")}
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

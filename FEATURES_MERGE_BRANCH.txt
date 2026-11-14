@@ -686,6 +686,21 @@ Posting signals out
     TwelveData's other prices
 
 ======================================================================
+17b4. REPLAY LIKE THE LIVE MARKET (as on the live site, for everyone)
+======================================================================
+  - A bar replay of gold or the forex pairs on our own feed (17b3) asks "How should the replay run?":
+    like the live market (each candle forms from the real ticks of the time, every price change in
+    its own order, at the market's pace: 1x is real time, up to 300x; closed hours are skipped) or
+    bar by bar. Asked only where ticks are stored from that point; "Live market" on the replay bar
+    switches between the two (with the reason when there are no ticks there)
+  - Paper trading in the replay fills at the tick that reaches an order (a frame's ticks at once);
+    the bar-close countdown counts down the forming candle on the replay's clock; a new timeframe
+    keeps the replay as it was (the forming candle rebuilt from the ticks up to that moment)
+  - The legend shows the replay's last candle, not the latest loaded one (in the replay's future)
+  - Ticks: the backend keeps every tick the MT5 collector sends (180 days, /api/users/live/ticks/);
+    backend/pipeline/tick_backfill.py fills earlier periods from MT5
+
+======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD
 ======================================================================
   - Analytics → "Connect an account": any broker or prop-firm account (FTMO, FundedNext, The5ers,
