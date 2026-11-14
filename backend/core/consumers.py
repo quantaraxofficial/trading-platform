@@ -23,6 +23,7 @@ from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.utils import timezone
 
 from .auth import live_session
+from . import traffic
 from .collab import clean_pine, color_of, display_name, group_name, message_json, perms_of, room_json
 from .models import CollabMember, CollabMessage, CollabRoom, TraderProfile, UserSession
 
@@ -126,6 +127,8 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
         state.peers[self.channel_name] = self.peer
         await self.channel_layer.group_add(self.group, self.channel_name)
         await self.accept()
+        traffic.ws_opened("collab")   # (Django Admin → Site analytics: live connections)
+        self._counted = True
         room = await self._room_json()
         messages = await self._recent_messages()
         await self.send_json({
@@ -136,6 +139,9 @@ class CollabConsumer(AsyncJsonWebsocketConsumer):
         await self._broadcast({"type": "peer.joined", "peer": self.peer}, exclude=self.channel_name)
 
     async def disconnect(self, code):
+        if getattr(self, '_counted', False):
+            self._counted = False
+            traffic.ws_closed("collab")
         state = getattr(self, 'state', None)
         if not state:
             return
@@ -583,11 +589,16 @@ class TicksConsumer(AsyncJsonWebsocketConsumer):
         self.group = group_of(self.symbol)
         await self.channel_layer.group_add(self.group, self.channel_name)
         await self.accept()
+        traffic.ws_opened("ticks")
+        self._counted = True
         snap = live_snapshot(self.symbol)
         if snap:
             await self.send_json(snap)
 
     async def disconnect(self, code):
+        if getattr(self, '_counted', False):
+            self._counted = False
+            traffic.ws_closed("ticks")
         if getattr(self, 'group', None):
             await self.channel_layer.group_discard(self.group, self.channel_name)
 

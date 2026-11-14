@@ -1003,3 +1003,41 @@ class PostView(models.Model):
 
     class Meta:
         unique_together = ('post', 'profile')
+
+class TrafficSlot(models.Model):
+    """Who had the site open, per 5 minutes (core/traffic.py, from the presence pings): the number of
+    rows in a slot is how many people were on the site at once then (Django Admin → Site analytics)"""
+    slot = models.DateTimeField(db_index=True)       # the 5 minutes' start (UTC)
+    profile = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='traffic_slots')
+    where = models.CharField(max_length=40, blank=True, default='')   # the page they were on
+
+    class Meta:
+        unique_together = ('slot', 'profile')
+
+    def __str__(self):
+        return f"{self.profile.name} at {self.slot:%Y-%m-%d %H:%M}"
+
+
+class ServerMinute(models.Model):
+    """The server, minute by minute (core/traffic.py): requests served, errors, response times, open
+    live connections, the machine's load and memory (Django Admin → Site analytics)"""
+    minute = models.DateTimeField(unique=True)
+    requests = models.PositiveIntegerField(default=0)
+    errors = models.PositiveIntegerField(default=0)             # answered with a 5xx
+    avg_ms = models.FloatField(default=0)
+    max_ms = models.FloatField(default=0)
+    ws_collab = models.PositiveIntegerField(default=0)          # collab sockets open at the minute's end
+    ws_ticks = models.PositiveIntegerField(default=0)           # live price sockets open
+    load_pct = models.FloatField(null=True, blank=True)         # 1-minute load average ÷ CPU cores, %
+    mem_pct = models.FloatField(null=True, blank=True)          # the machine's memory in use, %
+
+    class Meta:
+        ordering = ['-minute']
+
+
+class SiteAnalytics(ServerMinute):
+    """Django Admin → Site analytics: the live dashboard (core/site_analytics.py)"""
+    class Meta:
+        proxy = True
+        verbose_name = "Site analytics"
+        verbose_name_plural = "Site analytics"

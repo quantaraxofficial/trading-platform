@@ -33,6 +33,9 @@ def ping(request, uid):
     # (.update: no other field's auto timestamps touched)
     TraderProfile.objects.filter(pk=profile.pk).update(last_seen=now, last_where=where)
     count_time(profile, profile.last_seen, now)
+    # who's on the site, per 5 minutes (Django Admin → Site analytics)
+    from .traffic import note_presence
+    note_presence(profile, now, where)
     return Response({"ok": True})
 
 

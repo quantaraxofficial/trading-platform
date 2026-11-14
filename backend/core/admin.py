@@ -4,6 +4,7 @@ from .models import TraderProfile, BacktestSession, UserActionLog, FailedRequest
 from .models import FeedbackMessage, Payment, Earning
 from django.contrib import messages
 from django.template.response import TemplateResponse
+from django.urls import path
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 
@@ -553,6 +554,53 @@ class TraderSourceAdmin(admin.ModelAdmin):
 # The admin is TradePilot's (its look: core/admin_theme)
 admin.site.site_title = "TradePilot admin"
 admin.site.site_header = "TradePilot admin"
+
+
+from .models import SiteAnalytics
+
+
+@admin.register(SiteAnalytics)
+class SiteAnalyticsAdmin(admin.ModelAdmin):
+    """Site analytics: traffic (when people are on the site, how many at once), the server (requests,
+    response times, load, memory, live connections), people (active, new, returning, retention, time
+    on site), what they use, their devices, and insights drawn from it; live, the page refreshing
+    itself (core/site_analytics.py)"""
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_active and request.user.is_staff
+
+    def get_urls(self):
+        return [
+            path("live/", self.admin_site.admin_view(self.live_json), name="core_siteanalytics_live"),
+            path("report/", self.admin_site.admin_view(self.report_json), name="core_siteanalytics_report"),
+        ] + super().get_urls()
+
+    def live_json(self, request):
+        from django.http import JsonResponse
+        from . import site_analytics
+        return JsonResponse(site_analytics.live())
+
+    def report_json(self, request):
+        from django.http import JsonResponse
+        from . import site_analytics
+        try:
+            days = int(request.GET.get("days") or 30)
+        except ValueError:
+            days = 30
+        return JsonResponse(site_analytics.report(days))
+
+    def changelist_view(self, request, extra_context=None):
+        ctx = {**self.admin_site.each_context(request), "title": "Site analytics", "opts": self.model._meta}
+        return TemplateResponse(request, "admin/core/site_analytics.html", ctx)
 
 
 # ---- No raw unix times anywhere: machine-written JSON shown readable ------------------------------

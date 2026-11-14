@@ -744,6 +744,26 @@ Posting signals out
     a session with no rules or tags can be saved
 
 ======================================================================
+17b7. DJANGO ADMIN → SITE ANALYTICS (live)
+======================================================================
+  - A live dashboard (refreshes itself: right now every 10 s, the rest every minute, only while the
+    tab is visible; period: today, 7, 30, 90 days, a year)
+  - Right now: people on the site, requests this minute, response time, collab and price
+    connections, the VM's CPU and memory gauges, who's on and which page
+  - Insights written from the data: busiest and quietest hours, whether the VM has room, how many
+    people at once it can take (load per person, fitted), growth, stickiness, devices, errors
+  - Traffic: a weekday × hour heatmap of people on the site at once (India time), the last 48 hours,
+    the busiest hours; server: load and memory, response times, requests per minute, live
+    connections, requests and errors per day, and a capacity scatter (people at once vs CPU load)
+  - People: active per day (new / returning), sign-ups, an activity calendar, peak at once per day,
+    time on the site per visit day, the funnel from sign-up to paying, weekly retention cohorts, the
+    people who spend the most time
+  - Use: pages, features (backtests, collabs, scripts, posts, chats, copy trading, broker accounts,
+    optimizer runs…), symbols, timeframes, failing endpoints; devices, browsers, systems, plans
+  - Recorded from now on: people on the site per 5 minutes (from the presence pings), the server per
+    minute (requests, errors, response times, live connections, load, memory), the browser at sign-in
+
+======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD
 ======================================================================
   - Analytics → "Connect an account": any broker or prop-firm account (FTMO, FundedNext, The5ers,

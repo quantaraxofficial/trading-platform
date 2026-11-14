@@ -63,7 +63,9 @@ def sync_user(request):
             for old in current_sessions[:current_sessions.count() - 1]:
                 old.delete()   # room for this one (the oldest go)
         new_key = new_session_key()
-        UserSession.objects.create(user=profile, session_key=new_key, device_info=str(data.get('device_info') or '')[:255])
+        # (the browser it's on, for Django Admin → Site analytics: devices)
+        device = data.get('device_info') or request.headers.get('User-Agent') or ''
+        UserSession.objects.create(user=profile, session_key=new_key, device_info=str(device)[:255])
 
     return Response({
         "success": True,

@@ -1,0 +1,554 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Site analytics | TradePilot admin{% endblock %}
+{% block breadcrumbs %}
+<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> › Site analytics</div>
+{% endblock %}
+{% block extrastyle %}{{ block.super }}
+<style>
+/* Site analytics: drawn here as SVG (the admin allows no outside scripts). Colours by role: the
+   categorical slots in a fixed order (validated on this dark surface), one blue ramp for amounts,
+   status colours only for good / warning / critical, always with a word beside them. */
+.sa {
+  --surface: #14091f;
+  --text-1: #f5f3ff; --text-2: rgba(216, 180, 254, 0.78); --text-3: rgba(216, 180, 254, 0.55);
+  --grid: rgba(167, 139, 250, 0.14); --axis: rgba(167, 139, 250, 0.35);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #9085e9;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  color: var(--text-1);
+}
+.sa-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 4px 0 18px; }
+.sa-range button { background: transparent; color: var(--text-2); border: 1px solid var(--axis); padding: 5px 12px; border-radius: 16px; cursor: pointer; font-size: 13px; }
+.sa-range button.on { background: var(--s1); border-color: var(--s1); color: #fff; }
+.sa-live { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); margin-left: auto; }
+.sa-live i { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 0 rgba(12,163,12,.6); animation: sa-pulse 2s infinite; }
+.sa-live.off i { background: var(--text-3); animation: none; }
+@keyframes sa-pulse { 70% { box-shadow: 0 0 0 8px rgba(12,163,12,0); } 100% { box-shadow: 0 0 0 0 rgba(12,163,12,0); } }
+.sa h2 { margin: 28px 0 10px; font-size: 16px; color: var(--text-1); background: none; padding: 0; border: 0; }
+.sa h2 small { font-weight: 400; color: var(--text-3); font-size: 12px; margin-left: 8px; }
+.sa-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.sa-grid.wide { grid-template-columns: repeat(auto-fill, minmax(520px, 1fr)); }
+.sa-card { border: 1px solid var(--grid); border-radius: 10px; padding: 14px 16px; background: rgba(0,0,0,.35); min-width: 0; }
+.sa-card h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--text-1); background: none; padding: 0; text-transform: none; letter-spacing: 0; }
+.sa-card .sub { font-size: 12px; color: var(--text-3); margin-bottom: 8px; }
+.sa-tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.sa-tile { border: 1px solid var(--grid); border-radius: 10px; padding: 12px 14px; background: rgba(0,0,0,.35); }
+.sa-tile .k { font-size: 12px; color: var(--text-2); }
+.sa-tile .v { font-size: 26px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.sa-tile .n { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.sa-tile .n.up { color: #4ade80; } .sa-tile .n.down { color: #f87171; }
+.sa svg { display: block; overflow: visible; }
+.sa svg text { fill: var(--text-2); font-size: 11px; font-family: inherit; }
+.sa-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--text-2); margin-top: 6px; }
+.sa-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sa-legend b { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.sa-tip { position: fixed; z-index: 1000; pointer-events: none; background: #0b0613; border: 1px solid var(--axis); border-radius: 8px; padding: 8px 10px; font-size: 12px; color: var(--text-1); box-shadow: 0 6px 20px rgba(0,0,0,.5); display: none; max-width: 280px; }
+.sa-tip .t { color: var(--text-3); margin-bottom: 4px; }
+.sa-tip .r { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.sa-tip .r b { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.sa-tip .r em { font-style: normal; margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; }
+.sa-insights { display: grid; gap: 8px; }
+.sa-insight { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--grid); background: rgba(0,0,0,.3); font-size: 13px; line-height: 1.45; }
+.sa-insight .tag { flex: none; font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--axis); color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }
+.sa-insight.good .tag { border-color: var(--good); color: #4ade80; }
+.sa-insight.warning .tag { border-color: var(--warning); color: var(--warning); }
+.sa-insight.critical .tag { border-color: var(--critical); color: #f87171; }
+.sa table.sa-t { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sa table.sa-t th, .sa table.sa-t td { padding: 5px 6px; border-bottom: 1px solid var(--grid); text-align: left; background: none; color: var(--text-1); }
+.sa table.sa-t th { color: var(--text-2); font-weight: 600; }
+.sa table.sa-t td.num, .sa table.sa-t th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.sa .cell { text-align: center !important; border-radius: 4px; border: 2px solid var(--surface) !important; font-variant-numeric: tabular-nums; }
+.sa .empty { color: var(--text-3); font-size: 13px; padding: 18px 0; text-align: center; }
+.sa-people { font-size: 12px; max-height: 220px; overflow: auto; }
+.sa-people div { display: flex; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--grid); }
+.sa-people div span:last-child { margin-left: auto; color: var(--text-3); }
+.sa details summary { cursor: pointer; color: var(--text-3); font-size: 12px; margin-top: 8px; }
+</style>
+{% endblock %}
+{% block content %}
+<div id="content-main" class="sa">
+  <div class="sa-bar">
+    <span class="sa-range" role="group" aria-label="Period">
+      <button type="button" data-days="1">Today</button>
+      <button type="button" data-days="7">7 days</button>
+      <button type="button" data-days="30" class="on">30 days</button>
+      <button type="button" data-days="90">90 days</button>
+      <button type="button" data-days="365">1 year</button>
+    </span>
+    <span class="sa-live" id="sa-live"><i></i><span>Connecting…</span></span>
+  </div>
+
+  <h2>Right now <small>refreshes every 10 seconds</small></h2>
+  <div class="sa-tiles" id="t-live"></div>
+  <div class="sa-grid wide" style="margin-top:14px">
+    <div class="sa-card"><h3>People on the site</h3><div class="sub">at once, every 5 minutes, the last 2 hours</div><div id="c-onsite"></div></div>
+    <div class="sa-card"><h3>Requests per minute</h3><div class="sub">every request the server answered, the last hour</div><div id="c-reqmin"></div></div>
+  </div>
+  <div class="sa-grid" style="margin-top:14px">
+    <div class="sa-card"><h3>VM load</h3><div class="sub">CPU (1-minute load ÷ cores) and memory in use</div><div id="c-gauges" style="display:flex;gap:8px;justify-content:space-around"></div></div>
+    <div class="sa-card"><h3>Where they are now</h3><div class="sub">the page each person on the site has open</div><div id="c-pagesnow"></div></div>
+    <div class="sa-card"><h3>Who's on</h3><div class="sub">signed in, seen in the last 2 minutes</div><div id="c-people" class="sa-people"></div></div>
+  </div>
+
+  <h2>Insights <small id="sa-period-note"></small></h2>
+  <div class="sa-insights" id="c-insights"></div>
+
+  <h2>Key numbers <small>for the period</small></h2>
+  <div class="sa-tiles" id="t-kpis"></div>
+
+  <h2>Traffic: when people are on the site <small>India time</small></h2>
+  <div class="sa-grid wide">
+    <div class="sa-card" style="grid-column:1/-1"><h3>Busy hours (weekday × hour)</h3><div class="sub">average people on the site at once in each hour; hover for the peak</div><div id="c-heat"></div></div>
+    <div class="sa-card"><h3>People on the site, last 48 hours</h3><div class="sub">at once, every 5 minutes</div><div id="c-c48"></div></div>
+    <div class="sa-card"><h3>Busiest hours</h3><div class="sub">average at once (peak in brackets)</div><div id="c-busiest"></div></div>
+  </div>
+
+  <h2>Server and VM <small>for scaling: what the busy times cost</small></h2>
+  <div class="sa-grid wide">
+    <div class="sa-card"><h3>Load and memory, last 48 hours</h3><div class="sub">the busiest minute of each hour, % of the machine</div><div id="c-load48"></div></div>
+    <div class="sa-card"><h3>Response time, last 48 hours</h3><div class="sub">average and slowest request each hour, ms</div><div id="c-ms48"></div></div>
+    <div class="sa-card"><h3>Requests per minute, last 48 hours</h3><div class="sub">average and busiest minute each hour</div><div id="c-req48"></div></div>
+    <div class="sa-card"><h3>Capacity: people at once vs CPU load</h3><div class="sub">each dot an hour; the line is how load grows with people</div><div id="c-capacity"></div></div>
+    <div class="sa-card"><h3>Live connections, last 48 hours</h3><div class="sub">collab and live price sockets open at the busiest minute</div><div id="c-ws48"></div></div>
+    <div class="sa-card"><h3>Requests and errors per day</h3><div class="sub">server errors (5xx) stacked on the rest</div><div id="c-reqday"></div></div>
+  </div>
+
+  <h2>People</h2>
+  <div class="sa-grid wide">
+    <div class="sa-card"><h3>Active people per day</h3><div class="sub">new (signed up that day) and returning</div><div id="c-active"></div></div>
+    <div class="sa-card"><h3>Sign-ups per day</h3><div class="sub">new accounts</div><div id="c-signups"></div></div>
+    <div class="sa-card"><h3>Activity calendar</h3><div class="sub">active people each day</div><div id="c-cal"></div></div>
+    <div class="sa-card"><h3>Peak people at once per day</h3><div class="sub">the busiest 5 minutes of each day</div><div id="c-peakday"></div></div>
+    <div class="sa-card"><h3>Time on the site per visit day</h3><div class="sub">how long people stay on a day they come</div><div id="c-timehist"></div></div>
+    <div class="sa-card"><h3>From sign-up to paying</h3><div class="sub">people who signed up in the period</div><div id="c-funnel"></div></div>
+    <div class="sa-card" style="grid-column:1/-1"><h3>Retention by sign-up week</h3><div class="sub">% of each week's sign-ups on the site in week 0, 1, 2… after</div><div id="c-cohorts"></div></div>
+    <div class="sa-card"><h3>Most time on the site</h3><div class="sub">hours in the period, days visited</div><div id="c-topusers"></div></div>
+  </div>
+
+  <h2>What they use</h2>
+  <div class="sa-grid">
+    <div class="sa-card"><h3>Pages</h3><div class="sub">hours spent on each page</div><div id="c-pages"></div></div>
+    <div class="sa-card"><h3>Features used</h3><div class="sub">made or saved in the period</div><div id="c-features"></div></div>
+    <div class="sa-card"><h3>Symbols on their charts</h3><div class="sub">each person's current chart</div><div id="c-symbols"></div></div>
+    <div class="sa-card"><h3>Timeframes</h3><div class="sub">each person's current chart</div><div id="c-intervals"></div></div>
+    <div class="sa-card"><h3>Failing requests</h3><div class="sub">the endpoints that failed most</div><div id="c-failing"></div></div>
+  </div>
+
+  <h2>Devices and plans</h2>
+  <div class="sa-grid">
+    <div class="sa-card"><h3>Device</h3><div class="sub">signed-in browsers</div><div id="c-devices"></div></div>
+    <div class="sa-card"><h3>Browser</h3><div class="sub">signed-in browsers</div><div id="c-browsers"></div></div>
+    <div class="sa-card"><h3>Operating system</h3><div class="sub">signed-in browsers</div><div id="c-systems"></div></div>
+    <div class="sa-card"><h3>Plans</h3><div class="sub">accounts by plan</div><div id="c-tiers"></div></div>
+  </div>
+  <div class="sa-tip" id="sa-tip"></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  const LIVE_URL = "{% url 'admin:core_siteanalytics_live' %}";
+  const REPORT_URL = "{% url 'admin:core_siteanalytics_report' %}";
+  const css = getComputedStyle(document.querySelector(".sa"));
+  const C = n => css.getPropertyValue(n).trim();
+  const SERIES = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6"].map(C);
+  const OTHER = "rgba(216,180,254,0.35)";
+  // the sequential blue ramp, dim (little) to bright (a lot) on this dark surface
+  const RAMP = ["#0d366b", "#104281", "#184f95", "#1c5cab", "#256abf", "#2a78d6", "#3987e5", "#5598e7", "#6da7ec", "#86b6ef", "#9ec5f4", "#b7d3f6", "#cde2fb"];
+  const ramp = f => RAMP[Math.max(0, Math.min(RAMP.length - 1, Math.round(f * (RAMP.length - 1))))];
+  const NS = "http://www.w3.org/2000/svg";
+  const $ = id => document.getElementById(id);
+  const fmtN = v => v == null ? "—" : Math.abs(v) >= 1e6 ? (v / 1e6).toFixed(1) + "M" : Math.abs(v) >= 1e4 ? (v / 1e3).toFixed(1) + "k" : (Math.round(v * 10) / 10).toLocaleString();
+  const tz = { timeZone: "Asia/Kolkata" };
+  const fmtTime = t => new Date(t).toLocaleTimeString("en-IN", { ...tz, hour: "2-digit", minute: "2-digit", hour12: false });
+  const fmtDT = t => new Date(t).toLocaleString("en-IN", { ...tz, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+  // (axis labels across days: the weekday and the time, short enough not to collide)
+  const fmtWT = t => new Date(t).toLocaleString("en-IN", { ...tz, weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+  const fmtDay = d => new Date(d + "T00:00:00+05:30").toLocaleDateString("en-IN", { ...tz, day: "numeric", month: "short" });
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs || {}) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function svg(host, h) {
+    host.innerHTML = "";
+    const w = Math.max(240, host.clientWidth || 300);
+    const s = el("svg", { width: w, height: h, viewBox: `0 0 ${w} ${h}`, role: "img" }, host);
+    return { s, w, h };
+  }
+  function empty(host, text) { host.innerHTML = `<div class="empty">${esc(text || "No data yet for this period")}</div>`; }
+  function legend(host, items) {
+    if (items.length < 2) return;
+    const d = document.createElement("div");
+    d.className = "sa-legend";
+    d.innerHTML = items.map(i => `<span><b style="background:${i.color}"></b>${esc(i.name)}</span>`).join("");
+    host.appendChild(d);
+  }
+
+  // ---- the tooltip
+  const tip = $("sa-tip");
+  function showTip(e, title, rows) {
+    tip.innerHTML = (title ? `<div class="t">${esc(title)}</div>` : "") + rows.map(r =>
+      `<div class="r">${r.color ? `<b style="background:${r.color}"></b>` : ""}${esc(r.name)}<em>${esc(r.value)}</em></div>`).join("");
+    tip.style.display = "block";
+    const x = Math.min(window.innerWidth - tip.offsetWidth - 12, e.clientX + 14);
+    const y = Math.min(window.innerHeight - tip.offsetHeight - 12, e.clientY + 14);
+    tip.style.left = x + "px"; tip.style.top = y + "px";
+  }
+  const hideTip = () => { tip.style.display = "none"; };
+
+  // ---- axes
+  function niceMax(v) {
+    if (!(v > 0)) return 1;
+    const p = Math.pow(10, Math.floor(Math.log10(v)));
+    for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p;
+    return 10 * p;
+  }
+  function yAxis(g, x0, x1, y0, y1, max, fmt, ticks = 4) {
+    for (let i = 0; i <= ticks; i++) {
+      const v = max * i / ticks, y = y1 - (y1 - y0) * i / ticks;
+      el("line", { x1: x0, x2: x1, y1: y, y2: y, stroke: i ? C("--grid") : C("--axis"), "stroke-width": 1 }, g);
+      const t = el("text", { x: x0 - 6, y: y + 4, "text-anchor": "end" }, g); t.textContent = (fmt || fmtN)(v);
+    }
+  }
+
+  // ---- line / area (one y-axis; a crosshair and a tooltip across all series)
+  function lineChart(host, { x, series, h = 200, fmt, xfmt, area = false, max, tfmt }) {
+    if (!x.length || series.every(s => s.values.every(v => v == null || v === 0))) { empty(host); return; }
+    const { s, w } = svg(host, h);
+    const L = 44, R = 8, T = 8, B = 22;
+    const top = max != null ? max : niceMax(Math.max(...series.flatMap(s => s.values.filter(v => v != null))));
+    const X = i => L + (w - L - R) * (x.length > 1 ? i / (x.length - 1) : 0.5);
+    const Y = v => T + (h - T - B) * (1 - Math.min(v, top) / top);
+    const g = el("g", {}, s);
+    yAxis(g, L, w - R, T, h - B, top, fmt);
+    const nT = Math.max(2, Math.min(6, x.length, Math.floor((w - L - R) / 80)));
+    for (let k = 0; k < nT; k++) {
+      const i = Math.round((x.length - 1) * k / Math.max(1, nT - 1));
+      const t = el("text", { x: X(i), y: h - 6, "text-anchor": k === 0 ? "start" : k === nT - 1 ? "end" : "middle" }, g);
+      t.textContent = (xfmt || fmtTime)(x[i]);
+    }
+    series.forEach((sr, si) => {
+      let d = "", started = false;
+      sr.values.forEach((v, i) => { if (v == null) { started = false; return; } d += (started ? "L" : "M") + X(i).toFixed(1) + "," + Y(v).toFixed(1); started = true; });
+      if (area && si === 0 && d) {
+        const firstI = sr.values.findIndex(v => v != null), lastI = sr.values.length - 1 - [...sr.values].reverse().findIndex(v => v != null);
+        el("path", { d: d + `L${X(lastI)},${Y(0)}L${X(firstI)},${Y(0)}Z`, fill: sr.color, opacity: 0.18 }, s);
+      }
+      el("path", { d, fill: "none", stroke: sr.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round", ...(sr.dash ? { "stroke-dasharray": "4 3" } : {}) }, s);
+    });
+    const cross = el("line", { y1: T, y2: h - B, stroke: C("--axis"), "stroke-width": 1, visibility: "hidden" }, s);
+    const dots = series.map(sr => el("circle", { r: 4, fill: sr.color, stroke: C("--surface"), "stroke-width": 2, visibility: "hidden" }, s));
+    const hit = el("rect", { x: L, y: T, width: w - L - R, height: h - T - B, fill: "transparent" }, s);
+    hit.addEventListener("mousemove", e => {
+      const r = s.getBoundingClientRect();
+      const i = Math.max(0, Math.min(x.length - 1, Math.round((e.clientX - r.left - L) / (w - L - R) * (x.length - 1))));
+      cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i)); cross.setAttribute("visibility", "visible");
+      series.forEach((sr, si) => { const v = sr.values[i]; dots[si].setAttribute("visibility", v == null ? "hidden" : "visible"); if (v != null) { dots[si].setAttribute("cx", X(i)); dots[si].setAttribute("cy", Y(v)); } });
+      showTip(e, (tfmt || fmtDT)(x[i]), series.map(sr => ({ name: sr.name, color: sr.color, value: sr.values[i] == null ? "—" : (fmt || fmtN)(sr.values[i]) })));
+    });
+    hit.addEventListener("mouseleave", () => { cross.setAttribute("visibility", "hidden"); dots.forEach(d => d.setAttribute("visibility", "hidden")); hideTip(); });
+    legend(host, series);
+  }
+
+  // ---- vertical bars (stacked when several series), 2px gaps, rounded data ends
+  function barChart(host, { labels, series, h = 200, fmt, lfmt, stacked = true }) {
+    const totals = labels.map((_, i) => series.reduce((a, sr) => a + (sr.values[i] || 0), 0));
+    if (!labels.length || totals.every(t => !t)) { empty(host); return; }
+    const { s, w } = svg(host, h);
+    const L = 40, R = 6, T = 8, B = 22;
+    const top = niceMax(stacked ? Math.max(...totals) : Math.max(...series.flatMap(sr => sr.values)));
+    const g = el("g", {}, s);
+    yAxis(g, L, w - R, T, h - B, top, fmt);
+    const slot = (w - L - R) / labels.length, bw = Math.max(2, Math.min(28, slot - 2));
+    const Y = v => (h - T - B) * v / top;
+    const every = Math.ceil(labels.length / Math.max(1, Math.floor((w - L) / 52)));
+    labels.forEach((lb, i) => {
+      const cx = L + slot * i + slot / 2;
+      let base = h - B;
+      series.forEach((sr, si) => {
+        const v = sr.values[i] || 0;
+        if (!v) return;
+        const bh = Math.max(1, Y(v) - (si && stacked ? 2 : 0));
+        el("rect", { x: cx - bw / 2, y: base - bh, width: bw, height: bh, rx: Math.min(3, bw / 3), fill: sr.color }, s);
+        base -= bh + (stacked ? 2 : 0);
+      });
+      if (i % every === 0) { const t = el("text", { x: cx, y: h - 6, "text-anchor": "middle" }, g); t.textContent = (lfmt || (v => v))(lb); }
+      const hit = el("rect", { x: L + slot * i, y: T, width: slot, height: h - T - B, fill: "transparent" }, s);
+      hit.addEventListener("mousemove", e => showTip(e, (lfmt || (v => v))(lb), series.map(sr => ({ name: sr.name, color: sr.color, value: (fmt || fmtN)(sr.values[i] || 0) }))));
+      hit.addEventListener("mouseleave", hideTip);
+    });
+    legend(host, series);
+  }
+
+  // ---- horizontal bars with labels (rankings)
+  function hbar(host, rows, { fmt, color } = {}) {
+    if (!rows.length || rows.every(r => !r[1])) { empty(host); return; }
+    host.innerHTML = "";
+    const max = Math.max(...rows.map(r => r[1]));
+    rows.forEach(([label, v]) => {
+      const d = document.createElement("div");
+      d.style.cssText = "display:grid;grid-template-columns:minmax(80px,38%) 1fr auto;gap:8px;align-items:center;font-size:12px;padding:3px 0";
+      d.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-2)" title="${esc(label)}">${esc(label)}</span>`
+        + `<span style="height:10px;border-radius:0 3px 3px 0;background:${color || C("--s1")};width:${Math.max(1.5, 100 * v / max)}%"></span>`
+        + `<span style="font-variant-numeric:tabular-nums;min-width:36px;text-align:right">${esc((fmt || fmtN)(v))}</span>`;
+      host.appendChild(d);
+    });
+  }
+
+  // ---- donut (shares; up to 5 slices, the rest "Other")
+  function donut(host, rows) {
+    rows = rows.filter(r => r[1] > 0);
+    if (!rows.length) { empty(host); return; }
+    if (rows.length > 5) rows = [...rows.slice(0, 4), ["Other", rows.slice(4).reduce((a, r) => a + r[1], 0)]];
+    const { s, w, h } = svg(host, 170);
+    const total = rows.reduce((a, r) => a + r[1], 0);
+    const cx = Math.min(w / 2, 90), cy = h / 2, ro = 70, ri = 46;
+    let a0 = -Math.PI / 2;
+    rows.forEach((r, i) => {
+      const frac = r[1] / total, a1 = a0 + frac * Math.PI * 2;
+      const color = r[0] === "Other" ? OTHER : SERIES[i];
+      const big = a1 - a0 > Math.PI ? 1 : 0;
+      const p = rows.length === 1
+        ? `M${cx},${cy - ro}A${ro},${ro} 0 1 1 ${cx - 0.01},${cy - ro}L${cx - 0.01},${cy - ri}A${ri},${ri} 0 1 0 ${cx},${cy - ri}Z`
+        : `M${cx + ro * Math.cos(a0)},${cy + ro * Math.sin(a0)}A${ro},${ro} 0 ${big} 1 ${cx + ro * Math.cos(a1)},${cy + ro * Math.sin(a1)}L${cx + ri * Math.cos(a1)},${cy + ri * Math.sin(a1)}A${ri},${ri} 0 ${big} 0 ${cx + ri * Math.cos(a0)},${cy + ri * Math.sin(a0)}Z`;
+      const path = el("path", { d: p, fill: color, stroke: C("--surface"), "stroke-width": 2 }, s);
+      path.addEventListener("mousemove", e => showTip(e, null, [{ name: r[0], color, value: `${fmtN(r[1])} · ${(100 * frac).toFixed(0)}%` }]));
+      path.addEventListener("mouseleave", hideTip);
+      a0 = a1;
+    });
+    const t = el("text", { x: cx, y: cy + 6, "text-anchor": "middle", style: "font-size:18px;font-weight:600;fill:" + C("--text-1") }, s); t.textContent = fmtN(total);
+    // labels beside it
+    rows.forEach((r, i) => {
+      const y = 22 + i * 26, x = cx + ro + 22;
+      if (x + 60 > w) return;
+      el("rect", { x, y: y - 9, width: 10, height: 10, rx: 2, fill: r[0] === "Other" ? OTHER : SERIES[i] }, s);
+      const tt = el("text", { x: x + 16, y }, s); tt.textContent = `${r[0]} · ${(100 * r[1] / total).toFixed(0)}%`;
+    });
+  }
+
+  // ---- gauge (a half dial with its status in words)
+  function gauge(host, value, label) {
+    const box = document.createElement("div");
+    box.style.cssText = "text-align:center;min-width:130px";
+    host.appendChild(box);
+    const w = 150, h = 92, cx = 75, cy = 80, r = 62;
+    const s = el("svg", { width: w, height: h, viewBox: `0 0 ${w} ${h}` }, box);
+    const arc = (a0, a1, color, sw) => el("path", { d: `M${cx + r * Math.cos(a0)},${cy + r * Math.sin(a0)}A${r},${r} 0 0 1 ${cx + r * Math.cos(a1)},${cy + r * Math.sin(a1)}`, fill: "none", stroke: color, "stroke-width": sw, "stroke-linecap": "round" }, s);
+    arc(Math.PI, 2 * Math.PI - 0.001, C("--grid"), 12);
+    const v = value == null ? null : Math.max(0, Math.min(100, value));
+    const level = v == null ? null : v >= 85 ? ["critical", "Critical"] : v >= 70 ? ["warning", "Busy"] : ["good", "OK"];
+    if (v != null && v > 0) arc(Math.PI, Math.PI + Math.PI * v / 100, C("--" + level[0]), 12);
+    const t = el("text", { x: cx, y: cy - 8, "text-anchor": "middle", style: "font-size:22px;font-weight:650;fill:" + C("--text-1") }, s);
+    t.textContent = v == null ? "—" : v.toFixed(0) + "%";
+    box.insertAdjacentHTML("beforeend", `<div style="font-size:12px;color:var(--text-2)">${esc(label)}${level ? ` · <span style="color:var(--${level[0]})">${level[1]}</span>` : " · not measured here"}</div>`);
+  }
+
+  // ---- heatmap (weekday × hour), one hue, dim to bright
+  function heatmap(host, grid, peaks) {
+    const max = Math.max(...grid.flat());
+    if (!(max > 0)) { empty(host, "The busy-hour map fills in as people use the site (recorded every 5 minutes from now on)"); return; }
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const w = Math.max(480, host.clientWidth), L = 36, T = 4, cw = (w - L) / 24, ch = 24, h = T + 7 * ch + 20;
+    host.innerHTML = "";
+    const s = el("svg", { width: w, height: h, viewBox: `0 0 ${w} ${h}` }, host);
+    grid.forEach((row, d) => {
+      const t = el("text", { x: L - 6, y: T + d * ch + ch / 2 + 4, "text-anchor": "end" }, s); t.textContent = days[d];
+      row.forEach((v, hr) => {
+        const rect = el("rect", { x: L + hr * cw + 1, y: T + d * ch + 1, width: cw - 2, height: ch - 2, rx: 3, fill: v > 0 ? ramp(v / max) : "rgba(255,255,255,0.03)" }, s);
+        rect.addEventListener("mousemove", e => showTip(e, `${days[d]} ${String(hr).padStart(2, "0")}:00–${String((hr + 1) % 24).padStart(2, "0")}:00`, [
+          { name: "Average at once", value: v.toFixed(2) }, { name: "Peak at once", value: String(peaks[d][hr]) }]));
+        rect.addEventListener("mouseleave", hideTip);
+      });
+    });
+    for (let hr = 0; hr < 24; hr += 2) { const t = el("text", { x: L + hr * cw + cw / 2, y: h - 4, "text-anchor": "middle" }, s); t.textContent = String(hr).padStart(2, "0"); }
+    const lg = document.createElement("div");
+    lg.className = "sa-legend";
+    lg.innerHTML = `<span>fewer</span>${[0.1, 0.3, 0.5, 0.7, 0.9, 1].map(f => `<b style="background:${ramp(f)};width:18px"></b>`).join("")}<span>more (up to ${max.toFixed(1)} at once)</span>`;
+    host.appendChild(lg);
+  }
+
+  // ---- calendar (GitHub-like: a column per week, a row per weekday)
+  function calendar(host, daily) {
+    if (!daily.length || daily.every(d => !d.active)) { empty(host); return; }
+    host.innerHTML = "";
+    const max = Math.max(...daily.map(d => d.active));
+    const first = new Date(daily[0].d + "T00:00:00Z"), offset = (first.getUTCDay() + 6) % 7;
+    const weeks = Math.ceil((daily.length + offset) / 7), c = Math.min(16, Math.max(9, Math.floor(((host.clientWidth || 300) - 30) / weeks) - 2));
+    const w = 30 + weeks * (c + 2), h = 7 * (c + 2) + 4;
+    const s = el("svg", { width: w, height: h, viewBox: `0 0 ${w} ${h}` }, host);
+    ["Mon", "", "Wed", "", "Fri", "", "Sun"].forEach((d, i) => { if (d) { const t = el("text", { x: 0, y: i * (c + 2) + c - 1 }, s); t.textContent = d; } });
+    daily.forEach((d, i) => {
+      const k = i + offset, col = Math.floor(k / 7), row = k % 7;
+      const r = el("rect", { x: 30 + col * (c + 2), y: row * (c + 2), width: c, height: c, rx: 2, fill: d.active ? ramp(d.active / max) : "rgba(255,255,255,0.04)" }, s);
+      r.addEventListener("mousemove", e => showTip(e, fmtDay(d.d), [{ name: "Active", value: String(d.active) }, { name: "New sign-ups", value: String(d.signups) }]));
+      r.addEventListener("mouseleave", hideTip);
+    });
+  }
+
+  // ---- funnel (an ordinal ramp, each step's share of the first and of the one before)
+  function funnel(host, steps) {
+    if (!steps.length || !steps[0][1]) { empty(host, "No sign-ups in this period"); return; }
+    host.innerHTML = "";
+    const first = steps[0][1];
+    const shades = ["#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95"];
+    steps.forEach(([label, n], i) => {
+      const prev = i ? steps[i - 1][1] : n;
+      const d = document.createElement("div");
+      d.style.cssText = "margin:4px 0";
+      d.innerHTML = `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-2)"><span>${esc(label)}</span><span style="color:var(--text-1)">${fmtN(n)} · ${(100 * n / first).toFixed(0)}%${i ? ` <span style="color:var(--text-3)">(${prev ? (100 * n / prev).toFixed(0) : 0}% of the step before)</span>` : ""}</span></div>`
+        + `<div style="height:16px;margin:3px auto 0;border-radius:4px;background:${shades[i] || shades[4]};width:${Math.max(2, 100 * n / first)}%"></div>`;
+      host.appendChild(d);
+    });
+  }
+
+  // ---- scatter with a fitted line (capacity)
+  function scatter(host, points, cap) {
+    if (points.length < 2) { empty(host, "Needs a few hours of traffic with load measured (on the server)"); return; }
+    const { s, w, h } = svg(host, 210);
+    const L = 40, R = 10, T = 8, B = 28;
+    const xmax = niceMax(Math.max(...points.map(p => p[0]), cap && cap.users_at_70 ? Math.min(cap.users_at_70, Math.max(...points.map(p => p[0])) * 3) : 0));
+    const X = v => L + (w - L - R) * v / xmax, Y = v => T + (h - T - B) * (1 - Math.min(v, 100) / 100);
+    const g = el("g", {}, s);
+    yAxis(g, L, w - R, T, h - B, 100, v => v + "%");
+    for (let i = 0; i <= 4; i++) { const t = el("text", { x: X(xmax * i / 4), y: h - 12, "text-anchor": "middle" }, g); t.textContent = fmtN(xmax * i / 4); }
+    const xl = el("text", { x: w - R, y: h, "text-anchor": "end" }, g); xl.textContent = "people at once →";
+    el("line", { x1: L, x2: w - R, y1: Y(70), y2: Y(70), stroke: C("--warning"), "stroke-dasharray": "4 3", "stroke-width": 1 }, s);
+    const tl = el("text", { x: w - R, y: Y(70) - 4, "text-anchor": "end" }, s); tl.textContent = "70% (busy)";
+    if (cap && cap.enough) el("line", { x1: X(0), y1: Y(cap.base), x2: X(xmax), y2: Y(cap.base + cap.per_user * xmax), stroke: C("--s2"), "stroke-width": 2 }, s);
+    points.forEach(p => {
+      const c = el("circle", { cx: X(p[0]), cy: Y(p[1]), r: 4.5, fill: C("--s1"), stroke: C("--surface"), "stroke-width": 2 }, s);
+      c.addEventListener("mousemove", e => showTip(e, null, [{ name: "People at once", value: String(p[0]) }, { name: "CPU load", value: p[1].toFixed(0) + "%" }]));
+      c.addEventListener("mouseleave", hideTip);
+    });
+    if (cap && cap.enough) legend(host, [{ name: "an hour", color: C("--s1") }, { name: "load per person (fit)", color: C("--s2") }]);
+  }
+
+  // ---- cohort table (retention heat)
+  function cohorts(host, rows) {
+    if (!rows.some(r => r.size)) { empty(host, "No sign-ups in the last 8 weeks"); return; }
+    const n = Math.max(...rows.map(r => r.weeks.length));
+    let html = `<table class="sa-t"><thead><tr><th>Signed up (week of)</th><th class="num">People</th>${Array.from({ length: n }, (_, i) => `<th class="num">Wk ${i}</th>`).join("")}</tr></thead><tbody>`;
+    rows.forEach(r => {
+      html += `<tr><td>${fmtDay(r.week)}</td><td class="num">${r.size}</td>` + Array.from({ length: n }, (_, i) => {
+        const v = r.weeks[i];
+        if (v == null || !r.size) return `<td class="cell" style="color:var(--text-3)">${i < r.weeks.length ? "—" : ""}</td>`;
+        return `<td class="cell" style="background:${ramp(v / 100)};color:${v > 55 ? "#0b0613" : "var(--text-1)"}">${v}%</td>`;
+      }).join("") + "</tr>";
+    });
+    host.innerHTML = html + "</tbody></table>";
+  }
+
+  // ---- stat tiles (with a sparkline when there's a trend)
+  function tiles(host, items) {
+    host.innerHTML = items.map(it => `<div class="sa-tile"><div class="k">${esc(it.k)}</div><div class="v">${esc(it.v)}</div>`
+      + (it.n ? `<div class="n ${it.dir || ""}">${esc(it.n)}</div>` : "") + (it.spark ? `<div class="sp" data-i="${items.indexOf(it)}"></div>` : "") + "</div>").join("");
+    items.forEach((it, i) => {
+      if (!it.spark) return;
+      const host2 = host.querySelector(`.sp[data-i="${i}"]`);
+      const vals = it.spark.map(v => v || 0), w = host2.clientWidth || 150, h = 26, max = Math.max(1, ...vals);
+      const s = el("svg", { width: w, height: h, viewBox: `0 0 ${w} ${h}` }, host2);
+      const pts = vals.map((v, j) => `${(w * j / Math.max(1, vals.length - 1)).toFixed(1)},${(h - 2 - (h - 4) * v / max).toFixed(1)}`).join(" ");
+      el("polyline", { points: pts, fill: "none", stroke: C("--s1"), "stroke-width": 1.5 }, s);
+    });
+  }
+  const delta = (now, prev) => prev ? { n: `${now >= prev ? "▲" : "▼"} ${Math.abs(100 * (now - prev) / prev).toFixed(0)}% on the period before`, dir: now >= prev ? "up" : "down" } : {};
+
+  // ------------------------------------------------------------------ live
+  let lastLive = null, lastReport = null, days = 30, liveTimer = null, reportTimer = null, liveAt = 0;
+  try { days = parseInt(localStorage.getItem("sa-days") || "30", 10) || 30; } catch (e) { /* none kept */ }
+  document.querySelectorAll(".sa-range button").forEach(b => b.classList.toggle("on", +b.dataset.days === days));
+
+  function drawLive(d) {
+    const pm = d.per_minute;
+    tiles($("t-live"), [
+      { k: "People on the site now", v: fmtN(d.active_now), spark: d.on_site.map(p => p[1]) },
+      { k: "Requests this minute", v: fmtN(d.requests_this_minute), n: d.errors_this_minute ? `${d.errors_this_minute} server errors` : "no server errors", spark: pm.map(p => p[1]) },
+      { k: "Average response", v: d.avg_ms == null ? "—" : Math.round(d.avg_ms) + " ms", spark: pm.map(p => p[2]) },
+      { k: "Collab connections", v: fmtN(d.ws.collab) },
+      { k: "Live price connections", v: fmtN(d.ws.ticks) },
+      { k: "CPU cores", v: d.cpus == null ? "—" : String(d.cpus) },
+    ]);
+    lineChart($("c-onsite"), { x: d.on_site.map(p => p[0]), series: [{ name: "People on the site", color: C("--s1"), values: d.on_site.map(p => p[1]) }], area: true, h: 180 });
+    lineChart($("c-reqmin"), { x: pm.map(p => p[0]), series: [{ name: "Requests", color: C("--s3"), values: pm.map(p => p[1]) }], area: true, h: 180 });
+    const g = $("c-gauges"); g.innerHTML = ""; gauge(g, d.load_pct, "CPU"); gauge(g, d.mem_pct, "Memory");
+    hbar($("c-pagesnow"), d.pages_now, { color: C("--s6") });
+    $("c-people").innerHTML = d.active.length ? d.active.map(a => `<div><span>${esc(a.name)}</span><span style="color:var(--text-2)">${esc(a.where)}</span><span>${a.ago < 60 ? a.ago + " s" : Math.round(a.ago / 60) + " min"} ago</span></div>`).join("")
+      + (d.active_now > d.active.length ? `<div><span style="color:var(--text-3)">and ${d.active_now - d.active.length} more</span></div>` : "") : `<div class="empty">Nobody signed in right now</div>`;
+  }
+
+  function drawReport(r) {
+    const k = r.kpis;
+    $("sa-period-note").textContent = r.tracking_since ? `traffic recorded since ${fmtDT(r.tracking_since)}` : "traffic recording has just started";
+    $("c-insights").innerHTML = r.insights.map(i => `<div class="sa-insight ${esc(i.kind)}"><span class="tag">${esc(i.kind)}</span><span>${esc(i.text)}</span></div>`).join("") || `<div class="empty">Insights appear as data comes in</div>`;
+    tiles($("t-kpis"), [
+      { k: "Accounts", v: fmtN(k.users) },
+      { k: "Sign-ups", v: fmtN(k.signups), ...delta(k.signups, k.signups_prev), spark: r.daily.map(d => d.signups) },
+      { k: "Active people", v: fmtN(k.active), ...delta(k.active, k.active_prev), spark: r.daily.map(d => d.active) },
+      { k: "Daily / weekly / monthly active", v: `${k.dau} / ${k.wau} / ${k.mau}`, n: k.mau ? `stickiness ${(100 * k.dau / k.mau).toFixed(0)}%` : "" },
+      { k: "Peak people at once", v: fmtN(k.peak_concurrent), spark: r.daily.map(d => d.peak) },
+      { k: "Minutes per visit day", v: fmtN(k.avg_minutes) },
+      { k: "Requests served", v: fmtN(k.requests), n: `${k.error_rate}% server errors`, spark: r.daily.map(d => d.requests) },
+      { k: "Highest CPU / memory", v: `${k.max_load == null ? "—" : Math.round(k.max_load) + "%"} / ${k.max_mem == null ? "—" : Math.round(k.max_mem) + "%"}` },
+      { k: "Paid in the last 31 days", v: k.paying_now == null ? "—" : fmtN(k.paying_now) },
+    ]);
+    heatmap($("c-heat"), r.heatmap, r.heatmap_peak);
+    lineChart($("c-c48"), { x: r.concurrent_48h.map(p => p[0]), series: [{ name: "People on the site", color: C("--s1"), values: r.concurrent_48h.map(p => p[1]) }], area: true, xfmt: fmtWT });
+    hbar($("c-busiest"), r.busiest.map(b => [`${b.day} ${String(b.hour).padStart(2, "0")}:00`, b.avg]), { fmt: v => v.toFixed(2) });
+    const sx = r.server_48h.map(p => p.t), hfmt = fmtWT;
+    lineChart($("c-load48"), { x: sx, series: [{ name: "CPU load", color: C("--s1"), values: r.server_48h.map(p => p.load) }, { name: "Memory", color: C("--s2"), values: r.server_48h.map(p => p.mem) }], max: 100, fmt: v => Math.round(v) + "%", xfmt: hfmt });
+    lineChart($("c-ms48"), { x: sx, series: [{ name: "Average", color: C("--s3"), values: r.server_48h.map(p => p.avg_ms) }, { name: "Slowest", color: C("--s4"), values: r.server_48h.map(p => p.max_ms) }], fmt: v => Math.round(v) + " ms", xfmt: hfmt });
+    lineChart($("c-req48"), { x: sx, series: [{ name: "Average per minute", color: C("--s1"), values: r.server_48h.map(p => p.req_per_min) }, { name: "Busiest minute", color: C("--s2"), values: r.server_48h.map(p => p.req_max) }], area: true, xfmt: hfmt });
+    lineChart($("c-ws48"), { x: sx, series: [{ name: "Live connections", color: C("--s6"), values: r.server_48h.map(p => p.ws) }], area: true, xfmt: hfmt });
+    scatter($("c-capacity"), r.capacity_points, r.capacity);
+    const dl = r.daily.map(d => d.d);
+    barChart($("c-reqday"), { labels: dl, lfmt: fmtDay, series: [{ name: "Answered", color: C("--s1"), values: r.daily.map(d => d.requests - d.errors) }, { name: "Server errors", color: C("--critical"), values: r.daily.map(d => d.errors) }] });
+    barChart($("c-active"), { labels: dl, lfmt: fmtDay, series: [{ name: "Returning", color: C("--s1"), values: r.daily.map(d => d.returning) }, { name: "New", color: C("--s2"), values: r.daily.map(d => d.new_active) }] });
+    barChart($("c-signups"), { labels: dl, lfmt: fmtDay, series: [{ name: "Sign-ups", color: C("--s3"), values: r.daily.map(d => d.signups) }] });
+    calendar($("c-cal"), r.daily);
+    lineChart($("c-peakday"), { x: dl.map(d => new Date(d + "T12:00:00+05:30").getTime()), series: [{ name: "Peak at once", color: C("--s5"), values: r.daily.map(d => d.peak) }], xfmt: t => fmtDay(new Date(t).toISOString().slice(0, 10)), tfmt: t => fmtDay(new Date(t).toISOString().slice(0, 10)) });
+    barChart($("c-timehist"), { labels: r.time_hist.map(t => t[0]), series: [{ name: "Visit days", color: C("--s6"), values: r.time_hist.map(t => t[1]) }] });
+    funnel($("c-funnel"), r.funnel);
+    cohorts($("c-cohorts"), r.cohorts);
+    $("c-topusers").innerHTML = r.top_users.length ? `<table class="sa-t"><thead><tr><th>Trader</th><th class="num">Hours</th><th class="num">Days</th></tr></thead><tbody>${r.top_users.map(u => `<tr><td>${esc(u[0])}</td><td class="num">${u[1]}</td><td class="num">${u[2]}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">No data yet for this period</div>`;
+    hbar($("c-pages"), r.pages, { fmt: v => v + " h" });
+    hbar($("c-features"), r.features, { color: C("--s3") });
+    hbar($("c-symbols"), r.symbols, { color: C("--s4") });
+    hbar($("c-intervals"), r.intervals, { color: C("--s5") });
+    hbar($("c-failing"), r.failing, { color: C("--critical") });
+    donut($("c-devices"), r.devices); donut($("c-browsers"), r.browsers); donut($("c-systems"), r.systems); donut($("c-tiers"), r.tiers);
+  }
+
+  const status = (ok) => {
+    const b = $("sa-live");
+    b.classList.toggle("off", !ok);
+    b.querySelector("span").textContent = ok ? `Live · updated ${new Date().toLocaleTimeString("en-IN", { ...tz, hour12: false })}` : "Paused (tab hidden) — resumes when you come back";
+  };
+  async function loadLive() {
+    try { const d = await (await fetch(LIVE_URL, { cache: "no-store" })).json(); lastLive = d; liveAt = Date.now(); drawLive(d); status(true); } catch (e) { /* next round */ }
+  }
+  async function loadReport() {
+    try { const r = await (await fetch(`${REPORT_URL}?days=${days}`, { cache: "no-store" })).json(); lastReport = r; drawReport(r); } catch (e) { /* next round */ }
+  }
+  function start() {
+    stop();
+    loadLive(); loadReport();
+    liveTimer = setInterval(loadLive, 10000);
+    reportTimer = setInterval(loadReport, 60000);
+  }
+  function stop() { clearInterval(liveTimer); clearInterval(reportTimer); liveTimer = reportTimer = null; }
+  document.addEventListener("visibilitychange", () => { if (document.hidden) { stop(); status(false); } else start(); });
+  document.querySelectorAll(".sa-range button").forEach(b => b.addEventListener("click", () => {
+    days = +b.dataset.days;
+    try { localStorage.setItem("sa-days", String(days)); } catch (e) { /* not kept */ }
+    document.querySelectorAll(".sa-range button").forEach(x => x.classList.toggle("on", x === b));
+    loadReport();
+  }));
+  let rt = 0;
+  window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (lastLive) drawLive(lastLive); if (lastReport) drawReport(lastReport); }, 200); });
+  start();
+})();
+</script>
+{% endblock %}

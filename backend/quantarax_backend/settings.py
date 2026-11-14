@@ -67,6 +67,7 @@ MIDDLEWARE = [
     'axes.middleware.AxesMiddleware', # Must be after AuthenticationMiddleware
     'csp.middleware.CSPMiddleware', # Content Security Policy
     'core.middleware.FailedRequestMiddleware', # Records failed /api/users/* requests for the admin
+    'core.traffic.TrafficMiddleware',  # Requests per minute and their time (Django Admin → Site analytics)
 ]
 
 # Configure Authentication Backends to use Axes
