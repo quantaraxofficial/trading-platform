@@ -16,7 +16,8 @@ from django.utils import timezone
 from . import traffic
 from .models import (BacktestRun, ChartState, CollabMessage, CollabRoom, FailedRequest, FeedbackMessage, PineScript,
                      ReplaySession, SavedReplay, ServerMinute, SiteTime, TradeJournal, TraderProfile, TrafficSlot, UserSession,
-                     Payment, Post, PostComment, ChatGroupMessage, CopyChannel, CopySignal, BrokerAccount, OptimizerRun)
+                     Payment, Post, PostComment, ChatGroupMessage, CopyChannel, CopySignal, BrokerAccount, OptimizerRun,
+                     Visitor, VisitorSlot, EndpointMinute)
 
 IST = ZoneInfo("Asia/Kolkata")
 SLOT = traffic.SLOT_SECONDS
@@ -66,8 +67,13 @@ def live(now=None):
     while t <= now:
         on_site.append([_ms(t), counts.get(t, 0)])
         t += timedelta(seconds=SLOT)
+    from .presence import ACTIVE_WINDOW as _W
+    visitors_now = Visitor.objects.filter(last_seen__gte=now - _W, profile__isnull=True).count()
+    v_counts = dict(VisitorSlot.objects.filter(slot__gte=since).values_list("slot").annotate(n=Count("id")))
     return {
         "at": _ms(now),
+        "visitors_now": visitors_now,
+        "visitors_on_site": [[p[0], v_counts.get(datetime.fromtimestamp(p[0] / 1000, tz=dt_timezone.utc), 0)] for p in on_site],
         "active_now": len(active),
         "active": [{"name": a["name"] or a["email"].split("@")[0], "where": a["last_where"] or "/",
                     "ago": int((now - a["last_seen"]).total_seconds())} for a in active[:12]],
@@ -301,6 +307,10 @@ def report(days=30, now=None):
         "tiers": tiers, "failing": failing,
     }
     out["capacity"] = _capacity(capacity_points, traffic.current().get("cpus"))
+    out["visitors"] = _visitors(since, first_day, days, now)
+    out["not_premium"] = _not_premium(now)
+    out["at_risk"] = _at_risk(today)
+    out["endpoints"] = _endpoints(since)
     out["insights"] = _insights(out)
     return out
 
@@ -352,6 +362,128 @@ def _insights(r):
     total_dev = sum(n for _, n in r["devices"])
     if total_dev:
         out.append(("devices", f"{100 * mobile / total_dev:.0f}% of sign-ins are on phones."))
+    v = r.get("visitors") or {}
+    if v.get("new"):
+        best = max(v.get("referrers") or [["", 0, 0, 0]], key=lambda x: (x[2], x[1]))
+        out.append(("visitors", f"{v['new']} new visitors, {v['signed_up']} signed up ({v['conversion']}%)"
+                    + (f"; most sign-ups came from {best[0]} ({best[2]})." if best[2] else ".")))
+    npm = r.get("not_premium") or {}
+    if npm.get("active_14d"):
+        out.append(("plans", f"{npm['active_14d']} people without premium used the site in the last 14 days — the ones to offer it to."))
+    ar = r.get("at_risk") or {}
+    if ar.get("count"):
+        out.append(("warning", f"{ar['count']} people who used to come often haven't been back for {ar['away_days']}+ days — reach out to them (list below)."))
+    ep = r.get("endpoints") or []
+    if ep and ep[0]["share"] >= 20:
+        out.append(("server", f"{ep[0]['method']} {ep[0]['route']} takes {ep[0]['share']}% of the server's time ({ep[0]['n']} requests, {ep[0]['avg_ms']:.0f} ms each): speed it up first."))
     if k["error_rate"] >= 1:
         out.append(("warning", f"{k['error_rate']}% of requests failed with a server error — see the failing endpoints."))
     return [{"kind": a, "text": b} for a, b in out]
+
+
+# ------------------------------------------------------------------ visitors, plans, at risk, endpoints
+
+def _premium_ids(now):
+    """The accounts that count as premium: (merge) paid in the last 31 days or on a paid tier"""
+    paid = set(Payment.objects.filter(paid_at__gte=now - timedelta(days=31), profile__isnull=False).values_list("profile_id", flat=True))
+    return paid | set(TraderProfile.objects.exclude(tier="free").values_list("pk", flat=True))
+
+
+def _visitors(since, first_day, days, now):
+    """Signed-out visitors: how many, new ones, where they landed and came from, how many signed up"""
+    new = Visitor.objects.filter(first_seen__gte=since)
+    n_new = new.count()
+    converted = new.filter(signed_up_at__isnull=False)
+    n_conv = converted.count()
+    seen = VisitorSlot.objects.filter(slot__gte=since)
+    daily = defaultdict(set)
+    for slot, vid in seen.values_list("slot", "visitor_id"):
+        daily[_ist(slot).date()].add(vid)
+    signups_by_day = Counter(_ist(t).date() for t in converted.values_list("signed_up_at", flat=True))
+    series = []
+    for i in range(days):
+        d = first_day + timedelta(days=i)
+        series.append({"d": d.isoformat(), "visitors": len(daily.get(d, ())), "signed_up": signups_by_day.get(d, 0)})
+    direct = "(direct / typed in)"
+    landing = Counter((p or "/").split("?")[0] for p in new.values_list("first_path", flat=True))
+    by_ref = defaultdict(lambda: [0, 0])
+    for r, up in new.values_list("referrer", "signed_up_at"):
+        k = r or direct
+        by_ref[k][0] += 1
+        by_ref[k][1] += up is not None
+    devices = Counter(_device(ua)[0] for ua in new.values_list("device", flat=True))
+    hours = sorted((t - f).total_seconds() / 3600 for f, t in converted.values_list("first_seen", "signed_up_at") if t and f)
+    premium = _premium_ids(now)
+    became = set(converted.values_list("profile_id", flat=True))
+    return {"unique": seen.values("visitor_id").distinct().count(), "new": n_new, "signed_up": n_conv,
+            "conversion": round(100 * n_conv / n_new, 1) if n_new else 0, "became_premium": len(became & premium),
+            "daily": series, "landing": landing.most_common(8),
+            "referrers": sorted([[k, v[0], v[1], round(100 * v[1] / v[0], 1) if v[0] else 0] for k, v in by_ref.items()], key=lambda r: -r[1])[:8],
+            "devices": devices.most_common(), "hours_to_sign_up": round(hours[len(hours) // 2], 1) if hours else None}
+
+
+def _person(p, extra=None):
+    from django.urls import reverse
+    out = {"name": p.name or p.email.split("@")[0], "email": p.email, "phone": p.phone or "",
+           "url": reverse("admin:core_traderprofile_change", args=[p.pk])}
+    out.update(extra or {})
+    return out
+
+
+def _not_premium(now):
+    """Signed up but not premium: how many, how many still use the site, and the most active of them
+    (the ones worth offering premium to)"""
+    premium = _premium_ids(now)
+    ids = set(TraderProfile.objects.values_list("pk", flat=True))
+    today = _ist(now).date()
+    secs, days_on = defaultdict(int), defaultdict(set)
+    for pid, day, sec in SiteTime.objects.filter(day__gte=today - timedelta(days=29)).values_list("profile_id", "day", "seconds"):
+        if pid not in premium:
+            secs[pid] += sec
+            days_on[pid].add(day)
+    active14 = sum(1 for ds in days_on.values() if max(ds) >= today - timedelta(days=13))
+    top = sorted(secs.items(), key=lambda kv: -kv[1])[:25]
+    people = {p.pk: p for p in TraderProfile.objects.filter(pk__in=[k for k, _ in top])}
+    return {"total": len(ids), "premium": len(premium & ids), "not_premium": len(ids - premium), "active_14d": active14,
+            "people": [_person(people[k], {"hours": round(v / 3600, 1), "days": len(days_on[k]), "last": max(days_on[k]).isoformat()})
+                       for k, v in top if k in people]}
+
+
+def _at_risk(today, away_days=14, lookback=30, min_days=4):
+    """People who used to come often (on the site at least min_days days in the lookback days before
+    their last visit) and haven't been back for away_days: the ones to reach out to"""
+    cutoff = today - timedelta(days=away_days)
+    by_person = defaultdict(list)
+    for pid, day, sec in SiteTime.objects.filter(day__gte=cutoff - timedelta(days=lookback + 90)).values_list("profile_id", "day", "seconds"):
+        by_person[pid].append((day, sec))
+    rows = []
+    for pid, visits in by_person.items():
+        last = max(d for d, _ in visits)
+        if last >= cutoff:
+            continue
+        before = [(d, sec) for d, sec in visits if last - timedelta(days=lookback) < d <= last]
+        if len(before) < min_days:
+            continue
+        rows.append((pid, last, len(before), sum(sec for _, sec in before)))
+    rows.sort(key=lambda r: (-r[2], r[1]))
+    people = {p.pk: p for p in TraderProfile.objects.filter(pk__in=[r[0] for r in rows[:50]])}
+    premium = _premium_ids(timezone.now())
+    return {"count": len(rows), "away_days": away_days, "min_days": min_days, "lookback": lookback,
+            "people": [_person(people[pid], {"last": last.isoformat(), "away": (today - last).days, "days_before": n,
+                                             "hours_before": round(sec / 3600, 1), "premium": pid in premium})
+                       for pid, last, n, sec in rows[:50] if pid in people]}
+
+
+def _endpoints(since):
+    """Each API endpoint in the period: requests, average and slowest time, the slow ones (over a
+    second), errors, and its share of the server's time: the ones to speed up first"""
+    rows = (EndpointMinute.objects.filter(minute__gte=since).values("route", "method")
+            .annotate(n=Sum("count"), total=Sum("total_ms"), mx=Max("max_ms"), slow=Sum("slow"), err=Sum("errors")))
+    rows = [r for r in rows if r["n"]]
+    grand = sum(r["total"] for r in rows) or 1
+    out = [{"route": "/" + r["route"].lstrip("/"), "method": r["method"], "n": r["n"], "avg_ms": round(r["total"] / r["n"], 1),
+            "max_ms": round(r["mx"]), "slow_pct": round(100 * r["slow"] / r["n"], 1), "errors": r["err"],
+            "share": round(100 * r["total"] / grand, 1), "total_s": round(r["total"] / 1000, 1)} for r in rows]
+    out.sort(key=lambda r: -r["total_s"])
+    return out[:20]
+

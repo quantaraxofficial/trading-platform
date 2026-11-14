@@ -4,6 +4,7 @@ from . import presence, voice, views, analytics, broker_algo, broker_mt5, stats_
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
     path('presence/<str:uid>/', presence.ping, name='presence'),
+    path('visit/', presence.visit, name='visit'),   # signed-out visitors (Site analytics)
     path('calendar/economic/', econ_calendar.economic, name='economic_calendar'),
     path('news/', news.symbol_news, name='symbol_news'),
     # Our own market data (Vantage, core/market.py): candles from ClickHouse, the MT5 collector's

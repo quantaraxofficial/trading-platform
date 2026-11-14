@@ -112,6 +112,26 @@
     <div class="sa-card"><h3>Requests and errors per day</h3><div class="sub">server errors (5xx) stacked on the rest</div><div id="c-reqday"></div></div>
   </div>
 
+  <h2>Visitors (not signed in) <small>a random id each browser keeps; nothing personal</small></h2>
+  <div class="sa-tiles" id="t-visitors"></div>
+  <div class="sa-grid wide" style="margin-top:14px">
+    <div class="sa-card"><h3>Visitors and sign-ups per day</h3><div class="sub">signed-out visitors, and how many of them made an account</div><div id="c-vdaily"></div></div>
+    <div class="sa-card"><h3>From visit to premium</h3><div class="sub">new visitors in the period</div><div id="c-vfunnel"></div></div>
+    <div class="sa-card"><h3>Where they come from</h3><div class="sub">the site that sent them, and how many signed up</div><div id="c-vref"></div></div>
+    <div class="sa-card"><h3>Where they land</h3><div class="sub">the first page they open</div><div id="c-vland"></div></div>
+    <div class="sa-card"><h3>Their devices</h3><div class="sub">new visitors</div><div id="c-vdev"></div></div>
+  </div>
+
+  <h2>Signed up, not premium <small>the people worth offering premium to</small></h2>
+  <div class="sa-tiles" id="t-plans"></div>
+  <div class="sa-grid wide" style="margin-top:14px">
+    <div class="sa-card"><h3>Premium and not</h3><div class="sub">all accounts</div><div id="c-premium"></div></div>
+    <div class="sa-card"><h3>Most active without premium</h3><div class="sub">time on the site in the last 30 days</div><div id="c-nopremium"></div></div>
+  </div>
+
+  <h2>At risk of leaving <small id="risk-note"></small></h2>
+  <div class="sa-card"><div id="c-risk"></div></div>
+
   <h2>People</h2>
   <div class="sa-grid wide">
     <div class="sa-card"><h3>Active people per day</h3><div class="sub">new (signed up that day) and returning</div><div id="c-active"></div></div>
@@ -131,6 +151,23 @@
     <div class="sa-card"><h3>Symbols on their charts</h3><div class="sub">each person's current chart</div><div id="c-symbols"></div></div>
     <div class="sa-card"><h3>Timeframes</h3><div class="sub">each person's current chart</div><div id="c-intervals"></div></div>
     <div class="sa-card"><h3>Failing requests</h3><div class="sub">the endpoints that failed most</div><div id="c-failing"></div></div>
+  </div>
+
+  <h2>Slowest endpoints <small>where the server's time goes: speed these up before buying a bigger VM</small></h2>
+  <div class="sa-grid wide">
+    <div class="sa-card"><h3>Share of the server's time</h3><div class="sub">requests × their average time, per endpoint</div><div id="c-epshare"></div></div>
+    <div class="sa-card"><h3>Slowest on average</h3><div class="sub">ms per request (endpoints with 20+ requests)</div><div id="c-epslow"></div></div>
+    <div class="sa-card" style="grid-column:1/-1"><h3>Every endpoint</h3><div class="sub">the period; slow = over a second</div><div id="c-eptable"></div></div>
+  </div>
+
+  <h2>Data store and price collector <small>refreshes every 30 seconds</small></h2>
+  <div class="sa-tiles" id="t-store"></div>
+  <div class="sa-grid wide" style="margin-top:14px">
+    <div class="sa-card"><h3>Price collector (MT5)</h3><div class="sub">per symbol: when it last posted, how old its price is, how far the stored bars are behind</div><div id="c-collector"></div></div>
+    <div class="sa-card"><h3>ClickHouse disk</h3><div class="sub">the data store's disk</div><div id="c-disk" style="display:flex;gap:8px;justify-content:space-around"></div></div>
+    <div class="sa-card"><h3>ClickHouse query time, last 24 hours</h3><div class="sub">average and 95th percentile per hour, ms</div><div id="c-chq"></div></div>
+    <div class="sa-card"><h3>Tables</h3><div class="sub">rows and size on disk</div><div id="c-chtables"></div></div>
+    <div class="sa-card" style="grid-column:1/-1"><h3>Heaviest queries, last 24 hours</h3><div class="sub">by total time (count × average)</div><div id="c-chslow"></div></div>
   </div>
 
   <h2>Devices and plans</h2>
@@ -464,14 +501,16 @@
   function drawLive(d) {
     const pm = d.per_minute;
     tiles($("t-live"), [
-      { k: "People on the site now", v: fmtN(d.active_now), spark: d.on_site.map(p => p[1]) },
+      { k: "Signed in, on the site now", v: fmtN(d.active_now), spark: d.on_site.map(p => p[1]) },
+      { k: "Visitors (not signed in) now", v: fmtN(d.visitors_now), spark: (d.visitors_on_site || []).map(p => p[1]) },
       { k: "Requests this minute", v: fmtN(d.requests_this_minute), n: d.errors_this_minute ? `${d.errors_this_minute} server errors` : "no server errors", spark: pm.map(p => p[1]) },
       { k: "Average response", v: d.avg_ms == null ? "—" : Math.round(d.avg_ms) + " ms", spark: pm.map(p => p[2]) },
       { k: "Collab connections", v: fmtN(d.ws.collab) },
       { k: "Live price connections", v: fmtN(d.ws.ticks) },
       { k: "CPU cores", v: d.cpus == null ? "—" : String(d.cpus) },
     ]);
-    lineChart($("c-onsite"), { x: d.on_site.map(p => p[0]), series: [{ name: "People on the site", color: C("--s1"), values: d.on_site.map(p => p[1]) }], area: true, h: 180 });
+    lineChart($("c-onsite"), { x: d.on_site.map(p => p[0]), series: [{ name: "Signed in", color: C("--s1"), values: d.on_site.map(p => p[1]) },
+      { name: "Visitors (not signed in)", color: C("--s2"), values: (d.visitors_on_site || []).map(p => p[1]) }], h: 180 });
     lineChart($("c-reqmin"), { x: pm.map(p => p[0]), series: [{ name: "Requests", color: C("--s3"), values: pm.map(p => p[1]) }], area: true, h: 180 });
     const g = $("c-gauges"); g.innerHTML = ""; gauge(g, d.load_pct, "CPU"); gauge(g, d.mem_pct, "Memory");
     hbar($("c-pagesnow"), d.pages_now, { color: C("--s6") });
@@ -519,6 +558,78 @@
     hbar($("c-intervals"), r.intervals, { color: C("--s5") });
     hbar($("c-failing"), r.failing, { color: C("--critical") });
     donut($("c-devices"), r.devices); donut($("c-browsers"), r.browsers); donut($("c-systems"), r.systems); donut($("c-tiers"), r.tiers);
+    drawMore(r);
+  }
+
+  const mail = p => `<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>`;
+  const who = p => `<a href="${esc(p.url)}">${esc(p.name)}</a>`;
+  const tel = p => p.phone ? `<a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>` : `<span style="color:var(--text-3)">—</span>`;
+  const fmtDur = s => s < 120 ? Math.round(s) + " s" : s < 7200 ? Math.round(s / 60) + " min" : (s / 3600).toFixed(1) + " h";
+  function table(host, head, rows, emptyText, maxH) {
+    if (!rows.length) { empty(host, emptyText); return; }
+    host.innerHTML = `<div style="overflow:auto${maxH ? `;max-height:${maxH}px` : ""}"><table class="sa-t"><thead><tr>${head.map(h => `<th class="${h.num ? "num" : ""}">${esc(h.t)}</th>`).join("")}</tr></thead><tbody>`
+      + rows.map(r => `<tr>${r.map((c, i) => `<td class="${head[i].num ? "num" : ""}">${c}</td>`).join("")}</tr>`).join("") + "</tbody></table></div>";
+  }
+  function drawMore(r) {
+    const v = r.visitors;
+    tiles($("t-visitors"), [
+      { k: "Visitors", v: fmtN(v.unique), spark: v.daily.map(d => d.visitors) },
+      { k: "New visitors", v: fmtN(v.new) },
+      { k: "Signed up from them", v: fmtN(v.signed_up), spark: v.daily.map(d => d.signed_up) },
+      { k: "Visitor → sign-up", v: v.conversion + "%" },
+      { k: "Became premium", v: fmtN(v.became_premium) },
+      { k: "Typical time to sign up", v: v.hours_to_sign_up == null ? "—" : v.hours_to_sign_up < 1 ? Math.round(v.hours_to_sign_up * 60) + " min" : v.hours_to_sign_up < 48 ? v.hours_to_sign_up + " h" : Math.round(v.hours_to_sign_up / 24) + " days", n: "median, first visit to account" },
+    ]);
+    lineChart($("c-vdaily"), { x: v.daily.map(d => new Date(d.d + "T12:00:00+05:30").getTime()), series: [{ name: "Visitors", color: C("--s2"), values: v.daily.map(d => d.visitors) }, { name: "Signed up", color: C("--s3"), values: v.daily.map(d => d.signed_up) }], xfmt: t => fmtDay(new Date(t).toISOString().slice(0, 10)), tfmt: t => fmtDay(new Date(t).toISOString().slice(0, 10)) });
+    funnel($("c-vfunnel"), [["New visitors", v.new], ["Signed up", v.signed_up], ["Premium", v.became_premium]]);
+    table($("c-vref"), [{ t: "Came from" }, { t: "Visitors", num: 1 }, { t: "Signed up", num: 1 }, { t: "Rate", num: 1 }], v.referrers.map(x => [esc(x[0]), fmtN(x[1]), fmtN(x[2]), x[3] + "%"]), "No visitors yet in this period");
+    hbar($("c-vland"), v.landing, { color: C("--s2") });
+    donut($("c-vdev"), v.devices);
+
+    const np = r.not_premium;
+    tiles($("t-plans"), [
+      { k: "Accounts", v: fmtN(np.total) }, { k: "Premium", v: fmtN(np.premium) },
+      { k: "Not premium", v: fmtN(np.not_premium), n: np.total ? `${(100 * np.not_premium / np.total).toFixed(0)}% of accounts` : "" },
+      { k: "Not premium, used the site in the last 14 days", v: fmtN(np.active_14d) },
+    ]);
+    donut($("c-premium"), [["Not premium", np.not_premium], ["Premium", np.premium]]);
+    table($("c-nopremium"), [{ t: "Trader" }, { t: "Email" }, { t: "Phone" }, { t: "Hours", num: 1 }, { t: "Days", num: 1 }, { t: "Last on", num: 1 }],
+      np.people.map(p => [who(p), mail(p), tel(p), p.hours, p.days, fmtDay(p.last)]), "Nobody without premium used the site in the last 30 days", 440);
+
+    const ar = r.at_risk;
+    $("risk-note").textContent = `came on ${ar.min_days}+ days within ${ar.lookback} days, then not for ${ar.away_days}+ days · ${ar.count} people`;
+    table($("c-risk"), [{ t: "Trader" }, { t: "Email" }, { t: "Phone" }, { t: "Last on", num: 1 }, { t: "Days away", num: 1 }, { t: "Days on before", num: 1 }, { t: "Hours before", num: 1 }, { t: "Plan" }],
+      ar.people.map(p => [who(p), mail(p), tel(p), fmtDay(p.last), p.away, p.days_before, p.hours_before, p.premium ? "Premium" : "Free"]), "Nobody at risk right now: everyone who came often is still coming", 440);
+
+    const ep = r.endpoints;
+    hbar($("c-epshare"), ep.slice(0, 10).map(e => [`${e.method} ${e.route}`, e.share]), { fmt: v => v + "%", color: C("--s4") });
+    hbar($("c-epslow"), ep.filter(e => e.n >= 20).sort((a, b) => b.avg_ms - a.avg_ms).slice(0, 10).map(e => [`${e.method} ${e.route}`, e.avg_ms]), { fmt: v => Math.round(v) + " ms", color: C("--s2") });
+    table($("c-eptable"), [{ t: "Endpoint" }, { t: "Requests", num: 1 }, { t: "Average", num: 1 }, { t: "Slowest", num: 1 }, { t: "Slow", num: 1 }, { t: "Errors", num: 1 }, { t: "Server time", num: 1 }],
+      ep.map(e => [`<code>${esc(e.method)} ${esc(e.route)}</code>`, fmtN(e.n), Math.round(e.avg_ms) + " ms", Math.round(e.max_ms) + " ms", e.slow_pct + "%", fmtN(e.errors), `${fmtDur(e.total_s)} · ${e.share}%`]),
+      "Recorded from now on: each endpoint's requests and their time");
+  }
+
+  function drawStore(d) {
+    const ch = d.clickhouse, col = d.collector;
+    const st = col.symbols || [];
+    const streaming = st.filter(x => x.status === "streaming").length;
+    tiles($("t-store"), [
+      { k: "ClickHouse", v: ch.ok ? "Up" : "Down", n: ch.ok ? `answers in ${ch.ping_ms} ms, a query in ${ch.query_ms} ms` : "not reachable from this server" },
+      { k: "Data stored", v: ch.data_mb == null ? "—" : ch.data_mb >= 1000 ? (ch.data_mb / 1000).toFixed(1) + " GB" : ch.data_mb + " MB" },
+      { k: "Disk free", v: ch.disk ? ch.disk.free_gb + " GB" : "—", n: ch.disk ? `of ${ch.disk.total_gb} GB` : "" },
+      { k: "Collector", v: st.length ? `${streaming} / ${st.length} streaming` : "—", n: col.market_open === false ? "market closed now" : "" },
+    ]);
+    const dk = $("c-disk"); dk.innerHTML = ""; gauge(dk, ch.disk ? ch.disk.used_pct : null, "Disk used");
+    const qh = ch.query_hours || [];
+    if (qh.length) lineChart($("c-chq"), { x: qh.map(q => new Date(q.t.replace(" ", "T") + "Z").getTime()), series: [{ name: "Average", color: C("--s3"), values: qh.map(q => q.avg_ms) }, { name: "95th percentile", color: C("--s4"), values: qh.map(q => q.p95_ms) }], fmt: v => Math.round(v) + " ms", xfmt: fmtWT });
+    else empty($("c-chq"), ch.ok ? "No query log (ClickHouse's query_log is off)" : "ClickHouse isn't reachable from here");
+    table($("c-chtables"), [{ t: "Table" }, { t: "Rows", num: 1 }, { t: "Size", num: 1 }], (ch.tables || []).map(t => [esc(t.table), fmtN(t.rows), t.mb >= 1000 ? (t.mb / 1000).toFixed(2) + " GB" : t.mb + " MB"]), ch.ok ? "No tables yet" : "ClickHouse isn't reachable from here");
+    table($("c-chslow"), [{ t: "Query" }, { t: "Times", num: 1 }, { t: "Average", num: 1 }, { t: "Slowest", num: 1 }, { t: "Rows read", num: 1 }],
+      (ch.slow_queries || []).map(q => [`<code style="white-space:normal">${esc(q.sample)}</code>`, fmtN(q.n), Math.round(q.avg_ms) + " ms", fmtN(q.max_ms) + " ms", fmtN(q.read_rows)]), ch.ok ? "No queries logged in the last 24 hours" : "ClickHouse isn't reachable from here");
+    const ago = s => s == null ? "—" : s < 90 ? Math.round(s) + " s" : s < 5400 ? Math.round(s / 60) + " min" : s < 172800 ? Math.round(s / 3600) + " h" : Math.round(s / 86400) + " days";
+    const badge = s => { const c = { streaming: "good", slow: "warning", stopped: "critical", "market closed": "" }[s]; return `<span style="display:inline-flex;align-items:center;gap:6px"><b style="width:8px;height:8px;border-radius:50%;display:inline-block;background:${c ? `var(--${c})` : "var(--text-3)"}"></b>${esc(s[0].toUpperCase() + s.slice(1))}</span>`; };
+    table($("c-collector"), [{ t: "Symbol" }, { t: "Status" }, { t: "Last posted", num: 1 }, { t: "Price age", num: 1 }, { t: "Stored bars behind", num: 1 }],
+      st.map(x => [esc(x.symbol), badge(x.status), ago(x.posted_ago), ago(x.price_age), ago(x.stored_behind)]), "The collector hasn't posted since the server started");
   }
 
   const status = (ok) => {
@@ -529,16 +640,23 @@
   async function loadLive() {
     try { const d = await (await fetch(LIVE_URL, { cache: "no-store" })).json(); lastLive = d; liveAt = Date.now(); drawLive(d); status(true); } catch (e) { /* next round */ }
   }
+  const STORE_URL = "{% url 'admin:core_siteanalytics_store' %}";
+  let storeTimer = null;
+  async function loadStore() {
+    try { drawStore(await (await fetch(STORE_URL, { cache: "no-store" })).json()); } catch (e) { /* next round */ }
+  }
   async function loadReport() {
     try { const r = await (await fetch(`${REPORT_URL}?days=${days}`, { cache: "no-store" })).json(); lastReport = r; drawReport(r); } catch (e) { /* next round */ }
   }
   function start() {
     stop();
     loadLive(); loadReport();
+    loadStore();
     liveTimer = setInterval(loadLive, 10000);
     reportTimer = setInterval(loadReport, 60000);
+    storeTimer = setInterval(loadStore, 30000);
   }
-  function stop() { clearInterval(liveTimer); clearInterval(reportTimer); liveTimer = reportTimer = null; }
+  function stop() { clearInterval(liveTimer); clearInterval(reportTimer); clearInterval(storeTimer); liveTimer = reportTimer = storeTimer = null; }
   document.addEventListener("visibilitychange", () => { if (document.hidden) { stop(); status(false); } else start(); });
   document.querySelectorAll(".sa-range button").forEach(b => b.addEventListener("click", () => {
     days = +b.dataset.days;

@@ -582,6 +582,7 @@ class SiteAnalyticsAdmin(admin.ModelAdmin):
         return [
             path("live/", self.admin_site.admin_view(self.live_json), name="core_siteanalytics_live"),
             path("report/", self.admin_site.admin_view(self.report_json), name="core_siteanalytics_report"),
+            path("store/", self.admin_site.admin_view(self.store_json), name="core_siteanalytics_store"),
         ] + super().get_urls()
 
     def live_json(self, request):
@@ -597,6 +598,11 @@ class SiteAnalyticsAdmin(admin.ModelAdmin):
         except ValueError:
             days = 30
         return JsonResponse(site_analytics.report(days))
+
+    def store_json(self, request):
+        from django.http import JsonResponse
+        from . import store_health
+        return JsonResponse(store_health.report())
 
     def changelist_view(self, request, extra_context=None):
         ctx = {**self.admin_site.each_context(request), "title": "Site analytics", "opts": self.model._meta}

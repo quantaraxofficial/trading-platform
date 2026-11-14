@@ -53,3 +53,34 @@ def count_time(profile, previous, now):
     day = now.astimezone(IST).date()
     row, _ = SiteTime.objects.get_or_create(profile=profile, day=day)
     SiteTime.objects.filter(pk=row.pk).update(seconds=F("seconds") + int(round(gap)))
+
+# ---- signed-out visitors (Django Admin → Site analytics: visitors and how many sign up)
+
+import re as _re
+from urllib.parse import urlparse
+
+_VID = _re.compile(r"^[A-Za-z0-9_-]{8,40}$")
+
+
+@api_view(["POST"])
+def visit(request):
+    """POST {vid, where, ref?}: a signed-out browser has the site open (once a minute while a tab is
+    visible). vid is a random id the browser keeps; ref the page it came from (only the other site's
+    name is kept). Nothing else about the visitor is stored."""
+    data = request.data if isinstance(request.data, dict) else {}
+    vid = str(data.get("vid") or "")
+    if not _VID.match(vid):
+        return Response({"ok": False}, status=400)
+    where = str(data.get("where") or "/")[:80]
+    host = ""
+    ref = str(data.get("ref") or "")[:500]
+    if ref.startswith(("http://", "https://")):
+        host = (urlparse(ref).hostname or "")[:120]
+        if host.startswith("www."):
+            host = host[4:]
+        if host and host == (request.get_host() or "").split(":")[0]:
+            host = ""   # (its own pages aren't where it came from)
+    from .traffic import note_visit
+    note_visit(vid, where, host, request.headers.get("User-Agent") or "", timezone.now())
+    return Response({"ok": True})
+

@@ -1035,6 +1035,49 @@ class ServerMinute(models.Model):
         ordering = ['-minute']
 
 
+class Visitor(models.Model):
+    """A browser that opened the site while signed out (core/traffic.py: the visit ping): a random id
+    the browser keeps (no IP, nothing personal), where it first landed and the site it came from;
+    when it signs up, the account it became (Django Admin → Site analytics: visitors)"""
+    vid = models.CharField(max_length=40, unique=True)
+    first_seen = models.DateTimeField(auto_now_add=True, db_index=True)
+    last_seen = models.DateTimeField(db_index=True)
+    first_path = models.CharField(max_length=80, blank=True, default='')
+    referrer = models.CharField(max_length=120, blank=True, default='')   # the other site's name only
+    device = models.CharField(max_length=255, blank=True, default='')     # the browser (user agent)
+    profile = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='visitors')
+    signed_up_at = models.DateTimeField(null=True, blank=True)   # it made a new account (not just signed in)
+
+    def __str__(self):
+        return f"visitor {self.vid[:8]} ({self.first_seen:%Y-%m-%d})"
+
+
+class VisitorSlot(models.Model):
+    """A signed-out visitor on the site, per 5 minutes (as TrafficSlot for signed-in people)"""
+    slot = models.DateTimeField(db_index=True)
+    visitor = models.ForeignKey(Visitor, on_delete=models.CASCADE, related_name='slots')
+    where = models.CharField(max_length=40, blank=True, default='')
+
+    class Meta:
+        unique_together = ('slot', 'visitor')
+
+
+class EndpointMinute(models.Model):
+    """One API endpoint's requests in a minute (core/traffic.py): how many, their time, the slow ones
+    (over a second) and the errors (Django Admin → Site analytics: slowest endpoints)"""
+    minute = models.DateTimeField(db_index=True)
+    route = models.CharField(max_length=160)      # the URL pattern ("api/users/user/<str:uid>/")
+    method = models.CharField(max_length=8)
+    count = models.PositiveIntegerField(default=0)
+    total_ms = models.FloatField(default=0)
+    max_ms = models.FloatField(default=0)
+    slow = models.PositiveIntegerField(default=0)
+    errors = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ('minute', 'route', 'method')
+
+
 class SiteAnalytics(ServerMinute):
     """Django Admin → Site analytics: the live dashboard (core/site_analytics.py)"""
     class Meta:

@@ -12,6 +12,7 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
 import { backendFetch } from "@/lib/backend";
+import { visitorId } from "@/lib/visitor";
 import { noteArrival, arrivalInfo } from "@/app/lib/arrival";
 
 interface AuthContextType {
@@ -107,6 +108,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               email: activeUser.email,
               phone: '',
               session_key: storedKey(),
+              visitor_id: visitorId(),   // (the signed-out visitor this browser was: Site analytics)
               arrival: arrivalInfo(),
               id_token: fbUser ? await fbUser.getIdToken() : undefined
             })
@@ -130,6 +132,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                   email: activeUser.email,
                   phone: '',
                   session_key: storedKey(),
+              visitor_id: visitorId(),   // (the signed-out visitor this browser was: Site analytics)
                   arrival: arrivalInfo(),
                   id_token: fbUser ? await fbUser.getIdToken() : undefined,
                   force: true
@@ -194,6 +197,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           email,
           phone,
           session_key: storedKey(),
+              visitor_id: visitorId(),   // (the signed-out visitor this browser was: Site analytics)
           arrival: arrivalInfo(),
           id_token: await res.user.getIdToken()
         })

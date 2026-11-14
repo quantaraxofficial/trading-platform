@@ -762,6 +762,18 @@ Posting signals out
     optimizer runs…), symbols, timeframes, failing endpoints; devices, browsers, systems, plans
   - Recorded from now on: people on the site per 5 minutes (from the presence pings), the server per
     minute (requests, errors, response times, live connections, load, memory), the browser at sign-in
+  - Visitors not signed in: a random id each browser keeps (no IP), once a minute while a tab is
+    open; how many, new ones, where they come from (with each site's sign-up rate), where they land,
+    their devices, how many sign up and become premium, the typical time from first visit to an account
+  - Signed up but not premium: how many, how many still use the site, the most active of them with
+    their email and phone (merge: premium = paid in the last 31 days or a paid tier)
+  - At risk of leaving: people who came on 4+ days within 30 days and haven't been back for 14,
+    with their email, phone and plan, to reach out to
+  - Slowest endpoints: each API endpoint's requests, average and slowest time, the share over a
+    second, errors and its share of the server's time (the ones to speed up before a bigger VM)
+  - Data store and price collector (every 30 s): ClickHouse up / down and how fast it answers, the
+    disk, each table's rows and size, query times by hour and the heaviest queries; per symbol, when
+    the MT5 collector last posted, its price's age and how far the stored bars are behind
 
 ======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD

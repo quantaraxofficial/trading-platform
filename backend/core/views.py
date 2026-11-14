@@ -67,6 +67,12 @@ def sync_user(request):
         device = data.get('device_info') or request.headers.get('User-Agent') or ''
         UserSession.objects.create(user=profile, session_key=new_key, device_info=str(device)[:255])
 
+    # The signed-out visitor this browser was: now this account (and, a new account, a sign-up)
+    vid = str(data.get('visitor_id') or '')[:40]
+    if vid:
+        from .models import Visitor
+        Visitor.objects.filter(vid=vid, profile__isnull=True).update(profile=profile, signed_up_at=timezone.now() if created else None)
+
     return Response({
         "success": True,
         "tier": profile.tier,

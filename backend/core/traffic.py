@@ -1,7 +1,9 @@
 """Traffic recording for Django Admin → Site analytics (core/site_analytics.py):
 
 - who's on the site, per 5 minutes: each presence ping (core/presence.py) notes the signed-in person
-  in that slot (TrafficSlot), so a slot's rows are how many were on the site at once
+  in that slot (TrafficSlot), so a slot's rows are how many were on the site at once; signed-out
+  visitors the same from the visit ping (Visitor, VisitorSlot: a random id their browser keeps)
+- each API endpoint's requests per minute: how many, their time, the slow ones, errors (EndpointMinute)
 - the server, per minute: requests served, 5xx errors, response times (TrafficMiddleware), the live
   connections open (collab and price sockets: consumers.py) and the machine's load and memory
   (ServerMinute). Counted in memory and written once a minute, on the next minute's first request.
@@ -13,11 +15,13 @@ import time
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 SLOT_SECONDS = 300
-RETENTION_DAYS = {"slots": 400, "minutes": 120}
+RETENTION_DAYS = {"slots": 400, "minutes": 120, "endpoints": 30}
+SLOW_MS = 1000
 
 _lock = threading.Lock()
 _minute = None                       # the minute being counted (unix minutes)
 _buf = {"requests": 0, "errors": 0, "ms_total": 0.0, "ms_max": 0.0}
+_routes: dict = {}                   # (route, method) -> [count, total ms, max ms, slow, errors] this minute
 WS = {"collab": 0, "ticks": 0}       # live connections open now
 _last_prune = 0.0
 
@@ -58,7 +62,7 @@ def ws_closed(kind):
 
 # ---- requests
 
-def note_request(ms, status_code):
+def note_request(ms, status_code, route=None, method="GET"):
     global _minute
     m = int(time.time() // 60)
     done = None
@@ -66,20 +70,36 @@ def note_request(ms, status_code):
         if _minute is None:
             _minute = m
         if m != _minute:
-            done = (_minute, dict(_buf), dict(WS))
+            done = (_minute, dict(_buf), dict(WS), dict(_routes))
             _buf.update(requests=0, errors=0, ms_total=0.0, ms_max=0.0)
+            _routes.clear()
             _minute = m
         _buf["requests"] += 1
         if status_code >= 500:
             _buf["errors"] += 1
         _buf["ms_total"] += ms
         _buf["ms_max"] = max(_buf["ms_max"], ms)
+        if route:
+            r = _routes.setdefault((route[:160], (method or "GET")[:8]), [0, 0.0, 0.0, 0, 0])
+            r[0] += 1
+            r[1] += ms
+            r[2] = max(r[2], ms)
+            r[3] += ms >= SLOW_MS
+            r[4] += status_code >= 500
     if done:
         _write(*done)
 
 
-def _write(minute, b, ws):
-    from .models import ServerMinute
+def _write(minute, b, ws, routes=None):
+    from .models import EndpointMinute, ServerMinute
+    try:
+        if routes:
+            at = datetime.fromtimestamp(minute * 60, tz=dt_timezone.utc)
+            EndpointMinute.objects.bulk_create([
+                EndpointMinute(minute=at, route=route, method=method, count=c, total_ms=round(t, 1), max_ms=round(mx, 1), slow=sl, errors=er)
+                for (route, method), (c, t, mx, sl, er) in routes.items()], ignore_conflicts=True)
+    except Exception:
+        pass
     try:
         n = b["requests"]
         ServerMinute.objects.update_or_create(
@@ -98,10 +118,12 @@ def _prune():
         return
     _last_prune = time.time()
     from django.utils import timezone
-    from .models import ServerMinute, TrafficSlot
+    from .models import EndpointMinute, ServerMinute, TrafficSlot, VisitorSlot
     now = timezone.now()
     TrafficSlot.objects.filter(slot__lt=now - timedelta(days=RETENTION_DAYS["slots"])).delete()
+    VisitorSlot.objects.filter(slot__lt=now - timedelta(days=RETENTION_DAYS["slots"])).delete()
     ServerMinute.objects.filter(minute__lt=now - timedelta(days=RETENTION_DAYS["minutes"])).delete()
+    EndpointMinute.objects.filter(minute__lt=now - timedelta(days=RETENTION_DAYS["endpoints"])).delete()
 
 
 def current():
@@ -130,6 +152,20 @@ def note_presence(profile, when, where=""):
         pass   # (two pings at once: the other one wrote it)
 
 
+def note_visit(vid, where, referrer, device, when):
+    """A signed-out browser on the site (the visit ping): remembered by its random id, per 5 minutes"""
+    from .models import Visitor, VisitorSlot
+    try:
+        v = Visitor.objects.filter(vid=vid).first()
+        if v is None:
+            v = Visitor.objects.create(vid=vid, last_seen=when, first_path=where[:80], referrer=referrer[:120], device=device[:255])
+        else:
+            Visitor.objects.filter(pk=v.pk).update(last_seen=when)
+        VisitorSlot.objects.get_or_create(slot=slot_of(when), visitor=v, defaults={"where": where[:40]})
+    except Exception:
+        pass   # (two pings at once: the other one wrote it)
+
+
 class TrafficMiddleware:
     """Counts every request and its time (the admin's own pages and static files aside)"""
 
@@ -143,5 +179,8 @@ class TrafficMiddleware:
             return self.get_response(request)
         start = time.perf_counter()
         response = self.get_response(request)
-        note_request((time.perf_counter() - start) * 1000, getattr(response, "status_code", 200))
+        # (the endpoint as its URL pattern, so every user's /user/<uid>/ counts as one)
+        match = getattr(request, "resolver_match", None)
+        route = getattr(match, "route", None) or ("(no such page)" if getattr(response, "status_code", 200) == 404 else None)
+        note_request((time.perf_counter() - start) * 1000, getattr(response, "status_code", 200), route, request.method)
         return response
