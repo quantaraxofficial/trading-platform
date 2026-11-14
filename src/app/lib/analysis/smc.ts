@@ -25,7 +25,8 @@ export type ZoneKind = "sr" | "fvg" | "ifvg" | "ob" | "bos" | "choch";
 // label at one bar. More kinds come from ./concepts (POI, liquidity, breakers…)
 export type Zone = {
   kind: ZoneKind | string; side: Side; from: number; to: number; top: number; bottom: number; label: string; touches?: number;
-  shape?: "box" | "line" | "label"; dashed?: boolean; extend?: boolean;
+  shape?: "box" | "line" | "label" | "position"; dashed?: boolean; extend?: boolean;
+  entry?: number; stop?: number; target?: number;   // (a trade: lib/analysis/setups)
 };
 
 // Average true range at each bar (Wilder's smoothing)

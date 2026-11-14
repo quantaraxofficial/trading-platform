@@ -8,6 +8,9 @@
 
 import { getChartBars } from "../chartBars";
 import { analyse, ALL_MARK_KINDS, type MarkKind } from "../analysis/concepts";
+import { setupMarks, SETUP_IDS, SETUP_NAMES, SETUP_FAMILIES, type SetupId, type SetupResult } from "../analysis/setups";
+export { SETUP_IDS, SETUP_FAMILIES };
+import { POSITION_TARGET_FILL, POSITION_STOP_FILL } from "../../components/drawing/tools/PositionTool";
 export { CANDLE_PATTERN_IDS } from "../analysis/candles";
 import type { Zone } from "../analysis/smc";
 
@@ -21,7 +24,7 @@ export const MARK_NAMES: Record<MarkKind, string> = {
   killzones: "kill zones", key_levels: "key levels", swing_points: "swing points", trendlines: "trend lines", supply_demand: "supply and demand zones",
   candle_patterns: "candle patterns", chart_patterns: "chart patterns", ranges: "ranges",
   msnr_levels: "MSNR A and V levels", msnr_gaps: "MSNR gap levels", msnr_flips: "SBR and RBS levels", msnr_qm: "Quasimodo levels",
-  msnr_compression: "compressions",
+  msnr_compression: "compressions", setups: "trade setups",
 };
 const GROUP_NAMES: Record<MarkKind, string> = {
   order_blocks: "Order blocks", fvg: "Fair value gaps", ifvg: "Inverse FVGs", support_resistance: "Support / resistance", structure: "BOS / CHoCH",
@@ -30,7 +33,7 @@ const GROUP_NAMES: Record<MarkKind, string> = {
   swing_points: "Swing points (HH / HL / LH / LL)", trendlines: "Trend lines", supply_demand: "Supply / demand", candle_patterns: "Candle patterns",
   chart_patterns: "Chart patterns", ranges: "Ranges",
   msnr_levels: "MSNR A / V levels", msnr_gaps: "MSNR gap levels", msnr_flips: "MSNR SBR / RBS", msnr_qm: "MSNR QM (Quasimodo)",
-  msnr_compression: "MSNR compression (CP)",
+  msnr_compression: "MSNR compression (CP)", setups: "Trade setups",
 };
 export const GROUP_PREFIX = "voice-marks-";
 const groupId = (k: MarkKind) => `${GROUP_PREFIX}${k}`;
@@ -48,6 +51,7 @@ const COLORS: Record<string, Record<Zone["side"], string>> = {
   // MSNR: fresh levels strong, unfresh ones muted; flips, QM and compression each their own
   msnr: { bull: GREEN, bear: RED }, msnr_gap: { bull: "#00acc1", bear: "#fb8c00" }, msnr_old: { bull: "#80cbc4", bear: "#ef9a9a" },
   msnr_flip: { bull: "#26a69a", bear: "#ef5350" }, msnr_qm: { bull: "#7e57c2", bear: "#ab47bc" }, msnr_cp: { bull: "#fbc02d", bear: "#fbc02d" },
+  setup: { bull: "#089981", bear: "#f23645" },
 };
 // Box fill (alpha) by kind: the wide context zones lighter
 const FILL: Record<string, string> = { sr: "22", pd: "14", kz: "1c", range: "1c", ote: "2a", msnr_gap: "26", msnr_old: "14", msnr_cp: "1c" };
@@ -92,10 +96,21 @@ function summarise(kind: MarkKind, zones: Zone[]): string {
   return `${count} ${count === 1 ? one : name}${detail ? ` (${detail})` : ""}`;
 }
 
-export function markOnChart(kind: MarkKind, opts: { patterns?: string[] } = {}): MarkResult {
+// Setups found: how many, how they went (won / lost, in R), and the ones still live
+function setupSummary(results: SetupResult[]): string {
+  if (!results.length) return "no trade setups";
+  const won = results.filter(r => r.outcome === "won"), lost = results.filter(r => r.outcome === "lost");
+  const net = won.reduce((a, r) => a + r.r, 0) - lost.length;
+  const live = results.filter(r => r.outcome === "waiting" || r.outcome === "open");
+  const liveText = live.length ? `; live now: ${live.slice(-3).map(r => `${SETUP_NAMES[r.id]} ${r.side === "bull" ? "long" : "short"} (${r.outcome === "open" ? "in trade" : "waiting for entry"})`).join(", ")}` : "";
+  return `${results.length} trade setup${results.length === 1 ? "" : "s"} (${won.length} reached the target, ${lost.length} the stop, net ${net >= 0 ? "+" : ""}${net.toFixed(1)}R)${liveText}`;
+}
+
+export function markOnChart(kind: MarkKind, opts: { patterns?: string[]; setups?: SetupId[] } = {}): MarkResult {
   const bars = getChartBars();
   if (bars.length < 30) return { ok: false, reason: "no_data" };
-  const zones = analyse(kind, bars, analysisStart(bars), opts);
+  const setups = kind === "setups" ? setupMarks(bars, analysisStart(bars), opts.setups) : null;
+  const zones = setups ? setups.zones : analyse(kind, bars, analysisStart(bars), opts);
   const group = { id: groupId(kind), name: `${GROUP_NAMES[kind]} · voice assistant` };
   const stamp = Date.now().toString(36);
   const pt = (i: number, price: number) => ({ logical: i, price, time: bars[Math.min(Math.max(i, 0), bars.length - 1)]?.time });
@@ -108,6 +123,12 @@ export function markOnChart(kind: MarkKind, opts: { patterns?: string[] } = {}):
       const dashed = z.kind === "choch" || !!z.dashed;
       return { ...base, type: "trendline", stroke: color, strokeWidth: z.kind === "choch" || z.kind === "trend" ? 2 : 1, lineStyle: dashed ? "dashed" : "solid",
         text: z.label, points: [pt(z.from, z.top), pt(z.to, z.bottom)] };
+    }
+    // A trade (a setup): a long / short position with its entry, target and stop
+    if (z.shape === "position") {
+      return { ...base, type: z.side === "bull" ? "long_position" : "short_position",
+        textColor: "#ffffff", targetFillColor: POSITION_TARGET_FILL, stopFillColor: POSITION_STOP_FILL, accountSize: 1000, lotSize: 1, risk: 25, riskType: "%",
+        points: [pt(z.from, z.entry!), pt(z.to, z.entry!), pt(z.from, z.target!), pt(z.from, z.stop!)] };
     }
     // A label at one bar (HH / LL, a sweep, a candle pattern)
     if (z.shape === "label") {
@@ -122,9 +143,10 @@ export function markOnChart(kind: MarkKind, opts: { patterns?: string[] } = {}):
   });
   // (the old marks of this kind go in the same step: one undo takes the whole marking back)
   fire("tv:add-drawings", { drawings, replaceGroup: group.id });
-  const count = kind === "sweeps" ? zones.filter(z => z.shape === "label").length : kind === "chart_patterns" ? zones.filter(z => z.kind === "pattern").length : zones.length;
+  const count = setups ? setups.results.length : kind === "sweeps" ? zones.filter(z => z.shape === "label").length : kind === "chart_patterns" ? zones.filter(z => z.kind === "pattern").length : zones.length;
   return { ok: true, count, bull: zones.filter(z => z.side === "bull").length, bear: zones.filter(z => z.side === "bear").length,
-    bos: zones.filter(z => z.kind === "bos").length, choch: zones.filter(z => z.kind === "choch").length, summary: summarise(kind, zones) };
+    bos: zones.filter(z => z.kind === "bos").length, choch: zones.filter(z => z.kind === "choch").length,
+    summary: setups ? setupSummary(setups.results) : summarise(kind, zones) };
 }
 
 // How many of the assistant's marks are on the chart (one kind, or all)

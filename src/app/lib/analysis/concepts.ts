@@ -47,6 +47,8 @@
 //   SBR / RBS         broken levels that flipped (role reversal), untested or retested
 //   QM                Quasimodo levels (the left shoulder of H L HH LL, or L H LL HH)
 //   Compression       CP: small overlapping candles drifting into a fresh level
+// Setups (./setups): complete trades (entry, stop, target) of the SMC, ICT, price-action and MSNR
+// setups, each followed on the bars after it
 
 import {
   atr, swings, swingSize, fairValueGaps, inverseFairValueGaps, marketStructure, orderBlocks, allOrderBlocks, supportResistance,
@@ -54,21 +56,24 @@ import {
 } from "./smc";
 import { candlePatterns } from "./candles";
 import { msnrAV, msnrCompression, msnrFlips, msnrGaps, msnrQuasimodo } from "./msnr";
+import { setupMarks, type SetupId } from "./setups";
 
 export type MarkKind =
   | "order_blocks" | "fvg" | "ifvg" | "support_resistance" | "structure"
   | "poi" | "liquidity" | "sweeps" | "premium_discount" | "breakers" | "bpr" | "displacement" | "killzones" | "key_levels"
   | "swing_points" | "trendlines" | "supply_demand" | "candle_patterns" | "chart_patterns" | "ranges"
-  | "msnr_levels" | "msnr_gaps" | "msnr_flips" | "msnr_qm" | "msnr_compression";
+  | "msnr_levels" | "msnr_gaps" | "msnr_flips" | "msnr_qm" | "msnr_compression"
+  | "setups";
 
 export const ALL_MARK_KINDS: MarkKind[] = [
   "order_blocks", "fvg", "ifvg", "support_resistance", "structure",
   "poi", "liquidity", "sweeps", "premium_discount", "breakers", "bpr", "displacement", "killzones", "key_levels",
   "swing_points", "trendlines", "supply_demand", "candle_patterns", "chart_patterns", "ranges",
   "msnr_levels", "msnr_gaps", "msnr_flips", "msnr_qm", "msnr_compression",
+  "setups",
 ];
 
-export function analyse(kind: MarkKind, bars: Bar[], from: number, opts: { patterns?: string[] } = {}): Zone[] {
+export function analyse(kind: MarkKind, bars: Bar[], from: number, opts: { patterns?: string[]; setups?: SetupId[] } = {}): Zone[] {
   switch (kind) {
     case "order_blocks": return orderBlocks(bars, from);
     case "fvg": return fairValueGaps(bars, from);
@@ -95,6 +100,7 @@ export function analyse(kind: MarkKind, bars: Bar[], from: number, opts: { patte
     case "msnr_flips": return msnrFlips(bars, from);
     case "msnr_qm": return msnrQuasimodo(bars, from);
     case "msnr_compression": return msnrCompression(bars, from);
+    case "setups": return setupMarks(bars, from, opts.setups).zones;
   }
 }
 

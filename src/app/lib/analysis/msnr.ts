@@ -185,7 +185,8 @@ export function msnrFlips(bars: Bar[], from: number, perSide = 3): Zone[] {
 
 // ---- QM (Quasimodo): on the line chart's turns, H L HH LL (bearish) or L H LL HH (bullish); the
 // level is the left shoulder, live until a close beyond the head
-export function msnrQuasimodo(bars: Bar[], from: number, perSide = 2): Zone[] {
+export type QmPattern = { side: Side; p1: number; p2: number; p3: number; p4: number; level: number; head: number };
+export function msnrQmPatterns(bars: Bar[], from: number): QmPattern[] {
   const last = bars.length - 1;
   if (last - from < 30) return [];
   const k = swingSize(last - from);
@@ -200,13 +201,24 @@ export function msnrQuasimodo(bars: Bar[], from: number, perSide = 2): Zone[] {
     } else alt.push(t);
   }
   const c = (i: number) => bars[i].close;
-  const found: { side: Side; line: Zone; head: Zone }[] = [];
+  const out: QmPattern[] = [];
   for (let n = 0; n + 3 < alt.length; n++) {
     const [p1, p2, p3, p4] = alt.slice(n, n + 4);
     const bearish = p1.hi && c(p3.i) > c(p1.i) && c(p4.i) < c(p2.i);    // H, L, HH, LL
     const bullish = !p1.hi && c(p3.i) < c(p1.i) && c(p4.i) > c(p2.i);   // L, H, LL, HH
     if (!bearish && !bullish) continue;
-    const level = c(p1.i), head = c(p3.i);
+    out.push({ side: bearish ? "bear" : "bull", p1: p1.i, p2: p2.i, p3: p3.i, p4: p4.i, level: c(p1.i), head: c(p3.i) });
+  }
+  return out;
+}
+
+export function msnrQuasimodo(bars: Bar[], from: number, perSide = 2): Zone[] {
+  const last = bars.length - 1;
+  const found: { side: Side; line: Zone; head: Zone }[] = [];
+  for (const q of msnrQmPatterns(bars, from)) {
+    const bearish = q.side === "bear";
+    const { level, head } = q;
+    const p1 = { i: q.p1 }, p3 = { i: q.p3 }, p4 = { i: q.p4 };
     let touches = 0, over = false;
     for (let j = p4.i + 1; j <= last; j++) {
       const b = bars[j];
@@ -228,12 +240,13 @@ export function msnrQuasimodo(bars: Bar[], from: number, perSide = 2): Zone[] {
 }
 
 // ---- compression (CP): small, overlapping candles drifting into a fresh level
-export function msnrCompression(bars: Bar[], from: number, max = 4): Zone[] {
+export type CpRun = { from: number; to: number; side: Side; level: MsnrLevel; hi: number; lo: number };
+export function msnrCompressionRuns(bars: Bar[], from: number): CpRun[] {
   const last = bars.length - 1;
   if (last - from < 30) return [];
   const a = atr(bars);
   const levels = msnrLevels(bars, from);
-  const out: Zone[] = [];
+  const out: CpRun[] = [];
   const MIN = 6;
   let i = Math.max(from + 1, last - 400);
   while (i <= last - MIN + 1) {
@@ -260,13 +273,17 @@ export function msnrCompression(bars: Bar[], from: number, max = 4): Zone[] {
             : l.type === "V" && l.top <= bodyBottom(end) + unit * 0.2 && end.low - l.top <= unit * 1.2))
           .sort((x, y) => Math.abs(x.bottom - end.close) - Math.abs(y.bottom - end.close))[0];
         if (target) {
-          const hi = Math.max(...run.map(b => b.high)), lo = Math.min(...run.map(b => b.low));
-          out.push({ kind: "msnr_cp", side: up > 0 ? "bear" : "bull", from: i, to: j, top: hi, bottom: lo, extend: false,
-            label: `CP → ${target.type}` });
+          out.push({ from: i, to: j, side: up > 0 ? "bear" : "bull", level: target,
+            hi: Math.max(...run.map(b => b.high)), lo: Math.min(...run.map(b => b.low)) });
         }
       }
       i = j + 1;
     } else i++;
   }
-  return out.slice(-max);
+  return out;
+}
+
+export function msnrCompression(bars: Bar[], from: number, max = 4): Zone[] {
+  return msnrCompressionRuns(bars, from).slice(-max).map<Zone>(r => ({ kind: "msnr_cp", side: r.side, from: r.from, to: r.to,
+    top: r.hi, bottom: r.lo, extend: false, label: `CP → ${r.level.type}` }));
 }

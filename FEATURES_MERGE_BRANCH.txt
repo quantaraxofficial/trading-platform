@@ -816,6 +816,22 @@ Posting signals out
     (how many, resistance above / support below, how many fresh)
 
 ======================================================================
+17b10. VOICE ASSISTANT: TRADE SETUPS (SMC, ICT, PRICE ACTION, MSNR)
+======================================================================
+  - It knows how the setups are traded and explains them (conditions, entry, stop, target): ICT Silver
+    Bullet, Unicorn, Judas swing, OTE, Turtle soup, the 2022 model, Power of 3 / AMD, breaker and
+    mitigation entries; SMC CHoCH + OB, BOS + OB pullback, sweep + CHoCH, POI to POI; price action pin
+    bar / engulfing at S/R, break and retest, inside bar, false breakout, double top / bottom, head and
+    shoulders, ranges, trend pullbacks; MSNR fresh-level rejection, compression into a level, SBR / RBS
+    retest, QM, storyline entries
+  - "Find setups" (or a family: ICT, SMC, price action, MSNR, or one setup) finds 19 of them in the
+    chart's bars as complete trades, each drawn as a long / short position (entry, stop, target) with
+    its name and how it went on the bars after it (won +R, lost -1R, in trade, waiting for entry,
+    missed); setups agreeing on the same trade are one ("Turtle soup + Pin bar at S/R"); the live ones
+    and finished ones spread across the chart; it says how many, how they went (net R) and which are
+    live now. The rules are in src/app/lib/analysis/setups.ts
+
+======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD
 ======================================================================
   - Analytics → "Connect an account": any broker or prop-firm account (FTMO, FundedNext, The5ers,
