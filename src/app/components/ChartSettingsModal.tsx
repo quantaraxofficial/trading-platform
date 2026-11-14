@@ -22,7 +22,7 @@ import { PRICE_SOURCES, BOX_METHODS } from '../lib/seriesStyles';
 import { styleOf } from './chartPrimitives/ChartStyles';
 import {
   chartSettings, themeCanvas, takeSnapshot, applySnapshot, defaultSnapshot, chartTemplates, saveTemplate, removeTemplate, renameTemplate, syncTemplatesFromAccount, applyTemplate,
-  VISIBILITY3, DATE_FORMATS, PRECISIONS, FONT_SIZES, type ChartSettings, type ColorLine, type ChartSettingsSnapshot,
+  VISIBILITY3, DATE_FORMATS, PRECISIONS, FONT_SIZES, WHEEL_SPEED_MIN, WHEEL_SPEED_MAX, type ChartSettings, type ColorLine, type ChartSettingsSnapshot,
 } from '../lib/chartSettings';
 import { chartBgImage, readImageFile, BG_IMAGE_FITS } from '../lib/chartBackgroundImage';
 import { FONTS, FONT_KEYS } from '../lib/fonts';
@@ -485,6 +485,13 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
     {row(187, 'Date format', <Dropdown key="df" c={c} label="Date format" value={s.dateFormat} options={DATE_FORMATS.map(f => ({ value: f, label: s.dayOfWeek ? f : f.replace(/^Mon /, '') }))} onChange={v => set({ dateFormat: v })} />)}
     {row(187, 'Time hours format', <Dropdown key="tf" c={c} label="Time hours format" value={s.timeFormat} width={100} options={['24-hours', '12-hours']} onChange={v => set({ timeFormat: v as any })} />)}
     {line(<Check c={c} label="Save chart left edge position when changing interval" checked={s.saveLeftEdge} onChange={v => set({ saveLeftEdge: v })} />)}
+    {section('Mouse wheel')}
+    {row(187, 'Scroll speed', <input key="ws" type="range" min={WHEEL_SPEED_MIN} max={WHEEL_SPEED_MAX} step={0.25} aria-label="Mouse wheel scroll speed"
+      value={s.wheelSpeed ?? 1} onChange={e => set({ wheelSpeed: Number(e.target.value) })} style={{ width: 150, accentColor: '#2962ff' }} data-name="wheel-speed" />,
+      <span key="wsv" style={{ fontSize: 14, width: 44 }}>{(s.wheelSpeed ?? 1).toFixed(2).replace(/\.?0+$/, '')}×</span>,
+      (s.wheelSpeed ?? 1) !== 1 ? <button key="wsr" type="button" onClick={() => set({ wheelSpeed: 1 })} data-name="wheel-speed-reset"
+        style={{ border: `1px solid ${c.border}`, background: 'transparent', color: c.text, borderRadius: 4, padding: '3px 8px', fontSize: 13, cursor: 'pointer' }}>Reset</button> : null)}
+    {desc("How far one turn of the wheel zooms the chart and the price scale, and how far Shift + wheel scrolls it. 1× is TradingView's speed.")}
   </>);
 
   // Background image: pick a photo (shrunk to fit a setting), how strongly it shows, how it's fitted

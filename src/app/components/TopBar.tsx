@@ -321,7 +321,7 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
 
         {/* Compare symbols */}
         <Tip text="Compare symbols" placement="bottom">
-          <button className="tv-hdr-btn" aria-label="Compare symbols"><TVCompareIcon size={28} /></button>
+          <button className="tv-hdr-btn tv-hdr-optional" aria-label="Compare symbols"><TVCompareIcon size={28} /></button>
         </Tip>
 
         <div className="tv-hdr-sep" />
@@ -369,7 +369,7 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
 
         {/* Indicators */}
         <button
-          className="tv-hdr-btn tv-topbar-labeled"
+          className="tv-hdr-btn tv-topbar-labeled tv-btn-indicators"
           style={{ padding: "0 8px 0 2px" }}
           onClick={() => setShowIndicatorsModal(true)}
         >
@@ -443,7 +443,7 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
 
         {/* Alert */}
         <Tip text={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>Create alert <TipKey>Alt</TipKey>+<TipKey>A</TipKey></span>} placement="bottom">
-          <button className="tv-hdr-btn tv-topbar-labeled" onClick={onAlertClick} style={{ padding: "0 8px 0 2px" }}>
+          <button className="tv-hdr-btn tv-topbar-labeled tv-btn-alert" onClick={onAlertClick} style={{ padding: "0 8px 0 2px" }}>
             <TVAlertIcon size={28} />
             <span className="tv-topbar-label">Alert</span>
           </button>
@@ -452,7 +452,7 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
         {/* Replay */}
         <Tip text="Bar replay" placement="bottom">
           <button
-            className={`tv-hdr-btn tv-topbar-labeled ${isReplayActive ? "active" : ""}`}
+            className={`tv-hdr-btn tv-topbar-labeled tv-btn-replay ${isReplayActive ? "active" : ""}`}
             onClick={onReplayClick}
             style={{ padding: "0 8px 0 2px", color: isReplayActive ? "var(--tv-color-accent)" : undefined }}
           >
@@ -465,10 +465,10 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
 
         {/* Undo / Redo */}
         <Tip text={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>Undo <TipKey>Ctrl</TipKey>+<TipKey>Z</TipKey></span>} placement="bottom">
-          <button className="tv-hdr-btn" disabled={!canUndo} onClick={undo} aria-label="Undo"><TVUndoIcon size={28} /></button>
+          <button className="tv-hdr-btn tv-hdr-optional" disabled={!canUndo} onClick={undo} aria-label="Undo"><TVUndoIcon size={28} /></button>
         </Tip>
         <Tip text={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>Redo <TipKey>Ctrl</TipKey>+<TipKey>Y</TipKey></span>} placement="bottom">
-          <button className="tv-hdr-btn" disabled={!canRedo} onClick={redo} aria-label="Redo"><TVRedoIcon size={28} /></button>
+          <button className="tv-hdr-btn tv-hdr-optional" disabled={!canRedo} onClick={redo} aria-label="Redo"><TVRedoIcon size={28} /></button>
         </Tip>
       </div>
 
@@ -483,7 +483,7 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
 
         {/* Quick search (Ctrl+K) */}
         <Tip text={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>Quick search <TipKey>Ctrl</TipKey>+<TipKey>K</TipKey></span>} placement="bottom">
-          <button className="tv-hdr-btn" onClick={onQuickSearchClick} aria-label="Quick search"><TVQuickSearchIcon size={28} /></button>
+          <button className="tv-hdr-btn tv-hdr-optional" onClick={onQuickSearchClick} aria-label="Quick search"><TVQuickSearchIcon size={28} /></button>
         </Tip>
 
         {/* Redesign, Settings, Fullscreen, Snapshot */}

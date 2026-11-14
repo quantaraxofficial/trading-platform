@@ -71,7 +71,7 @@ export default function LayoutMenu() {
     <>
       <Tip text={dirty ? "Save layout" : "All changes saved"} placement="bottom">
         <button type="button" className="tv-hdr-btn" onClick={save} style={{ maxWidth: 160, padding: "0 6px" }} aria-label={`Layout ${name}`}>
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+          <span className="tv-layout-name" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
         </button>
       </Tip>
       <Tip text="Manage layouts" placement="bottom">

@@ -11,11 +11,13 @@
 // what's left (~30 % at 60 fps, settled in ~140 ms), so a notched wheel's steps flow together
 // and a trackpad's stream stays smooth.
 // Used for the chart canvas and the drawing layer above it, so both behave the same.
+// Settings → Scales and lines → Mouse wheel speed multiplies both the zoom and the pan step.
 // A price axis set by hand (dragged or wheeled: autoscale off) would stay frozen while zooming,
 // the candles running off it; instead it keeps where it sat against the visible bars' high and
 // low (its stretch and its shift), so the zoom follows the bars as it does with autoscale on.
 
 import { mainPriceScale, mainScaleSide } from "./priceScaleSide";
+import { wheelSpeed } from "./chartSettings";
 
 const MIN_BARS = 3;
 const EASE_RATE = 21.5;        // per second
@@ -144,7 +146,7 @@ export function applyChartWheel(chart: any, e: WheelEvent, paneX: number): boole
   const lr = ts?.getVisibleLogicalRange?.();
   const width = ts?.width?.();
   if (!lr || !width) return false;
-  const unit = e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? width : 1;
+  const unit = (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? width : 1) * wheelSpeed();
   let dx = e.deltaX * unit, dy = e.deltaY * unit;
   if (e.shiftKey && dy && !dx) { dx = -dy; dy = 0; }
   const size = lr.to - lr.from;

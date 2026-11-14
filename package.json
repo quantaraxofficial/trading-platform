@@ -26,8 +26,9 @@
     "firebase": "^12.12.1",
     "konva": "^9.3.22",
     "lightweight-charts": "^5.1.0",
+    "livekit-client": "2.23.0",
     "lucide-react": "^1.11.0",
-    "next": "^16.2.4",
+    "next": "^16.4.2",
     "postcss": "^8.5.10",
     "puppeteer": "^25.1.0",
     "react": "^19.2.5",
@@ -43,7 +44,11 @@
     "@fortawesome/free-regular-svg-icons": "^6.7.2",
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "eslint": "^10.2.1",
-    "eslint-config-next": "16.2.4",
+    "eslint-config-next": "^16.4.2",
     "playwright": "^1.63.0"
+  },
+  "overrides": {
+    "dompurify": "3.4.17",
+    "@grpc/grpc-js": "1.13.7"
   }
 }

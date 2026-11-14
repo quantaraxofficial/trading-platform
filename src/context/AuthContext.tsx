@@ -52,22 +52,26 @@ function authErrorMessage(error: any): string {
   }
 }
 
+// The session key the server issued this browser (kept across reloads)
+const storedKey = () => { try { return localStorage.getItem('tv_session_key') || ''; } catch { return ''; } };
+const keepKey = (res: any) => {
+  if (res && typeof res.session_key === 'string' && res.session_key) {
+    try { localStorage.setItem('tv_session_key', res.session_key); } catch { /* ignore */ }
+  }
+};
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sessionKey, setSessionKey] = useState<string>('');
+  // This browser's session key: issued by the server at sign-in (a cryptographic random value) and
+  // kept here; null until it's been read
+  const [sessionKey, setSessionKey] = useState<string | null>(null);
 
   useEffect(() => {
     // where this visitor came from (an ad, a referral, a link…), sent with their sign-up
     noteArrival();
-    // Generate or get session key
-    let sk = localStorage.getItem('tv_session_key');
-    if (!sk) {
-      sk = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      localStorage.setItem('tv_session_key', sk);
-    }
-    setSessionKey(sk);
+    try { setSessionKey(localStorage.getItem('tv_session_key') || ''); } catch { setSessionKey(''); }
   }, []);
 
   useEffect(() => {
@@ -88,10 +92,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // as signed in only once the server has issued one: everything that loads with `user`
       // (drawings, chart state, templates) asked without it, was refused (401) and showed an empty
       // chart, drawings gone until the next reload, and nothing drawn meanwhile was saved
-      const waitForKey = false;   // (here the browser makes its own session key at once: it's never missing)
+      const waitForKey = !!activeUser && !storedKey();
       if (!waitForKey) setUser(activeUser);
 
-      if (activeUser && sessionKey) {
+      if (activeUser && sessionKey !== null) {
         try {
           // Sync with Django API
           const syncRes = await fetch('http://localhost:8000/api/users/sync/', {
@@ -102,7 +106,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               name: activeUser.displayName || 'Trader',
               email: activeUser.email,
               phone: '',
-              session_key: sessionKey,
+              session_key: storedKey(),
               arrival: arrivalInfo(),
               id_token: fbUser ? await fbUser.getIdToken() : undefined
             })
@@ -112,11 +116,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             console.warn('[Auth] Sync failed (SQLite lock?), ignoring:', syncRes.status);
           } else {
             const syncResult = await syncRes.json();
+            keepKey(syncResult);
             
             if (syncResult.limit_reached) {
               const confirm = window.confirm(syncResult.message + "\n\nDo you want to log out of one of your other devices and log in here?");
             if (confirm) {
-              await fetch('http://localhost:8000/api/users/sync/', {
+              const forced = await fetch('http://localhost:8000/api/users/sync/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -124,12 +129,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                   name: activeUser.displayName || 'Trader',
                   email: activeUser.email,
                   phone: '',
-                  session_key: sessionKey,
-              arrival: arrivalInfo(),
+                  session_key: storedKey(),
+                  arrival: arrivalInfo(),
                   id_token: fbUser ? await fbUser.getIdToken() : undefined,
                   force: true
                 })
               });
+              if (forced.ok) keepKey(await forced.json().catch(() => null));
             } else {
               if (fbUser) {
                 await signOut(auth);
@@ -187,11 +193,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           name,
           email,
           phone,
-          session_key: sessionKey,
-              arrival: arrivalInfo(),
+          session_key: storedKey(),
+          arrival: arrivalInfo(),
           id_token: await res.user.getIdToken()
         })
-      });
+      }).then(r => (r.ok ? r.json() : null)).then(keepKey).catch(() => {});
     } catch (error: any) {
       // A failed sign-up is shown to the user (no local stand-in account)
       throw new Error(authErrorMessage(error));
@@ -210,6 +216,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const logout = async () => {
     try {
       localStorage.removeItem('tv_mock_user');
+      localStorage.removeItem('tv_session_key');   // the next sign-in is issued a new one
       await signOut(auth);
       setUser(null);
     } catch (error) {

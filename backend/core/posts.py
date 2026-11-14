@@ -31,7 +31,8 @@ from django.core.files.storage import FileSystemStorage
 from django.db.models import F as models_F, Q
 from django.http import FileResponse, HttpResponse, StreamingHttpResponse
 from rest_framework import status
-from rest_framework.decorators import api_view, parser_classes
+from .throttles import UploadThrottle
+from rest_framework.decorators import api_view, parser_classes, throttle_classes
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from django.utils import timezone
@@ -158,6 +159,7 @@ def links_json(p):
 
 @api_view(['POST', 'DELETE'])
 @parser_classes([MultiPartParser, FormParser])
+@throttle_classes([UploadThrottle])
 def my_avatar(request, uid):
     """multipart {file}: your profile photo. DELETE: removes it (your initials again)."""
     me, denied = require_session(request, uid)

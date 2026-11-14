@@ -9,6 +9,8 @@ import TopBar from "./components/TopBar";
 import LeftToolbar from "./components/LeftToolbar";
 import RightSidebar from "./components/RightSidebar";
 import RightToolbar from "./components/RightToolbar";
+import ScrollArrows from "./components/ScrollArrows";
+import { useFitHeader } from "./lib/fitHeader";
 import OrderTicket from "./trading/OrderTicket";
 import TradingDialogs from "./trading/TradingDialogs";
 import TradingNotifications from "./trading/TradingNotifications";
@@ -261,6 +263,7 @@ function AppLayout() {
   const calSplitW = calVisible && cal.mode === "split" && !cal.maximized ? (cal.width || defaultCalendarWidth()) : 0;
   const splitW = Math.max(calSplitW, pineVisible && pine.mode === "split" && !pine.maximized ? (pine.width || defaultPineWidth()) : 0);
   const layoutW = winW - splitW;
+  const headerRef = useFitHeader();
   const layoutWidthClass = splitW ? `${layoutW <= 1150 ? "tv-lw-1150" : ""} ${layoutW <= 1000 ? "tv-lw-1000" : ""}` : "";
   // Lets the on-chart Pine script legend row's icons reopen the editor
   // without ChartContainer needing to own the editor's open state. The
@@ -1185,7 +1188,7 @@ function AppLayout() {
       }}
     >
       {!panelsHidden && (
-        <header className={styles.topbar} data-widget="topbar" style={widgetStyle("topbar")}>
+        <header className={`${styles.topbar} tv-chart-header`} ref={headerRef} data-widget="topbar" style={widgetStyle("topbar")}>
           <TopBar
             theme={theme}
             toggleTheme={toggleTheme}
@@ -1225,6 +1228,7 @@ function AppLayout() {
 
       {!panelsHidden && drawingsPanelVisible && (
         <aside className={styles.leftToolbar} data-widget="left" style={widgetStyle("left")} data-left-toolbar>
+          <ScrollArrows />
           <LeftToolbar indicatorCount={activeIndicators.length} onRemoveIndicators={() => setActiveIndicators([])} />
         </aside>
       )}
@@ -1344,6 +1348,7 @@ function AppLayout() {
 
       {!panelsHidden && (
         <aside className={styles.rightSidebar} data-widget="sidebar" style={widgetStyle("sidebar")}>
+          <ScrollArrows />
           <RightSidebar
             activePanel={showRightPanel ? activeSidebarPanel : null}
             onPanelChange={(id) => {

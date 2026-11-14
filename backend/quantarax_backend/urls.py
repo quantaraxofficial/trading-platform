@@ -4,7 +4,8 @@ from django.conf.urls.static import static
 from django.urls import path, include
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    # The admin, at ADMIN_URL (admin/ unless set)
+    path(settings.ADMIN_URL, admin.site.urls),
     path('api/users/', include('core.urls')),
 ]
 

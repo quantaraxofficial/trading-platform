@@ -14,6 +14,8 @@ import environ
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -74,40 +76,98 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 # Security Settings
-SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
-# For HTTPS (uncomment in production with SSL):
-# SECURE_SSL_REDIRECT = True
-# SESSION_COOKIE_SECURE = True
-# CSRF_COOKIE_SECURE = True
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = 'Lax'
+# Behind a reverse proxy (nginx, a load balancer): how many X-Forwarded-For hops to trust for the
+# caller's IP (rate limits, logs) and whether it says the request came over HTTPS. 0: no proxy.
+TRUSTED_PROXY_COUNT = env.int('TRUSTED_PROXY_COUNT', default=0)
+if TRUSTED_PROXY_COUNT > 0:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# The site's own origins (the Next.js frontend), from the environment in production
+FRONTEND_ORIGINS = env.list('FRONTEND_ORIGINS', default=['http://localhost:3000', 'http://127.0.0.1:3000'])
 
 # CORS Policy
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
 else:
     CORS_ALLOW_ALL_ORIGINS = False
-    CORS_ALLOWED_ORIGINS = [
-        "http://localhost:3000",
-        # Add production frontend URL here
-    ]
+    CORS_ALLOWED_ORIGINS = FRONTEND_ORIGINS
+CSRF_TRUSTED_ORIGINS = FRONTEND_ORIGINS
+
+if not DEBUG:
+    # Production: HTTPS only, cookies only over HTTPS, browsers told to stay on HTTPS
+    SECURE_SSL_REDIRECT = env.bool('SECURE_SSL_REDIRECT', default=True)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = env.int('SECURE_HSTS_SECONDS', default=31536000)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    # Refuse to run unsafely: a guessable secret key, any host, or sign-in without verification
+    if len(SECRET_KEY) < 40 or SECRET_KEY.startswith('django-insecure') or len(set(SECRET_KEY)) < 10:
+        raise ImproperlyConfigured(
+            "SECRET_KEY must be a long random value in production (40+ characters), e.g. from: "
+            "python -c 'import secrets; print(secrets.token_urlsafe(50))'")
+    if not ALLOWED_HOSTS or '*' in ALLOWED_HOSTS:
+        raise ImproperlyConfigured("Set ALLOWED_HOSTS to the site's own domain(s) in production")
 
 # WebSockets (collab charts). One server process, so the channel layer can live in memory; with
 # several processes this becomes channels_redis.
 ASGI_APPLICATION = 'quantarax_backend.asgi.application'
 CHANNEL_LAYERS = {'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'}}
 
-# Rate Limiting (django-axes configuration)
+# Admin sign-in brute-force protection (django-axes): locked per IP and per username
 AXES_FAILURE_LIMIT = 5 # Lock out after 5 failed attempts
 AXES_COOLOFF_TIME = 1 # Cool off for 1 hour
+AXES_LOCKOUT_PARAMETERS = ["ip_address", "username"]
+AXES_RESET_ON_SUCCESS = True
 AXES_LOCKOUT_TEMPLATE = '403.html' # Custom template or just default 403
 
-# Content Security Policy (django-csp)
-CSP_DEFAULT_SRC = ("'self'",)
-CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "fonts.googleapis.com")
-CSP_SCRIPT_SRC = ("'self'", "'unsafe-inline'", "'unsafe-eval'")
-CSP_FONT_SRC = ("'self'", "fonts.gstatic.com")
-CSP_IMG_SRC = ("'self'", "data:", "https:")
+# Content Security Policy (django-csp 4): the backend serves JSON, the admin and uploaded media
+CONTENT_SECURITY_POLICY = {
+    "DIRECTIVES": {
+        "default-src": ["'self'"],
+        "script-src": ["'self'", "'unsafe-inline'"],
+        "style-src": ["'self'", "'unsafe-inline'", "fonts.googleapis.com"],
+        "font-src": ["'self'", "fonts.gstatic.com"],
+        "img-src": ["'self'", "data:", "blob:"],
+        "media-src": ["'self'", "blob:"],
+        "object-src": ["'none'"],
+        "base-uri": ["'self'"],
+        "frame-ancestors": ["'none'"],
+        "form-action": ["'self'"],
+    },
+}
+
+REST_FRAMEWORK = {
+    # The API knows people by their session keys (core/auth.py), never by Django's login cookie:
+    # with SessionAuthentication on, anyone also signed in to /admin on the site had every save
+    # refused (403, CSRF)
+    'DEFAULT_AUTHENTICATION_CLASSES': [],
+    # Request limits per IP (core/throttles.py): sign-ins, reports and uploads tight; the rest
+    # generous, so only floods are stopped
+    'DEFAULT_THROTTLE_CLASSES': ['core.throttles.ApiThrottle'],
+    'DEFAULT_THROTTLE_RATES': {
+        'api': env('THROTTLE_API', default='2000/min'),
+        'signin': env('THROTTLE_SIGNIN', default='20/min'),
+        'report': env('THROTTLE_REPORT', default='120/min'),
+        'feedback': env('THROTTLE_FEEDBACK', default='10/hour'),
+        'upload': env('THROTTLE_UPLOAD', default='120/hour'),
+    },
+    'NUM_PROXIES': TRUSTED_PROXY_COUNT,
+}
+
+# Request size limits (uploads have their own per-view limits)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
+
+# The admin's address (a non-default one keeps bots that scan /admin/ away)
+ADMIN_URL = env('ADMIN_URL', default='admin/').strip('/') + '/'
 
 ROOT_URLCONF = 'quantarax_backend.urls'
 
@@ -183,8 +243,11 @@ STATIC_URL = 'static/'
 
 # Sign-in (api/users/sync/) checks the Firebase ID token against this project
 FIREBASE_PROJECT_ID = env('FIREBASE_PROJECT_ID', default='quantarax')
-# Development only: let sync/ open sessions without a Firebase token (local test accounts)
+# Development only: let sync/ open sessions without a Firebase token (local test accounts).
+# Never in production: anyone could sign in as anyone.
 ALLOW_UNVERIFIED_SIGNIN = env.bool('ALLOW_UNVERIFIED_SIGNIN', default=False)
+if ALLOW_UNVERIFIED_SIGNIN and not DEBUG:
+    raise ImproperlyConfigured("ALLOW_UNVERIFIED_SIGNIN is for local development only (DEBUG=True)")
 
 # MetaTrader 5 (core/broker_mt5.py): which terminal64.exe to drive (empty: the one running), and a
 # stand-in account instead of a terminal (tests, or trying the site without MT5)

@@ -256,20 +256,23 @@ ul {
    ≤700px : the avatar gives way to the menu button that replaces the right-hand panels */
 .tv-narrow-only { display: none !important; }
 
-@media (max-width: 1150px) {
-  .tv-topbar-label { display: none; }
-  .tv-topbar-labeled { padding: 0 3px !important; }
-}
-
-@media (max-width: 1000px) {
-  .tv-tf-fav:not(.active) { display: none !important; }
-}
-
-/* The same, when the layout itself is narrow but the window isn't (Pine Editor in split view):
-   the page marks the layout by its own width */
-.tv-lw-1150 .tv-topbar-label { display: none; }
+/* The header measures itself (lib/fitHeader.ts) and adds these only when its buttons don't fit;
+   the layout adds the first two too when the Pine Editor / Calendar split view narrows it */
+.tv-lw-1150 .tv-topbar-label,
+.tv-hdr-noalert .tv-btn-alert .tv-topbar-label,
+.tv-hdr-noind .tv-btn-indicators .tv-topbar-label { display: none; }
+.tv-hdr-noalert .tv-btn-alert,
+.tv-hdr-noind .tv-btn-indicators { padding: 0 3px !important; }
 .tv-lw-1150 .tv-topbar-labeled { padding: 0 3px !important; }
 .tv-lw-1000 .tv-tf-fav:not(.active) { display: none !important; }
+/* Its groups and buttons keep their size (they never squeeze on top of each other) */
+.tv-chart-header > div, .tv-chart-header > div > * { flex-shrink: 0; }
+.tv-hdr-tight .tv-layout-name { display: none; }
+/* (the Tip wrapper around each goes too, so no gap is left) */
+.tv-hdr-fewer :has(> .tv-hdr-optional), .tv-hdr-fewer .tv-hdr-optional { display: none !important; }
+/* The last step: it scrolls sideways (swipe / wheel), no scrollbar */
+.tv-hdr-scroll { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; justify-content: flex-start !important; gap: 12px; }
+.tv-hdr-scroll::-webkit-scrollbar { display: none; }
 
 @media (max-width: 700px) {
   .tv-narrow-only { display: flex !important; }

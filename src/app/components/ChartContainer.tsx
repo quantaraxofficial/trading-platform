@@ -329,7 +329,7 @@ import { BandFill } from "./chartPrimitives/BandFill";
 import { SessionBreaks } from "./chartPrimitives/SessionBreaks";
 import { EconomicEvents, type EventMark } from "./chartPrimitives/EconomicEvents";
 import { fetchEconomicEvents, symbolCurrencies, fmtTime as fmtEventTime, IMPACT_COLOR, IMPACT_LABEL } from "../lib/economicCalendar";
-import { chartSettings, themeCanvas, precisionFormat, type ChartSettings } from "../lib/chartSettings";
+import { chartSettings, themeCanvas, precisionFormat, wheelSpeed, type ChartSettings } from "../lib/chartSettings";
 import { chartBgImage, canvasBackgroundCss } from "../lib/chartBackgroundImage";
 import { DEFAULT_FONT_STACK, FONTS, applySiteFont, type FontKey } from "../lib/fonts";
 import type { DateRangeSpan } from "./BottomPanel";
@@ -2627,7 +2627,8 @@ export default function ChartContainer({
         priceScaleId: '', // set as an overlay
       });
       chartRef.current.priceScale('').applyOptions({
-        scaleMargins: { top: 0.8, bottom: 0 },
+        // The bottom quarter of the pane, as on TradingView (its tallest visible bar: 214 of 855 px)
+        scaleMargins: { top: 0.75, bottom: 0 },
       });
       volumeSeriesRef.current = volumeSeries;
       
@@ -3068,22 +3069,33 @@ export default function ChartContainer({
     newChart.timeScale().subscribeVisibleLogicalRangeChange(() => {
       if (updateSessionDOMRef.current) updateSessionDOMRef.current();
     });
+    // The zoom as it is now: options().barSpacing stays at what was last set with applyOptions
+    // (wheel and pinch zooming don't change it), so it's worked out from the visible bars
+    const currentBarSpacing = () => {
+      const ts = newChart.timeScale();
+      const r = ts.getVisibleLogicalRange();
+      const w = ts.width();
+      // (the visible logical range spans one bar less than fits: lightweight-charts' leftBorder + 1)
+      return r && w > 0 && r.to > r.from ? Math.round((w / (r.to - r.from + 1)) * 1000) / 1000 : ts.options().barSpacing || 6;
+    };
     newChart.timeScale().subscribeVisibleTimeRangeChange(() => {
       if (updateSessionDOMRef.current) updateSessionDOMRef.current();
-      
+
       if (isNavigatingRef.current) return;
-      
+
       // Notify parent of center timestamp for state persistence
       if (onChartStateChange && fullDataRef.current.length > 0) {
         const ts = newChart.timeScale();
         const range = ts.getVisibleLogicalRange();
         if (range) {
-          const centerLogical = Math.floor((range.from + range.to) / 2);
-          if (centerLogical >= 0 && centerLogical < fullDataRef.current.length) {
-            const centerTime = fullDataRef.current[centerLogical].time;
-            const barSpacing = ts.options().barSpacing || 6;
-            onChartStateChange(centerTime, barSpacing);
-          }
+          // The middle bar's time; in the empty space after the last bar, a time that far past it
+          // (so a view with room on the right comes back the same), before the first bar the first
+          const data = fullDataRef.current;
+          const mid = Math.floor((range.from + range.to) / 2);
+          const last = data.length - 1;
+          const sec = getIntervalMs(intervalRef.current) / 1000;
+          const centerTime = mid > last && sec > 0 ? data[last].time + (mid - last) * sec : data[Math.max(0, Math.min(last, mid))].time;
+          onChartStateChange(centerTime, currentBarSpacing());
         }
       }
     });
@@ -3190,17 +3202,23 @@ export default function ChartContainer({
           const diff = Math.abs(stockData[i].time - initialTargetTimestamp);
           if (diff < minDiff) { minDiff = diff; closestIdx = i; }
         }
-        const timeScale = newChart.timeScale();
-        
-        if (initialBarSpacing) {
-          timeScale.applyOptions({ barSpacing: initialBarSpacing });
+        // A middle saved in the empty space after the last bar (see the range subscription)
+        const lastBar = stockData[stockData.length - 1];
+        const barSec = getIntervalMs(interval) / 1000;
+        if (initialTargetTimestamp > lastBar.time && barSec > 0) {
+          closestIdx = stockData.length - 1 + Math.min(500, Math.round((initialTargetTimestamp - lastBar.time) / barSec));
         }
-        
+        const timeScale = newChart.timeScale();
+
         let retries = 0;
         const applyPosition = () => {
           const visibleRange = timeScale.getVisibleLogicalRange();
           if (visibleRange && visibleRange.to - visibleRange.from > 0) {
-            const halfWidth = (visibleRange.to - visibleRange.from) / 2;
+            // The saved zoom as the number of bars across: lightweight-charts applies a new bar
+            // spacing only on its next frame, so the range measured now still has the old zoom,
+            // and setting the range from it would put that old zoom back
+            const width = timeScale.width();
+            const halfWidth = initialBarSpacing && width > 0 ? (width / initialBarSpacing - 1) / 2 : (visibleRange.to - visibleRange.from) / 2;
             console.log(`[ChartLoad] Applying position. closestIdx: ${closestIdx}, halfWidth: ${halfWidth}`);
             timeScale.setVisibleLogicalRange({ from: closestIdx - halfWidth, to: closestIdx + halfWidth });
           } else if (retries < 20) {
@@ -3463,10 +3481,7 @@ export default function ChartContainer({
       const stockData = await loadWindow(apiDate(Math.min(targetTimestamp * 1000 + halfMs, Date.now())));
       if (!stockData) return;
       centreOn(stockData);
-      if (onChartStateChange) {
-        const barSpacing = newChart.timeScale().options().barSpacing || 6;
-        onChartStateChange(targetTimestamp, barSpacing);
-      }
+      if (onChartStateChange) onChartStateChange(targetTimestamp, currentBarSpacing());
     };
 
     // Replay's "Select starting point" (as on TradingView): a date from the dialog, the first bar
@@ -3588,7 +3603,7 @@ export default function ChartContainer({
       const anchor = cursorPrice !== null ? cursorPrice : (visibleRange.from + visibleRange.to) / 2;
 
       // Scroll up = zoom in (compress the visible range), scroll down = zoom out (expand it)
-      const zoomFactor = e.deltaY < 0 ? 0.9 : 1 / 0.9;
+      const zoomFactor = Math.pow(e.deltaY < 0 ? 0.9 : 1 / 0.9, wheelSpeed());
       const newFrom = anchor - (anchor - visibleRange.from) * zoomFactor;
       const newTo = anchor + (visibleRange.to - anchor) * zoomFactor;
       if (newTo - newFrom < 1e-9) return;

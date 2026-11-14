@@ -15,7 +15,8 @@ from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.decorators import api_view, parser_classes
+from .throttles import UploadThrottle
+from rest_framework.decorators import api_view, parser_classes, throttle_classes
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
@@ -285,6 +286,7 @@ def group_send(request, uid, token):
 
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
+@throttle_classes([UploadThrottle])
 def group_upload(request, uid, token):
     """multipart {file, text?}: shares a picture or document in the group (the same kinds and
     limits as collab chats)"""

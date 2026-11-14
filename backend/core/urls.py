@@ -1,5 +1,5 @@
 from django.urls import path
-from . import presence, voice, views, analytics, broker_algo, broker_mt5, stats_accounts, posts, copy_api, copy_share, optimizer_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github, econ_calendar, news, market
+from . import presence, voice, views, analytics, broker_algo, broker_mt5, stats_accounts, posts, copy_api, copy_share, optimizer_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github, econ_calendar, news, market, turn
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
@@ -115,6 +115,7 @@ urlpatterns = [
     path('github/<str:uid>/file/', github.github_file, name='github_file'),
     # Collab charts (the live part is the WebSocket in consumers.py)
     path('collab/<str:uid>/rooms/', collab.collab_rooms, name='collab_rooms'),
+    path('collab/<str:uid>/ice/', turn.ice_servers, name='collab_ice'),   # voice: STUN + the TURN relay (core/turn.py)
     path('collab/<str:uid>/people/', collab.collab_people, name='collab_people'),
     # Private chats (the Chats panel)
     path('collab/<str:uid>/dms/', collab_dms.dm_conversations, name='dm_conversations'),

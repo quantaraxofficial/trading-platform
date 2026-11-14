@@ -103,6 +103,41 @@ export function CollabDrawingSync() {
   }, [drawings, active, applyRemoteDrawings]);
 
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  // The shape being drawn / moved / resized (DrawingLayer's tv:drawing-preview), live to the room
+  // up to ~16 times a second. Its end goes out a moment later: by then the finished shape has
+  // arrived and replaced it there, so it doesn't blink out first
+  useEffect(() => {
+    if (!active) return;
+    let last = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let pending: any = null;
+    let shown = false;
+    const send = () => {
+      timer = null;
+      const sym = shadowSymbol.current;
+      if (!sym || symbolRef.current !== sym) return;
+      last = Date.now();
+      const d = pending;
+      collab.sendDrawingPreview(sym, d ? (d.id === "preview" ? { ...d, id: `preview-${collab.get().you}` } : d) : null);
+      shown = !!d;
+    };
+    const onPreview = (e: Event) => {
+      const d = (e as CustomEvent).detail?.drawing ?? null;
+      pending = d;
+      if (timer) clearTimeout(timer);
+      if (!d) { timer = shown ? setTimeout(send, 400) : null; return; }
+      const wait = 60 - (Date.now() - last);
+      if (wait <= 0) send();
+      else timer = setTimeout(send, wait);
+    };
+    window.addEventListener("tv:drawing-preview", onPreview);
+    return () => {
+      window.removeEventListener("tv:drawing-preview", onPreview);
+      if (timer) clearTimeout(timer);
+      if (shown && shadowSymbol.current) collab.sendDrawingPreview(shadowSymbol.current, null);
+    };
+  }, [active]);
   return null;
 }
 

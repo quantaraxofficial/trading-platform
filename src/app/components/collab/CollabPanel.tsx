@@ -168,12 +168,15 @@ export default function CollabPanel({ onShare }: { onShare: () => void }) {
               <button
                 className={`tv-co-iconbtn${voice.muted ? " on" : ""}`}
                 disabled={!canVoice}
-                title={!canVoice ? "The owner has turned your mic off" : voice.muted ? "Unmute" : "Mute"}
+                title={!canVoice ? "The owner has turned your mic off"
+                  : voice.noMic === "blocked" ? "Microphone blocked: allow it in the browser's site settings, then click to try again"
+                  : voice.noMic === "missing" ? "No microphone found: connect one, then click to try again"
+                  : voice.muted ? "Unmute" : "Mute"}
                 aria-label={voice.muted ? "Unmute" : "Mute"} aria-pressed={voice.muted} onClick={() => collab.toggleMute()}
               >
                 <MicIcon off={voice.muted || !canVoice} />
               </button>
-              <span style={{ flex: 1, fontSize: 13, color: "var(--tv-co-muted)" }}>In voice{!canVoice ? " · listening (mic off by the owner)" : voice.muted ? " · muted" : ""}</span>
+              <span style={{ flex: 1, fontSize: 13, color: "var(--tv-co-muted)" }}>In voice{!canVoice ? " · listening (mic off by the owner)" : voice.noMic === "missing" ? " · listening (no microphone)" : voice.noMic === "blocked" ? " · listening (microphone blocked)" : voice.muted ? " · muted" : ""}</span>
               <button className="tv-co-btn danger" onClick={() => collab.leaveVoice()}><PhoneIcon hangup />Leave</button>
             </>
           ) : (

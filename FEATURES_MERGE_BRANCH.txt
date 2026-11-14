@@ -701,6 +701,30 @@ Posting signals out
     backend/pipeline/tick_backfill.py fills earlier periods from MT5
 
 ======================================================================
+17b5. FROM THE LIVE SITE: CHART, COLLAB AND SECURITY
+======================================================================
+  - Chart settings → Scales and lines → Mouse wheel: scroll speed 0.25x-5x (zoom of the chart and
+    the price scale, Shift + wheel scrolling)
+  - The chart's real zoom is saved and restored (also with empty space after the last bar); volume
+    takes the bottom quarter of the pane, as on TradingView
+  - The chart page fits any window: the header measures itself and steps down only as far as it
+    must (Alert's label, Indicators', Replay's, then the interval favourites, the layout's name,
+    Compare / Undo / Redo / Quick search, then it scrolls sideways); the drawing toolbar and the
+    right icon bar show up / down arrows when the window is too short
+  - Collab: a shape being drawn, moved or resized shows live on everyone's chart; voice through a
+    TURN relay (/api/users/collab/<uid>/ice/: TURN_HOST and TURN_SECRET for coturn), connection
+    details that arrive early are kept; no microphone (or a blocked one): join the call to listen
+  - Security: the server issues each browser's session key (cryptographically random, never one
+    the browser made) and a session unused for 30 days ends (also on the collab socket); the email
+    is taken from the verified Firebase token; per-IP limits on sign-in, reports, feedback, uploads
+    and everything else; X-Forwarded-For trusted only behind a declared proxy
+    (TRUSTED_PROXY_COUNT); production settings (HTTPS, HSTS, secure cookies, FRONTEND_ORIGINS,
+    ADMIN_URL; refuses a weak SECRET_KEY, no ALLOWED_HOSTS or ALLOW_UNVERIFIED_SIGNIN outside DEBUG);
+    security headers on every page; Next.js 16.4 and patched dependencies (npm audit: 0 in production)
+  - Someone also signed in to /admin no longer has every save refused (403): the API ignores
+    Django's admin login cookie
+
+======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD
 ======================================================================
   - Analytics → "Connect an account": any broker or prop-firm account (FTMO, FundedNext, The5ers,

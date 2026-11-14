@@ -1,10 +1,11 @@
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, throttle_classes
 from rest_framework.response import Response
 from .models import TraderProfile, DrawingTemplate, UserDrawing, UserSession, PineScript, UserStrategyNote, UserSetting, FailedRequest, FeedbackMessage
 from django.utils import timezone
 from django.conf import settings
-from .auth import verified_uid, require_session, session_owner, session_key_of
+from .auth import verified_claims, require_session, session_owner, session_key_of, live_session, new_session_key
+from .throttles import FeedbackThrottle, ReportThrottle, SignInThrottle
 from .middleware import get_client_ip
 from django.core.cache import cache
 from django.core.files.storage import default_storage
@@ -12,67 +13,63 @@ import secrets
 from .middleware import get_client_ip
 
 @api_view(['POST'])
+@throttle_classes([SignInThrottle])
 def sync_user(request):
-    data = request.data
-    uid = data.get('uid')
-    session_key = data.get('session_key')
-    force = data.get('force', False)
-    
+    """Signing in on this browser: {uid, id_token, session_key?, name?, phone?, device_info?, force?,
+    arrival?}. The Firebase ID token must be that user's; the email is taken from it (never from the
+    request). An existing session key of theirs is refreshed; otherwise the server issues a new one
+    (two devices at most; force replaces the oldest) and sends it back as `session_key`."""
+    data = request.data if isinstance(request.data, dict) else {}
+    uid = str(data.get('uid') or '')[:128]
+    force = data.get('force') is True
+
     if not uid:
         return Response({"error": "UID is required"}, status=status.HTTP_400_BAD_REQUEST)
 
     # Only the user themself can open a session: the Firebase ID token must be theirs. (Local test
-    # accounts are allowed only with ALLOW_UNVERIFIED_SIGNIN on, for development.)
-    if not settings.ALLOW_UNVERIFIED_SIGNIN and verified_uid(data.get('id_token')) != uid:
-        return Response({"error": "Sign-in could not be verified"}, status=status.HTTP_401_UNAUTHORIZED)
-    
-    profile, created = TraderProfile.objects.update_or_create(
-        uid=uid,
-        defaults={
-            'name': data.get('name', ''),
-            'email': data.get('email', ''),
-            'phone': data.get('phone', ''),
-            'last_login': timezone.now()
-        }
-    )
+    # accounts are allowed only with ALLOW_UNVERIFIED_SIGNIN on, which settings refuse outside DEBUG.)
+    claims = None
+    if not settings.ALLOW_UNVERIFIED_SIGNIN:
+        claims = verified_claims(data.get('id_token'))
+        if not claims or (claims.get('user_id') or claims.get('sub')) != uid:
+            return Response({"error": "Sign-in could not be verified"}, status=status.HTTP_401_UNAUTHORIZED)
+    email = (claims.get('email') if claims else data.get('email')) or ''
+    defaults = {'email': str(email)[:254], 'last_login': timezone.now()}
+    name = str(data.get('name') or '').strip()[:255]
+    if name:
+        defaults['name'] = name
+    if data.get('phone'):
+        defaults['phone'] = str(data.get('phone'))[:20]
+    profile, created = TraderProfile.objects.update_or_create(uid=uid, defaults=defaults)
     # a new trader: where they came from (an ad, a referral, a link…), noted by their browser
     if created:
         from .arrival import record
         record(profile, data.get('arrival'))
 
-    # Session management
-    if session_key:
-        try:
-            session = UserSession.objects.get(user=profile, session_key=session_key)
-            session.last_active = timezone.now()
-            session.save()
-        except UserSession.DoesNotExist:
-            current_sessions = UserSession.objects.filter(user=profile).order_by('last_active')
-            if current_sessions.count() >= 2:
-                if force:
-                    # Remove oldest session to make room
-                    current_sessions.first().delete()
-                    UserSession.objects.create(
-                        user=profile, 
-                        session_key=session_key,
-                        device_info=data.get('device_info', '')
-                    )
-                else:
-                    return Response({
-                        "limit_reached": True,
-                        "message": "You have already reached the limit of number of devices per account."
-                    })
-            else:
-                UserSession.objects.create(
-                    user=profile, 
-                    session_key=session_key,
-                    device_info=data.get('device_info', '')
-                )
-    
+    # Session management: a key of theirs is refreshed, anything else gets a fresh server-made key
+    key = session_key_of(request)
+    session = live_session(UserSession.objects.filter(user=profile, session_key=key)) if key else None
+    if session:
+        UserSession.objects.filter(id=session.id).update(last_active=timezone.now())
+        new_key = session.session_key
+    else:
+        current_sessions = UserSession.objects.filter(user=profile).order_by('last_active')
+        if current_sessions.count() >= 2:
+            if not force:
+                return Response({
+                    "limit_reached": True,
+                    "message": "You have already reached the limit of number of devices per account."
+                })
+            for old in current_sessions[:current_sessions.count() - 1]:
+                old.delete()   # room for this one (the oldest go)
+        new_key = new_session_key()
+        UserSession.objects.create(user=profile, session_key=new_key, device_info=str(data.get('device_info') or '')[:255])
+
     return Response({
         "success": True,
         "tier": profile.tier,
-        "is_new": created
+        "is_new": created,
+        "session_key": new_key,
     })
 
 @api_view(['GET'])
@@ -352,6 +349,7 @@ def start_backtest_session(request, uid):
     return Response({'session_id': session.id})
 
 @api_view(['POST'])
+@throttle_classes([ReportThrottle])
 def track_failure(request):
     """Browser self-report of a request that did not come back to the user (a Next.js /api/*
     data-route failure, or a cloud-sync miss). The Django middleware already records the
@@ -667,6 +665,7 @@ def _real_image(f):
 
 
 @api_view(['POST'])
+@throttle_classes([FeedbackThrottle])
 def submit_feedback(request):
     """Bug report / feedback from the chart's 'Send feedback' button.
 
