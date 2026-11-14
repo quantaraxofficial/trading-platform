@@ -162,6 +162,47 @@ function pickVoice(): SpeechSynthesisVoice | null {
   return same.sort((a, b) => score(b) - score(a))[0] ?? null;
 }
 
+// ---- the words as they're spoken, for voices that don't say where they are
+// Chrome's online voices ("Google US English"…) send no word events while they speak: the line would
+// show only at its end. Instead each word gets a share of the speaking time from how long it takes to
+// say (syllables; a number as it's read out: "3881.77" is "three thousand eight hundred eighty-one
+// point seven seven"; a pause at commas and full stops), and the words show as the voice reaches them.
+// A voice that does send word events takes over from this at its first one.
+const SYLLABLES_PER_SECOND = 5.0;   // (measured: Chrome's "Google US English" at rate 1)
+
+function numberSyllables(n: string): number {
+  const [int, dec = ""] = n.replace(/[,]/g, "").split(".");
+  const d = int.replace(/\D/g, "").length;
+  const intPart = d <= 1 ? 1.5 : d === 2 ? 3 : d === 3 ? 6 : d === 4 ? 9 : d <= 6 ? 13 : 18;
+  return intPart + (dec ? 1 + dec.length * 1.7 : 0);
+}
+function wordSyllables(w: string): number {
+  const core = w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+  if (!core) return 0.3;
+  if (/^[\d.,]+%?$/.test(core)) return numberSyllables(core) + (core.endsWith("%") ? 2 : 0);
+  if (/^[a-z]+$/i.test(core)) {
+    const groups = core.toLowerCase().replace(/e$/, "").match(/[aeiouy]+/g);
+    return Math.max(1, groups ? groups.length : 1);
+  }
+  return Math.max(1, Math.round(core.length / 2.5));   // (other scripts: by length)
+}
+// [where each piece ends in the text, when it starts being said (in syllables from the start)]
+function speechPlan(text: string): { end: number; at: number }[] {
+  const plan: { end: number; at: number }[] = [];
+  let at = 0;
+  const spaced = (text.match(/\s/g) || []).length >= text.length / 20;
+  const re = spaced ? /\S+/g : /\S/g;   // (Chinese, Japanese…: no spaces, a character at a time)
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const piece = m[0];
+    plan.push({ end: m.index + piece.length, at });
+    at += spaced ? wordSyllables(piece) : 1;
+    if (/[,;:]$/.test(piece)) at += 1.5;
+    if (/[.!?…।]$/.test(piece)) at += 3;
+  }
+  return plan;
+}
+
 let speakQueue: Promise<void> = Promise.resolve();
 // The line being said (to cut it short when the trader talks over it, and to tell its echo from them)
 let speakingNow: { id: number; text: string; spokenTo: number; cut: boolean } | null = null;
@@ -181,9 +222,16 @@ function say(text: string, extra?: Partial<VoiceMessage>): Promise<void> {
     const me = { id, text, spokenTo: 0, cut: false };
     speakingNow = me;
     let done = false;
+    let paced: ReturnType<typeof setInterval> | null = null;
+    let watch: ReturnType<typeof setInterval> | null = null;
+    let started = false;
+    let fromVoice = false;          // the voice tells where it is (word events): no estimating
+    const stopPacing = () => { if (paced) { clearInterval(paced); paced = null; } };
     const finish = () => {
       if (done) return;
       done = true;
+      stopPacing();
+      if (watch) { clearInterval(watch); watch = null; }
       if (!me.cut) patchMessage(id, { spokenTo: undefined });
       if (speakingNow === me) speakingNow = null;
       lastSpoken = { text, at: Date.now() };
@@ -196,9 +244,25 @@ function say(text: string, extra?: Partial<VoiceMessage>): Promise<void> {
       if (v) u.voice = v;
       u.lang = v?.lang || state.lang;   // (no voice for it: the language still tells the browser how to read it)
       u.rate = 1.03;
-      u.onstart = () => { set({ speaking: true }); };
+      u.onstart = () => {
+        started = true;
+        set({ speaking: true });
+        // the words as the voice reaches them (until it sends word events of its own)
+        const plan = speechPlan(text);
+        const t0 = performance.now();
+        const perSecond = SYLLABLES_PER_SECOND * (u.rate || 1);
+        stopPacing();
+        paced = setInterval(() => {
+          if (done || me.cut || fromVoice) { stopPacing(); return; }
+          const said = (performance.now() - t0) / 1000 * perSecond;
+          let to = 0;
+          for (const p of plan) { if (p.at <= said) to = p.end; else break; }
+          if (to > me.spokenTo) { me.spokenTo = to; patchMessage(id, { spokenTo: to }); }
+        }, 90);
+      };
       u.onboundary = (e: SpeechSynthesisEvent) => {
-        if (e.name && e.name !== "word" || me.cut) return;
+        if (e.name && e.name !== "word" || me.cut || done) return;
+        if (!fromVoice) { fromVoice = true; stopPacing(); }
         const end = text.indexOf(" ", e.charIndex + 1);
         me.spokenTo = end < 0 ? text.length : end;
         patchMessage(id, { spokenTo: me.spokenTo });
@@ -206,8 +270,14 @@ function say(text: string, extra?: Partial<VoiceMessage>): Promise<void> {
       u.onend = finish;
       u.onerror = finish;
       window.speechSynthesis.speak(u);
-      // (some voices never send boundary events, or never end: the whole line shows after a while)
-      setTimeout(finish, 2500 + text.length * 90);
+      // A voice that never starts, or stops without saying so (Chrome's online voices can go quiet
+      // on a long line without an end event): the whole line shows then. Not by a guessed time: a
+      // slow voice still speaking keeps its words coming
+      const t0 = Date.now();
+      watch = setInterval(() => {
+        const busy = window.speechSynthesis.speaking || window.speechSynthesis.pending;
+        if ((!started && Date.now() - t0 > 5000) || (started && !busy) || Date.now() - t0 > 120000) finish();
+      }, 500);
     } catch { finish(); }
   }));
   return speakQueue;

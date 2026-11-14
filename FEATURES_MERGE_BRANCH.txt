@@ -776,6 +776,17 @@ Posting signals out
     the MT5 collector last posted, its price's age and how far the stored bars are behind
 
 ======================================================================
+17b8. VOICE ASSISTANT: SUBTITLES AS IT SPEAKS
+======================================================================
+  - The answer's words show while it's spoken, not after: with voices that say where they are (word
+    events) by those; with Chrome's online voices ("Google US English"…), which send none, by each
+    word's speaking time (syllables; numbers as they're read out: "3881.77" is "three thousand eight
+    hundred eighty-one point seven seven"; pauses at commas and full stops; Chinese, Japanese… a
+    character at a time), measured to keep pace with the voice
+  - A slow voice's line no longer jumps to the end and back; a voice that never starts or goes quiet
+    without an end still shows the whole line
+
+======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD
 ======================================================================
   - Analytics → "Connect an account": any broker or prop-firm account (FTMO, FundedNext, The5ers,
