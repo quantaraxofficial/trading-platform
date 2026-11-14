@@ -1,10 +1,11 @@
 from django.urls import path
-from . import presence, voice, views, analytics, broker_algo, broker_mt5, stats_accounts, posts, copy_api, copy_share, optimizer_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github, econ_calendar
+from . import presence, voice, views, analytics, broker_algo, broker_mt5, stats_accounts, posts, copy_api, copy_share, optimizer_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github, econ_calendar, news
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
     path('presence/<str:uid>/', presence.ping, name='presence'),
     path('calendar/economic/', econ_calendar.economic, name='economic_calendar'),
+    path('news/', news.symbol_news, name='symbol_news'),
     path('user/<str:uid>/', views.get_user_data, name='get_user_data'),
     path('templates/<str:uid>/', views.manage_templates, name='manage_templates'),
     path('templates/delete/<int:template_id>/', views.delete_template, name='delete_template'),

@@ -12,6 +12,7 @@ import { useDetailsAnalytics, type Quote } from "./data";
 import type { SeasonalYear, TechnicalRating } from "./analytics";
 import { fmtPrice, fmtVolume, priceDecimals, CheckRow, MenuHeading } from "./Watchlist";
 import { displaySymbol } from "@/app/lib/symbolDisplay";
+import { NewsCard } from "./News";
 
 const BULL = "var(--tv-color-bull, #089981)", BEAR = "var(--tv-color-bear, #f23645)";
 const SECTIONS: [DetailsSection, string][] = [
@@ -64,7 +65,7 @@ export default function SymbolDetails({ symbol, quote }: { symbol: string; quote
   const up = (quote?.change ?? 0) >= 0;
   const price = quote ? fmtPrice(symbol, quote.close) : "";
   const decimals = quote ? priceDecimals(symbol, quote.close) : 2;
-  const volume = quote?.volume && quote.volume > 0 ? quote.volume : undefined;
+  const volume = quote?.volume && quote.volume > 0 ? quote.volume : analytics?.dayVolume;
   const avgVolume = analytics?.avgVolume30;
 
   return (
@@ -118,6 +119,23 @@ export default function SymbolDetails({ symbol, quote }: { symbol: string; quote
             {quote.lastUpdate ? <div style={{ color: "var(--tv-legend-args)", marginTop: 2 }}>Last update at {fmtUpdate(quote.lastUpdate)}</div> : null}
           </div>
         )}
+
+        {/* Volume against its 30-day average, as on TradingView: the two figures and a bar split between them */}
+        {volume != null && avgVolume != null && avgVolume > 0 && (
+          <div data-testid="details-volume" style={{ marginTop: 14, fontSize: 12, color: "var(--tv-legend-args)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}><span>Volume</span><span>Avg. volume (30D)</span></div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--tv-hdr-text)", fontVariantNumeric: "tabular-nums" }}>
+              <span>{fmtVolume(volume)}</span><span>{fmtVolume(avgVolume)}</span>
+            </div>
+            <div style={{ display: "flex", gap: 2, height: 4, marginTop: 6, borderRadius: 2, overflow: "hidden" }}>
+              <span style={{ flex: `${volume} 1 0`, background: "#2962ff" }} />
+              <span style={{ flex: `${avgVolume} 1 0`, background: "#22ab94" }} />
+            </div>
+          </div>
+        )}
+
+        {/* The latest headline about it; "More events" lists them over the chart (./News) */}
+        <NewsCard symbol={symbol} />
 
         {shown.priceRanges && quote && (
           <Section title="Price ranges">

@@ -175,7 +175,7 @@ export function useDetailsQuote(symbol: string, rows: Record<string, Quote>): Qu
 }
 
 // Daily bars → performance, seasonals and technical rating (computed once, cached 30 minutes)
-export type DetailsAnalytics = { perf: { period: string; pct: number }[] | null; seasonals: SeasonalYear[]; rating: TechnicalRating | null; avgVolume30?: number };
+export type DetailsAnalytics = { perf: { period: string; pct: number }[] | null; seasonals: SeasonalYear[]; rating: TechnicalRating | null; avgVolume30?: number; dayVolume?: number };
 const AN_KEY = "tv:wlAnalytics:";
 export function useDetailsAnalytics(symbol: string): DetailsAnalytics | null {
   const [a, setA] = useState<DetailsAnalytics | null>(null);
@@ -198,6 +198,8 @@ export function useDetailsAnalytics(symbol: string): DetailsAnalytics | null {
         const v: DetailsAnalytics = {
           perf: performance(bars), seasonals: seasonals(bars), rating: technicalRating(bars),
           avgVolume30: vols.length === Math.min(30, bars.length) && vols.length ? vols.reduce((a, b) => a + b, 0) / vols.length : undefined,
+          // the latest session's volume, for quotes without one
+          dayVolume: bars.length && bars[bars.length - 1].volume ? bars[bars.length - 1].volume : undefined,
         };
         // Seasonals are thinned for the cache (one point in three is plenty for the small chart)
         const slim = { ...v, seasonals: v.seasonals.map(y => ({ ...y, points: y.points.filter((_, i, arr) => i % 3 === 0 || i === arr.length - 1) })) };

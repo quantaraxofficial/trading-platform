@@ -649,6 +649,17 @@ Posting signals out
   - Flags for China and "Global" events; logo ids no longer differ between server and browser
 
 ======================================================================
+17b1. SYMBOL DETAILS: VOLUME AND NEWS (as TradingView's)
+======================================================================
+  - Under the market status: Volume against Avg. volume (30D), with a bar split between them
+  - A News card: the latest headline about the symbol and how long ago ("News · 40 minutes ago");
+    "More events ›" opens the News list over the chart (time, related symbols, headline, source);
+    a headline opens the story view (source, title, time, copy link, related symbols, ‹ › / ← → through
+    the stories, "Read on <source>"). Escape closes the top view. Headlines come from Google News'
+    public search feed (backend /api/users/news/, cached 10 minutes): only headlines and links, the
+    stories stay on their publishers' sites
+
+======================================================================
 17b2. CANDLES THAT FIT THE 4-HOUR CANDLES
 ======================================================================
   - 45m, 50m, 90m (any timeframe up to 2 hours that doesn't fit evenly into 4 hours) restart at each
