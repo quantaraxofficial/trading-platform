@@ -6,7 +6,7 @@
 // listed in the page's menu instead of a pop-up.
 
 import React, { useEffect, useRef, useState } from 'react';
-import { BarChart3, LineChart, LogOut, User as UserIcon } from 'lucide-react';
+import { BarChart3, FlaskConical, LineChart, LogOut, User as UserIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 // Accounts made with a user ID instead of an email are stored as <id>@this domain
@@ -48,9 +48,20 @@ export default function SiteUserMenu({ signedOut, mobile = false }: { signedOut:
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEscapeClose(() => setOpen(false), open);
+  // (the home page's guided tour opens it to point at its entries: lib/tours)
+  useEffect(() => {
+    if (mobile) return;
+    const show = () => setOpen(true), hide = () => setOpen(false);
+    window.addEventListener('tv:open-account-menu', show);
+    window.addEventListener('tv:close-account-menu', hide);
+    return () => { window.removeEventListener('tv:open-account-menu', show); window.removeEventListener('tv:close-account-menu', hide); };
+  }, [mobile]);
   useEffect(() => {
     if (!open) return;
-    const away = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const away = (e: PointerEvent) => {
+      const t = e.target as HTMLElement;
+      if (!ref.current?.contains(t) && !t.closest?.('[data-name="feature-tour"]')) setOpen(false);
+    };
     window.addEventListener('pointerdown', away);
     return () => window.removeEventListener('pointerdown', away);
   }, [open]);
@@ -62,9 +73,10 @@ export default function SiteUserMenu({ signedOut, mobile = false }: { signedOut:
   const name = accountName(user, userData);
   const signOut = async () => { setOpen(false); await logout(); router.push('/'); };
   const items = [
-    { href: '/profile', label: 'Your profile', icon: <UserIcon className="w-4 h-4" /> },
-    { href: '/analytics', label: 'Analytics', icon: <BarChart3 className="w-4 h-4" /> },
-    { href: '/chart', label: 'Open the chart', icon: <LineChart className="w-4 h-4" /> },
+    { href: '/profile', label: 'Your profile', icon: <UserIcon className="w-4 h-4" />, name: 'account-menu-profile' },
+    { href: '/analytics', label: 'Analytics', icon: <BarChart3 className="w-4 h-4" />, name: 'account-menu-analytics' },
+    { href: '/analytics?view=backtests', label: 'Backtesting analytics', icon: <FlaskConical className="w-4 h-4" />, name: 'account-menu-backtests' },
+    { href: '/chart', label: 'Open the chart', icon: <LineChart className="w-4 h-4" />, name: 'account-menu-chart' },
   ];
 
   if (mobile) return (
@@ -92,7 +104,7 @@ export default function SiteUserMenu({ signedOut, mobile = false }: { signedOut:
             </div>
           </div>
           {items.map(i => (
-            <a key={i.href} href={i.href} role="menuitem" className="flex items-center gap-3 px-4 py-2.5 text-purple-200 hover:text-white hover:bg-purple-800/30 transition-colors">
+            <a key={i.href} href={i.href} role="menuitem" data-name={i.name} className="flex items-center gap-3 px-4 py-2.5 text-purple-200 hover:text-white hover:bg-purple-800/30 transition-colors">
               {i.icon}{i.label}
             </a>
           ))}

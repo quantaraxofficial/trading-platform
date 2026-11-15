@@ -1,0 +1,136 @@
+{% extends "admin/change_form.html" %}
+{% comment %}A trader profile: under the form, what they've done on the site (core/feature_use.py trader_activity){% endcomment %}
+
+{% block extrastyle %}{{ block.super }}
+<style>
+  .tp-act { margin: 24px 0 8px; }
+  .tp-act h2 { font-size: 15px; margin: 0 0 10px; padding: 8px 12px; background: var(--darkened-bg, #f8f8f8); border-radius: 4px; }
+  .tp-act h2 small { font-weight: 400; color: var(--body-quiet-color, #666); margin-left: 6px; }
+  .tp-act section { margin-bottom: 28px; }
+  .tp-pies { display: flex; flex-wrap: wrap; gap: 28px; }
+  .tp-pie { flex: 1 1 380px; display: flex; gap: 18px; align-items: center; border: 1px solid var(--hairline-color, #e8e8e8); border-radius: 8px; padding: 14px 16px; color: var(--body-fg, #333); }
+  .tp-pie h3 { margin: 0 0 6px; font-size: 14px; }
+  .tp-pie .sub { color: var(--body-quiet-color, #666); font-size: 12px; margin-bottom: 8px; }
+  .tp-legend { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+  .tp-legend li { display: flex; align-items: center; gap: 8px; padding: 2px 0; list-style: none; }
+  .tp-legend .sw { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .tp-legend .n { margin-left: auto; padding-left: 14px; font-variant-numeric: tabular-nums; color: var(--body-quiet-color, #666); }
+  .tp-empty { color: var(--body-quiet-color, #666); font-size: 13px; padding: 6px 2px; }
+  .tp-act table { width: 100%; }
+  .tp-act td.path { max-width: 380px; overflow-wrap: anywhere; }
+  .tp-times { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .tp-time { border: 1px solid var(--hairline-color, #e8e8e8); border-radius: 8px; padding: 10px 12px; }
+  .tp-time .k { font-size: 12px; color: var(--body-quiet-color, #666); }
+  .tp-time .v { font-size: 18px; font-weight: 600; margin: 2px 0; }
+  .tp-time .s, .tp-picked { font-size: 12px; }
+  .tp-act .a { color: #4ade80; } .tp-act .i { color: #9ca3af; }
+  .tp-meter { display: flex; height: 5px; border-radius: 3px; overflow: hidden; background: rgba(156,163,175,0.35); margin-top: 6px; }
+  .tp-meter span { background: #4ade80; }
+  .tp-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 6px 0 14px; }
+  .tp-pick input[type=date] { padding: 5px 8px; border-radius: 6px; color-scheme: dark; }
+  .tp-chart .sub { font-size: 12px; color: var(--body-quiet-color, #666); margin-bottom: 6px; }
+  .tp-leg { margin-left: 10px; }
+  .tp-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 4px 0 8px; vertical-align: -1px; }
+</style>
+{% endblock %}
+
+{% block after_related_objects %}{{ block.super }}
+{% if activity %}
+<div class="tp-act" id="trader-activity">
+
+  <section data-name="trader-time" id="trader-time">
+    <h2>Time on the site <small>{{ activity.time.days_seen }} day{{ activity.time.days_seen|pluralize }} on it{% if activity.time.first %}, first {{ activity.time.first|date:"j M Y" }}{% endif %}</small></h2>
+    <div class="tp-times">
+      {% for c in activity.time.cards %}
+      <div class="tp-time"><div class="k">{{ c.label }}</div><div class="v">{{ c.time }}</div>
+        {% if c.seconds %}<div class="s"><span class="a">active {{ c.active }}</span> · <span class="i">only open {{ c.idle }}</span></div>
+        <div class="tp-meter" title="{{ c.pct }}% active"><span style="width:{{ c.pct }}%"></span></div>{% endif %}</div>
+      {% endfor %}
+    </div>
+    <div class="tp-pick">
+      <label for="tp-day"><b>See a day:</b></label>
+      <input type="date" id="tp-day" data-name="trader-time-day" value="{% if activity.time.picked %}{{ activity.time.picked.day|date:'Y-m-d' }}{% endif %}" max="{{ activity.time.today|date:'Y-m-d' }}">
+      {% if activity.time.picked %}
+      <span class="tp-picked" data-name="trader-time-picked"><b>{{ activity.time.picked.label }}:</b> {{ activity.time.picked.time }} on the site{% if activity.time.picked.seconds %}: <span class="a">active {{ activity.time.picked.active }}</span>, <span class="i">only open {{ activity.time.picked.idle }}</span>{% if activity.time.picked.pct is not None %} ({{ activity.time.picked.pct }}% active){% endif %}{% else %} (not on the site that day){% endif %}</span>
+      {% endif %}
+    </div>
+    <div class="tp-chart"><div class="sub">The last 30 days <span class="tp-leg"><i style="background:#4ade80"></i>active <i style="background:#7c3aed;opacity:.45"></i>only open</span></div>{{ activity.time.chart|safe }}</div>
+    <script>
+      // (the change form is a form already: the day goes in the address, not a form of its own)
+      document.getElementById("tp-day").addEventListener("change", function () {
+        if (!this.value) return;
+        var u = new URL(location.href); u.searchParams.set("day", this.value); u.hash = "trader-time"; location.href = u.toString();
+      });
+    </script>
+  </section>
+
+  <section>
+    <h2>Features used</h2>
+    <div class="tp-pies">
+      <div class="tp-pie" data-name="features-used">
+        {% if activity.features.total %}{{ activity.features.svg|safe }}{% endif %}
+        <div>
+          <h3>{{ activity.features.kinds }} of {{ activity.features.of }} features used</h3>
+          <div class="sub">How often they used each one (once a minute at most){% if activity.features_since %}, counted since {{ activity.features_since|date:"d M Y" }}{% endif %}</div>
+          {% if activity.features.total %}
+          <ul class="tp-legend">{% for f in activity.features.legend %}
+            <li><span class="sw" style="background:{{ f.color }}"></span>{{ f.label }}<span class="n">{{ f.count }} · {{ f.pct }}%</span></li>{% endfor %}
+          </ul>
+          {% else %}<div class="tp-empty">No uses counted yet: they're counted from when this was added, while they're on the site.</div>{% endif %}
+        </div>
+      </div>
+      <div class="tp-pie" data-name="features-made">
+        {% if activity.made.total %}{{ activity.made.svg|safe }}{% endif %}
+        <div>
+          <h3>What they've made</h3>
+          <div class="sub">Saved on their account (all time)</div>
+          {% if activity.made.total %}
+          <ul class="tp-legend">{% for f in activity.made.legend %}
+            <li><span class="sw" style="background:{{ f.color }}"></span>{{ f.label }}<span class="n">{{ f.count }} · {{ f.pct }}%</span></li>{% endfor %}
+          </ul>
+          {% else %}<div class="tp-empty">Nothing saved yet.</div>{% endif %}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section data-name="trader-sessions">
+    <h2>Backtest sessions <small>{{ activity.sessions_total }}</small></h2>
+    {% if activity.sessions %}
+    <table>
+      <thead><tr><th>Name</th><th>Symbol</th><th>Timeframe</th><th>Status</th><th>Time spent</th><th>Trades</th><th>Balance</th><th>Now at (bar)</th><th>Last used</th></tr></thead>
+      <tbody>{% for s in activity.sessions %}
+        <tr><td><a href="{% url 'admin:core_replaysession_change' s.id %}">{{ s.name }}</a></td><td>{{ s.symbol }}</td><td>{{ s.interval }}</td><td>{{ s.status }}</td><td>{{ s.spent }}</td><td>{{ s.trades }}</td><td>{% if s.balance is not None %}{{ s.balance|floatformat:2 }}{% else %}—{% endif %}</td><td>{{ s.at }}</td><td>{{ s.updated }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="tp-empty">No backtest sessions.</div>{% endif %}
+  </section>
+
+  <section data-name="trader-replays">
+    <h2>Saved replays <small>{{ activity.replays_total }}</small></h2>
+    {% if activity.replays %}
+    <table>
+      <thead><tr><th>Symbol</th><th>Timeframe</th><th>Replay at (bar)</th><th>Saved at</th></tr></thead>
+      <tbody>{% for r in activity.replays %}
+        <tr><td><a href="{% url 'admin:core_savedreplay_change' r.id %}">{{ r.symbol }}</a></td><td>{{ r.interval }}</td><td>{{ r.at }}</td><td>{{ r.saved }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="tp-empty">No saved replays.</div>{% endif %}
+  </section>
+
+  <section data-name="trader-failed">
+    <h2>Failed requests <small>{{ activity.failed_total }}{% if activity.failed_total > 50 %} (the last 50){% endif %}</small>
+      {% if activity.failed_total %}<a style="font-weight:400;font-size:12px;margin-left:10px" href="{% url 'admin:core_failedrequest_changelist' %}?user__id__exact={{ original.pk }}">see all</a>{% endif %}</h2>
+    {% if activity.failed %}
+    <table>
+      <thead><tr><th>When</th><th>From</th><th>Request</th><th>Status</th><th>Why</th></tr></thead>
+      <tbody>{% for f in activity.failed %}
+        <tr><td><a href="{% url 'admin:core_failedrequest_change' f.id %}">{{ f.when }}</a></td><td>{{ f.source }}</td><td class="path">{{ f.method }} {{ f.path }}</td><td>{{ f.status }}</td><td>{{ f.reason }}{% if f.message %}: {{ f.message }}{% endif %}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="tp-empty">No failed requests.</div>{% endif %}
+  </section>
+
+</div>
+{% endif %}
+{% endblock %}

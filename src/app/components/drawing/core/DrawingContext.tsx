@@ -1,5 +1,6 @@
 "use client";
 
+import { trackFeature } from "@/app/lib/featureUse";
 import { registerVoiceCommands, registerToolPicker } from '@/app/lib/voice/registry';
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 
@@ -549,6 +550,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const addDrawing = (drawing: BaseDrawing) => {
+    trackFeature("drawing");
     const toolDefaults = defaultSettings[drawing.type] || {};
     const newDrawing = { 
       ...drawing, 

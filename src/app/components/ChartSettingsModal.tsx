@@ -8,6 +8,7 @@
 // (e.g. on another computer) and reloads with them; the imported settings also become a template. Canvas → Background image puts a photo behind the
 // candles.
 
+import { trackFeature } from "@/app/lib/featureUse";
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '@/context/AuthContext';
@@ -499,7 +500,7 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
   const imgInput = useRef<HTMLInputElement>(null);
   const [imgBusy, setImgBusy] = useState(false);
   const [imgError, setImgError] = useState<string | null>(null);
-  const pickImage = () => { setImgError(null); imgInput.current?.click(); };
+  const pickImage = () => { trackFeature("background_image"); setImgError(null); imgInput.current?.click(); };
   const onImageFile = async (file: File | undefined) => {
     if (!file) return;
     setImgBusy(true);
@@ -779,6 +780,7 @@ function SettingsFileButtons({ c, account, uid, onDialog }: { c: Colors; account
   const close = () => { if (!busy) { setPending(null); setError(null); } };
   const btn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 10px', borderRadius: 6, border: `1px solid ${c.border}`, background: 'transparent', color: c.text, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' };
   const download = async () => {
+    trackFeature("settings_file");
     await downloadSettings(account, uid);
     setSaved(true);
     setTimeout(() => setSaved(false), 1800);
@@ -790,6 +792,7 @@ function SettingsFileButtons({ c, account, uid, onDialog }: { c: Colors; account
     catch (e: any) { setError(e?.message || "Couldn't read that file"); }
   };
   const apply = async () => {
+    trackFeature("settings_file");
     if (!pending) return;
     setBusy(true);
     try { await applySettingsFile(pending, uid); }

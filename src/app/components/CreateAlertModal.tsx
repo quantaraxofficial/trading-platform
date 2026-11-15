@@ -5,6 +5,7 @@
 // (desktop notification, toast, webhook, sound with repeat). In Bar Replay it shows
 // "Oops. This is replay mode" instead.
 
+import { trackFeature } from "@/app/lib/featureUse";
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronRight, ChevronLeft, ChevronUp, X } from 'lucide-react';
@@ -96,6 +97,7 @@ function AlertDialog({ onClose, theme, symbol: chartSymbol = 'XAUUSD', initialPr
 
   const submit = () => {
     if (!valid) return;
+    trackFeature("alert");
     const data = { symbol, condition: operator, value: parseFloat(value), trigger, expiration, message: (message ?? autoMessage).trim() || autoMessage, notify };
     if (canShare && shared) collab.addSharedAlert({ symbol, condition: data.condition, value: data.value, trigger, expiration, message: data.message });
     else if (editing) updateAlert(editing.id, data); else addAlert(data);

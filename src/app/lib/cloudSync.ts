@@ -16,7 +16,7 @@ export const SYNCED_KEYS = [
   "tv:tradingSettings", "tv:indicatorTemplates", "tv:emaDefaults", "tv:favoriteIndicators", "tv:favoriteIntervals",
   "tv_favorite_tools", "tv:customColors", "tv:savedReplays", "tv:theme", "tv:chartTimezone", "tv:pineEditorSettings",
   "tv:alert-notify", "tv:indicators", "tv:chartBgImage", "tv:collabChatThemes",
-  "tv:widgetLayout", "tv:widgetLayoutTemplates", "tv:scriptTemplates",
+  "tv:widgetLayout", "tv:widgetLayoutTemplates", "tv:scriptTemplates", "tv:toursSeen",
 ];
 const SYNCED = new Set(SYNCED_KEYS);
 const META_KEY = "tv:syncMeta"; // key -> time of its last change here (ms)
@@ -150,8 +150,13 @@ export function setCloudSyncUser(nextUid: string | null) {
   if (nextUid === uid) return;
   uid = nextUid;
   dirty.clear();
-  if (uid) pullAndMerge();
+  if (uid) ready = pullAndMerge().then(() => undefined, () => undefined);
 }
+
+// Resolves once the signed-in account's copies have come down (or failed to): e.g. the guided tours
+// wait for it, so a tour seen on another device isn't shown again
+let ready: Promise<void> = Promise.resolve();
+export const cloudSyncReady = () => ready;
 
 // Another device may have changed something while this tab was in the background
 if (typeof window !== "undefined") {

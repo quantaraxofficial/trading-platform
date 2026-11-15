@@ -1,5 +1,6 @@
 "use client";
 
+import { trackFeature } from "@/app/lib/featureUse";
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from "react";
 import { LiveReplayFeed, liveReplaySupported, ticksFrom, type ReplayStep } from "../lib/replayLive";
 import { getChartInfo } from "../lib/chartBars";
@@ -286,6 +287,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
   const cancelSelectRef = useRef<() => void>(() => {});
 
   const startReplayAt = useCallback((index: number, data: CandleData[], series: any, chart: any, opts?: { continuing?: boolean }) => {
+    trackFeature("replay");
     stopInterval();
     seriesRef.current = series;
     chartRef.current = chart;

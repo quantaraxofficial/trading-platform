@@ -466,6 +466,21 @@ Posting signals out
     their own page (students added there), from Trader profiles (select some: "Add to a category…" /
     "Remove from a category…", a new category named there too) or on a trader's page; Trader profiles
     shows each one's categories as chips (a click lists that category) and filters by them
+  - A trader's page (Django admin → Trader profiles → a trader): their time on the site (today,
+    yesterday, this week / month / year, all time; active vs only open; the last 30 days as a chart;
+    "See a day" picks any date), their backtest sessions, saved replays and failed requests, and two
+    pies: the features they use (each feature's share; counted by the site, one use a minute at most,
+    sent with the presence ping) and what they've made (drawings, sessions, collabs, scripts…)
+  - Site analytics: "Features used", a pie of each feature's share of all uses in the period, and by
+    how many people
+  - Time on site: a Yesterday column, a date picker (that day as its own column and card, sortable),
+    and active time (they clicked, typed, scrolled, moved the mouse or used a feature in that minute)
+    vs only open, per trader, per period and per day
+  - Guided tours (src/app/lib/tours.ts): a spotlight on a feature with a card (Next / Back / Skip,
+    arrows, Escape closes), each shown once per person (the seen list follows their account), one per
+    visit: the chart's (collab, backtest sessions, background image, settings download / import) and
+    the home page's (the account menu: profile, analytics, backtesting analytics, a new menu entry).
+    The Help menu (right toolbar) starts any again. Every new feature gets a tour there
 
 ======================================================================
 16. VOICE ASSISTANT
@@ -598,6 +613,10 @@ Posting signals out
     Turkish, Arabic, Indonesian, Vietnamese, Thai, Chinese, Japanese, Korean): it hears in the
     language chosen, the AI answers in it (actions stay the same), a voice of that language reads
     it out, and yes / no are understood in it
+  - "Guide me through your website" / "show me around" (also an instant command): a guided tour of
+    everything TradePilot adds, page by page: the voice assistant, collab, backtest sessions, the
+    background image, settings download / import, then Analytics (performance, trade analysis and
+    journal, backtesting) and the profile (achievements)
 ======================================================================
 17. SITE PAGES: HOME, SIGN-IN, ABOUT, CONTACT, PROFILE
 ======================================================================
@@ -1012,7 +1031,7 @@ Posting signals out
 ======================================================================
 18. RUNNING IT (SETUP NOTES)
 ======================================================================
-  - Database: run "python manage.py migrate" (migrations up to 0049)
+  - Database: run "python manage.py migrate" (migrations up to 0054)
   - Live collab / chats: the backend runs under daphne (Django Channels)
   - Copy trading: run "python manage.py run_copier" on the copier server (MT5 installed)
   - Market data: TWELVEDATA_API_KEY (8 requests a minute on the free plan; the optimizer

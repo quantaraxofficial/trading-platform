@@ -267,6 +267,12 @@ def report(days=30, now=None):
         ["Broker accounts linked", BrokerAccount.objects.filter(created_at__gte=since).count()],
         ["Optimizer runs", OptimizerRun.objects.filter(created_at__gte=since).count()],
     ]
+    # how often each feature was used (counted by the site: core/feature_use.py), and by how many people
+    from .feature_use import totals as _feature_totals
+    from .models import FeatureUse
+    fu = FeatureUse.objects.filter(day__gte=first_day)
+    feature_use = [[label, n] for label, n, _ in _feature_totals(fu)]
+    feature_people = fu.values("profile_id").distinct().count()
     devices, browsers, systems = Counter(), Counter(), Counter()
     for ua in UserSession.objects.values_list("device_info", flat=True):
         k, b, o = _device(ua)
@@ -302,7 +308,7 @@ def report(days=30, now=None):
         "busiest": [{"day": DAYS[d], "hour": hr, "avg": v, "peak": heatmap_peak[d][hr]} for v, d, hr in busiest],
         "server_48h": server_48h, "daily": daily, "capacity_points": capacity_points,
         "time_hist": time_hist, "top_users": top_users, "cohorts": cohorts, "funnel": funnel,
-        "pages": pages, "symbols": symbols, "intervals": intervals, "features": features,
+        "pages": pages, "symbols": symbols, "intervals": intervals, "features": features, "feature_use": feature_use, "feature_people": feature_people,
         "devices": devices.most_common(), "browsers": browsers.most_common(6), "systems": systems.most_common(6),
         "tiers": tiers, "failing": failing,
     }

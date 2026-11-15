@@ -1,8 +1,9 @@
 "use client";
 
+import { TOURS, startTour } from "../lib/tours";
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Wallet, Bot, Keyboard, Mail, Info, Tag, BarChart3, Radio, Users } from "lucide-react";
+import { Wallet, Bot, Keyboard, Mail, Info, Tag, BarChart3, Radio, Users, Compass } from "lucide-react";
 import {
   TVPineIcon,
   TVWatchlistIcon,
@@ -110,6 +111,8 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
     { icon: <Keyboard {...i18} />, label: "Keyboard shortcuts", hint: "Ctrl + /", onClick: () => onOpenShortcuts?.() },
     { icon: <Mail {...i18} />, label: "Contact support", onClick: () => router.push("/contact") },
     { icon: <Info {...i18} />, label: "About TradePilot", onClick: () => router.push("/about") },
+    // the guided tours (lib/tours), to see one again
+    ...TOURS.filter(t => t.page === "chart").map(t => ({ icon: <Compass {...i18} />, label: `Tour: ${t.title}`, onClick: () => startTour(t.id) })),
   ];
 
   // The strip scrolls when the window is short, which would clip a tooltip beside it: the hovered
@@ -130,7 +133,7 @@ export default function RightSidebar({ activePanel, onPanelChange, onOpenPineEdi
       <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
         {panels.map(p => (
           <div key={p.id} className="tv-tooltip-container">
-            <button className={`tv-rt-btn ${isActive(p.id) ? "active" : ""}`} onClick={() => onPanelChange(p.id)} aria-label={p.tooltip} aria-pressed={isActive(p.id)} style={{ position: "relative" }}>
+            <button className={`tv-rt-btn ${isActive(p.id) ? "active" : ""}`} onClick={() => onPanelChange(p.id)} aria-label={p.tooltip} aria-pressed={isActive(p.id)} data-name={`right-toolbar-${p.id}`} style={{ position: "relative" }}>
               {p.icon}
               {p.id === "alerts" && unread > 0 && (
                 <span data-testid="alerts-badge" style={{ position: "absolute", top: 3, right: 3, minWidth: 16, height: 16, padding: "0 4px", boxSizing: "border-box", borderRadius: 8, background: "#f23645", color: "#fff", fontSize: 11, lineHeight: "16px", fontWeight: 600, pointerEvents: "none" }}>{unread > 99 ? "99+" : unread}</span>

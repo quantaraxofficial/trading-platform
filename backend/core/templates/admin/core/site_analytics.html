@@ -160,7 +160,8 @@
   <h2>What they use</h2>
   <div class="sa-grid">
     <div class="sa-card"><h3>Pages</h3><div class="sub">hours spent on each page</div><div id="c-pages"></div></div>
-    <div class="sa-card"><h3>Features used</h3><div class="sub">made or saved in the period</div><div id="c-features"></div></div>
+    <div class="sa-card" data-name="feature-use"><h3>Features used</h3><div class="sub" id="c-featureuse-sub">each feature's share of all uses in the period</div><div id="c-featureuse"></div><div id="c-featureuse-list" style="margin-top:8px"></div></div>
+    <div class="sa-card"><h3>Things made or saved</h3><div class="sub">in the period</div><div id="c-features"></div></div>
     <div class="sa-card"><h3>Symbols on their charts</h3><div class="sub">each person's current chart</div><div id="c-symbols"></div></div>
     <div class="sa-card"><h3>Timeframes</h3><div class="sub">each person's current chart</div><div id="c-intervals"></div></div>
     <div class="sa-card"><h3>Failing requests</h3><div class="sub">the endpoints that failed most</div><div id="c-failing"></div></div>
@@ -567,6 +568,12 @@
     $("c-topusers").innerHTML = r.top_users.length ? `<table class="sa-t"><thead><tr><th>Trader</th><th class="num">Hours</th><th class="num">Days</th></tr></thead><tbody>${r.top_users.map(u => `<tr><td>${esc(u[0])}</td><td class="num">${u[1]}</td><td class="num">${u[2]}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">No data yet for this period</div>`;
     hbar($("c-pages"), r.pages, { fmt: v => v + " h" });
     hbar($("c-features"), r.features, { color: C("--s3") });
+    {
+      const fu = r.feature_use || [], all = fu.reduce((a, x) => a + x[1], 0);
+      donut($("c-featureuse"), fu);
+      if (!fu.length) $("c-featureuse-list").innerHTML = ""; else hbar($("c-featureuse-list"), fu, { color: C("--s1"), fmt: v => `${fmtN(v)} · ${all ? (100 * v / all).toFixed(1) : 0}%` });
+      $("c-featureuse-sub").textContent = `each feature's share of all uses in the period${r.feature_people ? ` · by ${fmtN(r.feature_people)} ${r.feature_people === 1 ? "person" : "people"}` : ""}`;
+    }
     hbar($("c-symbols"), r.symbols, { color: C("--s4") });
     hbar($("c-intervals"), r.intervals, { color: C("--s5") });
     hbar($("c-failing"), r.failing, { color: C("--critical") });

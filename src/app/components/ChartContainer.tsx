@@ -2899,8 +2899,11 @@ export default function ChartContainer({
       setChartSettingsTab((e as CustomEvent).detail?.tab);
       setShowChartSettings(true);
     };
+    // (and closed: the guided tours open it for a step and close it after)
+    const onClose = () => setShowChartSettings(false);
     window.addEventListener('tv:open-chart-settings', onOpen);
-    return () => window.removeEventListener('tv:open-chart-settings', onOpen);
+    window.addEventListener('tv:close-chart-settings', onClose);
+    return () => { window.removeEventListener('tv:open-chart-settings', onOpen); window.removeEventListener('tv:close-chart-settings', onClose); };
   }, []);
 
   // "Draw horizontal line at …" from the price axis "+" menu: a horizontal level from the

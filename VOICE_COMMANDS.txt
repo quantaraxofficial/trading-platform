@@ -14,7 +14,8 @@ server at once, with no AI call. They work even when the AI is busy or down, and
 day's AI answers. Examples: "mark order blocks and FVGs", "show me fresh order blocks", "find
 setups", "clear the FVGs", "switch to 15 minutes", "daily", "open gold", "show me euro dollar on the
 15 minute chart", "add RSI", "remove the EMA", "switch to Heikin Ashi", "dark mode", "open the
-watchlist", "undo", "take a snapshot", "what's the price", "back to the chart". Anything more goes
+watchlist", "undo", "take a snapshot", "what's the price", "back to the chart", "guide me through your
+website". Anything more goes
 to the AI as before: a second instruction, a question, a date, other wording, or another language.
 
 
@@ -221,6 +222,11 @@ Knowledge:
 
 12. OTHER
 ---------
+- "Guide me through your website", "show me around", "give me a tour": a guided tour of everything
+  TradePilot adds, page by page. It points at each feature and says what it does: the voice
+  assistant, collab, backtest sessions, the background image, settings download / import, feedback,
+  then Analytics (performance, trade analysis and journal, backtesting) and your profile
+  (achievements). Next / Back to move, Escape to stop. Also in the Help menu (right toolbar).
 - "Send feedback: the alerts panel is slow" (can attach a chart screenshot).
 - "Stop listening".
 - Answers are spoken with subtitles as they're said. The speaker button switches to subtitles only.

@@ -251,6 +251,8 @@ def _one(t):
         (r"^(?:weak magnet|magnet weak)$", {"type": "command", "id": "magnet-weak"}),
         (r"^(?:strong magnet|magnet strong|(?:turn on|enable)(?: the)? magnet|magnet on)$", {"type": "command", "id": "magnet-strong"}),
         (r"^(?:back to the chart|back to the market|close the sketch|leave the sketch|exit the sketch)$", {"type": "sketch_exit"}),
+        (r"^(?:guide me|give me a tour|show me around|take me (?:on a tour|around)|walk me through|tour)"
+         r"(?: (?:through|of|around|on|to|in))?(?: (?:your|the|this))?(?: (?:website|web site|site|app|platform|features|tradepilot))?$", {"type": "site_tour"}),
     ]
     for pat, a in simple:
         if re.match(pat, t):

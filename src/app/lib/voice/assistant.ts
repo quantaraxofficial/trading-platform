@@ -14,6 +14,8 @@
 //               backtest session and clearing all the marks wait for a yes.
 // The state lives here, not in the panel: listening carries on while another panel is open.
 
+import { startTour } from "../tours";
+import { trackFeature } from "@/app/lib/featureUse";
 import { useSyncExternalStore } from "react";
 import { intervalByValue, type Intent, type Interval, type MarkKind, type Invitee, type BiasSpan } from "./commands";
 import { voiceCommand, voiceCommands, voiceContext, pickTool, voiceFunction, voiceFunctions, VoiceQuestion } from "./registry";
@@ -567,6 +569,10 @@ async function run(intent: Intent, reply?: string, quiet = false, confirmed = fa
     case "sketch_exit":
       say(leaveSketch());
       return;
+    case "site_tour":
+      say("Here's a tour of everything TradePilot adds. Press Next to go on, or Escape to stop.");
+      startTour("site-guide");
+      return;
     case "price_history": {
       // (looked up and worked out here, from the symbol's candles: said even after the AI's own words)
       set({ thinking: true });
@@ -860,6 +866,7 @@ function intentOf(a: any): Intent | null {
       return { kind: "sketch", spec };
     }
     case "sketch_exit": return { kind: "sketch_exit" };
+    case "site_tour": return { kind: "site_tour" };
     case "price_history": {
       const date = (v: any) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}( \d{1,2}:\d{2})?$/.test(v.trim()) ? v.trim() : undefined);
       const span = a.span && Number.isFinite(+a.span.value) && +a.span.value > 0 && ["minute", "hour", "day", "week", "month", "year"].includes(a.span.unit) ? { value: +a.span.value, unit: a.span.unit } : undefined;
@@ -940,6 +947,7 @@ async function askAI(text: string, alternatives: string[] = [], image = false) {
   // (the conversation so far, so it can follow up on its own questions)
   const history = state.messages.slice(0, -1).slice(-8).map(m => ({ from: m.from, text: m.text }));
   set({ thinking: true });
+  trackFeature("voice");
   try {
     const res = await backendFetch(`http://localhost:8000/api/users/voice/ask/${voiceUid}/`, {
       method: "POST", headers: { "Content-Type": "application/json" },

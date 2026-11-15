@@ -851,6 +851,9 @@ class SiteTime(models.Model):
     profile = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='site_time')
     day = models.DateField(db_index=True)
     seconds = models.PositiveIntegerField(default=0)
+    # of which they were using it (a click, a key, a scroll, the mouse moving, a feature used since the
+    # ping before); the rest it was only open in front of them
+    active_seconds = models.PositiveIntegerField(default=0)
 
     class Meta:
         unique_together = ('profile', 'day')
@@ -858,6 +861,24 @@ class SiteTime(models.Model):
 
     def __str__(self):
         return f"{self.profile.name}: {self.seconds // 60} min on {self.day}"
+
+
+class FeatureUse(models.Model):
+    """How often someone used a feature, per day (Indian time): the site counts one use per feature a
+    minute at most (src/app/lib/featureUse.ts) and sends them with the presence ping. Shown on a trader
+    profile's page (a pie) and in Site analytics (core/feature_use.py)"""
+    profile = models.ForeignKey(TraderProfile, on_delete=models.CASCADE, related_name='feature_uses')
+    feature = models.CharField(max_length=30)
+    day = models.DateField(db_index=True)
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ('profile', 'feature', 'day')
+        ordering = ['-day']
+        verbose_name = "feature use"
+
+    def __str__(self):
+        return f"{self.profile.name}: {self.feature} ×{self.count} on {self.day}"
 
 
 class TimeOnSite(SiteTime):

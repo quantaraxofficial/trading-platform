@@ -19,6 +19,7 @@ import LagReporter from "./components/LagReporter";
 import PresencePing from "./components/PresencePing";
 import SiteThemeVars from "./components/SiteThemeVars";
 import VoiceDock from "./components/VoiceDock";
+import FeatureTour from "./components/FeatureTour";
 
 export default function RootLayout({
   children,
@@ -38,6 +39,8 @@ export default function RootLayout({
           <VisitPing />
           <LagReporter />
           <SiteThemeVars />
+          {/* the guided tours of the site's features, each shown once (lib/tours) */}
+          <FeatureTour />
           <PaperTradingProvider>
             <AlertsProvider>
               <TelemetryProvider>

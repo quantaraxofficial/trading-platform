@@ -4,6 +4,7 @@
 // symbols; colour flags on symbols; column and symbol-display choices; which sections the
 // details panel shows; per-symbol notes; the watchlist/details split. Kept in localStorage.
 
+import { trackFeature } from "@/app/lib/featureUse";
 import { makeStore } from "../../trading/settings";
 
 export type FlagColor = "red" | "blue" | "green" | "orange" | "purple" | "cyan" | "pink";
@@ -110,12 +111,12 @@ export const wl = {
     return { lists: safe, activeId: s.activeId === id ? safe[0].id : s.activeId };
   }),
   clear: (id: string) => patchList(id, l => ({ ...l, items: [] })),
-  addSymbol: (symbol: string, listId?: string) => watchlists.set(s => {
+  addSymbol: (symbol: string, listId?: string) => { trackFeature("watchlist"); watchlists.set(s => {
     const id = listId ?? s.activeId;
     return {
       lists: s.lists.map(l => (l.id !== id || listSymbols(l).some(x => sameSymbol(x, symbol)) ? l : { ...l, items: [...l.items, { kind: "symbol", symbol }] })),
     };
-  }),
+  }); },
   removeSymbol: (symbol: string) => watchlists.set(s => ({
     lists: s.lists.map(l => (l.id !== s.activeId ? l : { ...l, items: l.items.filter(i => !(i.kind === "symbol" && sameSymbol(i.symbol, symbol))) })),
   })),

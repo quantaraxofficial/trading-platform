@@ -3,6 +3,7 @@
 // round-trip trades and execution marks. Pure TypeScript with a subscribe API so React (and
 // persistence) can sit on top; every mutation works on a cloned draft and commits atomically.
 
+import { trackFeature } from "@/app/lib/featureUse";
 import { simulatedQuote } from "@/app/utils/pricePrecision";
 import {
   AssetClass, assetClassOf, DEFAULT_LEVERAGE, defaultPrecisionOf, formatPrice, formatQty, qtyStepOf, roundToTick,
@@ -450,6 +451,7 @@ export class PaperTradingEngine {
   // ----- orders -----
 
   placeOrder(req: OrderRequest): OrderResult {
+    trackFeature("orders");
     return this.run(d => placeOrderIn(d, d.s.activeAccountId, req));
   }
 

@@ -28,11 +28,17 @@ def ping(request, uid):
     profile, denied = require_session(request, uid)
     if denied:
         return denied
-    where = str((request.data or {}).get("where") or "")[:40]
+    data = request.data if isinstance(request.data, dict) else {}
     now = timezone.now()
+    # the features used since the last ping (Django Admin: the trader's "Features used" pie)
+    from .feature_use import record
+    record(profile, data.get("features"), now)
+    if data.get("only_features"):
+        return Response({"ok": True})   # (the tab was hidden: not presence)
+    where = str(data.get("where") or "")[:40]
     # (.update: no other field's auto timestamps touched)
     TraderProfile.objects.filter(pk=profile.pk).update(last_seen=now, last_where=where)
-    count_time(profile, profile.last_seen, now)
+    count_time(profile, profile.last_seen, now, active=bool(data.get("active") or data.get("features")))
     # who's on the site, per 5 minutes (Django Admin → Site analytics)
     from .traffic import note_presence
     note_presence(profile, now, where)
@@ -44,7 +50,7 @@ def ping(request, uid):
 MAX_GAP = 150
 
 
-def count_time(profile, previous, now):
+def count_time(profile, previous, now, active=False):
     if not previous:
         return
     gap = (now - previous).total_seconds()
@@ -52,7 +58,9 @@ def count_time(profile, previous, now):
         return
     day = now.astimezone(IST).date()
     row, _ = SiteTime.objects.get_or_create(profile=profile, day=day)
-    SiteTime.objects.filter(pk=row.pk).update(seconds=F("seconds") + int(round(gap)))
+    add = int(round(gap))
+    # (active: they did something on the page since the ping before; otherwise it was only open)
+    SiteTime.objects.filter(pk=row.pk).update(seconds=F("seconds") + add, **({"active_seconds": F("active_seconds") + add} if active else {}))
 
 # ---- signed-out visitors (Django Admin → Site analytics: visitors and how many sign up)
 

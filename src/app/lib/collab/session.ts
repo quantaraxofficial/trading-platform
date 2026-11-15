@@ -6,6 +6,7 @@
 // the drawing layer, which listen to this session's chart events (onChart) and send their own
 // changes through it.
 
+import { trackFeature } from "@/app/lib/featureUse";
 import { useSyncExternalStore } from "react";
 import { sessionKey } from "@/lib/backend";
 
@@ -342,6 +343,7 @@ class CollabSession {
     switch (msg.type) {
       case "init": {
         this.retry = 0;
+        trackFeature("collab");
         this.set({
           status: "live", error: null, you: msg.you, room: msg.room, kind: msg.room?.kind || "chart", peers: msg.peers || [],
           messages: msg.messages || [], trades: msg.trades || {}, cursors: {}, replay: msg.replay || null,

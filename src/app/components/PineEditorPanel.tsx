@@ -14,6 +14,7 @@
 // file, for one-click push / pull.
 
 import { registerVoiceCommands } from "../lib/voice/registry";
+import { trackFeature } from "@/app/lib/featureUse";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
@@ -274,6 +275,7 @@ export default function PineEditorPanel({ theme, onClose, initialCode, initialSc
   // users keep them in this browser
   async function syncScriptToServer(partial: { id?: string; name?: string; script_type?: string; language?: ScriptLanguage; code?: string; versions?: { code: string; savedAt: number }[]; order?: number; github?: GitHubLink | null }) {
     if (!uid) return null;
+    trackFeature("pine");
     try {
       const res = await backendFetch(`http://localhost:8000/api/users/pinescripts/${uid}/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(partial) });
       return res.ok ? await res.json() : null;

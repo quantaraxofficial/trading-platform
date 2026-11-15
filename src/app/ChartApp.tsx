@@ -1,5 +1,6 @@
 "use client";
 
+import { trackFeature } from "@/app/lib/featureUse";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Info, Search, Clock3, RotateCcw, ListPlus, Download, Copy, Link2, Maximize, Bot, SunMoon, Globe, ArrowUpCircle, ArrowDownCircle, CloudUpload, Folder, Keyboard, MessageCircle } from "lucide-react";
@@ -109,6 +110,13 @@ function AppLayout() {
   const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [activeIndicators, setActiveIndicators] = useState<{id: string, name: string, visible?: boolean, inputs?: Record<string, any>, config?: Record<string, any>}[]>([]);
   const [isBotActive, setIsBotActive] = useState(false);
+  // (an indicator added: counted for Django Admin's "Features used"; not the ones a layout brings back on load)
+  const indicatorsSeen = useRef({ n: 0, since: Date.now() });
+  useEffect(() => {
+    const seen = indicatorsSeen.current;
+    if (activeIndicators.length > seen.n && Date.now() - seen.since > 5000) trackFeature("indicator");
+    seen.n = activeIndicators.length;
+  }, [activeIndicators.length]);
   // The order ticket docked in the right column (floating otherwise)
   const tradingUiState = useTradingUi();
   const ticketPrefsState = useTicketPrefs();
@@ -864,6 +872,7 @@ function AppLayout() {
   userRef.current = user;
   const saveLayoutRef = useRef<() => void>(() => {});
   saveLayoutRef.current = () => {
+    trackFeature("layout");
     layouts.save();
     // Signed out, the layout is still kept on this device: stay on the chart
     if (!user) { setHeaderToast("Chart layout saved"); return; }

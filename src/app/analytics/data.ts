@@ -3,6 +3,7 @@
 // broker_mt5.mt5_history) and strategy backtests saved from the Strategy Tester (backend
 // core/analytics.py). Also each trade's journal entry.
 
+import { trackFeature } from "@/app/lib/featureUse";
 import { BACKEND } from "../lib/collab/session";
 import { sessionKey } from "@/lib/backend";
 import type { EngineState } from "../trading/engine";
@@ -128,6 +129,6 @@ export function saveBacktest(uid: string, run: { name: string; script: string; l
 // ---- journal
 export const loadJournal = (uid: string, source: Source) =>
   api<{ entries: Journal[] }>(uid, "analytics/{uid}/journal/", { query: `&source=${source}` }).then(d => d.entries);
-export const saveJournal = (uid: string, j: Journal) => api<{ entry: Journal }>(uid, "analytics/{uid}/journal/", { method: "PUT", body: j }).then(d => d.entry);
+export const saveJournal = (uid: string, j: Journal) => { trackFeature("journal"); return api<{ entry: Journal }>(uid, "analytics/{uid}/journal/", { method: "PUT", body: j }).then(d => d.entry); };
 export const clearJournal = (uid: string, source: Source, key: string) =>
   api(uid, "analytics/{uid}/journal/", { method: "DELETE", query: `&source=${source}&trade_key=${encodeURIComponent(key)}` });

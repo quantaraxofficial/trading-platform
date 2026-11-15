@@ -32,12 +32,14 @@ function isVisibleCanvas(c: HTMLCanvasElement): boolean {
   return true;
 }
 
+import { trackFeature } from "@/app/lib/featureUse";
 import { tradingSettings } from '@/app/trading/settings';
 import { paneGeometry } from './priceScaleSide';
 import { chartSettings } from './chartSettings';
 import { chartBgImage, paintCanvasBackground } from './chartBackgroundImage';
 
 export async function captureChartSnapshot(meta: SnapshotMeta): Promise<Blob> {
+  trackFeature("snapshot");
   const root = findChartRoot();
   if (!root) throw new Error('Chart is not ready yet');
 

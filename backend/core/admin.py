@@ -110,6 +110,16 @@ class TraderProfileAdmin(TraderCategoriesMixin, admin.ModelAdmin):
             self.message_user(request, 'Active now: 0', messages.INFO)
         return super().changelist_view(request, extra_context)
 
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        # under the form: their backtest sessions, saved replays, failed requests, and what they use
+        # (pies), from core/feature_use.py (templates/admin/core/traderprofile/change_form.html)
+        from .feature_use import trader_activity
+        obj = self.get_object(request, object_id)
+        if obj is not None:
+            from .sitetime import parse_day
+            extra_context = {**(extra_context or {}), "activity": trader_activity(obj, _india, _duration, parse_day(request.GET.get("day")))}
+        return super().change_view(request, object_id, form_url, extra_context)
+
 @admin.register(BacktestSession)
 class BacktestSessionAdmin(admin.ModelAdmin):
     list_display = ('user', 'symbol', 'start_time', 'end_time', 'is_active')
@@ -526,7 +536,7 @@ class TimeOnSiteAdmin(admin.ModelAdmin):
         from django.template.response import TemplateResponse
         from . import sitetime
         ctx = {**self.admin_site.each_context(request), "title": "Time on site", "opts": self.model._meta,
-               **sitetime.report(request.GET.get("sort") or "today")}
+               **sitetime.report(request.GET.get("sort") or ("picked" if request.GET.get("day") else "today"), picked=sitetime.parse_day(request.GET.get("day")))}
         return TemplateResponse(request, "admin/core/time_on_site.html", ctx)
 
 

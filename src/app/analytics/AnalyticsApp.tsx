@@ -4,6 +4,7 @@
 // backtests — for any paper trading account or the linked MetaTrader 5 account. In TradePilot's
 // own look (the landing / login pages).
 
+import { trackFeature } from "@/app/lib/featureUse";
 import React, { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, BarChart3, FlaskConical, LineChart, LogIn, Plus, Radio, RefreshCw, TrendingUp, Trophy, Wallet } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -33,6 +34,7 @@ const ACCOUNT_KEY = "tv:analyticsAccount";
 const MT5_DAYS: Record<Period, number> = { today: 31, "7d": 31, "30d": 31, "3m": 92, "1y": 366, all: 3650 };
 
 export default function AnalyticsApp() {
+  useEffect(() => { trackFeature("analytics"); }, []);
   const { user, loading } = useAuth();
   const uid = user?.uid || null;
   const engineState = useEngineState();

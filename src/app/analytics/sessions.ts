@@ -3,6 +3,7 @@
 // positions, orders, trades), plus what you're testing and the time spent. The chart resumes one
 // exactly where it was left (components/BacktestSessionBar.tsx); Analytics lists and analyses them.
 
+import { trackFeature } from "@/app/lib/featureUse";
 import { BACKEND } from "../lib/collab/session";
 import { sessionKey } from "@/lib/backend";
 import type { Account, Book } from "../trading/engine";
@@ -122,7 +123,7 @@ export function spent(seconds: number) {
 // The session the chart is running now (the replay menu offers "Save as backtest session" only without one)
 let activeId: number | null = null;
 const activeSubs = new Set<() => void>();
-export function setActiveSession(id: number | null) { if (id !== activeId) { activeId = id; activeSubs.forEach(f => f()); } }
+export function setActiveSession(id: number | null) { if (id !== activeId) { activeId = id; if (id != null) trackFeature("backtest_session"); activeSubs.forEach(f => f()); } }
 export const getActiveSession = () => activeId;
 export function subscribeActiveSession(f: () => void) { activeSubs.add(f); return () => { activeSubs.delete(f); }; }
 

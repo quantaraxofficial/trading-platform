@@ -2,6 +2,7 @@
 // The chart's type (TradingView's chart style menu): what the symbol's bars are drawn as, and the
 // types starred as favorites (shown as their own buttons in the top bar). Values are
 // TradingView's own menu values.
+import { trackFeature } from "@/app/lib/featureUse";
 import { makeStore } from "../trading/settings";
 import { layoutStore, layouts } from "./layoutStore";
 
@@ -61,6 +62,7 @@ export const DRAWN_TYPES = new Set<ChartType>(["bar", "candle", "hollowCandle", 
 // type in its layout cell, as on TradingView, where changing the type changes the active chart only
 export const chartTypeStore = makeStore<{ type: ChartType; favorites: ChartType[] }>("tv:chartType", { type: "candle", favorites: [] });
 export function setChartType(type: ChartType) {
+  trackFeature("chart_type");
   chartTypeStore.set({ type });
   if (layoutStore.get().working) layouts.update(l => ({ cells: l.cells.map((c, i) => (i === l.active ? { ...c, chartType: type } : c)) }));
 }

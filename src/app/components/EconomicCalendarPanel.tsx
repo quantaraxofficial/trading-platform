@@ -14,6 +14,7 @@
 //     scrolls back to the next events when they're out of view.
 // Data: lib/economicCalendar (backend core/econ_calendar, Forex Factory's weekly feed).
 
+import { trackFeature } from "@/app/lib/featureUse";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CurrencyFlag } from "../trading/symbolLogos";
@@ -121,6 +122,7 @@ type DayBlock = { start: number; end: number; rows: Row[] };
 type MenuName = "categories" | "settings" | "week" | "countries" | "timezone";
 
 export default function EconomicCalendarPanel({ theme, onClose }: { theme: "light" | "dark"; onClose: () => void }) {
+  useEffect(() => { trackFeature("calendar"); }, []);
   const dark = theme === "dark";
   const p = palette(dark);
   const dock = calendarDock.useValue();

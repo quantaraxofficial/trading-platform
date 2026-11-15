@@ -61,3 +61,18 @@ class FastAnswerTests(SimpleTestCase):
     def test_a_site_command_the_page_doesnt_have_goes_to_the_ai(self):
         self.assertIsNone(_fast_answer(self.req("undo", commands=[]), "undo"))
         self.assertEqual(_fast_answer(self.req("undo", commands=["drawings-undo"]), "undo")["actions"][0]["id"], "drawings-undo")
+
+
+class SiteTourTests(SimpleTestCase):
+    """ "guide me through your website": the site's own guided tour of every feature it adds"""
+    def test_said_plainly(self):
+        for t in ["guide me through your website", "Guide me to your website.", "show me around", "give me a tour of the site",
+                  "can you guide me through the site", "walk me through the features"]:
+            self.assertEqual(fast_actions(t), [{"type": "site_tour"}], t)
+        self.assertIsNone(fast_actions("guide me through the order blocks on gold"))
+
+    def test_from_the_ai(self):
+        from .voice import ACTION_TYPES, SYSTEM_PROMPT, clean_action
+        self.assertIn("site_tour", ACTION_TYPES)
+        self.assertIn("site_tour", SYSTEM_PROMPT)
+        self.assertEqual(clean_action({"type": "site_tour"}, [], []), {"type": "site_tour"})
