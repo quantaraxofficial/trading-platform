@@ -1715,7 +1715,9 @@ export default function ChartContainer({
   // every re-run triggered from the settings modal, the date-range picker or
   // the capital picker, since those are silent state changes that otherwise
   // give no feedback that the report actually recomputed.
-  const [reportToast, setReportToast] = useState<"updating" | "success" | null>(null);
+  const [reportToast, setReportToast] = useState<"updating" | "success" | "failed" | null>(null);
+  // Each backtest run's number: only the newest may show its result (see runBacktest)
+  const backtestSeqRef = useRef(0);
   const reportToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The Pine editor script's output on the chart (series, pane, levels, fills, drawings)
@@ -1869,6 +1871,10 @@ export default function ChartContainer({
     const last = lastPineRunRef.current;
     if (!last) return;
     if (fullDataRef.current.length === 0) return;
+    // (a newer run, e.g. after the chart switched to another symbol, makes this one's result stale)
+    const seq = ++backtestSeqRef.current;
+    const runFor = `${last.symbol}|${last.pineTf}`;
+    const stale = () => seq !== backtestSeqRef.current || `${lastPineRunRef.current?.symbol}|${lastPineRunRef.current?.pineTf}` !== runFor || symbolRef.current !== last.symbol;
     if (!silent) {
       if (reportToastTimerRef.current) { clearTimeout(reportToastTimerRef.current); reportToastTimerRef.current = null; }
       setReportToast("updating");
@@ -1880,6 +1886,7 @@ export default function ChartContainer({
     if (overrides) setInputOverrides(overrides);
     try {
       const all = await ensureHistoryForRange(range);
+      if (stale()) return;
       if (all.length === 0) { setReportToast(null); return; }
       // TradingView's real "Testing period" keeps calculating the strategy
       // across the FULL loaded chart history and only restricts which bars
@@ -1907,17 +1914,28 @@ export default function ChartContainer({
         backtestTo,
       };
       const result = last.compiled ? await runCompiledPineAsync(last.compiled, all, runOpts) : await runScriptAsync(last.language, last.code, all, runOpts);
+      if (stale()) return;
       if (result.errors.length === 0) {
         applyPineResult(result, last.scriptName);
         if (!silent) {
           setReportToast("success");
           reportToastTimerRef.current = setTimeout(() => setReportToast(null), 2200);
         }
-      } else if (!silent) {
-        setReportToast(null);
+      } else {
+        // (never the previous symbol's report under this one: cleared, and said)
+        setStrategyReport(null);
+        if (!silent) {
+          setReportToast("failed");
+          reportToastTimerRef.current = setTimeout(() => setReportToast(null), 3500);
+        }
+      }
+    } catch {
+      if (!stale()) {
+        setStrategyReport(null);
+        if (!silent) { setReportToast("failed"); reportToastTimerRef.current = setTimeout(() => setReportToast(null), 3500); }
       }
     } finally {
-      if (!silent) setBacktestBusy(false);
+      if (!silent && seq === backtestSeqRef.current) setBacktestBusy(false);
     }
   }
   // The latest re-run and its inputs, for the live-price handler (registered once per mode)
@@ -4833,7 +4851,12 @@ export default function ChartContainer({
               animation: reportToast === "success" ? "chartToastSuccess 2.2s ease forwards" : "chartToastIn 0.2s ease forwards",
             }}
           >
-            {reportToast === "updating" ? (
+            {reportToast === "failed" ? (
+              <>
+                <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "16px", height: "16px", borderRadius: "50%", background: "#f23645", flexShrink: 0, fontSize: "11px", fontWeight: 700 }}>!</span>
+                The strategy couldn&apos;t calculate on {displaySymbol(symbol)}
+              </>
+            ) : reportToast === "updating" ? (
               <>
                 <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
                   {[0, 1, 2].map((i) => (
