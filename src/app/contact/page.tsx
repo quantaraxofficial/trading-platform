@@ -4,7 +4,7 @@ import SiteNav from '../components/external/SiteNav';
 import SiteFooter from '../components/external/SiteFooter';
 import React, { useState } from 'react';
 import { BACKEND_URL, backendFetch } from '@/lib/backend';
-import { Zap, Mail, MessageSquare, MapPin } from 'lucide-react';
+import { Zap, MessageSquare, MapPin } from 'lucide-react';
 import { ComingSoonLine } from '../components/external/ComingSoon';
 import Link from 'next/link';
 
@@ -40,16 +40,6 @@ export default function ContactPage() {
         
         {/* Contact Info */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-            <div style={{ padding: '12px', backgroundColor: 'rgba(139, 92, 246, 0.1)', borderRadius: '12px', color: '#a78bfa' }}>
-              <Mail size={24} />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '4px' }}>Email Support</h3>
-              <p style={{ color: '#94a3b8', marginBottom: '8px' }}>Send us an email anytime.</p>
-              <a href="mailto:support@tradepilot.com" style={{ color: '#a78bfa', textDecoration: 'none', fontWeight: 500 }}>support@tradepilot.com</a>
-            </div>
-          </div>
           
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
             <div style={{ padding: '12px', backgroundColor: 'rgba(99, 102, 241, 0.1)', borderRadius: '12px', color: '#818cf8' }}>

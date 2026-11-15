@@ -647,6 +647,10 @@ Posting signals out
 
   - A full footer on the site pages (home, About, Contact, Profile): the brand, every page in
     columns (product, community, your account, company), copyright, "not financial advice", back to top
+  - Terms of Service (/terms) and Privacy Policy (/privacy): what the site collects and why, who it's
+    shared with, your choices; not financial advice, accounts, subscriptions, simulated vs real trading
+    (connected accounts, copy trading), acceptable use. Linked in the footer. The Contact page no longer
+    shows a placeholder support email
 ======================================================================
 17b. ECONOMIC CALENDAR
 ======================================================================

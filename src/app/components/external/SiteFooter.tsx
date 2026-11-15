@@ -48,6 +48,8 @@ export default function SiteFooter() {
         { href: '/', label: 'Home' },
         { href: '/about', label: 'About us' },
         { href: '/contact', label: 'Contact us' },
+        { href: '/terms', label: 'Terms of Service' },
+        { href: '/privacy', label: 'Privacy Policy' },
       ],
     },
   ];
@@ -81,7 +83,7 @@ export default function SiteFooter() {
       </div>
       <div className="border-t border-purple-900/50">
         <div className="mx-auto max-w-6xl px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-purple-300/70">
-          <span>© {new Date().getFullYear()} TradePilot. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} TradePilot. All rights reserved. · <a href="/terms" className="hover:text-white">Terms</a> · <a href="/privacy" className="hover:text-white">Privacy</a></span>
           <span className="text-center">Charts and analysis are for information, not financial advice. Trading involves risk.</span>
           <button type="button" onClick={toTop} className="inline-flex items-center gap-1 hover:text-white transition-colors" data-name="footer-top">
             <ArrowUp className="w-3.5 h-3.5" />Back to top
