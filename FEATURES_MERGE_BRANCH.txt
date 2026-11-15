@@ -905,6 +905,17 @@ Posting signals out
     - Participation (the crowd behind it): volume against the usual, growing or fading, the share on
       rising vs falling candles (buyers or sellers in control), the heaviest bursts.
     - Times are the trader's own: the browser's time zone and clock are sent to the AI.
+  - Instant voice commands (backend/core/voice_fast.py): everyday commands said plainly in English
+    are understood on the server at once, before any AI call: marks (with "fresh" / "tapped"),
+    setups, clearing marks, timeframes, opening a symbol (with its timeframe), adding / removing
+    indicators, chart types, dark / light mode, panels, the Pine Editor, undo / redo, the drawings'
+    lock / hide / magnet, snapshot, reset view, price, stop, back from the sketch board.
+    - Faster for users, no rate limits, works when the AI is down; not counted against the day's
+      AI answers.
+    - Only a whole-sentence match counts. Anything more goes to the AI as before: a second
+      instruction, a question, a date, other wording, another language, or an answer to the
+      assistant's own question.
+    - The same safety check as the AI's actions (clean_action).
   - Sketch board, to explain with: made-up candles on a blank chart (symbol SKETCH), by voice.
     - Candles as said: green / red, tiny … huge, wicks.
     - A trend with one colour bigger ("20 candles in an uptrend, the green ones bigger").

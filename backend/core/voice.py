@@ -24,6 +24,7 @@ from rest_framework.response import Response
 
 from .auth import require_session
 from .models import VoiceRequest
+from .voice_fast import fast_actions
 
 TIMEOUT = 20
 MAX_TEXT = 500
@@ -428,6 +429,26 @@ def _clean_history(history):
     return out
 
 
+def _fast_answer(request, text):
+    ctx = request.data.get("context") if isinstance(request.data.get("context"), dict) else {}
+    language = str(ctx.get("language") or "English").strip()
+    if language != "English":
+        return None
+    history = _clean_history(request.data.get("history"))
+    if history and history[-1]["role"] == "assistant" and history[-1]["content"].rstrip().endswith("?"):
+        return None
+    found = fast_actions(text)
+    if not found:
+        return None
+    commands = [c for c in (ctx.get("commands") if isinstance(ctx.get("commands"), list) else []) if isinstance(c, str) and COMMAND_ID.match(c)][:200]
+    signatures = [sig.strip()[:300] for sig in (ctx.get("functions") if isinstance(ctx.get("functions"), list) else []) if isinstance(sig, str) and FN_NAME.match(_fn_name(sig))][:40]
+    actions = [x for x in (clean_action(a, commands, [_fn_name(sig) for sig in signatures]) for a in found) if x]
+    # (all of it understood, or the AI does it)
+    if len(actions) != len(found):
+        return None
+    return {"reply": "", "actions": actions, "action": actions[0], "question": False, "provider": "fast"}
+
+
 @api_view(["POST"])
 def ask(request, uid):
     profile, denied = require_session(request, uid)
@@ -436,6 +457,14 @@ def ask(request, uid):
     text = str(request.data.get("text") or "").strip()[:MAX_TEXT]
     if not text:
         return Response({"error": "text is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # The fast path: an everyday command ("mark order blocks", "switch to 15 minutes", "add RSI")
+    # understood here at once, no AI call (and not counted against the day's AI answers). Only in
+    # English, and not when the assistant has just asked something (the words answer that).
+    fast = _fast_answer(request, text)
+    if fast is not None:
+        return Response(fast)
+
     providers = _providers()
     if not providers:
         return Response({"error": "not_configured"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)

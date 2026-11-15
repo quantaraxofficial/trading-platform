@@ -9,6 +9,14 @@ order blocks and add RSI"). Big actions ask "yes or no" first. If something need
 asks. Anything about trading it can't do yet is noted for the team (Django Admin: voice requests).
 This file is kept up to date: every new voice feature is added here.
 
+Instant commands: everyday commands said plainly in English are understood on the site's own
+server at once, with no AI call. They work even when the AI is busy or down, and don't use up the
+day's AI answers. Examples: "mark order blocks and FVGs", "show me fresh order blocks", "find
+setups", "clear the FVGs", "switch to 15 minutes", "daily", "open gold", "show me euro dollar on the
+15 minute chart", "add RSI", "remove the EMA", "switch to Heikin Ashi", "dark mode", "open the
+watchlist", "undo", "take a snapshot", "what's the price", "back to the chart". Anything more goes
+to the AI as before: a second instruction, a question, a date, other wording, or another language.
+
 
 1. CHART
 --------
