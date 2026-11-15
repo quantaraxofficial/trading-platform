@@ -1,8 +1,9 @@
 TRADEPILOT VOICE ASSISTANT: EVERYTHING YOU CAN SAY
 ==================================================
 
-Open it with the microphone button in the right toolbar. Speak or type; any of the 27 languages in
-its Language box works. The AI understands what you mean, so these are examples, not exact
+Open it with the microphone button in the right toolbar, then tap the orb to start (or stop)
+listening: it grows and ripples as you speak, pulses as it answers, spins while it thinks. Speak or
+type; any of the 27 languages in its language box works. The AI understands what you mean, so these are examples, not exact
 wordings. It does up to 8 things from one sentence, in order ("switch to euro hourly, mark the
 order blocks and add RSI"). Big actions ask "yes or no" first. If something needed is missing, it
 asks. Anything about trading it can't do yet is noted for the team (Django Admin: voice requests).

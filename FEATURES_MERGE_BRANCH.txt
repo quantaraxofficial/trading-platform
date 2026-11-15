@@ -896,6 +896,18 @@ Posting signals out
     from the sides. Text drawings are left out (words can't be read from a picture). Tested on
     TradingView Desktop's own drawings: placed within a few points of TradingView's own values.
   - VOICE_COMMANDS.txt lists everything that can be said to the voice assistant, kept up to date
+  - The voice panel redesigned:
+    - A 3D orb in the site's purples hangs above the chat, floating, with a soft shadow beneath.
+      Tap it to start / stop listening (no mic button any more).
+    - It grows and ripples with your voice (the microphone's level), pulses with each word the
+      assistant says, and spins faster while it thinks.
+    - It's big while the chat is empty, smaller once you're talking. A live caption of what's heard
+      shows under it.
+    - Softer rounded bubbles, each answer with a small orb mark.
+    - One rounded input with the picture and round send buttons; the language as a small pill in
+      the header.
+    - Light on the PC: drawn on a 2D canvas at 30 frames a second at rest. It stops when the panel
+      closes or the tab is hidden, and the microphone is released as soon as listening stops.
 
 ======================================================================
 17c. CONNECTED ACCOUNTS, PROP-FIRM RULES, LEADERBOARD
