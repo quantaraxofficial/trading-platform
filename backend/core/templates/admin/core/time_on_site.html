@@ -37,7 +37,7 @@
   <div class="tp-cards">
     {% for c in cards %}
     <div class="tp-card{% if c.key == 'picked' %} tos-picked{% endif %}"><div class="tp-card-k">{{ c.label }}</div><div class="tp-card-v">{{ c.time }}</div><div class="tp-card-n">{{ c.people }} trader{{ c.people|pluralize }}</div>
-      {% if c.seconds %}<div class="tos-card-split"><span class="tos-act"><span class="a">active {{ c.active }}</span> · <span class="i">only open {{ c.idle }}</span></span></div>
+      {% if c.active_seconds %}<div class="tos-card-split"><span class="tos-act"><span class="a">active {{ c.active }}</span> · <span class="i">only open {{ c.idle }}</span></span></div>
       <div class="tos-meter" title="{{ c.pct }}% active"><span style="width:{{ c.pct }}%"></span></div>{% endif %}
     </div>
     {% endfor %}
@@ -52,12 +52,12 @@
     <tbody>
     {% for r in rows %}
       <tr><td><a href="{% url 'admin:core_traderprofile_change' r.profile_id %}">{{ r.profile__name }}</a><div class="tp-muted tp-small">{{ r.profile__email }}</div></td>
-        {% for cell in r.cells %}<td class="tp-num{% if cell.key == 'picked' %} tos-picked{% endif %}">{{ cell.time }}{% if cell.seconds %}<div class="tos-act" title="{{ cell.pct }}% of it active"><span class="a">{{ cell.active }}</span> / <span class="i">{{ cell.idle }}</span></div>{% endif %}</td>{% endfor %}
+        {% for cell in r.cells %}<td class="tp-num{% if cell.key == 'picked' %} tos-picked{% endif %}">{{ cell.time }}{% if cell.active_seconds %}<div class="tos-act" title="only open {{ cell.idle }}"><span class="a">active {{ cell.active }}</span> <span class="i">({{ cell.pct }}%)</span></div>{% endif %}</td>{% endfor %}
         <td class="tp-num">{{ r.avg }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
-  <p class="tp-muted tp-small">Under each time: <span class="tos-act"><span class="a">active</span> / <span class="i">only open</span></span>.</p>
+  <p class="tp-muted tp-small">Under a time: how much of it was <span class="tos-act"><span class="a">active</span></span> (the rest the site was only open); shown once active time has been counted.</p>
   {% else %}<p>Nobody yet: time is counted from now on, as people use the site.</p>{% endif %}
 
   <h2 style="margin-top:28px">The last 30 days <span class="tos-legend"><span><i style="background:#4ade80"></i>active</span><span><i class="tp-bar" style="display:inline-block;height:10px;width:10px;opacity:.45"></i>only open</span></span></h2>
@@ -66,7 +66,7 @@
     <tbody>
     {% for d in days reversed %}
       <tr><td><a href="?day={{ d.day|date:'Y-m-d' }}">{{ d.day|date:"D j M" }}</a></td><td class="tp-num">{{ d.people }}</td><td class="tp-num">{{ d.time }}</td>
-        <td class="tp-num">{% if d.seconds %}{{ d.active }}{% if d.pct is not None %} <span class="tp-muted tp-small">({{ d.pct }}%)</span>{% endif %}{% else %}—{% endif %}</td><td class="tp-num">{% if d.seconds %}{{ d.idle }}{% else %}—{% endif %}</td>
+        <td class="tp-num">{% if d.active_seconds %}{{ d.active }} <span class="tp-muted tp-small">({{ d.pct }}%)</span>{% else %}—{% endif %}</td><td class="tp-num">{% if d.active_seconds %}{{ d.idle }}{% else %}—{% endif %}</td>
         <td>{% if d.bar %}<div class="tos-bars"><div class="tp-bar" style="width:{{ d.bar }}%"></div>{% if d.bar_active %}<div class="tos-active" style="width:{{ d.bar_active }}%"></div>{% endif %}</div>{% endif %}</td></tr>
     {% endfor %}
     </tbody>

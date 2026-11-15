@@ -189,7 +189,7 @@ def trader_time(profile, picked=None, now=None):
         o = sum(r.seconds for d, r in rows.items() if days(d))
         a = sum(min(r.active_seconds, r.seconds) for d, r in rows.items() if days(d))
         return {"label": label, "time": duration(o), "active": duration(a), "idle": duration(o - a),
-                "pct": round(100 * a / o) if o else None, "seconds": o}
+                "pct": round(100 * a / o) if o else None, "seconds": o, "active_seconds": a}
 
     week, month, year = today - timedelta(days=today.weekday()), today.replace(day=1), today.replace(month=1, day=1)
     cards = [cell("Today", lambda d: d == today), cell("Yesterday", lambda d: d == yesterday), cell("This week", lambda d: d >= week),

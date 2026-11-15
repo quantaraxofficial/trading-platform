@@ -27,7 +27,7 @@ def _cell(open_s, active_s):
     """A period's time: open, and how much of it they were using the site (active) vs only had it open"""
     open_s, active_s = int(open_s or 0), min(int(active_s or 0), int(open_s or 0))
     return {"time": duration(open_s), "active": duration(active_s), "idle": duration(open_s - active_s),
-            "pct": round(100 * active_s / open_s) if open_s else None, "seconds": open_s}
+            "pct": round(100 * active_s / open_s) if open_s else None, "seconds": open_s, "active_seconds": active_s}
 
 
 def parse_day(text):

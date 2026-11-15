@@ -84,3 +84,18 @@ class ActiveTimeTests(TestCase):
         # picking yesterday: its own column, not a second one
         r = sitetime.report(picked=today - timedelta(days=1), sort="picked")
         self.assertEqual((r["sort"], r["picked"]), ("yesterday", None))
+
+
+class TimeShownOnceTests(TestCase):
+    """Time from before active time was counted: just the time, no "— / 59 min" beside it"""
+    def test_no_split_without_active_time(self):
+        p = TraderProfile.objects.create(uid="o1", name="Old", email="o1@test.invalid")
+        today = timezone.now().astimezone(presence.IST).date()
+        SiteTime.objects.create(profile=p, day=today - timedelta(days=1), seconds=3540)
+        self.client.force_login(User.objects.create_superuser("adm4", "adm4@test.invalid", "pw"))
+        html = self.client.get("/admin/core/timeonsite/").content.decode()
+        self.assertIn("59 min", html)
+        self.assertNotIn("only open 59 min", html)
+        self.assertNotIn('<span class="a">active —</span>', html)
+        page = self.client.get(f"/admin/core/traderprofile/{p.pk}/change/").content.decode()
+        self.assertNotIn("only open 59 min", page)

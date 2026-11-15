@@ -43,7 +43,7 @@
     <div class="tp-times">
       {% for c in activity.time.cards %}
       <div class="tp-time"><div class="k">{{ c.label }}</div><div class="v">{{ c.time }}</div>
-        {% if c.seconds %}<div class="s"><span class="a">active {{ c.active }}</span> · <span class="i">only open {{ c.idle }}</span></div>
+        {% if c.active_seconds %}<div class="s"><span class="a">active {{ c.active }}</span> · <span class="i">only open {{ c.idle }}</span></div>
         <div class="tp-meter" title="{{ c.pct }}% active"><span style="width:{{ c.pct }}%"></span></div>{% endif %}</div>
       {% endfor %}
     </div>
@@ -51,7 +51,7 @@
       <label for="tp-day"><b>See a day:</b></label>
       <input type="date" id="tp-day" data-name="trader-time-day" value="{% if activity.time.picked %}{{ activity.time.picked.day|date:'Y-m-d' }}{% endif %}" max="{{ activity.time.today|date:'Y-m-d' }}">
       {% if activity.time.picked %}
-      <span class="tp-picked" data-name="trader-time-picked"><b>{{ activity.time.picked.label }}:</b> {{ activity.time.picked.time }} on the site{% if activity.time.picked.seconds %}: <span class="a">active {{ activity.time.picked.active }}</span>, <span class="i">only open {{ activity.time.picked.idle }}</span>{% if activity.time.picked.pct is not None %} ({{ activity.time.picked.pct }}% active){% endif %}{% else %} (not on the site that day){% endif %}</span>
+      <span class="tp-picked" data-name="trader-time-picked"><b>{{ activity.time.picked.label }}:</b> {{ activity.time.picked.time }} on the site{% if activity.time.picked.active_seconds %}: <span class="a">active {{ activity.time.picked.active }}</span>, <span class="i">only open {{ activity.time.picked.idle }}</span> ({{ activity.time.picked.pct }}% active){% elif not activity.time.picked.seconds %} (not on the site that day){% endif %}</span>
       {% endif %}
     </div>
     <div class="tp-chart"><div class="sub">The last 30 days <span class="tp-leg"><i style="background:#4ade80"></i>active <i style="background:#7c3aed;opacity:.45"></i>only open</span></div>{{ activity.time.chart|safe }}</div>
