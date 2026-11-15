@@ -60,7 +60,7 @@ export default function SiteNav({ active }: { active?: Active }) {
             </a>
 
             {/* wide: the links in a row */}
-            <div className="hidden lg:flex items-center space-x-7">
+            <div className="hidden lg:flex items-center space-x-7 whitespace-nowrap">
               <a href="/#features" onClick={toSection("features")} className={link("")}>Features</a>
               <a href="/#coming-soon" onClick={toSection("coming-soon")} className={link("")}>Coming soon</a>
               <a href="/leaderboard" className={link("/leaderboard")}>Leaderboard</a>
