@@ -85,3 +85,19 @@ class ImageThemeActionTests(SimpleTestCase):
 
     def test_drawings_part(self):
         self.assertEqual(clean_action({"type": "theme_from_image", "parts": ["drawings"]}), {"type": "theme_from_image", "parts": ["drawings"]})
+
+
+class PriceHistoryActionTests(SimpleTestCase):
+    """What a symbol did: a moment or a period, dates checked"""
+
+    def test_moment_and_period(self):
+        a = clean_action({"type": "price_history", "symbol": "XAU/USD", "at": "2024-03-05 10:30"})
+        self.assertEqual(a["at"], "2024-03-05 10:30")
+        b = clean_action({"type": "price_history", "from": "2024-03-01", "to": "2024-03-10"})
+        self.assertEqual((b["from"], b["to"]), ("2024-03-01", "2024-03-10"))
+        c = clean_action({"type": "price_history", "span": {"value": 3, "unit": "months"}})
+        self.assertEqual(c["span"], {"value": 3, "unit": "month"})
+
+    def test_bad_dates_dropped_and_nothing_to_look_at_is_nothing(self):
+        self.assertIsNone(clean_action({"type": "price_history", "at": "yesterday"}))
+        self.assertIsNone(clean_action({"type": "price_history", "span": {"value": 3, "unit": "eons"}}))

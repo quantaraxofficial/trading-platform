@@ -896,6 +896,15 @@ Posting signals out
     from the sides. Text drawings are left out (words can't be read from a picture). Tested on
     TradingView Desktop's own drawings: placed within a few points of TradingView's own values.
   - VOICE_COMMANDS.txt lists everything that can be said to the voice assistant, kept up to date
+  - What a market did, by voice, any symbol, worked out from its own candles:
+    - "What was gold at 10:30 on 5 March": the price then (that candle's OHLC) and the day's range;
+      if the market was closed, the last price before.
+    - "How did EUR/USD move last week", "what did Apple do in October": the change; the high and low
+      with their times; the path in legs ("a brief rise, then a much bigger fall"); the biggest
+      candles; volatility against the period before.
+    - Participation (the crowd behind it): volume against the usual, growing or fading, the share on
+      rising vs falling candles (buyers or sellers in control), the heaviest bursts.
+    - Times are the trader's own: the browser's time zone and clock are sent to the AI.
   - The voice panel redesigned:
     - A 3D orb in the site's purples hangs just above the input, floating, with a soft shadow beneath.
       Tap it to start / stop listening (no mic button any more).

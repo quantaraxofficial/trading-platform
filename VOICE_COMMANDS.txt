@@ -27,6 +27,22 @@ This file is kept up to date: every new voice feature is added here.
 - Settings: "open chart settings" (each tab).
 
 
+1b. WHAT A MARKET DID (ANY SYMBOL)
+---------------------------------
+Looked up in the symbol's own candles. Times are your own (your computer's time zone).
+- A moment: "what was gold at 10:30 on 5 March". You get the price then, that candle's open / high /
+  low / close, and the day's range. If the market was closed, the last price before.
+- A period: "how did EUR/USD move last week", "what did Apple do in October", "gold over the last 3
+  months", "Bitcoin from 1 to 10 March". You get:
+  - the change, and the high and low with their times;
+  - the path: its legs, e.g. "a brief rise, then a much bigger fall: up 2.03% to 10 Nov, then down
+    7.13%";
+  - the biggest single candles, and volatility against the period before;
+  - participation (the crowd behind it): volume against the usual, growing or fading, how much of it
+    came on rising vs falling candles (buyers or sellers in control), and its heaviest bursts. Gold's
+    is our feed's tick volume; stocks have real volume; if a feed has no volume, it says so.
+
+
 2. COPY A CHART FROM A PICTURE
 ------------------------------
 Send a screenshot (the picture button by the text box, paste it, or drop it on the panel), then:

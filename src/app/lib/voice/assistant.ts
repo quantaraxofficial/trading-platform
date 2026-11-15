@@ -30,6 +30,7 @@ import { backendFetch } from "@/lib/backend";
 import { tradingUi } from "../../trading/store";
 import { displaySymbol } from "../symbolDisplay";
 import { biasOnChart } from "./bias";
+import { priceHistory } from "./priceHistory";
 import { applyImageTheme, THEME_PARTS, type ThemePart } from "./imageTheme";
 
 export type VoiceMessage = {
@@ -554,6 +555,14 @@ async function run(intent: Intent, reply?: string, quiet = false, confirmed = fa
       if (!quiet) say(result.trim());
       return;
     }
+    case "price_history": {
+      // (looked up and worked out here, from the symbol's candles: said even after the AI's own words)
+      set({ thinking: true });
+      const text = await priceHistory(intent, displaySymbol).catch(() => "I couldn't get the candles just now. Try again in a moment.");
+      set({ thinking: false });
+      say(text);
+      return;
+    }
     case "theme_from_image": {
       if (!sentImage) { say("Send me a screenshot of the chart first: the picture button next to the text box, or paste it there, then ask again."); return; }
       set({ thinking: true });
@@ -824,6 +833,11 @@ function intentOf(a: any): Intent | null {
       return what.length ? { kind: "mark", what, ...(patterns.length ? { patterns } : {}), ...(setups.length ? { setups } : {}), ...(state ? { state } : {}) } : null;
     }
     case "clear_marks": return { kind: "clear_marks", what: Array.isArray(a.what) && a.what.length ? a.what as (MarkKind | "bias")[] : undefined };
+    case "price_history": {
+      const date = (v: any) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}( \d{1,2}:\d{2})?$/.test(v.trim()) ? v.trim() : undefined);
+      const span = a.span && Number.isFinite(+a.span.value) && +a.span.value > 0 && ["minute", "hour", "day", "week", "month", "year"].includes(a.span.unit) ? { value: +a.span.value, unit: a.span.unit } : undefined;
+      return { kind: "price_history", symbol: typeof a.symbol === "string" ? a.symbol : undefined, at: date(a.at), from: date(a.from), to: date(a.to), span };
+    }
     case "theme_from_image": {
       const parts = Array.isArray(a.parts) ? (a.parts as string[]).filter((p): p is ThemePart => (THEME_PARTS as string[]).includes(p)) : [];
       return { kind: "theme_from_image", ...(parts.length ? { parts } : {}) };
@@ -888,6 +902,9 @@ export function attachImage(file: Blob | null, name = "image") {
   set({ attachment: { url: URL.createObjectURL(file), name } });
 }
 
+// "2026-11-15 14:05": the trader's own clock (their dates and times are in it)
+const localNow = () => { const d = new Date(), z = (n: number) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`; };
+
 async function askAI(text: string, alternatives: string[] = [], image = false) {
   if (!voiceUid) { say("Sign in to use the voice assistant: it answers through your account."); return; }
   const p = currentPrice();
@@ -907,6 +924,7 @@ async function askAI(text: string, alternatives: string[] = [], image = false) {
         collab: collab.get().room ? { name: collab.get().room!.name, role: collab.get().room!.role } : null,
         lang: state.lang, language: VOICE_LANGS.find(l => l.value === state.lang)?.name ?? "English",
         image: image || undefined, image_earlier: !image && !!sentImage ? true : undefined,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, local_time: localNow(),
       } }),
     });
     const data = await res.json().catch(() => ({}));
