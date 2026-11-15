@@ -106,9 +106,9 @@ export const TOURS: Tour[] = [
     page: "home",
     steps: [
       {
-        target: '[data-name="home-nav-faq"]',
+        target: '[data-name="site-footer"] a[href="/faq"]',
         title: "Questions & answers",
-        body: "Answers about the chart, replay and backtesting, collab, the voice assistant and your account. Search them, and if something isn't there, ask us from the same page.",
+        body: "Down in the footer: answers about the chart, replay and backtesting, collab, the voice assistant and your account. Search them, and if something isn't there, ask us from the same page.",
       },
     ],
   },
