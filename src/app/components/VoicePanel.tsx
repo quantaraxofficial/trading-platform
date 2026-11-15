@@ -111,25 +111,6 @@ export default function VoicePanel() {
         </button>
       </div>
 
-      {/* the orb, hanging: bigger while the chat is empty */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: empty ? "22px 16px 6px" : "6px 16px 2px", transition: "padding .45s ease", flex: "none" }}>
-        <div className="tv-voice-float" style={{ position: "relative", zIndex: 1 }}>
-          <VoiceOrb mode={mode} size={empty ? 150 : 92} hearing={v.hearing} pulse={speakingTo} onClick={toggleListening} disabled={!v.supported}
-            label={v.supported ? (v.listening ? "Stop listening" : "Start listening") : "Speech recognition isn't available in this browser"} />
-        </div>
-        <div className="tv-voice-shadow" aria-hidden style={{ width: empty ? 110 : 66, height: 10, marginTop: empty ? 6 : 2, borderRadius: "50%",
-          background: "radial-gradient(ellipse at center, rgba(124, 58, 237, 0.35) 0%, rgba(124, 58, 237, 0) 70%)", transition: "width .45s ease" }} />
-        <div aria-live="polite" style={{ marginTop: 8, fontSize: 12, letterSpacing: 0.3, color: "var(--tv-color-text-muted)", display: "flex", alignItems: "center", gap: 6, minHeight: 16 }}>
-          {status}{(v.thinking || (v.listening && !v.hearing)) && <span className="tv-voice-dots"><i /><i /><i /></span>}
-        </div>
-        {v.hearing && (
-          <div data-name="voice-hearing" style={{ marginTop: 6, maxWidth: "100%", padding: "0 8px", textAlign: "center", fontSize: 13, lineHeight: "19px", fontStyle: "italic",
-            color: "var(--tv-color-text)", opacity: 0.8, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-            “{v.hearing}…”
-          </div>
-        )}
-      </div>
-
       {/* the chat */}
       <div ref={scroll} data-name="voice-chat" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "10px 14px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
         {empty && !v.hearing && (
@@ -193,6 +174,25 @@ export default function VoicePanel() {
       {v.error && (
         <div role="alert" style={{ margin: "0 14px 8px", padding: "8px 12px", borderRadius: 10, fontSize: 12, lineHeight: "17px", background: "rgba(242, 54, 69, 0.12)", color: "var(--tv-color-bear)" }}>{v.error}</div>
       )}
+
+      {/* the orb, hanging above the input: bigger while the chat is empty */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: empty ? "4px 16px 2px" : "2px 16px 0", transition: "padding .45s ease", flex: "none" }}>
+        <div className="tv-voice-float" style={{ position: "relative", zIndex: 1 }}>
+          <VoiceOrb mode={mode} size={empty ? 150 : 92} hearing={v.hearing} pulse={speakingTo} onClick={toggleListening} disabled={!v.supported}
+            label={v.supported ? (v.listening ? "Stop listening" : "Start listening") : "Speech recognition isn't available in this browser"} />
+        </div>
+        <div className="tv-voice-shadow" aria-hidden style={{ width: empty ? 110 : 66, height: 10, marginTop: empty ? 6 : 2, borderRadius: "50%",
+          background: "radial-gradient(ellipse at center, rgba(124, 58, 237, 0.35) 0%, rgba(124, 58, 237, 0) 70%)", transition: "width .45s ease" }} />
+        <div aria-live="polite" style={{ marginTop: 8, fontSize: 12, letterSpacing: 0.3, color: "var(--tv-color-text-muted)", display: "flex", alignItems: "center", gap: 6, minHeight: 16 }}>
+          {status}{(v.thinking || (v.listening && !v.hearing)) && <span className="tv-voice-dots"><i /><i /><i /></span>}
+        </div>
+        {v.hearing && (
+          <div data-name="voice-hearing" style={{ marginTop: 6, maxWidth: "100%", padding: "0 8px", textAlign: "center", fontSize: 13, lineHeight: "19px", fontStyle: "italic",
+            color: "var(--tv-color-text)", opacity: 0.8, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            “{v.hearing}…”
+          </div>
+        )}
+      </div>
 
       {/* typing (and a picture to send with it) */}
       <div style={{ padding: "8px 12px 12px", display: "flex", flexDirection: "column", gap: 8, flex: "none" }}>

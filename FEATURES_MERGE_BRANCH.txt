@@ -897,7 +897,7 @@ Posting signals out
     TradingView Desktop's own drawings: placed within a few points of TradingView's own values.
   - VOICE_COMMANDS.txt lists everything that can be said to the voice assistant, kept up to date
   - The voice panel redesigned:
-    - A 3D orb in the site's purples hangs above the chat, floating, with a soft shadow beneath.
+    - A 3D orb in the site's purples hangs just above the input, floating, with a soft shadow beneath.
       Tap it to start / stop listening (no mic button any more).
     - It grows and ripples with your voice (the microphone's level), pulses with each word the
       assistant says, and spins faster while it thinks.
