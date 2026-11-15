@@ -71,7 +71,7 @@ export default function FaqApp() {
   const allOpen = shown.length > 0 && shown.every(f => isOpen(f.id));
 
   // one open at a time: opening a question closes the others ("Expand all" still opens them all)
-  const toggle = (id: string) => setOpen(prev => (prev.has(id) ? new Set([...prev].filter(x => x !== id)) : new Set([id])));
+  const toggle = (id: string) => setOpen(prev => (prev.has(id) ? new Set(Array.from(prev).filter(x => x !== id)) : new Set([id])));
   const setAll = (on: boolean) => setOpen(on ? new Set(shown.map(f => f.id)) : new Set());
 
   const vote = (id: string, helpful: boolean) => {

@@ -660,6 +660,10 @@ Posting signals out
     public pages there), /robots.txt lets search engines read them but not the API, admin or signed-in
     tools; each page has its title, description and canonical link; shared links get a preview; the
     Q&A is FAQPage structured data. NEXT_PUBLIC_SITE_URL sets the site's address (a domain later)
+  - One top bar on every site page (home, About, Contact, Q&A, Terms, Privacy, Profile, Pricing,
+    Leaderboard): the home page's (logo, Features, Coming soon, Leaderboard, Pricing, About, Contact, Log
+    in, Open the chart, account menu; a menu on phones). The Q&A is linked from the footer; opening a
+    question closes the one open before
 ======================================================================
 17b. ECONOMIC CALENDAR
 ======================================================================

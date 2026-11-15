@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import SiteFooter from './SiteFooter';
+import SiteNav from './SiteNav';
 import { TrendingUp, BarChart3, LineChart, Activity, Zap, Shield, Globe, ArrowRight, Menu, X, Target, LayoutTemplate } from 'lucide-react';
 import RollingBitcoin from './RollingBitcoin';
 import ComingSoon from './ComingSoon';
@@ -88,55 +89,8 @@ export default function LandingPage() {
         <div className="blob blob-3"></div>
       </div>
 
-      {/* Navigation */}
-      <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${scrollY > 50 ? 'bg-purple-900/90 backdrop-blur-md shadow-lg' : 'bg-transparent'}`}>
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg flex items-center justify-center">
-                <TrendingUp className="w-6 h-6" />
-              </div>
-              <span className="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent font-bold text-xl">
-                TradePilot
-              </span>
-            </div>
-
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center space-x-8">
-              <button onClick={() => scrollToSection('features')} className="text-purple-400 hover:text-white transition-colors">Features</button>
-              <button onClick={() => scrollToSection('coming-soon')} className="text-purple-400 hover:text-white transition-colors">Coming soon</button>
-              <a href="/about" className="text-purple-400 hover:text-white transition-colors">About Us</a>
-              <a href="/contact" className="text-purple-400 hover:text-white transition-colors">Contact</a>
-              <a href="/pricing" className="text-purple-400 hover:text-white transition-colors">Pricing</a>
-              {!loading && !user && <a href="/login" className="text-purple-400 hover:text-white transition-colors">Log in</a>}
-              <a href="/chart" className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 px-6 py-2 rounded-lg font-semibold transition-all transform hover:scale-105">
-                Open the chart
-              </a>
-              <SiteUserMenu signedOut={null} />
-            </div>
-
-            {/* Mobile Menu Button */}
-            <button className="md:hidden text-white" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-              {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
-          </div>
-
-          {/* Mobile Navigation */}
-          {isMenuOpen && (
-            <div className="md:hidden mt-4 pb-4 space-y-4">
-              <button onClick={() => scrollToSection('features')} className="block text-purple-400 hover:text-white transition-colors">Features</button>
-              <button onClick={() => scrollToSection('coming-soon')} className="block text-purple-400 hover:text-white transition-colors">Coming soon</button>
-              <a href="/about" className="block text-purple-400 hover:text-white transition-colors">About Us</a>
-              <a href="/contact" className="block text-purple-400 hover:text-white transition-colors">Contact</a>
-              <a href="/pricing" className="block text-purple-400 hover:text-white transition-colors">Pricing</a>
-              <SiteUserMenu mobile signedOut={<a href="/login" className="block text-purple-400 hover:text-white transition-colors">Log in</a>} />
-              <a href="/chart" className="block text-center w-full bg-gradient-to-r from-purple-700 to-indigo-700 px-6 py-2 rounded-lg font-semibold transition-all">
-                Open the chart
-              </a>
-            </div>
-          )}
-        </div>
-      </nav>
+      {/* Navigation (shared by every site page) */}
+      <SiteNav active="/" />
 
       {/* Hero Section */}
       <section className="relative flex items-center justify-center px-6 pt-32 pb-20 overflow-hidden" style={{ zIndex: 1, minHeight: '100vh' }}>

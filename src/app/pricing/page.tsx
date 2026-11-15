@@ -1,5 +1,6 @@
 "use client";
-
+
+import SiteNav from '../components/external/SiteNav';
 import React, { useState, useEffect } from 'react';
 import { Check, Zap, Shield, Star, Crown, ArrowRight, Sparkles } from 'lucide-react';
 import Link from 'next/link';
@@ -92,18 +93,8 @@ export default function PricingPage() {
       <div style={{ position: 'absolute', top: '-10%', left: '-10%', width: '40%', height: '40%', backgroundColor: 'rgba(139, 92, 246, 0.3)', filter: 'blur(120px)', borderRadius: '50%', pointerEvents: 'none' }} />
       <div style={{ position: 'absolute', bottom: '-10%', right: '-10%', width: '40%', height: '40%', backgroundColor: 'rgba(99, 102, 241, 0.3)', filter: 'blur(120px)', borderRadius: '50%', pointerEvents: 'none' }} />
 
-      {/* Navigation */}
-      <nav style={{ position: 'relative', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 32px', maxWidth: '1200px', margin: '0 auto' }}>
-        <Link href="/" style={{ fontSize: '24px', fontWeight: 800, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px', background: 'linear-gradient(to right, #a78bfa, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-          <Zap size={24} style={{ color: '#8b5cf6', fill: '#8b5cf6' }} />
-          TradePilot
-        </Link>
-        <div style={{ display: 'flex', gap: '32px', alignItems: 'center' }}>
-          <Link href="/" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Home</Link>
-          <Link href="/chart" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '15px' }}>Chart</Link>
-          <Link href="/login" style={{ padding: '10px 24px', backgroundColor: '#9333ea', borderRadius: '8px', color: 'white', textDecoration: 'none', fontWeight: 600, fontSize: '15px' }}>Sign In</Link>
-        </div>
-      </nav>
+      {/* Navigation (shared by every site page) */}
+      <SiteNav active="/pricing" />
 
       {/* Hero Section */}
       <div style={{ position: 'relative', zIndex: 10, paddingTop: '80px', paddingBottom: '48px', textAlign: 'center', paddingLeft: '16px', paddingRight: '16px' }}>

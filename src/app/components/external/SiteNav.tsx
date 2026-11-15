@@ -1,56 +1,103 @@
 "use client";
 
-// The top bar of the site's About and Contact pages: the links in a row on wide screens, a ☰ menu
-// on phones and narrow windows (so nothing runs off the screen); the account menu or Sign In stays
-// in sight on both. Escape or a tap on a link closes the menu.
-import React, { useEffect, useState } from "react";
-import Link from "next/link";
-import { Menu, X, Zap } from "lucide-react";
+// The site pages' top bar, the same on every one (home, About, Contact, Q&A, Terms, Privacy): the
+// logo, Features / Coming soon, Leaderboard, Pricing (the home page's sections: scrolled to there, opened from elsewhere),
+// About Us, Contact, Log in, "Open the chart" and the account menu; a ☰ menu on phones. Fixed at the
+// top, tinted once the page scrolls; off the home page a spacer keeps the content below it. Escape
+// or a tap on a link closes the phone menu.
+import React, { useCallback, useEffect, useState } from "react";
+import { Menu, TrendingUp, X } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import SiteUserMenu from "./SiteUserMenu";
 
-const LINKS: [string, string][] = [["/", "Home"], ["/chart", "Chart"], ["/leaderboard", "Leaderboard"], ["/about", "About Us"], ["/contact", "Contact"]];
+type Active = "/" | "/about" | "/contact" | "/terms" | "/privacy" | "/faq" | "/leaderboard" | "/pricing";
 
-export default function SiteNav({ active }: { active: "/about" | "/contact" | "/leaderboard" | "/terms" | "/privacy" | "/faq" }) {
+export default function SiteNav({ active }: { active?: Active }) {
+  const { user, loading } = useAuth();
+  const home = active === "/";
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => { setScrolled(window.scrollY > 50); ticking = false; });
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
-  const signIn = (small: boolean) => (
-    <Link href="/login" className={`rounded-lg bg-purple-600 hover:bg-purple-700 font-semibold text-white no-underline whitespace-nowrap ${small ? "px-3 py-2 text-sm" : "px-6 py-2.5 text-[15px]"}`}>Sign In</Link>
-  );
+
+  // the home page's sections: scrolled to on the home page, opened from the others
+  const toSection = useCallback((id: string) => (e: React.MouseEvent) => {
+    setOpen(false);
+    const el = home ? document.getElementById(id) : null;
+    if (!el) return;   // (the link goes to /#id)
+    e.preventDefault();
+    window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 80, behavior: "smooth" });
+  }, [home]);
+
+  const link = (href: string) => `transition-colors ${active === href ? "text-white font-semibold" : "text-purple-400 hover:text-white"}`;
+
   return (
-    <nav className="relative z-20 mx-auto flex max-w-[1200px] items-center justify-between gap-3 px-4 py-5 sm:px-8 sm:py-6">
-      <Link href="/" className="flex items-center gap-2 text-xl sm:text-2xl font-extrabold no-underline"
-        style={{ background: "linear-gradient(to right, #a78bfa, #ec4899)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-        <Zap size={24} style={{ color: "#8b5cf6", fill: "#8b5cf6" }} />
-        TradePilot
-      </Link>
-      {/* wide: the links in a row */}
-      <div className="hidden md:flex items-center gap-8">
-        {LINKS.map(([href, label]) => (
-          <Link key={href} href={href} className={`no-underline text-[15px] ${href === active ? "text-white font-semibold" : "text-slate-300 hover:text-white"}`}>{label}</Link>
-        ))}
-        <SiteUserMenu signedOut={signIn(false)} />
-      </div>
-      {/* narrow: the account and a menu */}
-      <div className="flex md:hidden items-center gap-2">
-        <SiteUserMenu signedOut={signIn(true)} />
-        <button type="button" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} onClick={() => setOpen(o => !o)}
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-200 hover:bg-white/10">
-          {open ? <X size={22} /> : <Menu size={22} />}
-        </button>
-      </div>
-      {open && (
-        <div className="md:hidden absolute left-4 right-4 top-full z-30 rounded-xl border border-purple-800/50 bg-slate-950/95 p-2 shadow-2xl backdrop-blur-md">
-          {LINKS.map(([href, label]) => (
-            <Link key={href} href={href} onClick={() => setOpen(false)}
-              className={`block rounded-lg px-4 py-3 no-underline text-base ${href === active ? "bg-purple-900/40 text-white font-semibold" : "text-slate-300 hover:bg-white/5 hover:text-white"}`}>{label}</Link>
-          ))}
+    <>
+      <nav data-name="site-nav" className={`fixed top-0 w-full z-50 transition-all duration-300 ${scrolled || open ? "bg-purple-900/90 backdrop-blur-md shadow-lg" : "bg-transparent"}`}>
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <a href="/" className="flex items-center space-x-2 no-underline" aria-label="TradePilot home">
+              <span className="w-10 h-10 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg flex items-center justify-center text-white">
+                <TrendingUp className="w-6 h-6" />
+              </span>
+              <span className="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent font-bold text-xl">TradePilot</span>
+            </a>
+
+            {/* wide: the links in a row */}
+            <div className="hidden lg:flex items-center space-x-7">
+              <a href="/#features" onClick={toSection("features")} className={link("")}>Features</a>
+              <a href="/#coming-soon" onClick={toSection("coming-soon")} className={link("")}>Coming soon</a>
+              <a href="/leaderboard" className={link("/leaderboard")}>Leaderboard</a>
+              <a href="/pricing" className={link("/pricing")}>Pricing</a>
+              <a href="/about" className={link("/about")}>About Us</a>
+              <a href="/contact" className={link("/contact")}>Contact</a>
+              {!loading && !user && <a href="/login" className={link("/login")}>Log in</a>}
+              <a href="/chart" className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 px-6 py-2 rounded-lg font-semibold text-white transition-all transform hover:scale-105">
+                Open the chart
+              </a>
+              <SiteUserMenu signedOut={null} />
+            </div>
+
+            <button type="button" className="lg:hidden text-white" onClick={() => setOpen(o => !o)} aria-label={open ? "Close the menu" : "Open the menu"} aria-expanded={open}>
+              {open ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+          </div>
+
+          {/* phones: the menu */}
+          {open && (
+            <div className="lg:hidden mt-4 pb-4 space-y-4">
+              <a href="/#features" onClick={toSection("features")} className={`block ${link("")}`}>Features</a>
+              <a href="/#coming-soon" onClick={toSection("coming-soon")} className={`block ${link("")}`}>Coming soon</a>
+              <a href="/leaderboard" className={`block ${link("/leaderboard")}`}>Leaderboard</a>
+              <a href="/pricing" className={`block ${link("/pricing")}`}>Pricing</a>
+              <a href="/about" className={`block ${link("/about")}`}>About Us</a>
+              <a href="/contact" className={`block ${link("/contact")}`}>Contact</a>
+              <SiteUserMenu mobile signedOut={<a href="/login" className="block text-purple-400 hover:text-white transition-colors">Log in</a>} />
+              <a href="/chart" className="block text-center w-full bg-gradient-to-r from-purple-700 to-indigo-700 px-6 py-2 rounded-lg font-semibold text-white transition-all">
+                Open the chart
+              </a>
+            </div>
+          )}
         </div>
-      )}
-    </nav>
+      </nav>
+      {/* (off the home page, whose hero sits under the bar: the content starts below it) */}
+      {!home && <div aria-hidden className="h-[72px]" />}
+    </>
   );
 }
