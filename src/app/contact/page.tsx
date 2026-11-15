@@ -4,7 +4,6 @@ import SiteNav from '../components/external/SiteNav';
 import SiteFooter from '../components/external/SiteFooter';
 import React, { useState } from 'react';
 import { BACKEND_URL, backendFetch } from '@/lib/backend';
-import { Zap, MessageSquare, MapPin } from 'lucide-react';
 import { ComingSoonLine } from '../components/external/ComingSoon';
 import Link from 'next/link';
 
@@ -35,39 +34,11 @@ export default function ContactPage() {
         </p>
       </div>
 
-      {/* Contact Form & Info */}
-      <div style={{ position: 'relative', zIndex: 10, maxWidth: '1000px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: '48px', padding: '0 24px 96px' }}>
-        
-        {/* Contact Info */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-          
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-            <div style={{ padding: '12px', backgroundColor: 'rgba(99, 102, 241, 0.1)', borderRadius: '12px', color: '#818cf8' }}>
-              <MessageSquare size={24} />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '4px' }}>Live Chat</h3>
-              <p style={{ color: '#94a3b8', marginBottom: '8px' }}>Available for Pro members 24/7.</p>
-              <span style={{ color: '#818cf8', fontWeight: 500, cursor: 'pointer' }}>Open Chat</span>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-            <div style={{ padding: '12px', backgroundColor: 'rgba(236, 72, 153, 0.1)', borderRadius: '12px', color: '#f472b6' }}>
-              <MapPin size={24} />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '4px' }}>Office</h3>
-              <p style={{ color: '#94a3b8', lineHeight: '1.5' }}>123 Trading Ave, Suite 500<br/>New York, NY 10004<br/>United States</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Contact Form */}
+      {/* The form (sent to the team: Django Admin's Contact messages) */}
+      <div style={{ position: 'relative', zIndex: 10, maxWidth: '640px', margin: '0 auto', padding: '0 24px 96px' }}>
         <div style={{ backgroundColor: 'rgba(30, 41, 59, 0.5)', padding: '32px', borderRadius: '24px', border: '1px solid rgba(51, 65, 85, 0.5)', backdropFilter: 'blur(12px)' }}>
           <ContactForm />
         </div>
-
       </div>
       
       {/* What's coming, in a line */}
