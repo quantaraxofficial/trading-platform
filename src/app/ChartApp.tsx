@@ -377,12 +377,18 @@ function AppLayout() {
   stateOwnerRef.current = stateOwner;
 
   // The URL mirrors the symbol. It's written synchronously: an async router round-trip could
-  // land after a newer pick and flip the chart back to the older symbol, over and over.
+  // land after a newer pick and flip the chart back to the older symbol, over and over. While the
+  // chart first settles (the address has no symbol yet, or the saved chart's symbol is loading in
+  // its first seconds) it's written in place, so one Back leaves the chart; a symbol picked after
+  // that is a step of its own (Back returns to the one before).
+  const openedAt = useRef(Date.now());
   useEffect(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.get("symbol") === symbol) return;
+    const settling = !url.searchParams.get("symbol") || Date.now() - openedAt.current < 5000;
     url.searchParams.set("symbol", symbol);
-    window.history.pushState(null, "", url);
+    if (settling) window.history.replaceState(window.history.state, "", url);
+    else window.history.pushState(null, "", url);
   }, [symbol]);
 
   // ...and it's read back only on the browser's Back/Forward
