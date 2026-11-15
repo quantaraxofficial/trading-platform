@@ -6,6 +6,7 @@
 // the performance chart, performance analysis, trades analysis) or the list of trades. Every
 // figure comes from the backtest's real trades and equity; the pickers re-run the backtest.
 
+import { displaySymbol } from "@/app/lib/symbolDisplay";
 import React, { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PineStrategyReport, PineStrategyTrade } from "../lib/pineScriptEngine";
@@ -36,6 +37,7 @@ interface StrategyReportPanelProps {
   theme?: string;
   scriptName: string;
   symbol: string;
+  intervalLabel?: string;   // the chart's timeframe, beside the symbol in the tab
   report: PineStrategyReport;
   range: BacktestRange;
   busy: boolean;
@@ -1048,6 +1050,10 @@ function Header({ p, expanded, maximized }: { p: StrategyReportPanelProps; expan
           style={{ display: "flex", alignItems: "center", gap: 12, height: expanded ? PANEL_ROW_HEIGHT : 32, padding: expanded ? "0 0 0 16px" : "0 0 0 14px", border: "none", background: "transparent", color: "inherit", fontSize: 14, minWidth: 0, cursor: expanded ? "default" : "pointer" }}>
           <StStrategyTabIcon />
           <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 240 }}>{p.scriptName}</span>
+          {/* (which chart's report: in a layout each chart's symbol has its own) */}
+          <span data-name="strategy-report-symbol" style={{ whiteSpace: "nowrap", color: "var(--tv-color-text-muted, #787b86)", fontSize: 13 }}>
+            {displaySymbol(p.symbol)}{p.intervalLabel ? ` · ${p.intervalLabel}` : ""}
+          </span>
         </button>
         <Tip text="Open context menu">
           <button ref={chevron} type="button" aria-label="Open context menu" aria-expanded={!!menu} className="tv-bb-btn"

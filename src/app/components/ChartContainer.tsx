@@ -4813,6 +4813,7 @@ export default function ChartContainer({
           theme={theme}
           scriptName={strategyScriptName}
           symbol={symbol}
+          intervalLabel={intervalLabel}
           report={strategyReport}
           range={backtestRange}
           busy={backtestBusy}
