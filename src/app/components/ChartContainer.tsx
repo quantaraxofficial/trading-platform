@@ -337,6 +337,7 @@ import { detectPrecision, simulatedQuote } from "@/app/utils/pricePrecision";
 import { feedTimeToUnix } from "../utils/feedTime";
 import { backendFetch } from "@/lib/backend";
 import { fetchVantageCandles, isVantageSymbol, vantageBarEnd, vantageBarTime, vantageInterval, vantageServing } from "../lib/vantageFeed";
+import { isSketch, sketchCandles, sketchRev, subscribeSketch } from "../lib/sketch";
 import { CollabIcon } from "./collab/icons";
 import { useCollabAlerts } from "../lib/collab/session";
 export { getCacheKey, getCachedData, setCachedData } from "../lib/stockDataCache";
@@ -349,6 +350,8 @@ export { getCacheKey, getCachedData, setCachedData } from "../lib/stockDataCache
 const inflightStockFetches = new Map<string, Promise<any[]>>();
 
 export function fetchStockData(symbol: string = 'AAPL', interval: string = '1min', endDate?: string, lastPrice?: number, startDate?: string): Promise<any[]> {
+  // (the sketch board's made-up candles: lib/sketch)
+  if (isSketch(symbol)) return Promise.resolve(sketchCandles(interval, endDate));
   const key = getCacheKey(symbol, interval, endDate, startDate);
   let pending = inflightStockFetches.get(key);
   if (!pending) {
@@ -655,6 +658,8 @@ export default function ChartContainer({
   const pineMarkersRef = useRef<any[]>([]);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  // a new sketch on the sketch board: its candles reloaded
+  const sketchVersion = useSyncExternalStore(subscribeSketch, sketchRev, sketchRev);
   // The data plan's limit: per minute (retried automatically once the minute resets) or per day
   const [apiLimitReached, setApiLimitReachedState] = useState<false | 'minute' | 'day'>(false);
   const limitRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -3799,7 +3804,8 @@ export default function ChartContainer({
           let usedAggCache = false;
           
           if (AGGREGATABLE_INTERVALS[interval]) {
-            const cached = getAggCachedData(symbol, interval);
+            // (never for the sketch board: each sketch is new candles)
+            const cached = isSketch(symbol) ? null : getAggCachedData(symbol, interval);
             // (for a date range, only a cache that reaches the present — within a long weekend)
             const reachesPresent = !!cached?.length && Date.now() / 1000 - cached[cached.length - 1].time < 4 * 86400;
             if (cached && cached.length > 0 && (!switchingForDateRange || reachesPresent)) {
@@ -3987,7 +3993,7 @@ export default function ChartContainer({
       refresh();
       return () => { cancelled = true; };
     }
-  }, [interval, series, symbol]);
+  }, [interval, series, symbol, isSketch(symbol) ? sketchVersion : 0]);
 
   // Keyboard shortcuts for replay
   useEffect(() => {

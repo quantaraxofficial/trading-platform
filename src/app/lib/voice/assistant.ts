@@ -31,6 +31,8 @@ import { tradingUi } from "../../trading/store";
 import { displaySymbol } from "../symbolDisplay";
 import { biasOnChart } from "./bias";
 import { priceHistory } from "./priceHistory";
+import { sketchOnChart, leaveSketch } from "./sketchBoard";
+import { SKETCH_PATTERNS } from "../analysis/sketchCandles";
 import { applyImageTheme, THEME_PARTS, type ThemePart } from "./imageTheme";
 
 export type VoiceMessage = {
@@ -555,6 +557,16 @@ async function run(intent: Intent, reply?: string, quiet = false, confirmed = fa
       if (!quiet) say(result.trim());
       return;
     }
+    case "sketch": {
+      set({ thinking: true });
+      const text = await sketchOnChart(intent.spec).catch(() => "I couldn't draw that sketch.");
+      set({ thinking: false });
+      say(text);
+      return;
+    }
+    case "sketch_exit":
+      say(leaveSketch());
+      return;
     case "price_history": {
       // (looked up and worked out here, from the symbol's candles: said even after the AI's own words)
       set({ thinking: true });
@@ -833,6 +845,21 @@ function intentOf(a: any): Intent | null {
       return what.length ? { kind: "mark", what, ...(patterns.length ? { patterns } : {}), ...(setups.length ? { setups } : {}), ...(state ? { state } : {}) } : null;
     }
     case "clear_marks": return { kind: "clear_marks", what: Array.isArray(a.what) && a.what.length ? a.what as (MarkKind | "bias")[] : undefined };
+    case "sketch": {
+      const sizes = ["tiny", "small", "medium", "big", "huge"], wicks = ["none", "short", "long", "long_top", "long_bottom"];
+      const candles = Array.isArray(a.candles) ? a.candles.filter((c: any) => c && (c.color === "green" || c.color === "red")).slice(0, 120)
+        .map((c: any) => ({ color: c.color, size: sizes.includes(c.size) ? c.size : undefined, wick: wicks.includes(c.wick) ? c.wick : undefined })) : undefined;
+      const spec = {
+        ...(candles?.length ? { candles } : {}),
+        ...(Number.isFinite(+a.count) && +a.count > 0 ? { count: Math.min(150, Math.round(+a.count)) } : {}),
+        ...(["up", "down", "sideways"].includes(a.trend) ? { trend: a.trend } : {}),
+        ...(["green", "red", "equal"].includes(a.bigger) ? { bigger: a.bigger } : {}),
+        ...((SKETCH_PATTERNS as readonly string[]).includes(a.pattern) ? { pattern: a.pattern } : {}),
+        ...(Number.isFinite(+a.start) && +a.start > 0 ? { start: +a.start } : {}),
+      };
+      return { kind: "sketch", spec };
+    }
+    case "sketch_exit": return { kind: "sketch_exit" };
     case "price_history": {
       const date = (v: any) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}( \d{1,2}:\d{2})?$/.test(v.trim()) ? v.trim() : undefined);
       const span = a.span && Number.isFinite(+a.span.value) && +a.span.value > 0 && ["minute", "hour", "day", "week", "month", "year"].includes(a.span.unit) ? { value: +a.span.value, unit: a.span.unit } : undefined;

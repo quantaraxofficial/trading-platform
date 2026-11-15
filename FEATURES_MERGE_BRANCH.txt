@@ -905,6 +905,14 @@ Posting signals out
     - Participation (the crowd behind it): volume against the usual, growing or fading, the share on
       rising vs falling candles (buyers or sellers in control), the heaviest bursts.
     - Times are the trader's own: the browser's time zone and clock are sent to the AI.
+  - Sketch board, to explain with: made-up candles on a blank chart (symbol SKETCH), by voice.
+    - Candles as said: green / red, tiny … huge, wicks.
+    - A trend with one colour bigger ("20 candles in an uptrend, the green ones bigger").
+    - Any of 34 teaching patterns, drawn with their parts labelled: candlestick patterns, double
+      tops, head and shoulders, triangles, flags, liquidity sweeps, FVGs, order blocks, BOS / CHoCH,
+      ranges, support / resistance.
+    - Real candles (each opening where the last closed), so every drawing tool and every "mark …"
+      works on it. "Back to the chart" returns to the market.
   - The voice panel redesigned:
     - A 3D orb in the site's purples hangs just above the input, floating, with a soft shadow beneath.
       Tap it to start / stop listening (no mic button any more).

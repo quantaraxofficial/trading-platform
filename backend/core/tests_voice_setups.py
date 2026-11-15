@@ -101,3 +101,18 @@ class PriceHistoryActionTests(SimpleTestCase):
     def test_bad_dates_dropped_and_nothing_to_look_at_is_nothing(self):
         self.assertIsNone(clean_action({"type": "price_history", "at": "yesterday"}))
         self.assertIsNone(clean_action({"type": "price_history", "span": {"value": 3, "unit": "eons"}}))
+
+
+class SketchActionTests(SimpleTestCase):
+    """Made-up candles to explain with: their recipe checked"""
+
+    def test_recipe_kept(self):
+        a = clean_action({"type": "sketch", "candles": [{"color": "green", "size": "big"}, {"color": "red", "wick": "long_top"}, {"color": "blue"}],
+                          "trend": "up", "bigger": "green", "pattern": "double_top", "count": 12})
+        self.assertEqual(a["candles"], [{"color": "green", "size": "big"}, {"color": "red", "wick": "long_top"}])
+        self.assertEqual((a["trend"], a["bigger"], a["pattern"], a["count"]), ("up", "green", "double_top", 12))
+
+    def test_unknown_parts_dropped(self):
+        a = clean_action({"type": "sketch", "pattern": "dragon", "trend": "diagonal", "count": 9999})
+        self.assertEqual(a, {"type": "sketch"})
+        self.assertEqual(clean_action({"type": "sketch_exit"}), {"type": "sketch_exit"})

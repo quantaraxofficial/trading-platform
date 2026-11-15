@@ -43,6 +43,26 @@ Looked up in the symbol's own candles. Times are your own (your computer's time 
     is our feed's tick volume; stocks have real volume; if a feed has no volume, it says so.
 
 
+1c. SKETCH BOARD: MADE-UP CANDLES TO EXPLAIN WITH
+-------------------------------------------------
+For teaching: candles drawn on a blank chart (SKETCH), not a real market.
+- Candles as you say them: "draw a big green candle, a small red one with a long top wick, then a
+  green one". Sizes: tiny, small, medium, big, huge. Wicks: none, short, long, long top, long bottom.
+- A trend: "make 20 candles in an uptrend, the green ones bigger", "a downtrend where red is bigger",
+  "sideways candles".
+- A pattern, its parts labelled. "Show me a double top", "explain a liquidity sweep with a drawing",
+  "draw a bullish engulfing after a downtrend". The patterns:
+  - candles: doji, hammer, shooting star, pin bar, bullish / bearish engulfing, morning / evening
+    star, three white soldiers, three black crows, inside bar;
+  - chart patterns: double top / bottom, head and shoulders (and inverse), ascending / descending
+    triangle, bull / bear flag;
+  - SMC: liquidity sweep (bullish / bearish), bullish / bearish FVG, bullish / bearish order block,
+    BOS, CHoCH;
+  - price action: range, breakout, V reversal, support, resistance.
+- Everything works on it: "now mark the order blocks", any drawing tool.
+- "Back to the chart" returns to the market you were on.
+
+
 2. COPY A CHART FROM A PICTURE
 ------------------------------
 Send a screenshot (the picture button by the text box, paste it, or drop it on the panel), then:

@@ -21,6 +21,9 @@ export type Intent =
   | { kind: "bias"; window: BiasSpan; horizon: BiasSpan }
   // the attached screenshot's colours on this chart (lib/voice/imageTheme)
   | { kind: "theme_from_image"; parts?: ("chart" | "candles" | "page")[] }
+  // made-up candles to explain with, on the sketch board (lib/voice/sketchBoard); and back to the market
+  | { kind: "sketch"; spec: import("../analysis/sketchCandles").SketchSpec }
+  | { kind: "sketch_exit" }
   // what a symbol did: its price at a moment, or its move over a period (lib/voice/priceHistory)
   | { kind: "price_history"; symbol?: string; at?: string; from?: string; to?: string; span?: { value: number; unit: "minute" | "hour" | "day" | "week" | "month" | "year" } }
   | { kind: "indicator"; name: string; remove?: boolean }
