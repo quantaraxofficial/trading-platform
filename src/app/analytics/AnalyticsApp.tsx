@@ -188,13 +188,13 @@ export default function AnalyticsApp() {
   };
 
   return (
-    <div className="h-screen bg-gradient-to-br from-black via-purple-950 to-black text-white relative overflow-hidden" data-testid="analytics">
+    <div className="an-scale h-screen bg-gradient-to-br from-black via-purple-950 to-black text-white relative overflow-hidden" data-testid="analytics">
       <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
         <div className="an-blob an-blob-1" /><div className="an-blob an-blob-2" /><div className="an-blob an-blob-3" />
       </div>
       <div className="relative z-10 flex h-full">
         <aside className="hidden md:flex w-64 shrink-0 flex-col gap-6 p-5 border-r border-purple-800/30 bg-black/40 backdrop-blur-xl h-full overflow-y-auto">
-          <a href="/chart" className="flex items-center gap-2.5">
+          <a href="/" className="flex items-center gap-2.5" aria-label="TradePilot home">
             <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/20"><TrendingUp className="w-6 h-6" /></div>
             <span className="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent font-bold text-xl">TradePilot</span>
           </a>
@@ -299,6 +299,10 @@ export default function AnalyticsApp() {
         onConnected={a => { putStats(a); setAccount(`acc:${a.id}`); setConnectOpen(false); setSelectedKey(null); }} />}
       <style>{`
         .an-blob { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.15; animation: an-pulse 6s ease-in-out infinite; }
+        /* big screens: the whole page a size larger (its text is sized for laptops), still filling the window */
+        @media (min-width: 1600px) { .an-scale { zoom: 1.1; height: calc(100vh / 1.1) !important; } }
+        @media (min-width: 1900px) { .an-scale { zoom: 1.2; height: calc(100vh / 1.2) !important; } }
+        @media (min-width: 2400px) { .an-scale { zoom: 1.35; height: calc(100vh / 1.35) !important; } }
         .an-blob-1 { width: 360px; height: 360px; background: #581c87; top: -100px; right: -80px; }
         .an-blob-2 { width: 320px; height: 320px; background: #581c87; bottom: -80px; left: -80px; }
         .an-blob-3 { width: 420px; height: 420px; background: #4c1d95; top: 45%; left: 55%; opacity: 0.08; }

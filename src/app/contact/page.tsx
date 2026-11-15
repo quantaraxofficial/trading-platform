@@ -1,73 +1,92 @@
 "use client";
 
+// The Contact page, in the home page's look (the dark-to-purple gradient, glowing blobs, purple glass
+// cards): where else to get help, and the form (sent to the team: core/contact.py → Django Admin's
+// Contact messages, with a notification). The Q&A page's "Ask us" fills the message (?message=…).
+import React, { useEffect, useState } from 'react';
+import { CheckCircle2, HelpCircle, MessageSquareText, Send, UserRound } from 'lucide-react';
 import SiteNav from '../components/external/SiteNav';
 import SiteFooter from '../components/external/SiteFooter';
-import React, { useEffect, useState } from 'react';
 import { BACKEND_URL, backendFetch } from '@/lib/backend';
-import { ComingSoonLine } from '../components/external/ComingSoon';
-import Link from 'next/link';
+
+const HELP = [
+  { icon: <HelpCircle className="w-6 h-6" />, title: 'Questions & answers', text: 'Most questions about the chart, replay, collab and your account are answered here.', href: '/faq', cta: 'Browse the Q&A' },
+  { icon: <MessageSquareText className="w-6 h-6" />, title: 'Feedback from the chart', text: 'Send feedback in the chart’s right toolbar: a picture of your chart goes with it.', href: '/chart', cta: 'Open the chart' },
+  { icon: <UserRound className="w-6 h-6" />, title: 'Your account', text: 'Need an account, a new password or a device signed out? Write to us with the form.', href: '#contact-form', cta: 'Write to us' },
+];
 
 export default function ContactPage() {
   return (
-    <div data-site-page style={{ 
-      minHeight: '100vh', 
-      backgroundColor: '#0f172a', 
-      color: 'white', 
-      position: 'relative', 
-      overflow: 'clip', // clips the glows without a second scroll bar (hidden would scroll)
-      fontFamily: 'Inter, sans-serif'
-    }}>
-      {/* Abstract Background Gradients */}
-      <div style={{ position: 'absolute', top: '-10%', left: '-10%', width: '40%', height: '40%', backgroundColor: 'rgba(139, 92, 246, 0.3)', filter: 'blur(120px)', borderRadius: '50%', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', bottom: '-10%', right: '-10%', width: '40%', height: '40%', backgroundColor: 'rgba(99, 102, 241, 0.3)', filter: 'blur(120px)', borderRadius: '50%', pointerEvents: 'none' }} />
-
-      {/* Navigation (a ☰ menu on phones) */}
+    <div data-site-page className="min-h-screen bg-gradient-to-br from-black via-purple-950 to-black text-white overflow-x-hidden">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
+        <div className="blob blob-1"></div><div className="blob blob-2"></div><div className="blob blob-3"></div>
+      </div>
       <SiteNav active="/contact" />
 
-      {/* Hero Section */}
-      <div style={{ position: 'relative', zIndex: 10, paddingTop: '80px', paddingBottom: '48px', textAlign: 'center', paddingLeft: '16px', paddingRight: '16px', maxWidth: '800px', margin: '0 auto' }}>
-        <h1 style={{ fontSize: '56px', fontWeight: 800, marginBottom: '24px', letterSpacing: '-0.025em' }}>
-          Get in <span style={{ background: 'linear-gradient(to right, #a78bfa, #818cf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Touch</span>
-        </h1>
-        <p style={{ fontSize: '20px', color: '#94a3b8', lineHeight: '1.6' }}>
-          Whether you have a question about features, trials, pricing, or anything else, our team is ready to answer all your questions.
-        </p>
-      </div>
+      <main className="relative px-6 pt-12 pb-24" style={{ zIndex: 1 }}>
+        <div className="container mx-auto max-w-6xl">
+          <header className="text-center max-w-2xl mx-auto">
+            <span className="inline-block rounded-full border border-purple-700/60 bg-purple-900/40 px-4 py-1 text-sm font-medium text-purple-300">Contact</span>
+            <h1 className="mt-5 text-4xl md:text-6xl font-bold leading-tight">
+              Get in <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">touch</span>
+            </h1>
+            <p className="mt-5 text-lg md:text-xl text-purple-300">
+              A question about features, your account or anything else? Send us a message and we’ll answer by email.
+            </p>
+          </header>
 
-      {/* The form (sent to the team: Django Admin's Contact messages) */}
-      <div style={{ position: 'relative', zIndex: 10, maxWidth: '640px', margin: '0 auto', padding: '0 24px 96px' }}>
-        <div style={{ backgroundColor: 'rgba(30, 41, 59, 0.5)', padding: '32px', borderRadius: '24px', border: '1px solid rgba(51, 65, 85, 0.5)', backdropFilter: 'blur(12px)' }}>
-          <ContactForm />
+          <div className="mt-14 grid lg:grid-cols-[1fr_1.2fr] gap-8 items-start">
+            <div className="space-y-4">
+              {HELP.map(h => (
+                <a key={h.title} href={h.href} className="group flex gap-4 rounded-2xl border border-purple-800/50 bg-purple-950/60 backdrop-blur-sm p-5 transition-all hover:border-purple-500 hover:bg-purple-900/40">
+                  <span className="flex-none w-11 h-11 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-900/50">{h.icon}</span>
+                  <span>
+                    <span className="block text-lg font-bold">{h.title}</span>
+                    <span className="mt-1 block text-sm leading-6 text-purple-200/80">{h.text}</span>
+                    <span className="mt-2 inline-block text-sm font-semibold text-purple-300 group-hover:text-white">{h.cta} →</span>
+                  </span>
+                </a>
+              ))}
+            </div>
+
+            <div id="contact-form" className="scroll-mt-28 rounded-2xl border border-purple-700/60 bg-purple-950/70 backdrop-blur-md p-6 sm:p-8 shadow-2xl shadow-purple-950/60">
+              <h2 className="text-2xl font-bold">Send us a message</h2>
+              <p className="mt-1 text-purple-300/90">We usually reply within a working day.</p>
+              <div className="mt-6"><ContactForm /></div>
+            </div>
+          </div>
         </div>
-      </div>
-      
-      {/* What's coming, in a line */}
-      <div style={{ position: 'relative', zIndex: 10, maxWidth: '1000px', margin: '0 auto', padding: '0 24px 64px' }}>
-        <ComingSoonLine />
-      </div>
+      </main>
 
       <SiteFooter />
+
+      <style jsx global>{`
+        .blob { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.15; will-change: opacity; transform: translateZ(0); animation: pulse-blob 6s ease-in-out infinite; }
+        .blob-1 { width: 320px; height: 320px; background: #581c87; top: -80px; right: -80px; }
+        .blob-2 { width: 320px; height: 320px; background: #581c87; bottom: -80px; left: -80px; }
+        .blob-3 { width: 384px; height: 384px; background: #4c1d95; top: 50%; left: 50%; transform: translate3d(-50%, -50%, 0); opacity: 0.08; }
+        @keyframes pulse-blob { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.25; } }
+      `}</style>
     </div>
   );
 }
 
-// The form: sent to the team (core/contact.py → Django Admin's Contact messages, with a notification).
-// Signed in, it's linked to your account.
-const inputStyle: React.CSSProperties = { padding: '12px 16px', borderRadius: '12px', backgroundColor: 'rgba(15, 23, 42, 0.6)', border: '1px solid #334155', color: 'white', outline: 'none', width: '100%' };
-const labelStyle: React.CSSProperties = { fontSize: '14px', fontWeight: 600, color: '#e2e8f0' };
-const errStyle: React.CSSProperties = { fontSize: '13px', color: '#fca5a5' };
+// The form: sent to the team (core/contact.py). Signed in, it's linked to your account.
+const inputCls = 'w-full rounded-xl border border-purple-800/70 bg-black/40 px-4 py-3 text-white placeholder-purple-300/40 outline-none transition-colors focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30';
+const labelCls = 'text-sm font-semibold text-purple-100';
+const errCls = 'text-sm text-rose-300';
 
 function ContactForm() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'failed' | 'busy'>('idle');
   // (the Q&A page's "Ask us" brings the question: ?message=…)
   useEffect(() => {
     const m = new URLSearchParams(window.location.search).get('message');
     if (m) setMessage(m.slice(0, 5000));
   }, []);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'failed' | 'busy'>('idle');
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,34 +111,41 @@ function ContactForm() {
   };
 
   if (state === 'sent') return (
-    <div data-name="contact-sent" style={{ textAlign: 'center', padding: '24px 8px' }}>
-      <div style={{ fontSize: '22px', fontWeight: 700, marginBottom: '8px' }}>Thanks, your message is sent.</div>
-      <p style={{ color: '#94a3b8', lineHeight: 1.6, marginBottom: '20px' }}>We&apos;ll get back to you by email.</p>
-      <button type="button" onClick={() => setState('idle')} style={{ padding: '10px 18px', borderRadius: '12px', border: '1px solid #475569', background: 'transparent', color: 'white', cursor: 'pointer', fontWeight: 600 }}>Send another</button>
+    <div data-name="contact-sent" className="py-8 text-center">
+      <CheckCircle2 className="mx-auto w-14 h-14 text-green-400" />
+      <div className="mt-4 text-2xl font-bold">Thanks, your message is sent.</div>
+      <p className="mt-2 text-purple-300">We&apos;ll get back to you by email.</p>
+      <button type="button" onClick={() => setState('idle')} className="mt-6 rounded-lg border-2 border-purple-600 hover:border-white px-5 py-2.5 font-semibold transition-colors">Send another</button>
     </div>
   );
 
   return (
-    <form onSubmit={submit} noValidate data-name="contact-form" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <label htmlFor="contact-name" style={labelStyle}>Name</label>
-        <input id="contact-name" type="text" placeholder="John Doe" value={name} onChange={e => setName(e.target.value)} maxLength={120} autoComplete="name" style={inputStyle} aria-invalid={!!errors.name} />
-        {errors.name && <span style={errStyle}>{errors.name}</span>}
+    <form onSubmit={submit} noValidate data-name="contact-form" className="space-y-5">
+      <div className="grid sm:grid-cols-2 gap-5">
+        <div className="space-y-2">
+          <label htmlFor="contact-name" className={labelCls}>Name</label>
+          <input id="contact-name" type="text" placeholder="Your name" value={name} onChange={e => setName(e.target.value)} maxLength={120} autoComplete="name" className={inputCls} aria-invalid={!!errors.name} />
+          {errors.name && <span className={errCls}>{errors.name}</span>}
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="contact-email" className={labelCls}>Email</label>
+          <input id="contact-email" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} maxLength={254} autoComplete="email" className={inputCls} aria-invalid={!!errors.email} />
+          {errors.email && <span className={errCls}>{errors.email}</span>}
+        </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <label htmlFor="contact-email" style={labelStyle}>Email</label>
-        <input id="contact-email" type="email" placeholder="john@example.com" value={email} onChange={e => setEmail(e.target.value)} maxLength={254} autoComplete="email" style={inputStyle} aria-invalid={!!errors.email} />
-        {errors.email && <span style={errStyle}>{errors.email}</span>}
+      <div className="space-y-2">
+        <label htmlFor="contact-message" className={labelCls}>Message</label>
+        <textarea id="contact-message" rows={6} placeholder="How can we help?" value={message} onChange={e => setMessage(e.target.value)} maxLength={5000} className={`${inputCls} resize-y`} aria-invalid={!!errors.message} />
+        <div className="flex justify-between">
+          {errors.message ? <span className={errCls}>{errors.message}</span> : <span />}
+          <span className="text-xs text-purple-300/60">{message.length}/5000</span>
+        </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <label htmlFor="contact-message" style={labelStyle}>Message</label>
-        <textarea id="contact-message" rows={4} placeholder="How can we help?" value={message} onChange={e => setMessage(e.target.value)} maxLength={5000} style={{ ...inputStyle, resize: 'vertical' }} aria-invalid={!!errors.message}></textarea>
-        {errors.message && <span style={errStyle}>{errors.message}</span>}
-      </div>
-      {state === 'failed' && <span style={errStyle} role="alert">It couldn&apos;t be sent just now. Please try again in a moment.</span>}
-      {state === 'busy' && <span style={errStyle} role="alert">You&apos;ve sent a few messages already. Please try again in an hour.</span>}
-      <button type="submit" disabled={state === 'sending'} data-name="contact-send" style={{ marginTop: '8px', padding: '14px', borderRadius: '12px', border: 'none', cursor: state === 'sending' ? 'default' : 'pointer', fontWeight: 700, backgroundColor: '#9333ea', color: 'white', fontSize: '16px', transition: 'all 0.2s', width: '100%', opacity: state === 'sending' ? 0.7 : 1 }}>
-        {state === 'sending' ? 'Sending…' : 'Send Message'}
+      {state === 'failed' && <div className={errCls} role="alert">It couldn&apos;t be sent just now. Please try again in a moment.</div>}
+      {state === 'busy' && <div className={errCls} role="alert">You&apos;ve sent a few messages already. Please try again in an hour.</div>}
+      <button type="submit" disabled={state === 'sending'} data-name="contact-send"
+        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 px-6 py-3.5 text-lg font-semibold transition-all disabled:opacity-70">
+        <Send className="w-5 h-5" />{state === 'sending' ? 'Sending…' : 'Send message'}
       </button>
     </form>
   );

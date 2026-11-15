@@ -5,6 +5,7 @@ import SiteNav from './SiteNav';
 import { TrendingUp, BarChart3, LineChart, Activity, Zap, Shield, Globe, ArrowRight, Menu, X, Target, LayoutTemplate } from 'lucide-react';
 import RollingBitcoin from './RollingBitcoin';
 import ComingSoon from './ComingSoon';
+import AboutSection from './AboutSection';
 import SiteUserMenu from './SiteUserMenu';
 import { useAuth } from '@/context/AuthContext';
 
@@ -127,8 +128,9 @@ export default function LandingPage() {
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {features.map((feature, index) => (
-              <div key={index} className={`bg-purple-950/60 backdrop-blur-sm border border-purple-800/50 rounded-xl p-6 transition-all duration-500 ${activeFeature === index ? 'scale-105 border-purple-600 shadow-xl' : ''}`}>
-                <div className="text-purple-500 mb-4">{feature.icon}</div>
+              <div key={index} className={`group relative overflow-hidden bg-purple-950/60 backdrop-blur-sm border border-purple-800/50 rounded-xl p-6 transition-all duration-500 hover:-translate-y-1.5 hover:border-purple-500 hover:shadow-[0_14px_40px_-12px_rgba(168,85,247,0.65)] motion-reduce:transition-none ${activeFeature === index ? 'scale-105 border-purple-600 shadow-xl' : ''}`}>
+                <span aria-hidden className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/[0.07] to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full motion-reduce:hidden" />
+                <div className="inline-block text-purple-500 mb-4 transition-transform duration-300 group-hover:scale-125 group-hover:-rotate-6 group-hover:text-purple-300 motion-reduce:transform-none">{feature.icon}</div>
                 <h3 className="text-xl font-bold text-white mb-2">{feature.title}</h3>
                 <p className="text-purple-200">{feature.description}</p>
               </div>
@@ -136,6 +138,9 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* About us ("About Us" in the top bar scrolls here) */}
+      <AboutSection />
 
       {/* Coming soon: what the next version adds */}
       <section id="coming-soon" className="py-20 px-6" style={{ zIndex: 1, position: 'relative' }}>

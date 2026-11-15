@@ -1,7 +1,7 @@
 "use client";
 
 // The site pages' top bar, the same on every one (home, About, Contact, Q&A, Terms, Privacy): the
-// logo, Features / Coming soon, Leaderboard, Pricing (the home page's sections: scrolled to there, opened from elsewhere),
+// logo, Features / Coming soon, About Us, Leaderboard, Pricing (the home page's sections: scrolled to there, opened from elsewhere),
 // About Us, Contact, Log in, "Open the chart" and the account menu; a ☰ menu on phones. Fixed at the
 // top, tinted once the page scrolls; off the home page a spacer keeps the content below it. Escape
 // or a tap on a link closes the phone menu.
@@ -10,7 +10,7 @@ import { Menu, TrendingUp, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import SiteUserMenu from "./SiteUserMenu";
 
-type Active = "/" | "/about" | "/contact" | "/terms" | "/privacy" | "/faq" | "/leaderboard" | "/pricing";
+type Active = "/" | "/contact" | "/terms" | "/privacy" | "/faq" | "/leaderboard" | "/pricing";
 
 export default function SiteNav({ active }: { active?: Active }) {
   const { user, loading } = useAuth();
@@ -65,7 +65,7 @@ export default function SiteNav({ active }: { active?: Active }) {
               <a href="/#coming-soon" onClick={toSection("coming-soon")} className={link("")}>Coming soon</a>
               <a href="/leaderboard" className={link("/leaderboard")}>Leaderboard</a>
               <a href="/pricing" className={link("/pricing")}>Pricing</a>
-              <a href="/about" className={link("/about")}>About Us</a>
+              <a href="/#about" onClick={toSection("about")} className={link("")}>About Us</a>
               <a href="/contact" className={link("/contact")}>Contact</a>
               {!loading && !user && <a href="/login" className={link("/login")}>Log in</a>}
               <a href="/chart" className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 px-6 py-2 rounded-lg font-semibold text-white transition-all transform hover:scale-105">
@@ -86,7 +86,7 @@ export default function SiteNav({ active }: { active?: Active }) {
               <a href="/#coming-soon" onClick={toSection("coming-soon")} className={`block ${link("")}`}>Coming soon</a>
               <a href="/leaderboard" className={`block ${link("/leaderboard")}`}>Leaderboard</a>
               <a href="/pricing" className={`block ${link("/pricing")}`}>Pricing</a>
-              <a href="/about" className={`block ${link("/about")}`}>About Us</a>
+              <a href="/#about" onClick={toSection("about")} className={`block ${link("")}`}>About Us</a>
               <a href="/contact" className={`block ${link("/contact")}`}>Contact</a>
               <SiteUserMenu mobile signedOut={<a href="/login" className="block text-purple-400 hover:text-white transition-colors">Log in</a>} />
               <a href="/chart" className="block text-center w-full bg-gradient-to-r from-purple-700 to-indigo-700 px-6 py-2 rounded-lg font-semibold text-white transition-all">

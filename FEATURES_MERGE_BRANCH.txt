@@ -664,6 +664,10 @@ Posting signals out
     Leaderboard): the home page's (logo, Features, Coming soon, Leaderboard, Pricing, About, Contact, Log
     in, Open the chart, account menu; a menu on phones). The Q&A is linked from the footer; opening a
     question closes the one open before
+  - About us is a section of the home page (#about; "About Us" scrolls there, /about opens it). The
+    Contact page in the home page's look (help links beside the form). Hover animations on the
+    feature, Coming soon and roadmap cards. Analytics a size larger on big screens (1600px+), and its
+    logo goes to the home page
 ======================================================================
 17b. ECONOMIC CALENDAR
 ======================================================================

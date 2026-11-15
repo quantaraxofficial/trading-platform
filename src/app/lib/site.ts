@@ -8,7 +8,6 @@ export const PUBLIC_PAGES: { path: string; priority: number; changeFrequency: "d
   { path: "/", priority: 1, changeFrequency: "weekly" },
   { path: "/chart", priority: 0.9, changeFrequency: "daily" },
   { path: "/faq", priority: 0.8, changeFrequency: "weekly" },
-  { path: "/about", priority: 0.7, changeFrequency: "monthly" },
   { path: "/contact", priority: 0.6, changeFrequency: "yearly" },
   { path: "/pricing", priority: 0.8, changeFrequency: "monthly" },
   { path: "/community", priority: 0.7, changeFrequency: "daily" },

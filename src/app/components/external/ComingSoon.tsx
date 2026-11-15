@@ -64,12 +64,13 @@ export default function ComingSoon({ heading = true }: { heading?: boolean }) {
       )}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6" data-name="coming-soon">
         {COMING_SOON.map(f => (
-          <div key={f.title} className="bg-purple-950/60 backdrop-blur-sm border border-purple-800/50 rounded-xl p-6">
+          <div key={f.title} className="group relative overflow-hidden transition-all duration-300 ease-out hover:-translate-y-1.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0 bg-purple-950/60 backdrop-blur-sm border border-purple-800/50 rounded-xl p-6 hover:border-purple-500 hover:bg-purple-900/50 hover:shadow-[0_14px_40px_-12px_rgba(168,85,247,0.65)]">
+            <span aria-hidden className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/[0.07] to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full motion-reduce:hidden" />
             <div className="flex items-center justify-between mb-4">
-              <span className="text-purple-500">{f.icon}</span>
+              <span className="inline-block text-purple-500 transition-transform duration-300 group-hover:scale-125 group-hover:-rotate-6 group-hover:text-purple-300 motion-reduce:transform-none">{f.icon}</span>
               <Badge />
             </div>
-            <h3 className="text-lg font-bold text-white mb-2">{f.title}</h3>
+            <h3 className="text-lg font-bold text-white mb-2 transition-colors group-hover:text-purple-100">{f.title}</h3>
             <p className="text-purple-200 text-sm leading-relaxed">{f.description}</p>
           </div>
         ))}
@@ -85,9 +86,10 @@ export default function ComingSoon({ heading = true }: { heading?: boolean }) {
       {/* rows of four, the last row centred */}
       <div className="flex flex-wrap justify-center gap-4" data-name="roadmap">
         {ROADMAP.map(f => (
-          <div key={f.title} className="w-full sm:w-[calc(50%-0.5rem)] lg:w-[calc(25%-0.75rem)] bg-black/40 backdrop-blur-sm border border-indigo-900/60 rounded-xl p-5">
+          <div key={f.title} className="group relative overflow-hidden transition-all duration-300 ease-out hover:-translate-y-1.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0 w-full sm:w-[calc(50%-0.5rem)] lg:w-[calc(25%-0.75rem)] bg-black/40 backdrop-blur-sm border border-indigo-900/60 rounded-xl p-5 hover:border-indigo-500 hover:bg-indigo-950/50 hover:shadow-[0_14px_40px_-12px_rgba(99,102,241,0.6)]">
+            <span aria-hidden className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/[0.07] to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full motion-reduce:hidden" />
             <div className="flex items-center justify-between mb-3">
-              <span className="text-indigo-400">{f.icon}</span>
+              <span className="inline-block text-indigo-400 transition-transform duration-300 group-hover:scale-125 group-hover:-rotate-6 group-hover:text-indigo-300 motion-reduce:transform-none">{f.icon}</span>
               <Badge planned />
             </div>
             <h4 className="font-bold text-white mb-1">{f.title}</h4>
