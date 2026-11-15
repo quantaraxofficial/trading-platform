@@ -1,12 +1,22 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { SITE_URL } from "./lib/site";
 
+const DESCRIPTION = "Professional trading charts with drawing tools and indicators, bar replay and backtesting, paper trading, live collab, a voice assistant and analytics of every trade.";
+
+// Search engines and shared links (Google, WhatsApp, X…): the title, description and preview
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "TradePilot | Professional Trading Platform",
     template: "%s | TradePilot",
   },
-  description: "Advanced charting, real-time analysis, and intelligent risk management for serious traders.",
+  description: DESCRIPTION,
+  applicationName: "TradePilot",
+  keywords: ["trading charts", "technical analysis", "bar replay", "backtesting", "paper trading", "trading journal", "forex charts", "gold chart", "smart money concepts", "order blocks", "trading platform"],
+  openGraph: { type: "website", siteName: "TradePilot", title: "TradePilot | Professional Trading Platform", description: DESCRIPTION, url: "/" },
+  twitter: { card: "summary", title: "TradePilot | Professional Trading Platform", description: DESCRIPTION },
+  robots: { index: true, follow: true },
 };
 
 import { AuthProvider } from "@/context/AuthContext";

@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 import LegalPage, { type LegalSection } from '../components/external/LegalPage';
 
-export const metadata: Metadata = { title: 'Terms of Service' };
+export const metadata: Metadata = { title: 'Terms of Service', description: "The terms for using TradePilot: not financial advice, accounts, subscriptions, simulated trading and acceptable use.", alternates: { canonical: '/terms' } };
 
 const UPDATED = '15 November 2026';
 

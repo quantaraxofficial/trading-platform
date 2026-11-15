@@ -656,6 +656,10 @@ Posting signals out
     link per question (/faq#…), "Was this helpful?" (kept in Django admin: FAQ votes, the least
     helpful first) and "Ask us", which carries the question to the Contact form. A home-page tour
     points at it. The Contact page no longer shows Live Chat or an office address
+  - SEO: /sitemap.xml lists the public pages for Google (src/app/lib/site.ts PUBLIC_PAGES: add new
+    public pages there), /robots.txt lets search engines read them but not the API, admin or signed-in
+    tools; each page has its title, description and canonical link; shared links get a preview; the
+    Q&A is FAQPage structured data. NEXT_PUBLIC_SITE_URL sets the site's address (a domain later)
 ======================================================================
 17b. ECONOMIC CALENDAR
 ======================================================================

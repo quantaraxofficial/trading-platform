@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 import LegalPage, { type LegalSection } from '../components/external/LegalPage';
 
-export const metadata: Metadata = { title: 'Privacy Policy' };
+export const metadata: Metadata = { title: 'Privacy Policy', description: "What TradePilot collects, why, who it's shared with and the choices you have.", alternates: { canonical: '/privacy' } };
 
 const UPDATED = '15 November 2026';
 
