@@ -1133,3 +1133,34 @@ class SiteAnalytics(ServerMinute):
         proxy = True
         verbose_name = "Site analytics"
         verbose_name_plural = "Site analytics"
+
+
+class ContactMessage(models.Model):
+    """A message from the Contact page's form (core/contact.py): who (and their profile when signed in),
+    what they wrote, when; is_read once handled"""
+    name = models.CharField(max_length=120)
+    email = models.EmailField(max_length=254)
+    message = models.TextField()
+    profile = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='contact_messages')
+    ip = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    is_read = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} <{self.email}>: {self.message[:50]}"
+
+
+class AdminSeen(models.Model):
+    """What an admin has seen of a kind of notification (core/admin_notices.py): everything up to
+    seen_until, and the ones seen one by one after it (their ids)"""
+    user = models.ForeignKey('auth.User', on_delete=models.CASCADE, related_name='tp_seen')
+    kind = models.CharField(max_length=20)
+    seen_until = models.DateTimeField()
+    seen_ids = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        unique_together = ('user', 'kind')

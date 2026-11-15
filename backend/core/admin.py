@@ -670,3 +670,34 @@ def _readable_json_fields(site):
 
 
 _readable_json_fields(admin.site)
+
+
+# ---- the Contact page's messages (core/contact.py)
+from .models import ContactMessage  # noqa: E402
+
+
+@admin.register(ContactMessage)
+class ContactMessageAdmin(admin.ModelAdmin):
+    """Messages sent from the site's Contact page; tick is_read once handled"""
+    list_display = ("created_at", "name", "email", "message_snippet", "profile", "is_read")
+    list_filter = ("is_read", "created_at")
+    search_fields = ("name", "email", "message", "profile__name")
+    date_hierarchy = "created_at"
+    ordering = ("-created_at",)
+    actions = ["mark_read", "mark_unread"]
+    readonly_fields = ("created_at", "name", "email", "message", "profile", "ip", "user_agent")
+
+    @admin.display(description="Message")
+    def message_snippet(self, obj):
+        return (obj.message or "")[:80]
+
+    @admin.action(description="Mark selected as read")
+    def mark_read(self, request, queryset):
+        queryset.update(is_read=True)
+
+    @admin.action(description="Mark selected as unread")
+    def mark_unread(self, request, queryset):
+        queryset.update(is_read=False)
+
+    def has_add_permission(self, request):
+        return False

@@ -1,6 +1,7 @@
 "use client";
 
 import SiteNav from '../components/external/SiteNav';
+import SiteFooter from '../components/external/SiteFooter';
 import React from 'react';
 import { Zap, Shield, Globe, Award } from 'lucide-react';
 import ComingSoon from '../components/external/ComingSoon';
@@ -58,12 +59,7 @@ export default function AboutPage() {
         <ComingSoon />
       </div>
 
-      {/* Footer */}
-      <footer style={{ position: 'relative', zIndex: 10, borderTop: '1px solid #1e293b', padding: '48px 24px' }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '32px', color: '#64748b', fontSize: '14px' }}>
-          <div>© 2026 TradePilot Trading Solutions. All rights reserved.</div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

@@ -71,6 +71,25 @@ function applyRemote(key: string, value: string, updatedAt: number) {
   reloadStore(key);
 }
 
+// No connection yet (offline, or the device just woke from sleep and hasn't reconnected: the tab
+// turning visible pulls at once): wait for it and try again a few times before giving up, so a
+// moment without a network isn't a failure (Django Admin's failed requests)
+const RETRY_WAITS_MS = [2000, 6000, 15000];
+const offline = () => typeof navigator !== "undefined" && navigator.onLine === false;
+const whenOnline = (): Promise<void> => offline()
+  ? new Promise(resolve => window.addEventListener("online", () => resolve(), { once: true }))
+  : Promise.resolve();
+async function fetchRetrying(input: string, init?: RequestInit): Promise<Response> {
+  for (let i = 0; ; i++) {
+    await whenOnline();
+    try { return await fetch(input, init); }
+    catch (err) {
+      if (i >= RETRY_WAITS_MS.length) throw err;
+      await new Promise(r => setTimeout(r, RETRY_WAITS_MS[i]));
+    }
+  }
+}
+
 // A failed upload (server busy, offline) is tried again shortly
 function retryLater(keys: string[]) {
   keys.forEach((k) => dirty.add(k));
@@ -90,7 +109,7 @@ async function push() {
   }
   if (!Object.keys(settings).length) return;
   try {
-    const res = await fetch(url(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ settings }) });
+    const res = await fetchRetrying(url(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ settings }) });
     if (!res.ok) {
       reportFailure({ path: `${API}${encodeURIComponent(uid || "")}/`, method: "POST", status_code: res.status, reason_code: "cloud_sync_failed", reason_message: `settings upload failed (${res.status})` });
       retryLater(keys); return;
@@ -116,11 +135,20 @@ export async function flushCloudSync() {
 
 // Fetches the server's copies; newer ones replace this browser's, and keys this browser changed
 // more recently go up
-export async function pullAndMerge(): Promise<string[]> {
+// (one at a time: the tab turning visible again while one waits for the network joins it)
+let pulling: Promise<string[]> | null = null;
+export function pullAndMerge(): Promise<string[]> {
+  if (!pulling) pulling = pull().finally(() => { pulling = null; });
+  return pulling;
+}
+
+async function pull(): Promise<string[]> {
   if (!uid) return [];
+  const forUid = uid;
   let remote: Record<string, { value: string; updated_at: number }> = {};
   try {
-    const res = await fetch(url());
+    const res = await fetchRetrying(url());
+    if (uid !== forUid) return [];   // (signed out or switched while it waited)
     if (!res.ok) {
       reportFailure({ path: `${API}${encodeURIComponent(uid || "")}/`, method: "GET", status_code: res.status, reason_code: "cloud_sync_failed", reason_message: `settings pull failed (${res.status})` });
       return [];

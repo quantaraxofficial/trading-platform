@@ -29,3 +29,8 @@ class UploadThrottle(_ByIp):
 class ApiThrottle(_ByIp):
     """Everything else: generous, only stops floods"""
     scope = 'api'
+
+
+class ContactThrottle(_ByIp):
+    """The Contact page's form"""
+    scope = 'contact'

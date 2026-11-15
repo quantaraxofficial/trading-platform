@@ -481,6 +481,13 @@ Posting signals out
     visit: the chart's (collab, backtest sessions, background image, settings download / import) and
     the home page's (the account menu: profile, analytics, backtesting analytics, a new menu entry).
     The Help menu (right toolbar) starts any again. Every new feature gets a tour there
+  - Admin notifications: a bell in the admin's header with how many new errors (failed requests),
+    Contact page messages and feedback messages this admin hasn't seen, listing the newest of each
+    (click one: it opens, counted seen; "open all": the list of the new ones; "Mark all as seen");
+    toasts in the corner when the admin is opened (once a browser session) and when more arrive
+    (checked every minute while the tab is visible). Each admin's own (what they've seen)
+  - Contact messages (Django admin): the Contact page's form now sends (name, email, message; 5 an
+    hour per address), kept with the sender's profile when signed in, read / unread
 
 ======================================================================
 16. VOICE ASSISTANT
@@ -638,6 +645,8 @@ Posting signals out
   - The chart's account menu: Your profile, Settings and billing, Home (/); the account's
     plan now reaches the menu and the profile (it was loaded but never passed on)
 
+  - A full footer on the site pages (home, About, Contact, Profile): the brand, every page in
+    columns (product, community, your account, company), copyright, "not financial advice", back to top
 ======================================================================
 17b. ECONOMIC CALENDAR
 ======================================================================
@@ -1031,7 +1040,7 @@ Posting signals out
 ======================================================================
 18. RUNNING IT (SETUP NOTES)
 ======================================================================
-  - Database: run "python manage.py migrate" (migrations up to 0054)
+  - Database: run "python manage.py migrate" (migrations up to 0055)
   - Live collab / chats: the backend runs under daphne (Django Channels)
   - Copy trading: run "python manage.py run_copier" on the copier server (MT5 installed)
   - Market data: TWELVEDATA_API_KEY (8 requests a minute on the free plan; the optimizer

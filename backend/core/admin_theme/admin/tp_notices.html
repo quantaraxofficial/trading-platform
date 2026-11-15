@@ -1,0 +1,121 @@
+{% comment %}
+  The admin's notifications (core/admin_notices.py): a bell in the header with how many new errors,
+  Contact messages and feedback this admin hasn't seen, listing them; toasts when the admin opens
+  (each browser session) and when more arrive (checked every minute while the tab is visible).
+  Clicking one opens it; Escape or a click outside closes the list.
+{% endcomment %}
+<div id="tp-bell" class="tp-bell" data-name="admin-bell">
+  <button type="button" class="tp-bell-btn" aria-label="Notifications" aria-haspopup="true" aria-expanded="false">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+    <span class="tp-bell-n" hidden data-name="admin-bell-count"></span>
+  </button>
+  <div class="tp-bell-panel" role="dialog" aria-label="Notifications" hidden>
+    <div class="tp-bell-head"><b>Notifications</b><button type="button" class="tp-bell-all" data-name="admin-bell-seen">Mark all as seen</button></div>
+    <div class="tp-bell-body"></div>
+  </div>
+</div>
+<div id="tp-toasts" class="tp-toasts" aria-live="polite"></div>
+
+<style>
+  /* (the header above the page, so the open list isn't under the content) */
+  #header { position: relative; z-index: 1000; }
+  .tp-bell { position: relative; display: inline-flex; align-items: center; margin-right: 14px; vertical-align: middle; }
+  .tp-bell-btn { position: relative; background: transparent; border: 1px solid var(--tp-card-line, rgba(107,33,168,.4)); color: #e9d5ff; width: 38px; height: 38px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+  .tp-bell-btn:hover, .tp-bell-btn[aria-expanded="true"] { background: rgba(147, 51, 234, .25); color: #fff; }
+  .tp-bell-n { position: absolute; top: -6px; right: -7px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #f23645; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px #1a0b2e; }
+  .tp-bell-panel, .tp-toasts { text-transform: none; letter-spacing: normal; font-weight: 400; }
+  .tp-bell-panel { position: absolute; right: 0; top: 46px; width: 400px; max-width: calc(100vw - 24px); max-height: 70vh; overflow: auto; background: #140a24; border: 1px solid rgba(147, 51, 234, .45); border-radius: 12px; box-shadow: 0 16px 48px rgba(0,0,0,.55); z-index: 10000; text-align: left; }
+  .tp-bell-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid rgba(147, 51, 234, .3); color: #f3e8ff; position: sticky; top: 0; background: #140a24; }
+  .tp-bell-all { background: transparent; border: 0; color: #c4b5fd; cursor: pointer; font-size: 12px; padding: 0; }
+  .tp-bell-all:hover { color: #fff; text-decoration: underline; }
+  .tp-bell-kind { padding: 8px 0 4px; border-bottom: 1px solid rgba(147, 51, 234, .18); }
+  .tp-bell-kind h4 { display: flex; justify-content: space-between; align-items: center; margin: 0; padding: 4px 14px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #a78bfa; background: none; }
+  .tp-bell-kind h4 a { text-transform: none; letter-spacing: 0; font-size: 12px; color: #c4b5fd; }
+  .tp-bell-item { display: block; padding: 8px 14px; color: #ede9fe !important; text-decoration: none !important; }
+  .tp-bell-item:hover { background: rgba(147, 51, 234, .18); }
+  .tp-bell-item .t { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tp-bell-item .s { font-size: 12px; color: #b9a8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tp-bell-item .w { font-size: 11px; color: #8b7bb8; margin-top: 1px; }
+  .tp-bell-empty { padding: 22px 14px; text-align: center; color: #b9a8e8; font-size: 13px; }
+  .tp-toasts { position: fixed; right: 18px; bottom: 18px; z-index: 10001; display: flex; flex-direction: column; gap: 10px; width: 340px; max-width: calc(100vw - 36px); }
+  .tp-toast { display: flex; gap: 10px; align-items: flex-start; background: #1b0d33; border: 1px solid rgba(167, 139, 250, .55); border-left: 4px solid var(--c, #a855f7); border-radius: 10px; padding: 12px 12px 12px 14px; color: #f3e8ff; box-shadow: 0 12px 36px rgba(0,0,0,.5); cursor: pointer; animation: tp-toast-in .25s ease-out; }
+  .tp-toast:hover { background: #24113f; }
+  .tp-toast .b { flex: 1; font-size: 13px; line-height: 18px; }
+  .tp-toast .b b { display: block; font-size: 14px; margin-bottom: 2px; }
+  .tp-toast .x { background: transparent; border: 0; color: #c4b5fd; cursor: pointer; font-size: 16px; line-height: 16px; padding: 0 2px; }
+  @keyframes tp-toast-in { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+</style>
+
+<script>
+(function () {
+  var URL_STATE = "{% url 'admin_notices' %}", URL_SEEN = "{% url 'admin_notices_seen' %}", CSRF = "{{ csrf_token }}";
+  var COLORS = { errors: "#f23645", contact: "#22c55e", feedback: "#a855f7" };
+  var TITLES = { errors: "New errors", contact: "New contact messages", feedback: "New feedback" };
+  var root = document.getElementById("tp-bell"); if (!root) return;
+  var btn = root.querySelector(".tp-bell-btn"), panel = root.querySelector(".tp-bell-panel"), body = root.querySelector(".tp-bell-body");
+  var badge = root.querySelector(".tp-bell-n"), toasts = document.getElementById("tp-toasts");
+  // (to the page itself: inside the header, whose blur makes it the box "fixed" is measured in)
+  document.body.appendChild(toasts);
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+  var ago = function (ms) { var m = Math.round((Date.now() - ms) / 60000); return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " d ago"; };
+  var store = function (s, k, v) { try { if (v === undefined) return JSON.parse(s.getItem(k) || "null"); s.setItem(k, JSON.stringify(v)); } catch (e) { return null; } };
+
+  function render(st) {
+    badge.hidden = !st.total;
+    badge.textContent = st.total > 99 ? "99+" : st.total;
+    btn.setAttribute("aria-label", st.total ? st.total + " notifications not seen" : "Notifications");
+    var html = "";
+    st.kinds.forEach(function (k) {
+      if (!k.count) return;
+      html += '<div class="tp-bell-kind" data-kind="' + k.kind + '"><h4><span>' + esc(TITLES[k.kind]) + " · " + k.count + '</span><a href="' + k.url + '">open all</a></h4>';
+      k.items.forEach(function (i) {
+        html += '<a class="tp-bell-item" href="' + i.url + '"><div class="t">' + esc(i.title) + '</div><div class="s">' + esc(i.sub) + '</div><div class="w">' + ago(i.at) + "</div></a>";
+      });
+      html += "</div>";
+    });
+    body.innerHTML = html || '<div class="tp-bell-empty">You’re all caught up.</div>';
+  }
+
+  function toast(k) {
+    var el = document.createElement("div");
+    el.className = "tp-toast"; el.style.setProperty("--c", COLORS[k.kind] || "#a855f7");
+    el.setAttribute("role", "status"); el.dataset.name = "admin-toast-" + k.kind;
+    el.innerHTML = '<div class="b"><b>' + esc(TITLES[k.kind]) + "</b>" + esc(k.count + " " + k.toast.replace(/^new \d+ /, "new ")) + '</div><button type="button" class="x" aria-label="Close">×</button>';
+    el.addEventListener("click", function (e) { if (e.target.closest(".x")) { el.remove(); return; } location.href = k.url; });
+    toasts.appendChild(el);
+    setTimeout(function () { el.remove(); }, 12000);
+  }
+
+  // toasts: on the first admin page of a browser session, every kind with new ones; after that, only
+  // when more have come since the last toast of that kind
+  function toastNew(st) {
+    var first = !store(sessionStorage, "tp-notices-session");
+    store(sessionStorage, "tp-notices-session", 1);
+    var shown = store(localStorage, "tp-notices-toasted") || {};
+    st.kinds.forEach(function (k) {
+      if (k.count && (first || k.newest > (shown[k.kind] || 0))) toast(k);
+      if (k.newest) shown[k.kind] = Math.max(shown[k.kind] || 0, k.newest);
+    });
+    store(localStorage, "tp-notices-toasted", shown);
+  }
+
+  function load() {
+    return fetch(URL_STATE, { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (st) { if (st) { render(st); toastNew(st); } })
+      .catch(function () {});
+  }
+
+  function setOpen(open) { panel.hidden = !open; btn.setAttribute("aria-expanded", open ? "true" : "false"); }
+  btn.addEventListener("click", function (e) { e.stopPropagation(); setOpen(panel.hidden); });
+  document.addEventListener("click", function (e) { if (!panel.hidden && !root.contains(e.target)) setOpen(false); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !panel.hidden) setOpen(false); });
+  root.querySelector(".tp-bell-all").addEventListener("click", function () {
+    fetch(URL_SEEN, { method: "POST", credentials: "same-origin", headers: { "X-CSRFToken": CSRF } })
+      .then(function (r) { return r.ok ? r.json() : null; }).then(function (st) { if (st) render(st); });
+  });
+
+  load();
+  setInterval(function () { if (document.visibilityState === "visible") load(); }, 60000);
+})();
+</script>

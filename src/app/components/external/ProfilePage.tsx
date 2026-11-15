@@ -7,6 +7,7 @@
 // Everything is read from your real data: the paper trading engine, and the backend's sessions,
 // backtests and journal. In the site pages' look (home, sign-in).
 
+import SiteFooter from './SiteFooter';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity, Award, BarChart3, BookOpen, CalendarDays, Clock, Coins, Crown, Download, Flame, FlaskConical, Gauge, Layers,
@@ -192,6 +193,8 @@ export default function ProfilePage() {
           )}
         </div>
       </main>
+
+      <SiteFooter />
 
       <style jsx global>{`
         .blob { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.15; will-change: opacity; transform: translateZ(0); animation: pulse-blob 6s ease-in-out infinite; }

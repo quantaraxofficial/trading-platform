@@ -1,9 +1,10 @@
 from django.urls import path
-from . import presence, voice, views, analytics, broker_algo, broker_mt5, stats_accounts, posts, copy_api, copy_share, optimizer_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github, econ_calendar, news, market, turn
+from . import contact, presence, voice, views, analytics, broker_algo, broker_mt5, stats_accounts, posts, copy_api, copy_share, optimizer_api, social, chat_groups, chat_presence, collab, collab_dms, collab_files, github, econ_calendar, news, market, turn
 
 urlpatterns = [
     path('sync/', views.sync_user, name='sync_user'),
     path('presence/<str:uid>/', presence.ping, name='presence'),
+    path('contact/', contact.send, name='contact'),   # the Contact page's form
     path('visit/', presence.visit, name='visit'),   # signed-out visitors (Site analytics)
     path('lag/', presence.lag, name='lag'),   # pages that froze in a browser (Site analytics)
     path('calendar/economic/', econ_calendar.economic, name='economic_calendar'),

@@ -20,3 +20,6 @@
 {% block extrastyle %}{{ block.super }}{% include "admin/tradepilot_theme.html" %}{% endblock %}
 
 {% block nav-global %}{% endblock %}
+
+{% comment %}the notifications bell (and its toasts) before the welcome, for staff only (core/admin_notices.py){% endcomment %}
+{% block welcome-msg %}{% include "admin/tp_notices.html" %}{{ block.super }}{% endblock %}

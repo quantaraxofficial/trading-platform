@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import SiteFooter from './SiteFooter';
 import { TrendingUp, BarChart3, LineChart, Activity, Zap, Shield, Globe, ArrowRight, Menu, X, Target, LayoutTemplate } from 'lucide-react';
 import RollingBitcoin from './RollingBitcoin';
 import ComingSoon from './ComingSoon';
@@ -189,16 +190,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="py-12 px-6 border-t border-purple-900" style={{ zIndex: 1, position: 'relative' }}>
-        <div className="container mx-auto flex flex-col md:flex-row justify-between items-center">
-          <div className="flex items-center space-x-2 mb-4 md:mb-0">
-            <TrendingUp className="w-8 h-8 text-purple-500" />
-            <span className="text-xl font-bold">TradePilot</span>
-          </div>
-          <div className="text-purple-400 text-center text-sm">© 2024 TradePilot. Professional trading platform.</div>
-        </div>
-      </footer>
+      <SiteFooter />
 
       <style jsx global>{`
         .blob { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.15; will-change: opacity; transform: translateZ(0); animation: pulse-blob 6s ease-in-out infinite; }
