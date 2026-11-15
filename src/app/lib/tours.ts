@@ -100,6 +100,18 @@ export const TOURS: Tour[] = [
     ],
     after: () => window.dispatchEvent(new CustomEvent("tv:close-account-menu")),
   },
+  {
+    id: "home-faq",
+    title: "Questions & answers",
+    page: "home",
+    steps: [
+      {
+        target: '[data-name="home-nav-faq"]',
+        title: "Questions & answers",
+        body: "Answers about the chart, replay and backtesting, collab, the voice assistant and your account. Search them, and if something isn't there, ask us from the same page.",
+      },
+    ],
+  },
   // Everything TradePilot adds to a TradingView-style chart, across its pages (on request only)
   {
     id: "site-guide",

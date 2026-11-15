@@ -106,6 +106,7 @@ export default function LandingPage() {
               <button onClick={() => scrollToSection('features')} className="text-purple-400 hover:text-white transition-colors">Features</button>
               <button onClick={() => scrollToSection('coming-soon')} className="text-purple-400 hover:text-white transition-colors">Coming soon</button>
               <a href="/about" className="text-purple-400 hover:text-white transition-colors">About Us</a>
+              <a href="/faq" data-name="home-nav-faq" className="text-purple-400 hover:text-white transition-colors">Q&amp;A</a>
               <a href="/contact" className="text-purple-400 hover:text-white transition-colors">Contact</a>
               <a href="/pricing" className="text-purple-400 hover:text-white transition-colors">Pricing</a>
               {!loading && !user && <a href="/login" className="text-purple-400 hover:text-white transition-colors">Log in</a>}
@@ -127,6 +128,7 @@ export default function LandingPage() {
               <button onClick={() => scrollToSection('features')} className="block text-purple-400 hover:text-white transition-colors">Features</button>
               <button onClick={() => scrollToSection('coming-soon')} className="block text-purple-400 hover:text-white transition-colors">Coming soon</button>
               <a href="/about" className="block text-purple-400 hover:text-white transition-colors">About Us</a>
+              <a href="/faq" className="block text-purple-400 hover:text-white transition-colors">Q&amp;A</a>
               <a href="/contact" className="block text-purple-400 hover:text-white transition-colors">Contact</a>
               <a href="/pricing" className="block text-purple-400 hover:text-white transition-colors">Pricing</a>
               <SiteUserMenu mobile signedOut={<a href="/login" className="block text-purple-400 hover:text-white transition-colors">Log in</a>} />

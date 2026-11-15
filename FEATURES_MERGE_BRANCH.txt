@@ -651,6 +651,11 @@ Posting signals out
     shared with, your choices; not financial advice, accounts, subscriptions, simulated vs real trading
     (connected accounts, copy trading), acceptable use. Linked in the footer. The Contact page no longer
     shows a placeholder support email
+  - Questions & answers (/faq, in the site's top bar, the home page and the footer): search (matches
+    highlighted, "/" to search), topics with counts, answers that open and close (or all at once), a
+    link per question (/faq#…), "Was this helpful?" (kept in Django admin: FAQ votes, the least
+    helpful first) and "Ask us", which carries the question to the Contact form. A home-page tour
+    points at it. The Contact page no longer shows Live Chat or an office address
 ======================================================================
 17b. ECONOMIC CALENDAR
 ======================================================================
@@ -1044,7 +1049,7 @@ Posting signals out
 ======================================================================
 18. RUNNING IT (SETUP NOTES)
 ======================================================================
-  - Database: run "python manage.py migrate" (migrations up to 0055)
+  - Database: run "python manage.py migrate" (migrations up to 0056)
   - Live collab / chats: the backend runs under daphne (Django Channels)
   - Copy trading: run "python manage.py run_copier" on the copier server (MT5 installed)
   - Market data: TWELVEDATA_API_KEY (8 requests a minute on the free plan; the optimizer

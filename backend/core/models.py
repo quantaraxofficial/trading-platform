@@ -1164,3 +1164,19 @@ class AdminSeen(models.Model):
 
     class Meta:
         unique_together = ('user', 'kind')
+
+
+class FaqVote(models.Model):
+    """A "Was this helpful?" answer on the Q&A page (core/faq.py): which question (its id on the page),
+    yes or no, who (when signed in), when"""
+    question = models.CharField(max_length=80, db_index=True)
+    helpful = models.BooleanField()
+    profile = models.ForeignKey(TraderProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='faq_votes')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "FAQ vote"
+
+    def __str__(self):
+        return f"{self.question}: {'helpful' if self.helpful else 'not helpful'}"

@@ -701,3 +701,29 @@ class ContactMessageAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+# ---- the Q&A page's "Was this helpful?" (core/faq.py)
+from .models import FaqVote  # noqa: E402
+
+
+@admin.register(FaqVote)
+class FaqVoteAdmin(admin.ModelAdmin):
+    """Each vote; above the list, each question's helpful / not helpful, the least helpful first"""
+    list_display = ("created_at", "question", "helpful", "profile")
+    list_filter = ("helpful", "question", "created_at")
+    date_hierarchy = "created_at"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from .faq import summary
+        rows = summary(10)
+        if rows:
+            text = "; ".join(f"{q}: {yes} helpful, {no} not" for q, yes, no in rows)
+            self.message_user(request, f"Least helpful first — {text}", messages.INFO)
+        return super().changelist_view(request, extra_context)

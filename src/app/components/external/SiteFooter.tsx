@@ -47,6 +47,7 @@ export default function SiteFooter() {
       links: [
         { href: '/', label: 'Home' },
         { href: '/about', label: 'About us' },
+        { href: '/faq', label: 'Questions & answers' },
         { href: '/contact', label: 'Contact us' },
         { href: '/terms', label: 'Terms of Service' },
         { href: '/privacy', label: 'Privacy Policy' },

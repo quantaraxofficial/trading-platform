@@ -75,3 +75,21 @@ class AdminNoticesTests(TestCase):
         self.client.logout()
         self.assertNotIn('data-name="admin-bell"', self.client.get("/admin/login/").content.decode())
         self.assertEqual(self.client.get("/admin/notices/").status_code, 302)   # (to the sign-in)
+
+
+class FaqVoteTests(TestCase):
+    def setUp(self):
+        cache.clear()
+
+    def test_vote_kept_and_summed(self):
+        from .faq import summary
+        from .models import FaqVote
+        for helpful in (True, False, False):
+            r = self.client.post("/api/users/faq/vote/", {"id": "what-is-tradepilot", "helpful": helpful}, content_type="application/json")
+            self.assertEqual(r.status_code, 200)
+        self.assertEqual(self.client.post("/api/users/faq/vote/", {"id": "Bad Id!", "helpful": True}, content_type="application/json").status_code, 400)
+        self.assertEqual(self.client.post("/api/users/faq/vote/", {"id": "x", "helpful": "yes"}, content_type="application/json").status_code, 400)
+        self.assertEqual(FaqVote.objects.count(), 3)
+        self.assertEqual(summary(), [("what-is-tradepilot", 1, 2)])
+        self.client.force_login(User.objects.create_superuser("adm9", "adm9@test.invalid", "pw"))
+        self.assertIn("what-is-tradepilot: 1 helpful, 2 not", self.client.get("/admin/core/faqvote/").content.decode())

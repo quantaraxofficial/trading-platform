@@ -2,7 +2,7 @@
 
 import SiteNav from '../components/external/SiteNav';
 import SiteFooter from '../components/external/SiteFooter';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BACKEND_URL, backendFetch } from '@/lib/backend';
 import { ComingSoonLine } from '../components/external/ComingSoon';
 import Link from 'next/link';
@@ -61,6 +61,11 @@ function ContactForm() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
+  // (the Q&A page's "Ask us" brings the question: ?message=…)
+  useEffect(() => {
+    const m = new URLSearchParams(window.location.search).get('message');
+    if (m) setMessage(m.slice(0, 5000));
+  }, []);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'failed' | 'busy'>('idle');
 

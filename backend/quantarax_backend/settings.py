@@ -159,6 +159,7 @@ REST_FRAMEWORK = {
         'report': env('THROTTLE_REPORT', default='120/min'),
         'feedback': env('THROTTLE_FEEDBACK', default='10/hour'),
         'contact': env('THROTTLE_CONTACT', default='5/hour'),
+        'faq': env('THROTTLE_FAQ', default='60/hour'),
         'upload': env('THROTTLE_UPLOAD', default='120/hour'),
     },
     'NUM_PROXIES': TRUSTED_PROXY_COUNT,

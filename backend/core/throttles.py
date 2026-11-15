@@ -34,3 +34,8 @@ class ApiThrottle(_ByIp):
 class ContactThrottle(_ByIp):
     """The Contact page's form"""
     scope = 'contact'
+
+
+class FaqThrottle(_ByIp):
+    """The Q&A page's "Was this helpful?" """
+    scope = 'faq'
