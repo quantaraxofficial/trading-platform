@@ -214,6 +214,10 @@ Small screens and browsers
   - Fixed React crashes when a drawing leaves the loaded bars and comes back
   - "Save this replay" is kept in the account (not just the browser)
   - Switching timeframe in a replay keeps the candle size and the replay bar's place
+  - Switching timeframe in a replay never shows the future: the replay keeps the exact moment it
+    reached (a bar ends where the next starts: 45-minute bars restart every 4 hours, which showed up
+    to 30 minutes ahead). To a longer timeframe, the bar the replay is part-way through shows as
+    far as it had formed (built from the bars played, as on TradingView); a step fills it whole
 
 ======================================================================
 4. TRADING: PAPER TRADING AND METATRADER 5
