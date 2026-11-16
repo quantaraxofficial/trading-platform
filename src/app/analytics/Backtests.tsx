@@ -338,6 +338,7 @@ function NewSessionDialog({ uid, onClose, onCreated }: { uid: string; onClose: (
   const [date, setDate] = useState(() => new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10));
   const [time, setTime] = useState("00:00");
   const [balance, setBalance] = useState("10000");
+  const [positionOrders, setPositionOrders] = useState(false);
   // How much to backtest (optional): e.g. 3 months from the start
   const [lengthValue, setLengthValue] = useState("");
   const [lengthUnit, setLengthUnit] = useState<LengthUnit>("months");
@@ -372,7 +373,7 @@ function NewSessionDialog({ uid, onClose, onCreated }: { uid: string; onClose: (
       const s = await createSession(uid, {
         name: name.trim() || `${sym} ${label} backtest`, symbol: sym, interval, interval_label: label, start_time: start, initial_balance: bal,
         strategy: strategy.trim(), description: description.trim(), rules, tags, account: freshAccount(`Backtest · ${name.trim() || sym}`, bal), book: {} as any,
-        length,
+        length, positions_as_orders: positionOrders,
       });
       onCreated(s);
     } catch (e: any) { setError(e?.message || "Couldn't create the session"); }
@@ -437,6 +438,11 @@ function NewSessionDialog({ uid, onClose, onCreated }: { uid: string; onClose: (
           </div>
           <label className="col-span-2"><span className="block text-purple-300 text-sm font-medium mb-1.5">Starting balance (USD)</span>
             <input className={field} value={balance} onChange={e => setBalance(e.target.value)} inputMode="decimal" data-testid="ns-balance" /></label>
+          <label className="col-span-2 flex items-start gap-3 cursor-pointer rounded-lg border border-purple-700/40 bg-purple-950/30 p-3" data-testid="ns-position-orders">
+            <input type="checkbox" checked={positionOrders} onChange={e => setPositionOrders(e.target.checked)} className="mt-0.5 w-4 h-4 accent-purple-600" />
+            <span><span className="block text-purple-100 text-sm font-medium">Long / Short Position drawings place orders</span>
+              <span className="block text-purple-400/80 text-xs mt-0.5">Drawing a Long or Short Position buys or sells in the session's account at its entry, with its take profit and stop loss; moving the drawing moves the order. Change it any time from the session's bar.</span></span>
+          </label>
           <label className="col-span-2"><span className="block text-purple-300 text-sm font-medium mb-1.5">Strategy (optional)</span>
             <input className={field} value={strategy} onChange={e => setStrategy(e.target.value)} placeholder="e.g. London breakout" /></label>
           <label className="col-span-2"><span className="block text-purple-300 text-sm font-medium mb-1.5">What are you testing? (optional)</span>

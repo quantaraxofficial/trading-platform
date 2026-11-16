@@ -179,6 +179,9 @@ Knowledge:
 - Backtest: "backtest gold from 1 March 2024 with 10k for 3 months" (asks yes / no, then creates
   and opens it).
 - "Open my backtest sessions".
+- In a running session: "make position drawings place orders" / "stop placing orders from drawings"
+  (Long / Short Position drawings buy or sell in the session's account at their entry, with their
+  take profit and stop loss).
 
 
 7. ALERTS

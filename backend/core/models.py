@@ -479,6 +479,8 @@ class ReplaySession(models.Model):
     time_spent = models.IntegerField(default=0)           # seconds spent replaying it
     # shown on the leaderboard's Manual backtests tab (core/stats_accounts.manual_leaderboard)
     on_leaderboard = models.BooleanField(default=False)
+    # Long / Short Position drawings place orders in its account (the site's lib/positionOrders)
+    positions_as_orders = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

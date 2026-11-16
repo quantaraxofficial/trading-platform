@@ -1,5 +1,6 @@
 "use client";
 
+import { positionDrawingAdded, positionDrawingChanged, positionDrawingDeleted } from "@/app/lib/positionOrders";
 import { trackFeature } from "@/app/lib/featureUse";
 import { registerVoiceCommands, registerToolPicker } from '@/app/lib/voice/registry';
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
@@ -478,7 +479,8 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
       const d = (e as CustomEvent).detail || {};
       const add: BaseDrawing[] = Array.isArray(d.drawings) ? d.drawings : [];
       const keep = typeof d.replaceGroup === "string" ? drawingsRef.current.filter(x => x.group?.id !== d.replaceGroup) : drawingsRef.current;
-      externalEditRef.current([...keep, ...add.map(x => ({ ...x, modifiedAt: Date.now() }))]);
+      // (a single position placed this way, not a group of analysis marks, places its order too)
+      externalEditRef.current([...keep, ...add.map(x => ({ ...x, modifiedAt: Date.now(), ...(x.group ? {} : positionDrawingAdded(x as any) || {}) }))]);
     };
     const onRemove = (e: Event) => {
       const prefix = (e as CustomEvent).detail?.groupPrefix;
@@ -564,6 +566,8 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
       group: drawing.group,
       modifiedAt: Date.now(),
     };
+    // (a Long / Short Position in a session that takes them as orders: placed, its order id kept)
+    Object.assign(newDrawing, positionDrawingAdded(newDrawing as any) || {});
     const newDrawings = [...drawingsRef.current, newDrawing];
     commitDrawings(newDrawings);
     pushToHistory(newDrawings);
@@ -584,6 +588,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
     setDrawings(prev => prev.map(d => {
       if (d.id === id) {
         const newDrawing = { ...d, ...keepFill(d, updates), ...updates, modifiedAt: Date.now() };
+        positionDrawingChanged(newDrawing as any);
         // Intercept style updates to save as new default
         const nonStyleKeys = ['id', 'type', 'points', 'visible', 'locked', 'scaleX', 'scaleY', 'rotation', 'text', 'group', 'modifiedAt'];
         const styleKeysChanged = Object.keys(updates).filter(k => !nonStyleKeys.includes(k));
@@ -624,6 +629,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const deleteDrawing = (id: string) => {
+    positionDrawingDeleted(drawingsRef.current.find(d => d.id === id) as any);
     const newDrawings = drawingsRef.current.filter(d => d.id !== id);
     commitDrawings(newDrawings);
     if (selectedShapeId === id) setSelectedShapeId(null);
@@ -634,6 +640,7 @@ export function DrawingProvider({ children }: { children: React.ReactNode }) {
 
   const deleteMultipleDrawings = (ids: string[]) => {
     const idSet = new Set(ids);
+    for (const d of drawingsRef.current) if (idSet.has(d.id)) positionDrawingDeleted(d as any);
     const newDrawings = drawingsRef.current.filter(d => !idSet.has(d.id));
     commitDrawings(newDrawings);
     if (selectedShapeId && idSet.has(selectedShapeId)) setSelectedShapeId(null);

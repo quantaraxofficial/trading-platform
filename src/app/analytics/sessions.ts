@@ -23,6 +23,8 @@ export interface BacktestSession {
   // How much market time it's meant to cover (optional) and the bar that is (seconds)
   length: SessionLength | null; end_time: number | null;
   account?: Account | null; book?: Book | null;
+  // Long / Short Position drawings place orders in the session's account (lib/positionOrders)
+  positions_as_orders?: boolean;
 }
 export interface NewSession {
   name: string; symbol: string; interval: string; interval_label: string; start_time: number; initial_balance: number;
@@ -30,10 +32,12 @@ export interface NewSession {
   account?: Account; book?: Book; current_time?: number; visible_bars?: number | null;
   drawings?: unknown[];   // its own drawings to start with
   length?: SessionLength | null;
+  positions_as_orders?: boolean;
 }
 export interface SessionProgress {
   current_time?: number; interval?: string; interval_label?: string; visible_bars?: number | null;
   account?: Account; book?: Book; add_time_spent?: number; status?: SessionStatus;
+  positions_as_orders?: boolean;
 }
 
 function url(uid: string, rest = "") {
@@ -127,10 +131,20 @@ export function setActiveSession(id: number | null) { if (id !== activeId) { act
 export const getActiveSession = () => activeId;
 export function subscribeActiveSession(f: () => void) { activeSubs.add(f); return () => { activeSubs.delete(f); }; }
 
+// The running session's "Long / Short Position drawings place orders", and its balance (the size a
+// new position drawing starts from): BacktestSessionBar sets them (lib/positionOrders reads them)
+let positionOrders = false;
+let balanceNow = 0;
+export function setSessionTrading(on: boolean, balance: number) { positionOrders = on; balanceNow = balance; }
+export const positionsAsOrdersOn = () => positionOrders && activeId != null;
+export const sessionBalance = () => balanceNow;
+
 // What the replay bar shows of the running session, and its buttons (BacktestSessionBar publishes it)
 export interface SessionUi {
   id: number; name: string; equity: number; pnl: number; spent: string; saved: string; error: string | null;
   save: () => void; complete: () => void;
+  // Long / Short Position drawings place orders: on or off for this session
+  positionOrders: boolean; togglePositionOrders: () => void;
 }
 let ui: SessionUi | null = null;
 const uiSubs = new Set<() => void>();

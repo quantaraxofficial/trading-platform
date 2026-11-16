@@ -7,13 +7,14 @@
 // when the page is hidden or closed, and when the replay is left. A replay under way can also be
 // kept as a new session ("Save as backtest session" in the replay menu).
 
+import { registerVoiceCommands } from "../lib/voice/registry";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useReplay } from "./ReplayContext";
 import { engine, useEngineState } from "@/app/trading/store";
 import { accountMetrics } from "@/app/trading/engine";
 import {
-  createSession, currentDrawings, freshAccount, getSession, updateSession, OPEN_SESSION_EVENT, setActiveSession, setDrawingSession, setSessionUi, spent,
+  createSession, currentDrawings, freshAccount, getSession, updateSession, OPEN_SESSION_EVENT, setActiveSession, setDrawingSession, setSessionUi, getSessionUi, setSessionTrading, spent,
   type BacktestSession, type SessionProgress,
 } from "@/app/analytics/sessions";
 
@@ -214,9 +215,30 @@ export default function BacktestSessionBar({ symbol, interval, intervalLabel, on
       id: session.id, name: session.name, equity: runM?.equity ?? session.balance, pnl: (runM?.equity ?? session.balance) - session.initial_balance,
       spent: spent(session.time_spent), saved: savedText, error,
       save: () => save(), complete: () => { statusRef.current = "completed"; stopReplay(); },
+      positionOrders: !!session.positions_as_orders,
+      togglePositionOrders: () => {
+        if (!uid) return;
+        const on = !session.positions_as_orders;
+        setSession(s => (s ? { ...s, positions_as_orders: on } : s));
+        updateSession(uid, session.id, { positions_as_orders: on }).catch(() => setSession(s => (s ? { ...s, positions_as_orders: !on } : s)));
+        window.dispatchEvent(new CustomEvent("tv:toast", { detail: { text: on ? "Long / Short Position drawings now place orders in this session" : "Position drawings no longer place orders" } }));
+      },
     });
   }, [phase, session, runM?.equity, savedText, error, save, stopReplay]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => setSessionUi(null), []);
+  // (Long / Short Position drawings place orders in it, when the session says so: lib/positionOrders)
+  useEffect(() => { setSessionTrading(!!session?.positions_as_orders && phase === "running", runM?.equity ?? session?.balance ?? 0); }, [session, phase, runM?.equity]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => setSessionTrading(false, 0), []);
+  // Voice: "make position drawings place orders" / "stop placing orders from drawings" (a running session)
+  useEffect(() => {
+    if (phase !== "running" || !session) { registerVoiceCommands("session-orders", null); return; }
+    const set = (on: boolean) => () => { if (!!session.positions_as_orders !== on) getSessionUi()?.togglePositionOrders(); };
+    registerVoiceCommands("session-orders", [
+      { id: "session-position-orders-on", run: set(true) },
+      { id: "session-position-orders-off", run: set(false) },
+    ]);
+  }, [phase, session]);
+  useEffect(() => () => registerVoiceCommands("session-orders", null), []);
 
   if (!session && !error) return null;
   if (session && phase === "running") return null;

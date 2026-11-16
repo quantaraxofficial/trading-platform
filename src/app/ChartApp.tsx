@@ -874,6 +874,12 @@ function AppLayout() {
     const timer = setTimeout(() => setHeaderToast(null), 3000);
     return () => clearTimeout(timer);
   }, [headerToast]);
+  // (a short message from anywhere on the page: tv:toast { text }, e.g. lib/positionOrders)
+  useEffect(() => {
+    const on = (e: Event) => { const t = (e as CustomEvent).detail?.text; if (typeof t === "string" && t) setHeaderToast(t); };
+    window.addEventListener("tv:toast", on);
+    return () => window.removeEventListener("tv:toast", on);
+  }, []);
   const userRef = useRef(user);
   userRef.current = user;
   const saveLayoutRef = useRef<() => void>(() => {});

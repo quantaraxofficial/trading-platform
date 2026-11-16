@@ -213,6 +213,17 @@ export default function ReplayBar({ intervalLabel = "5m", interval = "", symbol 
             {sessionUi.pnl >= 0 ? "+" : "-"}${Math.abs(sessionUi.pnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
           <span data-testid="bt-session-saved" style={{ color: sessionUi.error ? "#f23645" : "var(--tv-legend-args)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{sessionUi.error || sessionUi.saved}</span>
+          {/* Long / Short Position drawings place orders in this session: on / off */}
+          <button type="button" className="tv-bb-btn" data-testid="bt-session-position-orders" aria-pressed={sessionUi.positionOrders} onClick={sessionUi.togglePositionOrders}
+            title={sessionUi.positionOrders ? "Long / Short Position drawings place orders: on (click to turn off)" : "Make Long / Short Position drawings place orders"}
+            aria-label="Long / Short Position drawings place orders"
+            style={{ width: 26, height: 26, padding: 0, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 4,
+              color: sessionUi.positionOrders ? "#fff" : undefined, background: sessionUi.positionOrders ? "#7c3aed" : undefined }}>
+            {/* (a Long Position: target over entry over stop) */}
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
+              <rect x="2.5" y="2" width="11" height="5.5" rx="1" /><rect x="2.5" y="8.5" width="11" height="5.5" rx="1" strokeDasharray="2 1.5" /><path d="M1 8h14" />
+            </svg>
+          </button>
           <button type="button" className="tv-bb-btn" data-testid="bt-session-save" onClick={sessionUi.save} style={{ padding: "0 8px", height: 26, fontSize: 12, flex: "none" }}>Save</button>
           <button type="button" className="tv-bb-btn" data-testid="bt-session-complete" onClick={sessionUi.complete} style={{ padding: "0 8px", height: 26, fontSize: 12, flex: "none" }}>Complete</button>
         </div>

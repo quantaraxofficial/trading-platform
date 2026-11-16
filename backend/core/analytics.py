@@ -184,7 +184,7 @@ def _session_json(r, full=False):
          "net_pnl": round(sum(float(t.get("pnl") or 0) for t in closed), 2),
          "wins": sum(1 for t in closed if float(t.get("pnl") or 0) > 0),
          "strategy": r.strategy, "description": r.description, "rules": r.rules, "tags": r.tags, "notes": r.notes,
-         "status": r.status, "time_spent": r.time_spent, "on_leaderboard": r.on_leaderboard,
+         "status": r.status, "time_spent": r.time_spent, "on_leaderboard": r.on_leaderboard, "positions_as_orders": r.positions_as_orders,
          "created_at": int(r.created_at.timestamp() * 1000), "updated_at": int(r.updated_at.timestamp() * 1000)}
     if full:
         d.update(account=r.account, book=r.book)
@@ -222,6 +222,8 @@ def _apply(r, d, creating=False):
             setattr(r, f, str(d.get(f) or '')[:10000])
     if "rules" in d:
         r.rules = _str_list(d.get("rules"))
+    if "positions_as_orders" in d:
+        r.positions_as_orders = d.get("positions_as_orders") is True
     if "tags" in d:
         r.tags = _str_list(d.get("tags"), 20, 30)
     if creating or "symbol" in d:

@@ -372,6 +372,11 @@ Backtest sessions
   - A reopened backtest session shows its last played candle
   - New session: the symbol is a dropdown by market (plus your watchlists, or type one)
 
+  - "Long / Short Position drawings place orders" (when creating a session, the session bar's toggle,
+    or by voice): in that session, drawing a Long / Short Position buys / sells in its account at the
+    drawing's entry (market at the price now, else limit / stop) with its take profit and stop loss
+    and the quantity it shows (new drawings start at the session's balance, 1% risk); moving the
+    drawing moves the order (or a filled position's TP / SL); deleting it cancels an unfilled one
 ======================================================================
 12. COPY TRADING
 ======================================================================
