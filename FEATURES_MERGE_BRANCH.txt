@@ -703,6 +703,19 @@ Posting signals out
     with a chime that repeats until Stop, Open the chart or Snooze 5 min, plus a notification. Only
     while the market's open: forex, metals, indices and stocks not from Friday 22:00 to Sunday 22:00
     UTC (weekend days shown dimmed), crypto always. On / off switch, Test, edit, delete
+  - TradePilot phone apps (mobile/, built as TradingView builds its own: native Android in Kotlin +
+    Jetpack Compose, native iOS in Swift + SwiftUI, the chart in a WebView of the site). Tabs
+    Watchlist, Chart, Explore, Community, Menu. Native: the watchlist (lists, sections that fold, live
+    prices, add / remove, new list), symbol search (recent, popular, the site's search), a symbol's
+    page (price, change, 1D-All range chart, Chart / Trade, key stats), the chart bar (symbol,
+    timeframe sheet, drawing tools, indicators, more: alerts, replay, trading panel, Pine, object tree,
+    snapshot, chart settings, theme; undo / redo), Explore's feature cards, Menu (account, theme, the
+    PC's address, guide), a first-run guide, light / dark following the chart. The chart page runs in
+    an app mode (just the chart) and talks to the app through a bridge (lib/appBridge.ts,
+    components/AppBridge.tsx). They connect to the merge app on the PC over Wi-Fi: its Settings →
+    Phone app → "Use TradePilot on your phone" (servers on the network, the PC's address accepted,
+    the address shown). Sign-in by email in the app (Google's refuses apps' web views). Android:
+    `gradlew assembleDebug` in mobile/android; iOS: `xcodegen` on a Mac (mobile/README.md)
   - TradePilot purple (#7c3aed) instead of blue across the interface: accents, buttons, borders and
     focus, selections and drawing handles, toggles and tabs, the buy side, Redesign's outlines and
     Done, the classic themes' accent, the Pine editor's selection (drawing colours, palettes, named

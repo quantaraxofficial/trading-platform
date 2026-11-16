@@ -1,0 +1,37 @@
+# TradePilot for iOS: Swift + SwiftUI, the chart in a WKWebView (as TradingView's app is built).
+# On a Mac: `brew install xcodegen`, then `xcodegen` in this folder makes TradePilot.xcodeproj.
+name: TradePilot
+options:
+  bundleIdPrefix: com.tradepilot
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  TradePilot:
+    type: application
+    platform: iOS
+    sources:
+      - path: TradePilot
+    info:
+      path: TradePilot/Info.plist
+      properties:
+        CFBundleDisplayName: TradePilot
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        # The merge site runs on the user's PC over their Wi-Fi: plain HTTP to it
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: TradePilot connects to TradePilot on your PC over your Wi-Fi.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tradepilot.app
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO

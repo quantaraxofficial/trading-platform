@@ -45,6 +45,14 @@
     <div class="row"><div class="t">Trading reminders<small>Open your chart and ring at the times you trade</small></div>
       <button class="btn" id="reminders">Set reminders</button></div>
 
+    <div id="phone" hidden>
+      <h2>Phone app</h2>
+      <div class="row"><div class="t">Use TradePilot on your phone<small>The TradePilot phone app connects to this PC over your Wi-Fi. Windows asks once whether to allow it on your network: choose Private networks.</small></div>
+        <label class="switch"><input type="checkbox" id="phoneAccess"><span></span></label></div>
+      <div class="note" id="phoneInfo"></div>
+      <div class="restart" id="phoneRestart"><span>Restart TradePilot to apply this.</span><button class="btn primary" id="phoneRelaunch">Restart now</button></div>
+    </div>
+
     <h2>Appearance</h2>
     <div class="row"><div class="t">Theme<small>The app and your charts</small></div>
       <div class="seg" id="theme"><button data-v="system">System</button><button data-v="dark">Dark</button><button data-v="light">Light</button></div></div>

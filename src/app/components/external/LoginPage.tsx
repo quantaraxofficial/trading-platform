@@ -1,5 +1,6 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { inApp } from '@/app/lib/appBridge';
 import { Eye, EyeOff, TrendingUp, Mail, Lock, LogIn, ArrowRight } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
@@ -12,6 +13,9 @@ import { useRouter } from 'next/navigation';
  */
 export default function LoginPage() {
   const { signIn, signInWithGoogle } = useAuth();
+  // (inside the TradePilot phone apps Google's sign-in can't open: Google refuses apps' web views)
+  const [app, setApp] = useState(false);
+  useEffect(() => setApp(inApp()), []);
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -137,6 +141,11 @@ export default function LoginPage() {
             </form>
 
             {/* Or with a Google account */}
+            {app ? (
+              <p className="text-center text-purple-300 text-sm mt-6" data-name="app-google-note">
+                Google sign-in isn't available in the app (Google doesn't allow it inside apps). Sign in with your email and password.
+              </p>
+            ) : (<>
             <div className="flex items-center gap-4 my-6 text-sm text-purple-300">
               <div className="flex-1 border-t border-purple-700/50" />or<div className="flex-1 border-t border-purple-700/50" />
             </div>
@@ -150,6 +159,7 @@ export default function LoginPage() {
               </svg>
               Continue with Google
             </button>
+            </>)}
 
             {/* One device at a time */}
             <p className="text-center text-purple-300 text-sm mt-6">

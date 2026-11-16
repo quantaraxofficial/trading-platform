@@ -6,6 +6,7 @@
 // each step's target with a card beside it: Back, Next, Skip; Escape closes it. A step on another
 // page goes there and the tour carries on (sessionStorage). The Help menu and the voice assistant
 // ("guide me through the site") start one on request (tv:start-tour).
+import { inApp } from "../lib/appBridge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -66,7 +67,8 @@ export default function FeatureTour() {
       setTour(again);
       return;
     }
-    if (!page) return;
+    // (not inside the phone apps: they show their own first-run guide)
+    if (!page || inApp()) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
       if (user?.uid) await cloudSyncReady();

@@ -27,7 +27,7 @@ const AUTH_HOSTS = [/\.firebaseapp\.com$/, /^accounts\.google\.com$/, /^apis\.go
 
 // ---- settings and session (userData/settings.json)
 const SETTINGS_FILE = () => path.join(app.getPath("userData"), "settings.json");
-const DEFAULTS = { openAtLogin: false, restoreTabs: true, hardwareAcceleration: true, theme: "system", zoom: 1, windows: [], reminders: [] };
+const DEFAULTS = { openAtLogin: false, restoreTabs: true, hardwareAcceleration: true, theme: "system", zoom: 1, windows: [], reminders: [], phoneAccess: false };
 let settings = { ...DEFAULTS };
 function loadSettings() {
   try { settings = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE(), "utf8")) }; } catch { settings = { ...DEFAULTS }; }
@@ -319,6 +319,9 @@ let settingsWin = null;
 const publicSettings = () => ({
   openAtLogin: app.getLoginItemSettings().openAtLogin, restoreTabs: settings.restoreTabs, hardwareAcceleration: settings.hardwareAcceleration,
   theme: settings.theme, zoom: Math.round((settings.zoom || 1) * 100), version: app.getVersion(), electron: process.versions.electron, site: SITE, colors: colors(), dark: isDark(),
+  // (the local edition: the phone apps on this Wi-Fi, and the addresses they use)
+  local: !!LOCAL, phoneAccess: !!settings.phoneAccess, phoneAddresses: LOCAL ? require("./local-servers").lanAddresses().map((ip) => `${ip}`) : [],
+  frontendPort: LOCAL?.frontendPort || null,
 });
 function openSettings() {
   if (settingsWin && !settingsWin.isDestroyed()) { settingsWin.focus(); return; }
@@ -391,6 +394,7 @@ ipcMain.handle("settings:set", (_e, key, value) => {
   else if (key === "hardwareAcceleration") settings.hardwareAcceleration = !!value;
   else if (key === "theme" && ["system", "dark", "light"].includes(value)) setTheme(value);
   else if (key === "zoom") setZoom(Number(value) / 100);
+  else if (key === "phoneAccess" && LOCAL) settings.phoneAccess = !!value;
   saveSettings(true);
   return publicSettings();
 });
@@ -475,7 +479,7 @@ function startLocalEdition(open) {
   });
   splash.on("closed", () => { if (!windows.size) app.quit(); });
   splash.webContents.once("did-finish-load", async () => {
-    const ok = await startLocal({ ...LOCAL }, path.join(app.getPath("userData"), "logs"), status, ask);
+    const ok = await startLocal({ ...LOCAL, phoneAccess: !!settings.phoneAccess }, path.join(app.getPath("userData"), "logs"), status, ask);
     if (ok) { open(); splash.destroy(); }
     else if (!failed) app.quit();
   });

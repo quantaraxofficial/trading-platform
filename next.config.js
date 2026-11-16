@@ -19,6 +19,9 @@ const nextConfig = {
     unoptimized: true,
   },
   poweredByHeader: false,
+  // The phone apps (mobile/) against the dev server: the Android emulator (10.0.2.2) and phones on
+  // this PC's Wi-Fi (private addresses). Development only; production has no such check
+  allowedDevOrigins: ["10.0.2.2", "192.168.*.*", "10.*.*.*", "172.*.*.*"],
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },

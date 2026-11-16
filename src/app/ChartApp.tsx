@@ -77,6 +77,8 @@ import { CollabAlertsSync, CollabChartSync, CollabDrawingSync, CollabPineSync, C
 import { collab, useCollabActive } from "./lib/collab/session";
 import type { ScriptLanguage } from "./lib/scripting";
 import { displaySymbol } from "@/app/lib/symbolDisplay";
+import AppBridge from "./components/AppBridge";
+import { appPlatform, type AppPlatform } from "./lib/appBridge";
 
 const DRAWINGS_PANEL_KEY = "tv:drawingsPanelVisible";
 const RIGHT_PANEL_KEY = "tv:rightPanelOpen";
@@ -131,6 +133,16 @@ function AppLayout() {
   // drawing toolbar is shown (TradingView's "Drawings panel" switch, remembered)
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<MobilePanel | null>(null);
+  // Inside the TradePilot phone apps (lib/appBridge): the chart only — the app draws the header and
+  // the chart bar; the drawing toolbar and the bottom panel open when it asks
+  const [app, setApp] = useState<AppPlatform | null>(null);
+  const [appDraw, setAppDraw] = useState(false);
+  const [appBottom, setAppBottom] = useState(false);
+  useEffect(() => {
+    const a = appPlatform();
+    setApp(a);
+    if (a) document.documentElement.dataset.app = a;
+  }, []);
   const [drawingsPanelVisible, setDrawingsPanelVisible] = useState(true);
   useEffect(() => {
     try { if (localStorage.getItem(DRAWINGS_PANEL_KEY) === "false") setDrawingsPanelVisible(false); } catch { /* ignore */ }
@@ -1206,10 +1218,15 @@ function AppLayout() {
         ...(splitW ? { width: `calc(100vw - ${splitW}px)` } : {}),
         // A redesigned layout: what sits around the chart for the overlays that read these
         ...(area ? { ["--tv-header-height" as any]: `${area.y}px`, ["--tv-left-toolbar-width" as any]: `${area.x}px` } : {}),
+        ...(app ? {
+          gridTemplateColumns: `${appDraw ? "var(--tv-left-toolbar-width)" : "0px"} 1fr 0 0`,
+          gridTemplateRows: `0 minmax(0, 1fr) ${appBottom ? "45%" : "0"}`,
+          ["--tv-header-height" as any]: "0px", ["--tv-right-toolbar-width" as any]: "0px", ["--tv-right-sidebar-width" as any]: "0px",
+        } : {}),
       }}
     >
       {!panelsHidden && (
-        <header className={`${styles.topbar} tv-chart-header`} ref={headerRef} data-widget="topbar" style={widgetStyle("topbar")}>
+        <header className={`${styles.topbar} tv-chart-header`} ref={headerRef} data-widget="topbar" style={app ? { ...widgetStyle("topbar"), height: 0, minHeight: 0, padding: 0, overflow: "hidden", border: 0 } : widgetStyle("topbar")}>
           <TopBar
             theme={theme}
             toggleTheme={toggleTheme}
@@ -1247,7 +1264,7 @@ function AppLayout() {
         setTimeframe={setSelectedInterval}
       />
 
-      {!panelsHidden && drawingsPanelVisible && (
+      {(app ? appDraw : !panelsHidden && drawingsPanelVisible) && (
         <aside className={styles.leftToolbar} data-widget="left" style={widgetStyle("left")} data-left-toolbar>
           <ScrollArrows />
           <LeftToolbar indicatorCount={activeIndicators.length} onRemoveIndicators={() => setActiveIndicators([])} />
@@ -1343,7 +1360,7 @@ function AppLayout() {
         <FavoritesToolbar />
       </main>
 
-      {!panelsHidden && showRightPanel && (
+      {!panelsHidden && !app && showRightPanel && (
         <aside className={styles.rightToolbar} data-widget="panel" style={widgetStyle("panel")}>
           {dockedTicketOpen ? (
             <DockedTradingPanel />
@@ -1367,7 +1384,7 @@ function AppLayout() {
         </aside>
       )}
 
-      {!panelsHidden && (
+      {!panelsHidden && !app && (
         <aside className={styles.rightSidebar} data-widget="sidebar" style={widgetStyle("sidebar")}>
           <ScrollArrows />
           <RightSidebar
@@ -1387,9 +1404,22 @@ function AppLayout() {
         </aside>
       )}
 
-      <footer className={styles.bottomPanel} data-widget="bottom" ref={footerRef} style={widgetStyle("bottom")}>
+      <footer className={styles.bottomPanel} data-widget="bottom" ref={footerRef} style={app && !appBottom ? { ...widgetStyle("bottom"), overflow: "hidden", minHeight: 0 } : widgetStyle("bottom")}>
         <BottomPanel theme={theme} interval={selectedInterval} />
       </footer>
+
+      {app && (
+        <AppBridge
+          symbol={symbol} interval={selectedInterval} theme={theme} replayActive={mode !== "idle"}
+          drawOpen={appDraw} bottomOpen={appBottom}
+          setSymbol={setSymbol} setInterval={iv => handleIntervalChange(iv)}
+          setTheme={t => { if (t !== theme) toggleTheme(); }}
+          setDrawOpen={setAppDraw} setBottomOpen={setAppBottom}
+          openSheet={p => setMobilePanel(p)}
+          openReplay={handleReplayClick}
+          openPine={() => setShowPineEditor(true)}
+        />
+      )}
 
       {redesign && (
         <LayoutEditor rects={redesign} visible={widgetsShown} W={viewW} H={viewH}
@@ -1484,7 +1514,7 @@ function AppLayout() {
       {/* The chart's feedback icon: a small bubble above the bottom bar, on the chart's bottom-left
           corner beside the logo; clicking it opens the bug-report panel. Hidden when panels are
           hidden or the panel itself is open */}
-      {!panelsHidden && !showFeedback && (
+      {!panelsHidden && !app && !showFeedback && (
         <button
           onClick={() => setShowFeedback(true)}
           aria-label="Send feedback"

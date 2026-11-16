@@ -2,6 +2,7 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 let initialHw = null;
+let initialPhone = null;
 
 function show(s) {
   const r = document.documentElement;
@@ -19,6 +20,17 @@ function show(s) {
   if (![...z.options].some((o) => +o.value === s.zoom)) z.add(new Option(`${s.zoom}%`, s.zoom));
   z.value = String(s.zoom);
   $("ver").textContent = `Version ${s.version} · Electron ${s.electron}`;
+  // The local edition: the phone app over Wi-Fi
+  $("phone").hidden = !s.local;
+  if (s.local) {
+    $("phoneAccess").checked = s.phoneAccess;
+    if (initialPhone === null) initialPhone = s.phoneAccess;
+    $("phoneRestart").classList.toggle("show", s.phoneAccess !== initialPhone);
+    const addr = s.phoneAddresses || [];
+    $("phoneInfo").textContent = !s.phoneAccess ? "" : addr.length
+      ? `In the phone app, enter this PC's address: ${addr.join("  or  ")} (phone and PC on the same Wi-Fi).`
+      : "This PC isn't on a local network right now: connect it to your Wi-Fi.";
+  }
 }
 
 const set = (key, value) => window.tp.invoke("settings:set", key, value).then(show);
@@ -31,5 +43,7 @@ $("theme").addEventListener("click", (e) => { const b = e.target.closest("button
 $("zoom").addEventListener("change", (e) => set("zoom", +e.target.value));
 $("reminders").addEventListener("click", () => window.tp.send("settings:reminders"));
 $("relaunch").addEventListener("click", () => window.tp.send("settings:relaunch"));
+$("phoneAccess").addEventListener("change", (e) => set("phoneAccess", e.target.checked));
+$("phoneRelaunch").addEventListener("click", () => window.tp.send("settings:relaunch"));
 $("clear").addEventListener("click", (e) => { window.tp.send("settings:clear-cache"); e.target.textContent = "Cleared"; e.target.disabled = true; });
 $("updates").addEventListener("click", () => { $("msg").textContent = "Checking…"; window.tp.send("settings:check-updates"); });

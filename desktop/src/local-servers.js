@@ -10,6 +10,7 @@ const http = require("http");
 const net = require("net");
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 
 const started = [];
 
@@ -76,6 +77,21 @@ function lastCommitTime(repo) {
   });
 }
 
+// This PC's addresses on its local network (Wi-Fi / Ethernet): where the TradePilot phone apps
+// (mobile/) reach the merge site when phone access is on
+function lanAddresses() {
+  const out = [];
+  for (const [name, list] of Object.entries(os.networkInterfaces())) {
+    // (not the virtual adapters of WSL, Hyper-V, VirtualBox, VMware, Docker)
+    if (/vEthernet|WSL|Hyper-V|Virtual|VMware|docker|Loopback/i.test(name)) continue;
+    for (const a of list || []) {
+      if (a.family !== "IPv4" || a.internal) continue;
+      if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(a.address)) out.push(a.address);
+    }
+  }
+  return out.sort((x, y) => Number(!x.startsWith("192.168.")) - Number(!y.startsWith("192.168.")));
+}
+
 // status(text, detail?) shows progress; ask(question) resolves "retry" | "continue" | "quit"
 async function startLocal(cfg, logDir, status, ask) {
   const repo = cfg.repo;
@@ -83,6 +99,14 @@ async function startLocal(cfg, logDir, status, ask) {
   const beUrl = `http://127.0.0.1:${cfg.backendPort}/admin/login/`;
   const env = { ...process.env, PYTHONUNBUFFERED: "1", FRONTEND_ORIGINS: `http://localhost:${cfg.frontendPort},http://127.0.0.1:${cfg.frontendPort},http://localhost:3000,http://127.0.0.1:3000` };
   delete env.ELECTRON_RUN_AS_NODE;
+  // Phone access (the desktop settings): the servers listen on this PC's network too, and the backend
+  // accepts this PC's network addresses (Windows asks once whether to allow them on the network)
+  const lan = cfg.phoneAccess ? lanAddresses() : [];
+  if (lan.length) {
+    env.ALLOWED_HOSTS = ["localhost", "127.0.0.1", ...lan].join(",");
+    env.FRONTEND_ORIGINS += "," + lan.map((ip) => `http://${ip}:${cfg.frontendPort}`).join(",");
+  }
+  const bind = lan.length ? "0.0.0.0" : "127.0.0.1";
 
   // ---- the backend
   for (;;) {
@@ -97,7 +121,7 @@ async function startLocal(cfg, logDir, status, ask) {
     const be = path.join(repo, "backend");
     await runToEnd(cfg.python, ["manage.py", "migrate", "--noinput"], { cwd: be, env }, blog);
     status("Starting the merge backend…");
-    const child = run(cfg.python, ["manage.py", "runserver", String(cfg.backendPort), "--noreload"], { cwd: be, env }, blog);
+    const child = run(cfg.python, ["manage.py", "runserver", `${bind}:${cfg.backendPort}`, "--noreload"], { cwd: be, env }, blog);
     started.push(child);
     if (!(await waitFor(beUrl, 90000, child))) { status("The merge backend didn't start.", `See ${path.join(logDir, "backend.log")}`); return false; }
   }
@@ -115,7 +139,7 @@ async function startLocal(cfg, logDir, status, ask) {
     if (!ok) { status("The merge site couldn't be built.", `See ${path.join(logDir, "site.log")}`); return false; }
   }
   status("Starting the merge site…");
-  const site = run(node.cmd, [nextBin, "start", "-p", String(cfg.frontendPort), "-H", "127.0.0.1"], { cwd: repo, env: { ...env, ...node.env, NEXT_TELEMETRY_DISABLED: "1" } }, flog);
+  const site = run(node.cmd, [nextBin, "start", "-p", String(cfg.frontendPort), "-H", bind], { cwd: repo, env: { ...env, ...node.env, NEXT_TELEMETRY_DISABLED: "1" } }, flog);
   started.push(site);
   if (!(await waitFor(feUrl, 90000, site))) { status("The merge site didn't start.", `See ${path.join(logDir, "site.log")}`); return false; }
   return true;
@@ -129,4 +153,4 @@ function stopLocal() {
   }
 }
 
-module.exports = { startLocal, stopLocal };
+module.exports = { startLocal, stopLocal, lanAddresses };

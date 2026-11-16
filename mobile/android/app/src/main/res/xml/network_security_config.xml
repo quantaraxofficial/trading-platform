@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The merge site runs on the user's own PC over their Wi-Fi (http://192.168.x.x:3007), so plain HTTP
+     is allowed; anything else on the internet still needs HTTPS. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
