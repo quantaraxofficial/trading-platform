@@ -675,6 +675,12 @@ Posting signals out
     reorder, tabs and windows restored, start with Windows, hardware acceleration, clear cache,
     updates from the site's /desktop/ folder; tradepilot:// links. Build: desktop/README.md. The
     site's favicon is TradePilot's mark
+  - The merge app (desktop/, this branch's src/config.json): "TradePilot" running this branch on this
+    PC. Opening it starts the branch's backend (migrations applied first; port 8000, asks if it's
+    taken) and site (a production build on port 3007, rebuilt when the branch has newer commits), with
+    a splash showing progress; closing it stops both. Its own data folder (TradePilot Local), so it
+    never mixes with the live app. Run desktop\dist\win-unpacked\TradePilot.exe after `npm run dist`.
+    Market data needs the site's .env.local (TWELVEDATA_API_KEY) in the branch folder
 ======================================================================
 17b. ECONOMIC CALENDAR
 ======================================================================

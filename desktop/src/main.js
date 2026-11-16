@@ -11,7 +11,11 @@ const { app, BrowserWindow, WebContentsView, ipcMain, shell, nativeTheme, clipbo
 const path = require("path");
 const fs = require("fs");
 
-const SITE = (process.env.TRADEPILOT_URL || "https://34-93-138-162.sslip.io").replace(/\/$/, "");
+// config.json (optional): the local edition — another site address, its own data folder, and the
+// servers it starts on this PC (local-servers.js). Without it: the live TradePilot.
+const CONFIG = (() => { try { return require("./config.json"); } catch { return {}; } })();
+const LOCAL = CONFIG.local || null;
+const SITE = (process.env.TRADEPILOT_URL || CONFIG.site || "https://34-93-138-162.sslip.io").replace(/\/$/, "");
 const SITE_ORIGIN = new URL(SITE).origin;
 const HOME_URL = `${SITE}/chart`;
 const TITLE_H = 34;
@@ -37,14 +41,15 @@ function saveSettings(now = false) {
 
 // (before the app is ready: GPU on or off, and the same browser identity as Chrome so sign-in
 // pages treat the app like a normal browser)
-app.setPath("userData", path.join(app.getPath("appData"), "TradePilot"));
+app.setPath("userData", path.join(app.getPath("appData"), CONFIG.userDataName || "TradePilot"));
 loadSettings();
 if (settings.hardwareAcceleration === false) app.disableHardwareAcceleration();
 app.userAgentFallback = app.userAgentFallback.replace(/\s?Electron\/\S+/, "").replace(/\s?tradepilot-desktop\/\S+/i, "") + ` TradePilotDesktop/${app.getVersion()}`;
 
 // One app: a second launch (or a tradepilot:// link) goes to the open window
 if (!app.requestSingleInstanceLock()) { app.quit(); }
-app.setAsDefaultProtocolClient("tradepilot");
+// (tradepilot:// links belong to the live app)
+if (!LOCAL) app.setAsDefaultProtocolClient("tradepilot");
 
 function linkToUrl(link) {
   // tradepilot://chart?symbol=XAU/USD → SITE/chart?symbol=XAU/USD
@@ -395,6 +400,7 @@ ipcMain.on("settings:check-updates", () => checkForUpdates(true));
 // ---- updates (from the site's /desktop/ folder, when one is published there)
 let updater = null;
 function checkForUpdates(manual = false) {
+  if (LOCAL) { if (manual) settingsWin?.webContents.send("update", "This edition runs the branch on this PC: it's up to date with it."); return; }
   if (!app.isPackaged) { settingsWin?.webContents.send("update", "This is a development build."); return; }
   try {
     if (!updater) {
@@ -434,11 +440,38 @@ app.whenReady().then(() => {
   });
   ses.setPermissionCheckHandler((_wc, permission, origin) => origin === SITE_ORIGIN && allowed.has(permission));
 
-  const link = process.argv.find(a => a.startsWith("tradepilot://"));
-  const saved = settings.restoreTabs && settings.windows?.length ? settings.windows : [{}];
-  saved.forEach((s, i) => new AppWindow(i === 0 && link ? { ...s, tabs: [...(s.tabs || []), linkToUrl(link) || HOME_URL], active: (s.tabs || []).length } : s));
-  setTimeout(() => checkForUpdates(false), 15000);
+  const open = () => {
+    const link = process.argv.find(a => a.startsWith("tradepilot://"));
+    const saved = settings.restoreTabs && settings.windows?.length ? settings.windows : [{}];
+    saved.forEach((s, i) => new AppWindow(i === 0 && link ? { ...s, tabs: [...(s.tabs || []), linkToUrl(link) || HOME_URL], active: (s.tabs || []).length } : s));
+    setTimeout(() => checkForUpdates(false), 15000);
+  };
+  if (LOCAL) startLocalEdition(open); else open();
 });
 
-app.on("before-quit", () => { rememberSession(); quitting = true; saveSettings(true); });
+// ---- the local edition: start the branch's servers (a splash shows how it's going), then the windows
+function startLocalEdition(open) {
+  const { startLocal } = require("./local-servers");
+  const splash = new BrowserWindow({
+    width: 460, height: 320, frame: false, resizable: false, show: false, backgroundColor: "#131722", icon: ICON, title: "TradePilot",
+    webPreferences: { preload: path.join(__dirname, "preload-ui.js"), contextIsolation: true, sandbox: true },
+  });
+  splash.loadFile(UI("starting.html"));
+  splash.once("ready-to-show", () => splash.show());
+  const tell = (s) => { if (!splash.isDestroyed()) splash.webContents.send("starting", s); };
+  let failed = false;
+  const status = (text, detail) => { if (/didn't|couldn't/.test(text)) failed = true; tell({ status: text, detail, failed }); };
+  const ask = (question) => new Promise((resolve) => {
+    tell({ question });
+    ipcMain.once("starting:answer", (_e, a) => resolve(a));
+  });
+  splash.on("closed", () => { if (!windows.size) app.quit(); });
+  splash.webContents.once("did-finish-load", async () => {
+    const ok = await startLocal({ ...LOCAL }, path.join(app.getPath("userData"), "logs"), status, ask);
+    if (ok) { open(); splash.destroy(); }
+    else if (!failed) app.quit();
+  });
+}
+
+app.on("before-quit", () => { rememberSession(); quitting = true; saveSettings(true); if (LOCAL) require("./local-servers").stopLocal(); });
 app.on("window-all-closed", () => app.quit());

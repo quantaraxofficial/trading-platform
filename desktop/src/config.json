@@ -1,0 +1,10 @@
+{
+  "site": "http://localhost:3007",
+  "userDataName": "TradePilot Local",
+  "local": {
+    "repo": "F:\\trading\\New folder (2)\\tradingview-clone-merge",
+    "python": "C:\\Python313\\python.exe",
+    "frontendPort": 3007,
+    "backendPort": 8000
+  }
+}
