@@ -673,6 +673,23 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   pendingPointsRef.current = pendingPoints;
   const [previewPoint, setPreviewPoint] = useState<{ logical: number; price: number } | null>(null);
   const [isShiftMeasuring, setIsShiftMeasuring] = useState(false);
+  // Shift+click (as on TradingView): the measure then follows the mouse, no button held, and the
+  // next click ends it; a Shift+drag still ends on release. Where the press started, to tell them apart.
+  const shiftMeasurePressRef = useRef<{ x: number; y: number } | null>(null);
+  const shiftMeasureFollowRef = useRef(false);
+  useEffect(() => {
+    if (!isShiftMeasuring) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      shiftMeasureFollowRef.current = false;
+      shiftMeasurePressRef.current = null;
+      setIsShiftMeasuring(false);
+      setPendingPoints([]);
+      setPreviewPoint(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isShiftMeasuring]);
 
   // An in-progress multi-click drawing (e.g. a trendline's first point already
   // placed) must not carry over when the active tool changes — whether that's
@@ -885,6 +902,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     const pointerPos = stage.getPointerPosition();
     if (!pointerPos) return;
     lastPointerPosRef.current = pointerPos;
+    // (a Shift+click measure follows the mouse: this press is the click that ends it, on release)
+    if (isShiftMeasuring && shiftMeasureFollowRef.current) return;
     // Only the left button places points (a right-click finishes a path, it doesn't add to it)
     if (activeTool && e.evt && e.evt.button !== undefined && e.evt.button !== 0) return;
     downsRef.current = [downsRef.current[1], { x: pointerPos.x, y: pointerPos.y }];
@@ -916,6 +935,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
           if (d.type === 'measure') deleteDrawing(d.id);
         });
         setIsShiftMeasuring(true);
+        shiftMeasurePressRef.current = { x: pointerPos.x, y: pointerPos.y };
+        shiftMeasureFollowRef.current = false;
         setPendingPoints([{ logical, price }]);
         setPreviewPoint({ logical, price });
         return;
@@ -1261,6 +1282,15 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
     }
 
     if (isShiftMeasuring) {
+      // a click (released where it was pressed) starts a measure that follows the mouse until the next click
+      const press = shiftMeasurePressRef.current;
+      const at = lastPointerPosRef.current;
+      if (!shiftMeasureFollowRef.current && press && at && Math.hypot(at.x - press.x, at.y - press.y) < 5) {
+        shiftMeasureFollowRef.current = true;
+        return;
+      }
+      shiftMeasureFollowRef.current = false;
+      shiftMeasurePressRef.current = null;
       if (pendingPoints.length === 1 && previewPoint) {
         // commit measure drawing
         addDrawing({
