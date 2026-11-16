@@ -38,7 +38,7 @@ interface ReplayContextType {
   getReplayTime: () => number | null;
   // The moment the replay has reached (unix s): the end of its last bar (`barSec` long, or until the
   // next bar starts — some bars are shorter), its forming bar's time, or the live replay's clock
-  getReplayEnd: (barSec: number) => number | null;
+  getReplayEnd: (endOf: (data: CandleData[], i: number) => number) => number | null;
   // The bars played so far, and the part of a bar formed past them
   getPlayed: () => { bars: CandleData[]; ahead: ReplayAhead | null };
   stopReplay: (nextData?: CandleData[]) => void;
@@ -579,13 +579,12 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     return null;
   }, []);
 
-  const getReplayEnd = useCallback((barSec: number) => {
+  const getReplayEnd = useCallback((endOf: (data: CandleData[], i: number) => number) => {
     if (liveRef.current && feedRef.current && clockRef.current) return clockRef.current;
     const d = fullDataRef.current, i = replayIndexRef.current;
     if (!d[i]) return null;
-    // (a bar ends when the next one starts, if that's sooner: 45-minute bars restart every 4 hours)
-    const end = d[i + 1] ? Math.min(d[i].time + barSec, d[i + 1].time) : d[i].time + barSec;
-    return Math.max(end, aheadRef.current?.asOf ?? 0);
+    // (when its last bar really ended: lib/barSpan)
+    return Math.max(endOf(d, i), aheadRef.current?.asOf ?? 0);
   }, []);
   const getPlayed = useCallback(() => ({
     bars: fullDataRef.current.slice(0, replayIndexRef.current + 1),

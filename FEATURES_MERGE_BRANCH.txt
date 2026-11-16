@@ -218,6 +218,11 @@ Small screens and browsers
     reached (a bar ends where the next starts: 45-minute bars restart every 4 hours, which showed up
     to 30 minutes ahead). To a longer timeframe, the bar the replay is part-way through shows as
     far as it had formed (built from the bars played, as on TradingView); a step fills it whole
+  - ...for every pair of timeframes (1m to 1W, all 90 switches checked against the server's own bars):
+    gold's day / week bars start the evening before their date, a gap with no trading counts as
+    passed, and a forming candle the bars played can't make is built from finer bars from the server
+  - Gold's Sunday-evening bars (the week's real open) are kept on every timeframe (they were dropped
+    as "weekend" bars)
 
 ======================================================================
 4. TRADING: PAPER TRADING AND METATRADER 5

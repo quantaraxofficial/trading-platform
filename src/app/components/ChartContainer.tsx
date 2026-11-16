@@ -337,6 +337,7 @@ import { detectPrecision, simulatedQuote } from "@/app/utils/pricePrecision";
 import { feedTimeToUnix } from "../utils/feedTime";
 import { backendFetch } from "@/lib/backend";
 import { fetchVantageCandles, isVantageSymbol, vantageBarEnd, vantageBarTime, vantageInterval, vantageServing } from "../lib/vantageFeed";
+import { barEnd, barStart, momentAfter } from "../lib/barSpan";
 import { isSketch, sketchCandles, sketchRev, subscribeSketch } from "../lib/sketch";
 import { CollabIcon } from "./collab/icons";
 import { useCollabAlerts } from "../lib/collab/session";
@@ -423,6 +424,13 @@ async function fetchStockDataUncached(symbol: string = 'AAPL', interval: string 
     if (err.message === 'API_LIMIT') throw err;
     return [];
   }
+}
+
+// Weekend bars are feed artefacts, dropped; Vantage's Sunday-evening bars are the real week open
+function weekendBar(symbol: string, time: number): boolean {
+  if (isVantageSymbol(symbol) || isSketch(symbol)) return false;
+  const day = new Date(time * 1000).getUTCDay();
+  return day === 0 || day === 6;
 }
 
 // The EMA settings' line style as lightweight-charts' lineStyle (0 solid, 1 dotted, 2 dashed)
@@ -1841,8 +1849,7 @@ export default function ChartContainer({
       let unique = Array.from(dataMap.values());
       unique.sort((a: any, b: any) => (a.time as number) - (b.time as number));
       unique = unique.filter((d: any) => {
-        const day = new Date(d.time * 1000).getUTCDay();
-        return day !== 0 && day !== 6;
+        return !weekendBar(symbolRef.current, d.time);
       });
 
       if (unique.length <= all.length || unique[0].time >= oldestBar.time) break; // no real progress
@@ -3184,8 +3191,7 @@ export default function ChartContainer({
       // Filter out weekends and "dead" bars (identifiable by identical open prices and low volatility)
       // Filter out weekend bars only — keep all trading-session candles regardless of range
       stockData = stockData.filter((d: any) => {
-        const day = new Date(d.time * 1000).getUTCDay();
-        return day !== 0 && day !== 6;
+        return !weekendBar(symbolRef.current, d.time);
       });
 
       const oldInitData = fullDataRef.current; // May be empty on first load, but helps for subsequent remaps
@@ -3356,8 +3362,7 @@ export default function ChartContainer({
           
           // Filter out weekend bars only — keep all trading-session candles regardless of range
           unique = unique.filter((d: any) => {
-            const day = new Date(d.time * 1000).getUTCDay();
-            return day !== 0 && day !== 6; // Remove Saturday (6) and Sunday (0)
+            return !weekendBar(symbolRef.current, d.time);
           });
           
           // Calculate shift for drawings
@@ -3432,8 +3437,7 @@ export default function ChartContainer({
         stockData = stockData.filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.time === v.time) === i);
         stockData.sort((a: any, b: any) => (a.time as number) - (b.time as number));
         stockData = stockData.filter((d: any) => {
-          const day = new Date(d.time * 1000).getUTCDay();
-          return day !== 0 && day !== 6;
+          return !weekendBar(symbolRef.current, d.time);
         });
         if (stockData.length === 0) return null;
 
@@ -3774,10 +3778,12 @@ export default function ChartContainer({
             if (modeRef.current !== 'idle') {
               const rTime = getReplayTime();
               if (rTime) {
-                targetTimestamp = rTime;
                 savedReplayTime = rTime; // Save for later use after data swap
-                savedReplayEnd = getReplayEnd(getIntervalMs(prevInterval) / 1000);
+                savedReplayEnd = getReplayEnd((d, i) => momentAfter(d, i, symbolRef.current, prevInterval, getIntervalMs(prevInterval) / 1000));
                 savedPlayed = getPlayed();
+                // (the new bars are fetched around the replay's moment, not its last bar's start: a
+                // week's bar starts days before it, and 1-minute bars from there never reached it)
+                targetTimestamp = savedReplayEnd ?? rTime;
               }
               // The candle size, and where across the chart the replay's bar sits
               try {
@@ -3856,26 +3862,27 @@ export default function ChartContainer({
           // replay would start from whichever bar the batch happens to begin with. When the batch
           // (fewer bars than asked for) doesn't reach back to it, fetch one window placed so the
           // date sits ~300 bars from its start.
-          if (savedReplayTime && modeRef.current !== 'idle' && stockData.length) {
+          // (the replay's moment, not its last bar's start: a week's bar starts days before it)
+          const replayAnchor = savedReplayEnd ?? savedReplayTime;
+          if (replayAnchor && modeRef.current !== 'idle' && stockData.length) {
             stockData.sort((a: any, b: any) => a.time - b.time);
-            if (stockData[0].time > savedReplayTime) {
+            if (stockData[0].time > replayAnchor) {
               const barSec = getIntervalMs(interval) / 1000;
-              const endT = Math.min(savedReplayTime + Math.max(50, stockData.length - 300) * barSec, Math.floor(Date.now() / 1000));
+              const endT = Math.min(replayAnchor + Math.max(50, stockData.length - 300) * barSec, Math.floor(Date.now() / 1000));
               const d = new Date(endT * 1000);
               const pad = (n: number) => n.toString().padStart(2, '0');
               try {
                 const around = await fetchStockData(symbol, interval, `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00`);
                 if (cancelled) return;
                 const sorted = [...around].sort((a: any, b: any) => a.time - b.time);
-                if (sorted.length && sorted[0].time <= savedReplayTime) stockData = sorted;
+                if (sorted.length && sorted[0].time <= replayAnchor) stockData = sorted;
               } catch { /* keep the batch we have */ }
             }
           }
 
           // Filter out weekends
           stockData = stockData.filter((d: any) => {
-            const day = new Date(d.time * 1000).getUTCDay();
-            return day !== 0 && day !== 6;
+            return !weekendBar(symbolRef.current, d.time);
           });
 
           clearOverlaySeriesData();
@@ -3948,31 +3955,58 @@ export default function ChartContainer({
           // which would read stale index from the now-replaced dataset
           if (modeRef.current !== 'idle') {
             if (savedReplayTime && stockData.length > 0) {
-              // The new timeframe's bars that had fully passed by the replay's moment (a bar ends
-              // when the next starts, if that's sooner: 45-minute bars restart every 4 hours, so
-              // taking each as 45 minutes long showed up to half an hour of the future). Lower →
-              // higher, the bar the replay is part-way through shows as far as it had formed, built
-              // from the bars played (TradingView's forming candle) — not whole, not missing
+              // The new timeframe's bars that had fully passed by the replay's moment, by when each
+              // really starts and ends (lib/barSpan: a bar ends when the next starts, if that's
+              // sooner — 45-minute bars restart every 4 hours; gold's daily bars start the evening
+              // before their date). Lower → higher, the bar the replay is part-way through shows as
+              // far as it had formed, built from the bars played (TradingView's forming candle)
+              const sym = symbolRef.current;
               const oldSec = getIntervalMs(prevInterval) / 1000;
               const newSec = getIntervalMs(interval) / 1000;
               const knownEnd = savedReplayEnd ?? savedReplayTime + oldSec;
-              const endOf = (i: number) => stockData[i + 1] ? Math.min(stockData[i].time + newSec, stockData[i + 1].time) : stockData[i].time + newSec;
               let closestIdx = 0;
               for (let i = 0; i < stockData.length; i++) {
-                if (endOf(i) <= knownEnd) closestIdx = i;
+                if (barEnd(stockData, i, sym, interval, newSec) <= knownEnd) closestIdx = i;
                 else break; // sorted by time, no need to keep looking
               }
               let ahead: { asOf: number; bar: any } | null = null;
               const nextBar = stockData[closestIdx + 1];
-              if (nextBar && nextBar.time < knownEnd && !(window as any).__replayLive) {
-                const parts: any[] = (savedPlayed?.bars || []).filter((b: any) => b.time >= nextBar.time && b.time < knownEnd);
+              const nextStart = nextBar ? barStart(sym, interval, nextBar.time) : Infinity;
+              if (nextBar && nextStart < knownEnd && !(window as any).__replayLive) {
+                const played: any[] = savedPlayed?.bars || [];
+                const oldStart = (b: any) => barStart(sym, prevInterval, b.time);
+                let first = played.findIndex((b: any) => oldStart(b) >= nextStart);
+                const parts: any[] = first < 0 ? [] : played.slice(first).filter((b: any) => oldStart(b) < knownEnd);
                 const was = savedPlayed?.ahead?.bar;
-                if (was && was.time >= nextBar.time && was.time < knownEnd && !parts.some((b: any) => b.time === was.time)) parts.push(was);
+                if (was && oldStart(was) >= nextStart && oldStart(was) < knownEnd && !parts.some((b: any) => b.time === was.time)) parts.push(was);
+                if (first < 0 && parts.length) first = played.length;
                 let bar: any = null;
-                // (only from bars starting where it starts: a coarser timeframe can't show its first part)
-                if (parts.length && parts[0].time - nextBar.time < oldSec) {
-                  bar = { time: nextBar.time, open: parts[0].open, high: -Infinity, low: Infinity, close: parts[parts.length - 1].close };
-                  for (const b of parts) { bar.high = Math.max(bar.high, b.high); bar.low = Math.min(bar.low, b.low); }
+                // (only when no bar played straddles its start: a coarser timeframe can't show its first part)
+                const straddles = first > 0 && barEnd(played, first - 1, sym, prevInterval, oldSec) > nextStart;
+                // (…or the bars loaded don't reach back to its start: a week from 1-minute bars)
+                const unreached = first === 0 && played.length > 0 && oldStart(played[0]) > nextStart;
+                let from: any[] = parts.length && !straddles && !unreached ? parts : [];
+                // (none played to build it from — e.g. 1h → 45m, whose bar began inside an hour played:
+                // finer bars up to the moment, from the server)
+                if (!from.length) {
+                  const span = knownEnd - nextStart;
+                  const fine = span <= 3 * 86400 ? '1min' : span <= 16 * 86400 ? '5min' : '1h';
+                  const fineSec = getIntervalMs(fine) / 1000;
+                  const d = new Date(knownEnd * 1000);
+                  const pad = (n: number) => n.toString().padStart(2, '0');
+                  try {
+                    const got = await fetchStockData(sym, fine, `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00`);
+                    if (cancelled) return;
+                    const sorted = [...got].sort((a: any, b: any) => a.time - b.time);
+                    // (only if they reach back to its start)
+                    if (sorted.length && barStart(sym, fine, sorted[0].time) <= nextStart) {
+                      from = sorted.filter((b: any, i: number) => barStart(sym, fine, b.time) >= nextStart && barEnd(sorted, i, sym, fine, fineSec) <= knownEnd);
+                    }
+                  } catch { /* no forming bar then */ }
+                }
+                if (from.length) {
+                  bar = { time: nextBar.time, open: from[0].open, high: -Infinity, low: Infinity, close: from[from.length - 1].close };
+                  for (const b of from) { bar.high = Math.max(bar.high, b.high); bar.low = Math.min(bar.low, b.low); }
                 }
                 ahead = { asOf: knownEnd, bar };
               }

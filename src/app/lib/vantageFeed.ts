@@ -77,6 +77,17 @@ export function vantageBarEnd(interval: string, barTime: number): number | null 
   return Math.min(barTime + n, barTime + (BLOCK - (s % BLOCK)));
 }
 
+// When a bar really starts (unix s). Day, week and month bars are labelled with the server's date
+// (00:00 UTC) but start at the server's midnight: 17:00 New York the evening before (21:00 / 22:00
+// UTC). Intraday labels are their real start already. null: not a Vantage interval
+export function vantageBarStart(interval: string, barTime: number): number | null {
+  const spec = vantageInterval(interval);
+  if (!spec) return null;
+  if (spec.kind === "intraday") return barTime;
+  const guess = barTime - 2 * 3600;
+  return barTime - 7 * 3600 - nyOffset(guess);
+}
+
 // Whether Vantage's gold is trading at a moment: on its server clock (New York + 7 h) Monday 01:00 to
 // Friday 23:57, closed each day 23:57 → 01:00 (its daily break) and from Friday 23:57 to Monday 01:00
 export function vantageMarketOpen(tMs: number): boolean {
