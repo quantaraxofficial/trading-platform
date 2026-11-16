@@ -590,7 +590,7 @@ export default function ChartContainer({
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const { activeTool, shiftDrawings, setSymbol: setDrawingSymbol, setDrawings, selectedShapeId } = useDrawing();
-  const { mode, replayIndex, startReplayAt, getReplayTime, stopReplay, togglePlay, stepBack, stepForward, setHoverX, hoverX, updateReplayData, cancelSelect } = useReplay();
+  const { mode, replayIndex, startReplayAt, getReplayTime, getReplayEnd, getPlayed, stopReplay, togglePlay, stepBack, stepForward, setHoverX, hoverX, updateReplayData, cancelSelect } = useReplay();
   const { checkAlerts, alerts } = useAlerts();
   // A collab's shared alerts: drawn too, in the colour of whoever set them
   const sharedAlerts = useCollabAlerts();
@@ -3758,6 +3758,9 @@ export default function ChartContainer({
           let replayAt: number | null = null;
           // Save replay timestamp BEFORE we overwrite fullDataRef
           let savedReplayTime: number | null = null;
+          // …the moment the replay had reached, and the bars it had played (for a bar formed part-way)
+          let savedReplayEnd: number | null = null;
+          let savedPlayed: ReturnType<typeof getPlayed> | null = null;
           // A bottom-bar date range always ends at the newest bar, so it fetches the latest
           // data rather than data centered on the old view
           // (during replay it's just a timeframe change: the replay keeps its date, and the
@@ -3773,6 +3776,8 @@ export default function ChartContainer({
               if (rTime) {
                 targetTimestamp = rTime;
                 savedReplayTime = rTime; // Save for later use after data swap
+                savedReplayEnd = getReplayEnd(getIntervalMs(prevInterval) / 1000);
+                savedPlayed = getPlayed();
               }
               // The candle size, and where across the chart the replay's bar sits
               try {
@@ -3943,43 +3948,37 @@ export default function ChartContainer({
           // which would read stale index from the now-replaced dataset
           if (modeRef.current !== 'idle') {
             if (savedReplayTime && stockData.length > 0) {
-              const oldIntervalMs = getIntervalMs(prevInterval);
-              const newIntervalMs = getIntervalMs(interval);
-
+              // The new timeframe's bars that had fully passed by the replay's moment (a bar ends
+              // when the next starts, if that's sooner: 45-minute bars restart every 4 hours, so
+              // taking each as 45 minutes long showed up to half an hour of the future). Lower →
+              // higher, the bar the replay is part-way through shows as far as it had formed, built
+              // from the bars played (TradingView's forming candle) — not whole, not missing
+              const oldSec = getIntervalMs(prevInterval) / 1000;
+              const newSec = getIntervalMs(interval) / 1000;
+              const knownEnd = savedReplayEnd ?? savedReplayTime + oldSec;
+              const endOf = (i: number) => stockData[i + 1] ? Math.min(stockData[i].time + newSec, stockData[i + 1].time) : stockData[i].time + newSec;
               let closestIdx = 0;
-              if (oldIntervalMs > newIntervalMs) {
-                // Higher→Lower TF: find the last candle that opens BEFORE the next old-TF candle
-                // e.g. 15min candle at 12:00 → endTime = 12:15:00 → last 5min candle < 12:15 is 12:10
-                const endTime = savedReplayTime + (oldIntervalMs / 1000);
-                for (let i = 0; i < stockData.length; i++) {
-                  if (stockData[i].time < endTime) {
-                    closestIdx = i;
-                  } else {
-                    break; // sorted by time, no need to keep looking
-                  }
+              for (let i = 0; i < stockData.length; i++) {
+                if (endOf(i) <= knownEnd) closestIdx = i;
+                else break; // sorted by time, no need to keep looking
+              }
+              let ahead: { asOf: number; bar: any } | null = null;
+              const nextBar = stockData[closestIdx + 1];
+              if (nextBar && nextBar.time < knownEnd && !(window as any).__replayLive) {
+                const parts: any[] = (savedPlayed?.bars || []).filter((b: any) => b.time >= nextBar.time && b.time < knownEnd);
+                const was = savedPlayed?.ahead?.bar;
+                if (was && was.time >= nextBar.time && was.time < knownEnd && !parts.some((b: any) => b.time === was.time)) parts.push(was);
+                let bar: any = null;
+                // (only from bars starting where it starts: a coarser timeframe can't show its first part)
+                if (parts.length && parts[0].time - nextBar.time < oldSec) {
+                  bar = { time: nextBar.time, open: parts[0].open, high: -Infinity, low: Infinity, close: parts[parts.length - 1].close };
+                  for (const b of parts) { bar.high = Math.max(bar.high, b.high); bar.low = Math.min(bar.low, b.low); }
                 }
-              } else {
-                // Same TF or Lower→Higher: a higher-TF candle must be reachable
-                // only once it has FULLY elapsed by the current replay position —
-                // not merely "closest by open time". Picking the closest bar let
-                // a brand-new, still-forming higher-TF candle (e.g. stepping just
-                // one 30min bar into a new 4h period) render fully formed the
-                // instant replay crossed into its span. Require the candle's own
-                // close time (open + its interval) to fall at or before the close
-                // of the bar we've actually replayed to.
-                const currentKnownTime = savedReplayTime + (oldIntervalMs / 1000);
-                const newIntervalSec = newIntervalMs / 1000;
-                for (let i = 0; i < stockData.length; i++) {
-                  if (stockData[i].time + newIntervalSec <= currentKnownTime) {
-                    closestIdx = i;
-                  } else {
-                    break; // sorted by time, no need to keep looking
-                  }
-                }
+                ahead = { asOf: knownEnd, bar };
               }
 
               {
-                startReplayAt(closestIdx, stockData, candleSeriesRef.current, chartRef.current);
+                startReplayAt(closestIdx, stockData, candleSeriesRef.current, chartRef.current, { continuing: true, ahead });
                 // Cutting the bars back to the replay's keeps the old distance from the last bar
                 // (thousands of bars on the full data), which parked the view at the far left:
                 // place it again, the candle size and the replay bar's spot as before

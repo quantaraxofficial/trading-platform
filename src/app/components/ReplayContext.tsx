@@ -14,6 +14,7 @@ export interface CandleData {
 }
 
 export type ReplayMode = 'idle' | 'selecting' | 'active';
+export type ReplayAhead = { asOf: number; bar: CandleData | null };
 // TradingView's "Select starting point": pick a bar on the chart, a date, the first available
 // bar, or a random bar. The replay bar's main button repeats the last one chosen.
 export type ReplayStartMode = 'bar' | 'date' | 'first' | 'random';
@@ -30,9 +31,16 @@ interface ReplayContextType {
   setHoverX: (x: number | null) => void;
   // Actions
   enterSelectMode: () => void;
-  // `continuing`: the same replay on new bars (a new timeframe): its mode stays and nothing is asked
-  startReplayAt: (index: number, data: CandleData[], series: any, chart: any, opts?: { continuing?: boolean }) => void;
+  // `continuing`: the same replay on new bars (a new timeframe): its mode stays and nothing is asked.
+  // `ahead`: the replay had got past `index`'s bar (to `asOf`), e.g. 30 minutes into a 4-hour bar:
+  // `bar` is that bar as far as it had formed (built from the bars played), shown after `index`
+  startReplayAt: (index: number, data: CandleData[], series: any, chart: any, opts?: { continuing?: boolean; ahead?: ReplayAhead | null }) => void;
   getReplayTime: () => number | null;
+  // The moment the replay has reached (unix s): the end of its last bar (`barSec` long, or until the
+  // next bar starts — some bars are shorter), its forming bar's time, or the live replay's clock
+  getReplayEnd: (barSec: number) => number | null;
+  // The bars played so far, and the part of a bar formed past them
+  getPlayed: () => { bars: CandleData[]; ahead: ReplayAhead | null };
   stopReplay: (nextData?: CandleData[]) => void;
   togglePlay: () => void;
   stepBack: () => void;
@@ -99,6 +107,8 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
   const replayIndexRef = useRef(0);
   const fullDataRef = useRef<CandleData[]>([]);
   const speedRef = useRef(1);
+  // (bar by bar, after a timeframe switch: how far the replay had got past its last whole bar)
+  const aheadRef = useRef<ReplayAhead | null>(null);
 
   const stopInterval = () => {
     if (playIntervalRef.current) {
@@ -263,7 +273,8 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
 
       replayIndexRef.current = next;
       setReplayIndex(next);
-      
+      aheadRef.current = null;   // (the forming bar, now whole)
+
       if (seriesRef.current) {
         try {
           seriesRef.current.update(nextCandle);
@@ -286,7 +297,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
 
   const cancelSelectRef = useRef<() => void>(() => {});
 
-  const startReplayAt = useCallback((index: number, data: CandleData[], series: any, chart: any, opts?: { continuing?: boolean }) => {
+  const startReplayAt = useCallback((index: number, data: CandleData[], series: any, chart: any, opts?: { continuing?: boolean; ahead?: ReplayAhead | null }) => {
     trackFeature("replay");
     stopInterval();
     seriesRef.current = series;
@@ -304,12 +315,20 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     setHasStarted(true);
     setIsPlaying(false);
     formingRef.current = null;
+    aheadRef.current = null;
     // The same replay on another timeframe: it stays as it was (live or bar by bar), unasked. Live,
-    // the new timeframe's forming candle is built from the ticks up to the replay's moment
+    // the new timeframe's forming candle is built from the ticks up to the replay's moment; bar by
+    // bar, from the bars played (`ahead`)
     if (opts?.continuing) {
       applyDataUpToIndex(clamped);
       setAskLive(false);
-      if (liveRef.current && feedRef.current) void resumeLiveAt(clamped, clockRef.current);
+      if (liveRef.current && feedRef.current) { void resumeLiveAt(clamped, clockRef.current); return; }
+      const ahead = opts.ahead;
+      if (ahead && ahead.asOf > (data[clamped]?.time ?? Infinity)) {
+        aheadRef.current = ahead;
+        if (ahead.bar && seriesRef.current) { try { seriesRef.current.update(ahead.bar); } catch { /* drawn whole bars only */ } }
+        (window as any).__replayNow = ahead.asOf;
+      }
       return;
     }
     feedRef.current = null;
@@ -332,6 +351,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     stopInterval();
     (window as any).__replayActive = false;
     formingRef.current = null;
+    aheadRef.current = null;
     feedRef.current = null;
     setLiveFlag(false);
     setAskLive(false);
@@ -384,6 +404,14 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     stopInterval();
     setIsPlaying(false);
     formingRef.current = null;
+    // (a bar formed part-way after a timeframe switch: back to the whole bar before it)
+    if (aheadRef.current) {
+      const i = replayIndexRef.current, d = fullDataRef.current;
+      aheadRef.current = null;
+      applyDataUpToIndex(i);
+      if (d[i + 1]) (window as any).__replayNow = d[i + 1].time;
+      return;
+    }
     const next = Math.max(0, replayIndexRef.current - 1);
     replayIndexRef.current = next;
     setReplayIndex(next);
@@ -401,6 +429,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
       void positionLive(replayIndexRef.current);
       return;
     }
+    aheadRef.current = null;
     const next = Math.min(fullDataRef.current.length - 1, replayIndexRef.current + 1);
     replayIndexRef.current = next;
     setReplayIndex(next);
@@ -413,6 +442,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     stopInterval();
     setIsPlaying(false);
     formingRef.current = null;
+    aheadRef.current = null;
     const last = fullDataRef.current.length - 1;
     replayIndexRef.current = last;
     setReplayIndex(last);
@@ -434,13 +464,15 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
       idx = lo;
     }
     const cur = replayIndexRef.current;
-    if (idx === cur && !formingRef.current) return;
+    const hadAhead = !!aheadRef.current?.bar;
+    aheadRef.current = null;
+    if (idx === cur && !formingRef.current && !hadAhead) return;
     formingRef.current = null;
     replayIndexRef.current = idx;
     setReplayIndex(idx);
     if (liveRef.current) { applyDataUpToIndex(idx); void positionLive(idx); return; }
     // One bar on: add it (the chart keeps its scroll); otherwise redraw up to it
-    if (idx === cur + 1 && seriesRef.current) {
+    if (idx === cur + 1 && seriesRef.current && !hadAhead) {
       try { seriesRef.current.update(data[idx]); return; } catch { /* fall back to a redraw */ }
     }
     applyDataUpToIndex(idx);
@@ -479,6 +511,8 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     
     // Refresh chart series to include new historical data + current replay progress
     applyDataUpToIndex(newIndex);
+    const aheadBar = aheadRef.current?.bar;
+    if (aheadBar && seriesRef.current) { try { seriesRef.current.update(aheadBar); } catch { /* whole bars only */ } }
 
     if (wasPlaying) startInterval();
   }, [mode, isPlaying, applyDataUpToIndex, startInterval]);
@@ -489,6 +523,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     setLiveError(null);
     const wasPlaying = !!playIntervalRef.current;
     stopInterval();
+    aheadRef.current = null;
     if (!on) {
       formingRef.current = null;
       feedRef.current = null;
@@ -533,6 +568,7 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     const d = fullDataRef.current;
     const i = replayIndex;
     if (!d[i]) return;
+    if (aheadRef.current && i === replayIndexRef.current) { (window as any).__replayNow = aheadRef.current.asOf; return; }
     (window as any).__replayNow = d[i + 1]?.time ?? d[i].time + (i > 0 ? d[i].time - d[i - 1].time : 60);
   }, [mode, replayIndex, live]);
 
@@ -543,10 +579,23 @@ export function ReplayProvider({ children }: { children: React.ReactNode }) {
     return null;
   }, []);
 
+  const getReplayEnd = useCallback((barSec: number) => {
+    if (liveRef.current && feedRef.current && clockRef.current) return clockRef.current;
+    const d = fullDataRef.current, i = replayIndexRef.current;
+    if (!d[i]) return null;
+    // (a bar ends when the next one starts, if that's sooner: 45-minute bars restart every 4 hours)
+    const end = d[i + 1] ? Math.min(d[i].time + barSec, d[i + 1].time) : d[i].time + barSec;
+    return Math.max(end, aheadRef.current?.asOf ?? 0);
+  }, []);
+  const getPlayed = useCallback(() => ({
+    bars: fullDataRef.current.slice(0, replayIndexRef.current + 1),
+    ahead: aheadRef.current,
+  }), []);
+
   return (
     <ReplayContext.Provider value={{
       mode, isPlaying, replayIndex, replaySpeed, fullData, hoverX, setHoverX,
-      enterSelectMode, startReplayAt, getReplayTime, stopReplay, togglePlay,
+      enterSelectMode, startReplayAt, getReplayTime, getReplayEnd, getPlayed, stopReplay, togglePlay,
       stepBack, stepForward, skipToEnd, seekToTime, setSpeed, updateReplayData, reSelectBar, cancelSelect,
       startMode, setStartMode, hasStarted,
       live, askLive, liveLoading, liveError, setLive, dismissAskLive,
