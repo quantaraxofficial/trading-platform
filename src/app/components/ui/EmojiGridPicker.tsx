@@ -288,7 +288,7 @@ function NavBar({ tabs, active, onPick }: { tabs: { id: string; icon: string }[]
           <button key={t.id} type="button" onClick={() => onPick(t.id)} aria-label={t.id}
             style={{ width: NAV_TAB, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', cursor: 'pointer', position: 'relative', color: on ? text : muted, padding: 0 }}>
             <IconGlyph id={t.icon} size={20} />
-            {on && <span style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 3, background: '#2962ff', borderRadius: '3px 3px 0 0' }} />}
+            {on && <span style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 3, background: '#7c3aed', borderRadius: '3px 3px 0 0' }} />}
           </button>
         );
       })}
@@ -372,7 +372,7 @@ export function EmojiGridPicker({ onSelect, popupRef }: EmojiPickerProps) {
       <div style={{ display: 'flex', height: 46, padding: '0 5px', borderBottom: `1px solid ${border}`, flex: 'none' }}>
         <span style={{ width: NAV_TAB, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
           <EmojiGlyph char="🚀" size={22} />
-          <span style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 3, background: '#2962ff', borderRadius: '3px 3px 0 0' }} />
+          <span style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 3, background: '#7c3aed', borderRadius: '3px 3px 0 0' }} />
         </span>
       </div>
     );
@@ -417,7 +417,7 @@ export function EmojiGridPicker({ onSelect, popupRef }: EmojiPickerProps) {
             <button key={tab} type="button" onClick={() => setActiveTab(tab)}
               style={{ position: 'relative', height: 48, padding: '0 2px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 15, color: on ? '#2962ff' : text }}>
               {tab}
-              {on && <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: '#2962ff', borderRadius: '3px 3px 0 0' }} />}
+              {on && <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: '#7c3aed', borderRadius: '3px 3px 0 0' }} />}
             </button>
           );
         })}

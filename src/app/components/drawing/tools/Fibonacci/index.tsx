@@ -324,14 +324,14 @@ export function FibonacciTool({
       {(isSelected || isHovering) && (
         <>
           <HandleCircle 
-            x={x1} y={y1} radius={5} fill="white" stroke="#2962ff" strokeWidth={2} 
+            x={x1} y={y1} radius={5} fill="white" stroke="#7c3aed" strokeWidth={2} 
             draggable={!isLocked} 
             onDragStart={(e) => e.cancelBubble = true}
             onDragMove={handleCircleDrag(0)}
             onDragEnd={handleCircleDrag(0)}
           />
           <HandleCircle 
-            x={x2} y={y2} radius={5} fill="white" stroke="#2962ff" strokeWidth={2} 
+            x={x2} y={y2} radius={5} fill="white" stroke="#7c3aed" strokeWidth={2} 
             draggable={!isLocked} 
             onDragStart={(e) => e.cancelBubble = true}
             onDragMove={handleCircleDrag(1)}

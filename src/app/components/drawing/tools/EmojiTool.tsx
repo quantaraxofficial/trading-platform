@@ -114,9 +114,9 @@ export function EmojiTool({
           keepRatio
           rotateEnabled={false}
           enabledAnchors={isLocked ? [] : ['top-left', 'top-right', 'bottom-left', 'bottom-right']}
-          borderStroke="#2962ff"
+          borderStroke="#7c3aed"
           borderStrokeWidth={1}
-          anchorStroke="#2962ff"
+          anchorStroke="#7c3aed"
           anchorStrokeWidth={2}
           anchorFill="#ffffff"
           anchorSize={11}

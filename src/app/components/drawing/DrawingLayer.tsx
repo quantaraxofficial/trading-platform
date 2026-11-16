@@ -157,7 +157,8 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
 
     const isHandle = (n: any) => {
       const a = n.attrs;
-      return a && a.fill === 'white' && a.stroke === '#2962ff' && (n.className === 'Circle' || n.className === 'Rect');
+      // (a selection handle: white with the accent outline, TradePilot purple, or the earlier blue)
+      return a && a.fill === 'white' && (a.stroke === '#7c3aed' || a.stroke === '#2962ff') && (n.className === 'Circle' || n.className === 'Rect');
     };
 
     const cutCandleBodies = () => {
@@ -2373,7 +2374,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
                   width={w}
                   height={h}
                   fill="rgba(41, 98, 255, 0.2)"
-                  stroke="#2962ff"
+                  stroke="#7c3aed"
                   strokeWidth={1}
                   listening={false}
                 />
@@ -2393,7 +2394,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
               width={Math.abs(selectionRect.endX - selectionRect.startX)}
               height={Math.abs(selectionRect.endY - selectionRect.startY)}
               fill="rgba(41, 98, 255, 0.08)"
-              stroke="#2962ff"
+              stroke="#7c3aed"
               strokeWidth={1}
               dash={[4, 4]}
               listening={false}

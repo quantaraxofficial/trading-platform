@@ -19,7 +19,7 @@ import { C, Tip, Popover, MenuItem, MenuDivider } from "./ui";
 import { paneGeometry } from "../lib/priceScaleSide";
 import { displaySymbol } from "@/app/lib/symbolDisplay";
 
-const BUY = "#2962ff";
+const BUY = "#7c3aed";
 const SELL = "#f23645";
 const TP = "#089981";
 const SL = "#ff9800";

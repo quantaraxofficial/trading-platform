@@ -21,7 +21,7 @@ const primary = "px-4 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r fro
 
 export function PlatformBadge({ platform }: { platform: "mt5" | "ctrader" }) {
   return platform === "mt5"
-    ? <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-gradient-to-br from-emerald-600 to-blue-600">MT5</span>
+    ? <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-gradient-to-br from-emerald-600 to-purple-600">MT5</span>
     : <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-gradient-to-br from-red-600 to-orange-500">cT</span>;
 }
 

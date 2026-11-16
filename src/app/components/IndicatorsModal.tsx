@@ -171,7 +171,7 @@ export default function IndicatorsModal({ onClose, onSelect }: IndicatorsModalPr
             <SidebarItem icon={<TrendingUp size={18} strokeWidth={1.5} />} label="Top" active={source === "top"} onClick={() => setSource("top")} id="top" />
             <SidebarItem icon={<Sparkles size={18} strokeWidth={1.5} />} label="Newest" active={source === "new"} onClick={() => setSource("new")} id="new" />
             <SidebarItem icon={<Heart size={18} strokeWidth={1.5} />} label="Following" active={source === "following"} onClick={() => setSource("following")} id="following" />
-            <a href="/community" target="_blank" rel="noreferrer" style={{ fontSize: 13, color: "var(--tv-color-accent, #2962ff)", padding: "12px 12px 4px", textDecoration: "none" }}>Browse the community ↗</a>
+            <a href="/community" target="_blank" rel="noreferrer" style={{ fontSize: 13, color: "var(--tv-color-accent, #7c3aed)", padding: "12px 12px 4px", textDecoration: "none" }}>Browse the community ↗</a>
           </div>
 
           {/* Right Content */}

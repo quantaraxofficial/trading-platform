@@ -320,7 +320,7 @@ function SymbolRow({ sym, quote, grid, cols, display, flag, active, selected, dr
       style={{
         position: "relative", display: "grid", gridTemplateColumns: grid, gap: 6, alignItems: "center", height: 32, padding: "0 10px 0 0",
         fontSize: 14, cursor: "pointer", fontVariantNumeric: "tabular-nums",
-        background: selected ? "rgba(41, 98, 255, 0.18)" : hover ? "var(--tv-hover-neutral)" : "transparent",
+        background: selected ? "rgba(124, 58, 237, 0.18)" : hover ? "var(--tv-hover-neutral)" : "transparent",
         boxShadow: active && !selected ? "inset 0 0 0 1px var(--tv-hdr-text)" : undefined, borderRadius: active && !selected ? 4 : 0,
         borderTop: dropBefore ? "2px solid var(--tv-color-accent)" : undefined,
       }}>

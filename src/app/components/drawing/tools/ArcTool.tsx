@@ -47,7 +47,7 @@ export function ArcTool({ id, points, stroke, strokeWidth, fill, isSelected, isH
     return (
       <Group id={id} listening={false}>
         <Line points={[ax, ay, bx, by]} stroke={color} strokeWidth={strokeWidth} lineCap="round" />
-        <Circle x={ax} y={ay} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} />
+        <Circle x={ax} y={ay} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} />
       </Group>
     );
   }
@@ -158,9 +158,9 @@ export function ArcTool({ id, points, stroke, strokeWidth, fill, isSelected, isH
 
       {(isSelected || isHovering) && (
         <>
-          <HandleCircle x={ax} y={ay} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable={!isLocked} onDragStart={handleDragStart} onDragMove={handleEndMove(0)} onDragEnd={endDrag(handleEndMove(0))} />
-          <HandleCircle x={bx} y={by} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable={!isLocked} onDragStart={handleDragStart} onDragMove={handleEndMove(1)} onDragEnd={endDrag(handleEndMove(1))} />
-          <HandleCircle x={peakX} y={peakY} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable={!isLocked} onDragStart={handleDragStart} onDragMove={handlePeakMove} onDragEnd={endDrag(handlePeakMove)} />
+          <HandleCircle x={ax} y={ay} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable={!isLocked} onDragStart={handleDragStart} onDragMove={handleEndMove(0)} onDragEnd={endDrag(handleEndMove(0))} />
+          <HandleCircle x={bx} y={by} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable={!isLocked} onDragStart={handleDragStart} onDragMove={handleEndMove(1)} onDragEnd={endDrag(handleEndMove(1))} />
+          <HandleCircle x={peakX} y={peakY} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable={!isLocked} onDragStart={handleDragStart} onDragMove={handlePeakMove} onDragEnd={endDrag(handlePeakMove)} />
         </>
       )}
     </Group>

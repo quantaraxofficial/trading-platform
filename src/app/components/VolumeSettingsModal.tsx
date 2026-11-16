@@ -305,7 +305,7 @@ export default function VolumeSettingsModal({ onClose, theme, config, onChangeCo
           </div>
           <div style={{ display: "flex", gap: "8px" }}>
             <button onClick={cancel} style={{ padding: "8px 16px", borderRadius: "4px", border: `1px solid ${borderColor}`, backgroundColor: "transparent", color: textColor, cursor: "pointer", fontWeight: 600 }}>Cancel</button>
-            <button onClick={onClose} style={{ padding: "8px 16px", borderRadius: "4px", border: "none", backgroundColor: "#2962ff", color: "white", cursor: "pointer", fontWeight: 600 }}>Ok</button>
+            <button onClick={onClose} style={{ padding: "8px 16px", borderRadius: "4px", border: "none", backgroundColor: "#7c3aed", color: "white", cursor: "pointer", fontWeight: 600 }}>Ok</button>
           </div>
         </div>
       </div>
@@ -360,10 +360,10 @@ function ColorBox({ color, onChangeColor, theme }: { color: string, onChangeColo
         onClick={() => setShowPicker(!showPicker)}
         style={{ 
           width: "32px", height: "24px", backgroundColor: color, 
-          borderRadius: "4px", border: `1px solid ${showPicker ? "#2962ff" : borderColor}`,
+          borderRadius: "4px", border: `1px solid ${showPicker ? "#7c3aed" : borderColor}`,
           cursor: "pointer",
           // Adding outline to match screenshot for active state:
-          outline: showPicker ? "2px solid rgba(41, 98, 255, 0.3)" : "none",
+          outline: showPicker ? "2px solid rgba(124, 58, 237, 0.3)" : "none",
           outlineOffset: "1px"
         }} 
       />

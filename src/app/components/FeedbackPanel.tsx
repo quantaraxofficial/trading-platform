@@ -185,7 +185,7 @@ export default function FeedbackPanel({ theme, symbol, interval, onClose }: Feed
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
                 padding: "10px", borderRadius: "6px", fontSize: "12px",
-                border: `1px dashed ${dragOver ? "var(--tv-color-accent, #2962ff)" : "var(--tv-color-border)"}`,
+                border: `1px dashed ${dragOver ? "var(--tv-color-accent, #7c3aed)" : "var(--tv-color-border)"}`,
                 color: "var(--tv-color-text-muted)", cursor: "pointer",
               }}
               onClick={() => fileRef.current?.click()}
@@ -229,7 +229,7 @@ export default function FeedbackPanel({ theme, symbol, interval, onClose }: Feed
                 style={{
                   display: "flex", alignItems: "center", gap: "5px", height: "32px", padding: "0 14px",
                   borderRadius: "6px", border: "none",
-                  background: !message.trim() ? "var(--tv-color-text-muted)" : "var(--tv-color-accent, #2962ff)",
+                  background: !message.trim() ? "var(--tv-color-text-muted)" : "var(--tv-color-accent, #7c3aed)",
                   color: "#fff", fontSize: "13px", fontWeight: 600,
                   cursor: !message.trim() ? "not-allowed" : "pointer",
                 }}

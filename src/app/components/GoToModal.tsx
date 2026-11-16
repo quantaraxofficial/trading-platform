@@ -138,7 +138,7 @@ export default function GoToModal({ onClose, selectedDate, setSelectedDate, sele
               fontWeight: 700,
               background: "transparent",
               border: "none",
-              borderBottom: activeTab === "date" ? "2px solid var(--tv-color-accent, #2962ff)" : "2px solid transparent",
+              borderBottom: activeTab === "date" ? "2px solid var(--tv-color-accent, #7c3aed)" : "2px solid transparent",
               color: activeTab === "date" ? "var(--tv-color-text, #131722)" : "var(--tv-color-text-muted, #787b86)",
               cursor: "pointer",
             }}
@@ -153,7 +153,7 @@ export default function GoToModal({ onClose, selectedDate, setSelectedDate, sele
               fontWeight: 700,
               background: "transparent",
               border: "none",
-              borderBottom: activeTab === "custom" ? "2px solid var(--tv-color-accent, #2962ff)" : "2px solid transparent",
+              borderBottom: activeTab === "custom" ? "2px solid var(--tv-color-accent, #7c3aed)" : "2px solid transparent",
               color: activeTab === "custom" ? "var(--tv-color-text, #131722)" : "var(--tv-color-text-muted, #787b86)",
               cursor: "pointer",
             }}
@@ -176,7 +176,7 @@ export default function GoToModal({ onClose, selectedDate, setSelectedDate, sele
                   height: "34px",
                   padding: "0 12px",
                   borderRadius: "6px",
-                  border: "2px solid var(--tv-color-accent, #2962ff)",
+                  border: "2px solid var(--tv-color-accent, #7c3aed)",
                   fontSize: "14px",
                   outline: "none",
                   backgroundColor: "transparent",

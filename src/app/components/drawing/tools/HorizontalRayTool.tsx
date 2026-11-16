@@ -153,7 +153,7 @@ export function HorizontalRayTool({
       )}
       {(isSelected || isHovering) && (
         <HandleCircle
-          x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2}
+          x={x1} y={y1} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2}
           draggable={!isLocked}
           onDragStart={(e) => { e.cancelBubble = true; }}
           onDragMove={handleAnchorDrag}

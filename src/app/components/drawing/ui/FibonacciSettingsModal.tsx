@@ -48,7 +48,7 @@ function LineThicknessDropdown({ value, onChange, isOpen, onToggle }: { value: n
   return (
     <div style={{ position: 'relative' }}>
       <div onClick={e => { stopAll(e); onToggle(); }}
-        style={{ width: '48px', height: '32px', border: isOpen ? '1px solid #2962ff' : '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        style={{ width: '48px', height: '32px', border: isOpen ? '1px solid #7c3aed' : '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
         <div style={{ width: '24px', height: `${value}px`, backgroundColor: '#131722' }} />
       </div>
       {isOpen && (
@@ -76,7 +76,7 @@ function LineStyleMiniDropdown({ value, onChange, isOpen, onToggle }: { value: s
   return (
     <div style={{ position: 'relative' }}>
       <div onClick={e => { stopAll(e); onToggle(); }}
-        style={{ width: '48px', height: '32px', border: isOpen ? '1px solid #2962ff' : '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        style={{ width: '48px', height: '32px', border: isOpen ? '1px solid #7c3aed' : '1px solid var(--tv-sub-border)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
         <svg width="24" height="2" viewBox="0 0 24 2"><line x1="0" y1="1" x2="24" y2="1" stroke="var(--tv-sub-text)" strokeWidth="2" strokeDasharray={lineDash(value)} /></svg>
       </div>
       {isOpen && (
@@ -108,7 +108,7 @@ function ExtendDropdown({ left, right, onChange, isOpen, onToggle }: { left: boo
     <div style={{ position: 'relative', flex: 1 }}>
       <div onClick={e => { stopAll(e); onToggle(); }}
         style={{
-          height: '32px', border: isOpen ? '1px solid #2962ff' : '1px solid var(--tv-sub-border)', borderRadius: '4px',
+          height: '32px', border: isOpen ? '1px solid #7c3aed' : '1px solid var(--tv-sub-border)', borderRadius: '4px',
           padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', cursor: 'pointer',
         }}>
         <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
@@ -170,7 +170,7 @@ export const DEFAULT_FIB_LEVELS = [
   { id: '0.618', enabled: true, value: 0.618, color: '#089981' },
   { id: '0.786', enabled: true, value: 0.786, color: '#00bcd4' },
   { id: '1', enabled: true, value: 1, color: '#787b86' },
-  { id: '1.618', enabled: true, value: 1.618, color: '#2962ff' },
+  { id: '1.618', enabled: true, value: 1.618, color: '#7c3aed' },
   { id: '2.618', enabled: true, value: 2.618, color: '#f23645' },
   { id: '3.618', enabled: true, value: 3.618, color: '#9c27b0' },
   { id: '4.236', enabled: true, value: 4.236, color: '#e91e63' },
@@ -181,7 +181,7 @@ export const DEFAULT_FIB_LEVELS = [
   { id: '2', enabled: false, value: 2, color: '#089981' },
   { id: '3', enabled: false, value: 3, color: '#00bcd4' },
   { id: '3.272', enabled: false, value: 3.272, color: '#787b86' },
-  { id: '3.414', enabled: false, value: 3.414, color: '#2962ff' },
+  { id: '3.414', enabled: false, value: 3.414, color: '#7c3aed' },
   { id: '4', enabled: false, value: 4, color: '#f23645' },
   { id: '4.272', enabled: false, value: 4.272, color: '#9c27b0' },
   { id: '4.414', enabled: false, value: 4.414, color: '#e91e63' },
@@ -216,7 +216,7 @@ function CoordInput({ value, onCommit, autoFocus, ariaLabel }: { value: string; 
       onChange={e => setText(e.target.value)}
       onBlur={() => { setFocused(false); if (text !== value) onCommit(text); }}
       onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-      style={{ width: 100, height: 34, boxSizing: 'border-box', border: `1px solid ${focused ? '#2962ff' : 'var(--tv-sub-border)'}`, borderRadius: 6, padding: '0 12px', fontSize: 14, color: '#0f0f0f', outline: 'none', background: 'var(--tv-sub-bg)' }}
+      style={{ width: 100, height: 34, boxSizing: 'border-box', border: `1px solid ${focused ? '#7c3aed' : 'var(--tv-sub-border)'}`, borderRadius: 6, padding: '0 12px', fontSize: 14, color: '#0f0f0f', outline: 'none', background: 'var(--tv-sub-bg)' }}
     />
   );
 }
@@ -516,7 +516,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CheckBox checked={drawing.showBackground !== false} onChange={v => updateProp('showBackground', v)} />
               <span style={{ fontSize: '13px', color: 'var(--tv-sub-text)', width: '80px' }}>Background</span>
-              <div style={{ flex: 1, position: 'relative', height: '8px', borderRadius: '4px', background: 'linear-gradient(to right, transparent, #5b9cf6)', cursor: 'pointer' }}>
+              <div style={{ flex: 1, position: 'relative', height: '8px', borderRadius: '4px', background: 'linear-gradient(to right, transparent, #a78bfa)', cursor: 'pointer' }}>
                 <input type="range" min="0" max="100" value={Math.round((drawing.backgroundOpacity ?? 0.2) * 100)}
                   onChange={e => updateProp('backgroundOpacity', parseInt(e.target.value) / 100)}
                   style={{ position: 'absolute', inset: 0, width: '100%', opacity: 0, cursor: 'pointer', margin: 0 }}
@@ -524,7 +524,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
                 <div style={{
                   position: 'absolute', top: '50%', transform: 'translateY(-50%)',
                   left: `${Math.round((drawing.backgroundOpacity ?? 0.2) * 100)}%`, width: '14px', height: '14px',
-                  borderRadius: '50%', backgroundColor: 'var(--tv-sub-bg)', border: '2px solid #5b9cf6',
+                  borderRadius: '50%', backgroundColor: 'var(--tv-sub-bg)', border: '2px solid #a78bfa',
                   pointerEvents: 'none', marginLeft: '-7px'
                 }} />
               </div>
@@ -704,7 +704,7 @@ export function FibonacciSettingsModal({ onClose, initialPosition }: FibonacciSe
                       else if (e.key === 'Escape') { e.preventDefault(); setRenamingId(null); }
                     }}
                     onBlur={e => commitRename(t, e.target.value)}
-                    style={{ flex: 1, margin: '4px 8px 4px 12px', height: 30, padding: '0 8px', fontSize: 14, borderRadius: 4, border: '1px solid #2962ff', outline: 'none', background: 'transparent', color: 'var(--tv-sub-text)' }} />
+                    style={{ flex: 1, margin: '4px 8px 4px 12px', height: 30, padding: '0 8px', fontSize: 14, borderRadius: 4, border: '1px solid #7c3aed', outline: 'none', background: 'transparent', color: 'var(--tv-sub-text)' }} />
                 ) : (
                   <button onClick={() => applyTemplate(t)} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: 'transparent', border: 'none', color: 'var(--tv-sub-text)', cursor: 'pointer', textAlign: 'left', fontSize: '14px', minWidth: 0 }} onMouseEnter={(e) => e.currentTarget.style.background = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>

@@ -17,7 +17,7 @@ function CheckBox({ checked, onChange }: { checked: boolean; onChange: (v: boole
       style={{
         width: '18px', height: '18px', borderRadius: '3px',
         border: checked ? 'none' : '1px solid var(--tv-sub-muted)',
-        backgroundColor: checked ? '#2962ff' : 'var(--tv-sub-bg)',
+        backgroundColor: checked ? '#7c3aed' : 'var(--tv-sub-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         cursor: 'pointer', flexShrink: 0,
       }}
@@ -149,7 +149,7 @@ export function MultiSelectSettingsModal({ onClose, initialPosition }: MultiSele
       <div style={{ display: 'flex', padding: '0 20px', borderBottom: '1px solid var(--tv-sub-border)', gap: '20px' }}>
         {tabs.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            style={{ padding: '8px 0', fontSize: '14px', fontWeight: activeTab === tab ? 600 : 400, color: 'var(--tv-sub-text)', background: 'transparent', border: 'none', borderBottom: activeTab === tab ? '2px solid #2962ff' : '2px solid transparent', cursor: 'pointer' }}
+            style={{ padding: '8px 0', fontSize: '14px', fontWeight: activeTab === tab ? 600 : 400, color: 'var(--tv-sub-text)', background: 'transparent', border: 'none', borderBottom: activeTab === tab ? '2px solid #7c3aed' : '2px solid transparent', cursor: 'pointer' }}
           >{tab}</button>
         ))}
       </div>

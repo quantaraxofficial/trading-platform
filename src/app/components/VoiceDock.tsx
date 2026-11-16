@@ -63,7 +63,7 @@ export default function VoiceDock() {
       <button type="button" onClick={() => setOpen(o => !o)} aria-label="Voice assistant" aria-expanded={open} data-name="voice-dock-button"
         title={v.listening ? "Voice assistant (listening)" : "Voice assistant"}
         style={{ position: "fixed", right: 20, bottom: 20, width: 52, height: 52, borderRadius: "50%", zIndex: 10060, border: "none", cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", background: v.listening ? "#f23645" : "#2962ff",
+          display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", background: v.listening ? "#f23645" : "#7c3aed",
           boxShadow: "0 4px 16px rgba(0,0,0,0.35)" }}
         className={v.listening ? "tv-voice-mic on" : undefined}>
         <VoiceAssistantIcon size={28} />

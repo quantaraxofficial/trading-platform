@@ -106,7 +106,7 @@ export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, isHo
         points={flattenedPoints}
         stroke={stroke}
         strokeWidth={strokeWidth}
-        fill={backgroundVisible !== false ? (fill || 'rgba(41, 98, 255, 0.08)') : 'transparent'}
+        fill={backgroundVisible !== false ? (fill || 'rgba(124, 58, 237, 0.08)') : 'transparent'}
         hitFunc={strokeOnlyHit}
         closed={true}
         shadowColor={isSelected ? stroke : 'transparent'}
@@ -120,7 +120,7 @@ export function TriangleTool({ id, points, stroke, strokeWidth, isSelected, isHo
           y={pt.y}
           radius={6}
           fill="white"
-          stroke="#2962ff"
+          stroke="#7c3aed"
           strokeWidth={2}
           draggable
           onDragStart={handleDragStart}

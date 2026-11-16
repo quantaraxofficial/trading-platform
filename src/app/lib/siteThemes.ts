@@ -44,8 +44,8 @@ export const CLASSIC_ID = "classic";
 
 // The two classic looks (shown as cards, applied as "classic" on that base)
 export const CLASSIC_PREVIEW: Record<SiteThemeBase, { name: string; bg: string; panel: string; text: string; accent: string; up: string; down: string }> = {
-  light: { name: "Classic light", bg: "#ffffff", panel: "#f0f3fa", text: "#131722", accent: "#2962ff", up: "#089981", down: "#f23645" },
-  dark: { name: "Classic dark", bg: "#131722", panel: "#1e222d", text: "#d1d4dc", accent: "#2962ff", up: "#089981", down: "#f23645" },
+  light: { name: "Classic light", bg: "#ffffff", panel: "#f0f3fa", text: "#131722", accent: "#7c3aed", up: "#089981", down: "#f23645" },
+  dark: { name: "Classic dark", bg: "#131722", panel: "#1e222d", text: "#d1d4dc", accent: "#7c3aed", up: "#089981", down: "#f23645" },
 };
 
 export const SITE_THEMES: SiteTheme[] = [

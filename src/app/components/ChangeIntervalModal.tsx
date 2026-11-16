@@ -21,7 +21,7 @@ export default function ChangeIntervalModal({ initialDigit, onApply, onClose, th
   const text = isDark ? "#d1d4dc" : "#131722";
   const textMuted = isDark ? "#787b86" : "#787b86";
   const border = isDark ? "#2a2e39" : "#e0e3eb";
-  const focusBorder = "#2962ff";
+  const focusBorder = "#7c3aed";
 
   useEffect(() => {
     inputRef.current?.focus();

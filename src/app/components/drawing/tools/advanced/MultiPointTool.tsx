@@ -114,7 +114,7 @@ export function MultiPointTool({
         : <Line points={flat} stroke={drawing.stroke || '#2962ff'} strokeWidth={2} hitStrokeWidth={10} />}
       {(isSelected || isHovering) && !hideHandles && p.map((q, i) => (
         <HandleCircle
-          key={i} x={q.x} y={q.y} radius={6} fill="white" stroke="#2962ff" strokeWidth={2}
+          key={i} x={q.x} y={q.y} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2}
           draggable={!isLocked}
           onDragStart={(e: any) => { e.cancelBubble = true; }}
           onDragMove={onHandleMove(i)} onDragEnd={onHandleMove(i)}

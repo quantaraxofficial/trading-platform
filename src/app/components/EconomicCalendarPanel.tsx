@@ -30,11 +30,11 @@ const FONT = "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu,
 function palette(dark: boolean) {
   return dark ? {
     bg: "#0f0f0f", text: "#dbdbdb", muted: "#8c8c8c", border: "#3d3d3d", line: "#2e2e2e", card: "#2e2e2e", sep: "#1a1a1a",
-    hover: "#2e2e2e", pillOn: "#ffffff", pillOnText: "#000000", blue: "#3179f5", red: "#f23645", barOff: "#4a4a4a",
+    hover: "#2e2e2e", pillOn: "#ffffff", pillOnText: "#000000", blue: "#8b5cf6", red: "#f23645", barOff: "#4a4a4a",
     menu: "#1f1f1f", shadow: "0 2px 12px rgba(0,0,0,.6)", grip: "#4a4a4a",
   } : {
     bg: "#ffffff", text: "#000000", muted: "#707070", border: "#ebebeb", line: "#f2f2f2", card: "#f2f2f2", sep: "#f9f9f9",
-    hover: "#f2f2f2", pillOn: "#222222", pillOnText: "#ffffff", blue: "#2962ff", red: "#f23645", barOff: "#dbdbdb",
+    hover: "#f2f2f2", pillOn: "#222222", pillOnText: "#ffffff", blue: "#7c3aed", red: "#f23645", barOff: "#dbdbdb",
     menu: "#ffffff", shadow: "0 2px 12px rgba(0,0,0,.18)", grip: "#9c9c9c",
   };
 }

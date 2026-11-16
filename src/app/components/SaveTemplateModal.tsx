@@ -84,7 +84,7 @@ export default function SaveTemplateModal({ onClose, theme, settingsToSave }: Sa
             onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onClose(); }}
             style={{
               width: '100%', padding: '10px 12px', borderRadius: '6px',
-              border: `2px solid #2962ff`, // Highlighted blue border just like screenshot
+              border: `2px solid #7c3aed`, // Highlighted blue border just like screenshot
               backgroundColor: 'transparent', color: text, outline: 'none',
               fontSize: '14px'
             }}
@@ -104,7 +104,7 @@ export default function SaveTemplateModal({ onClose, theme, settingsToSave }: Sa
           </button>
           <button onClick={handleSave} disabled={loading || !templateName.trim()} style={{ 
             padding: '8px 20px', borderRadius: '6px', border: 'none',
-            background: (!templateName.trim() || loading) ? (isDark ? '#2a2e39' : '#f0f3fa') : '#2962ff', 
+            background: (!templateName.trim() || loading) ? (isDark ? '#2a2e39' : '#f0f3fa') : '#7c3aed', 
             color: (!templateName.trim() || loading) ? '#787b86' : '#fff', 
             cursor: (!templateName.trim() || loading) ? 'not-allowed' : 'pointer', fontSize: '14px'
           }}>

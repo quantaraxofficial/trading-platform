@@ -110,7 +110,7 @@ export function ArrowIconTool({
           y={y + handleOffset}
           radius={handleRadius}
           fill="white"
-          stroke="#2962ff"
+          stroke="#7c3aed"
           strokeWidth={2}
           draggable={!isLocked}
           onDragStart={(e) => { e.cancelBubble = true; setIsDragging(true); }}

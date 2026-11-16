@@ -300,7 +300,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
                   style={{
                     width: '100%',
                     padding: '10px 12px',
-                    border: '2px solid #2962ff',
+                    border: '2px solid #7c3aed',
                     borderRadius: '6px',
                     fontSize: '14px',
                     outline: 'none',
@@ -343,7 +343,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
                   padding: '10px 24px', 
                   borderRadius: '6px', 
                   border: 'none', 
-                  background: templateName ? '#2962ff' : 'var(--tv-sub-hover)', 
+                  background: templateName ? '#7c3aed' : 'var(--tv-sub-hover)', 
                   color: templateName ? '#ffffff' : '#b2b5be',
                   fontSize: '14px',
                   fontWeight: 600,
@@ -584,7 +584,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
       stroke: '#2962ff',
       strokeWidth: 2,
       fill: 'transparent',
-      textColor: '#2962ff',
+      textColor: '#7c3aed',
       fontSize: 16,
       lineStyle: 'Solid'
     };
@@ -683,7 +683,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
                       else if (e.key === 'Escape') { e.preventDefault(); setRenamingId(null); }
                     }}
                     onBlur={e => commitRename(tmp, e.target.value)}
-                    style={{ flex: 1, margin: '4px 8px 4px 12px', height: 30, padding: '0 8px', fontSize: 14, borderRadius: 4, border: '1px solid #2962ff', outline: 'none', background: 'transparent', color: 'var(--tv-sub-text)' }} />
+                    style={{ flex: 1, margin: '4px 8px 4px 12px', height: 30, padding: '0 8px', fontSize: 14, borderRadius: 4, border: '1px solid #7c3aed', outline: 'none', background: 'transparent', color: 'var(--tv-sub-text)' }} />
                 ) : (
                   <button
                     onClick={() => applyTemplate(tmp)}
@@ -1142,7 +1142,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -1232,7 +1232,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -1324,7 +1324,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -1422,7 +1422,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -1532,7 +1532,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -1630,7 +1630,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -1784,7 +1784,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -1883,7 +1883,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -2056,7 +2056,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -2239,7 +2239,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -2509,7 +2509,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -2618,7 +2618,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -2724,7 +2724,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -2815,7 +2815,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -2908,7 +2908,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -2999,7 +2999,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -3116,7 +3116,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -3243,7 +3243,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -3346,7 +3346,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -3446,7 +3446,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -3545,7 +3545,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -3646,7 +3646,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -3786,7 +3786,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -3886,7 +3886,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -4063,7 +4063,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -4170,7 +4170,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -4268,7 +4268,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -4402,7 +4402,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </button>
 
         {/* Lock */}
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
           <SubLockIcon locked={isLocked} />
         </button>
 
@@ -4453,7 +4453,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
         </div>
         <TemplateButton />
         <button className="tv-icon-btn" title="Settings" onClick={handleSettingsClick} style={btn} {...hover}><SubSettingsIcon /></button>
-        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ ...btn, color: isLocked ? '#2962ff' : 'var(--tv-sub-text)' }} {...hover}><SubLockIcon locked={isLocked} /></button>
+        <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ ...btn, color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)' }} {...hover}><SubLockIcon locked={isLocked} /></button>
         <button className="tv-icon-btn" title="Remove" onClick={handleDelete} style={btn} {...hover}><SubTrashIcon /></button>
         <MoreMenu />
       </div>
@@ -4529,7 +4529,7 @@ const onStrokeWidthChange = (id: string, width: number) => updateDrawing(id, { s
       </button>
 
       {/* Lock */}
-      <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#2962ff' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+      <button className="tv-icon-btn" title="Lock" onClick={handleLockToggle} style={{ width: '34px', height: '34px', color: isLocked ? '#7c3aed' : 'var(--tv-sub-text)', borderRadius: '4px', border: 'none', background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tv-sub-hover)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
         <SubLockIcon locked={isLocked} />
       </button>
 

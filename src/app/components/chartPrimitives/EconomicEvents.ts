@@ -162,7 +162,7 @@ export class EconomicEvents {
               }
               if (evs.length > 1) {
                 const bx = x + SIZE / 2 - 1, by = y - SIZE / 2 + 1;
-                ctx.beginPath(); ctx.arc(bx, by, 6, 0, Math.PI * 2); ctx.fillStyle = "#2962ff"; ctx.fill();
+                ctx.beginPath(); ctx.arc(bx, by, 6, 0, Math.PI * 2); ctx.fillStyle = "#7c3aed"; ctx.fill();
                 ctx.fillStyle = "#ffffff"; ctx.font = "600 9px -apple-system, Segoe UI, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
                 ctx.fillText(evs.length > 9 ? "9+" : String(evs.length), bx, by + 0.5);
               }

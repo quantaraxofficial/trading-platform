@@ -107,7 +107,7 @@ export default function AlertsSidebar() {
           <div key={g.day}>
             <div style={{ padding: "12px 12px 6px", fontSize: 11, letterSpacing: 0.4, color: "var(--tv-color-text-muted)" }}>{g.day}</div>
             {g.entries.map(e => (
-              <div key={e.id} data-testid="alert-log-row" style={{ padding: "9px 12px", borderBottom: "1px solid var(--tv-color-border)", background: e.read ? "transparent" : "var(--tv-alert-unread, rgba(41,98,255,0.18))" }}>
+              <div key={e.id} data-testid="alert-log-row" style={{ padding: "9px 12px", borderBottom: "1px solid var(--tv-color-border)", background: e.read ? "transparent" : "var(--tv-alert-unread, rgba(124, 58, 237,0.18))" }}>
                 <div style={{ fontSize: 14, lineHeight: "20px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.message}</div>
                 <div style={{ fontSize: 12, lineHeight: "18px", color: "var(--tv-color-text-muted)" }}>{shortSymbol(e.symbol)} <span style={{ margin: "0 3px" }}>•</span> {clock(e.time)}</div>
               </div>

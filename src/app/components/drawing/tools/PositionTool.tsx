@@ -336,13 +336,13 @@ export function PositionTool({
       {/* Handles: TradingView's four */}
       {showUI && (
         <>
-          <HandleCircle x={leftX} y={entryY} radius={5} fill="white" stroke="#2962ff" strokeWidth={2} draggable
+          <HandleCircle x={leftX} y={entryY} radius={5} fill="white" stroke="#7c3aed" strokeWidth={2} draggable
             onDragMove={handleHandleDrag(0)} />
-          <HandleRect cursor="ew-resize" x={rightX} y={entryY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#2962ff" strokeWidth={2} draggable
+          <HandleRect cursor="ew-resize" x={rightX} y={entryY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#7c3aed" strokeWidth={2} draggable
             onDragMove={handleHandleDrag(1)} />
-          <HandleRect cursor="ns-resize" x={leftX} y={targetY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#2962ff" strokeWidth={2} draggable
+          <HandleRect cursor="ns-resize" x={leftX} y={targetY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#7c3aed" strokeWidth={2} draggable
             onDragMove={handleHandleDrag(2)} />
-          <HandleRect cursor="ns-resize" x={leftX} y={stopY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#2962ff" strokeWidth={2} draggable
+          <HandleRect cursor="ns-resize" x={leftX} y={stopY} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2} fill="white" stroke="#7c3aed" strokeWidth={2} draggable
             onDragMove={handleHandleDrag(3)} />
         </>
       )}

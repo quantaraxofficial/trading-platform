@@ -245,7 +245,7 @@ export function HorizontalRaySettingsModal({ onClose, initialPosition }: Horizon
               value={drawing.text || ''}
               onChange={e => updateProp('text', e.target.value)}
               placeholder="Add text"
-              style={{ width: '100%', height: '80px', border: '1px solid #2962ff', borderRadius: '4px', padding: '10px 12px', fontSize: '14px', fontFamily: 'inherit', resize: 'none', outline: 'none', color: 'var(--tv-sub-text)', boxSizing: 'border-box' }}
+              style={{ width: '100%', height: '80px', border: '1px solid #7c3aed', borderRadius: '4px', padding: '10px 12px', fontSize: '14px', fontFamily: 'inherit', resize: 'none', outline: 'none', color: 'var(--tv-sub-text)', boxSizing: 'border-box' }}
             />
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>

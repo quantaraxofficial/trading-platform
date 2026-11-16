@@ -101,15 +101,15 @@ export default function TestingDashboard() {
                  </div>
                  {/* Bars */}
                  <div className="relative z-10 w-24 ml-16 flex flex-col items-center">
-                   <div className="w-full bg-gradient-to-t from-blue-600/80 to-blue-400 rounded-t-sm shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:brightness-125 transition-all cursor-pointer" style={{ height: '22%' }}></div>
+                   <div className="w-full bg-gradient-to-t from-purple-600/80 to-purple-400 rounded-t-sm shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:brightness-125 transition-all cursor-pointer" style={{ height: '22%' }}></div>
                    <span className="text-xs text-purple-400 mt-4 absolute -bottom-8">Apr 2026</span>
                  </div>
                  <div className="relative z-10 w-24 flex flex-col items-center">
-                   <div className="w-full bg-gradient-to-t from-blue-600/80 to-blue-400 rounded-t-sm shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:brightness-125 transition-all cursor-pointer" style={{ height: '2%' }}></div>
+                   <div className="w-full bg-gradient-to-t from-purple-600/80 to-purple-400 rounded-t-sm shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:brightness-125 transition-all cursor-pointer" style={{ height: '2%' }}></div>
                    <span className="text-xs text-purple-400 mt-4 absolute -bottom-8">May 2026</span>
                  </div>
                  <div className="relative z-10 w-24 flex flex-col items-center">
-                   <div className="w-full bg-gradient-to-t from-blue-600/80 to-blue-400 rounded-t-sm shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:brightness-125 transition-all cursor-pointer" style={{ height: '32%' }}></div>
+                   <div className="w-full bg-gradient-to-t from-purple-600/80 to-purple-400 rounded-t-sm shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:brightness-125 transition-all cursor-pointer" style={{ height: '32%' }}></div>
                    <span className="text-xs text-purple-400 mt-4 absolute -bottom-8">Jun 2026</span>
                  </div>
                </div>
@@ -153,13 +153,13 @@ export default function TestingDashboard() {
             
             <div className="bg-purple-950/40 border border-purple-800/30 rounded-xl p-4 flex items-center justify-between hover:bg-purple-900/40 transition-colors">
                <div className="flex items-center gap-4">
-                 <div className="w-10 h-10 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center cursor-pointer hover:bg-blue-500/30 transition-colors">
+                 <div className="w-10 h-10 bg-purple-500/20 text-purple-400 rounded-full flex items-center justify-center cursor-pointer hover:bg-purple-500/30 transition-colors">
                    <Play className="w-5 h-5 ml-1" />
                  </div>
                  <div>
                    <div className="flex items-center gap-3">
                      <span className="font-bold text-lg">XAUUSD</span>
-                     <span className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded border border-blue-500/30 flex items-center gap-1">⚡ 7 days</span>
+                     <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded border border-purple-500/30 flex items-center gap-1">⚡ 7 days</span>
                    </div>
                    <div className="flex items-center gap-4 text-sm text-purple-400 mt-1">
                      <div className="flex items-center gap-1"><Calendar className="w-3 h-3" /> 1/1/26 - 6/2/26</div>
@@ -187,7 +187,7 @@ export default function TestingDashboard() {
       {activeTab === 'sessions' && (
         <div className="space-y-6">
           {/* Upgrade Banner */}
-          <div className="bg-gradient-to-r from-blue-900/40 to-indigo-900/40 border border-indigo-500/30 rounded-xl p-4 flex items-center justify-between shadow-[0_0_20px_rgba(79,70,229,0.15)]">
+          <div className="bg-gradient-to-r from-purple-900/40 to-indigo-900/40 border border-indigo-500/30 rounded-xl p-4 flex items-center justify-between shadow-[0_0_20px_rgba(79,70,229,0.15)]">
             <span className="text-indigo-200">Sessions on the Beginner plan are hidden after 1 week. Upgrade to Pro to unlock all your past sessions.</span>
             <button className="px-4 py-2 bg-transparent border border-indigo-400 text-indigo-300 rounded-lg hover:bg-indigo-500/20 font-semibold transition-colors flex items-center gap-2">
               ⚡ Upgrade
@@ -198,13 +198,13 @@ export default function TestingDashboard() {
           <div className="flex items-center justify-between">
              <div className="bg-purple-950/60 border border-purple-800/50 rounded-xl overflow-hidden flex divide-x divide-purple-800/50 shadow-lg">
                <button className="flex items-center gap-2 px-6 py-3 hover:bg-purple-900/40 transition-colors text-purple-200 bg-purple-900/20">
-                 <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]"></div> Backtesting session <Info className="w-3 h-3 text-purple-500" />
+                 <div className="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_8px_#8b5cf6]"></div> Backtesting session <Info className="w-3 h-3 text-purple-500" />
                </button>
                <button className="flex items-center gap-2 px-6 py-3 hover:bg-purple-900/40 transition-colors text-purple-400">
-                 <Activity className="w-4 h-4 text-blue-500" /> Prop firm session <Info className="w-3 h-3 text-purple-500" />
+                 <Activity className="w-4 h-4 text-purple-500" /> Prop firm session <Info className="w-3 h-3 text-purple-500" />
                </button>
                <button className="flex items-center gap-2 px-6 py-3 hover:bg-purple-900/40 transition-colors text-purple-400">
-                 <Settings className="w-4 h-4 text-blue-500" /> Tutorials <Info className="w-3 h-3 text-purple-500" />
+                 <Settings className="w-4 h-4 text-purple-500" /> Tutorials <Info className="w-3 h-3 text-purple-500" />
                </button>
              </div>
              <div className="flex gap-4">
@@ -227,7 +227,7 @@ export default function TestingDashboard() {
              <div className="bg-purple-950/60 backdrop-blur-sm border border-purple-800/50 rounded-2xl p-6 w-full xl:w-[400px] shadow-[0_8px_30px_rgb(0,0,0,0.3)] hover:border-purple-600/50 transition-colors cursor-pointer group">
                <div className="flex justify-between items-start mb-4">
                  <div>
-                   <h2 className="text-2xl font-bold group-hover:text-blue-400 transition-colors">XAUUSD</h2>
+                   <h2 className="text-2xl font-bold group-hover:text-purple-400 transition-colors">XAUUSD</h2>
                    <div className="text-purple-400 text-sm mt-1">OANDA:XAUUSD</div>
                  </div>
                  <div className="w-8 h-8 rounded-full bg-purple-900/50 flex items-center justify-center cursor-pointer hover:bg-purple-800 transition-colors"><Info className="w-4 h-4 text-purple-400" /></div>
@@ -239,7 +239,7 @@ export default function TestingDashboard() {
              {/* Right Content Area */}
              <div className="flex-1 space-y-6 w-full">
                 <div className="flex justify-end gap-3 flex-wrap">
-                  <button onClick={() => setIsModalOpen(true)} className="px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded-full text-white font-semibold flex items-center gap-2 shadow-[0_0_15px_rgba(37,99,235,0.4)] transition-all transform hover:scale-105">
+                  <button onClick={() => setIsModalOpen(true)} className="px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-full text-white font-semibold flex items-center gap-2 shadow-[0_0_15px_rgba(37,99,235,0.4)] transition-all transform hover:scale-105">
                     <Plus className="w-4 h-4" /> New session
                   </button>
                   <button className="px-6 py-2 bg-purple-900/40 border border-purple-700 hover:bg-purple-800 rounded-full text-purple-200 font-semibold flex items-center gap-2 transition-all">
@@ -270,7 +270,7 @@ export default function TestingDashboard() {
                       <div className="text-3xl font-bold text-white tracking-wide shadow-black drop-shadow-md">$99,901.00</div>
                     </div>
                     
-                    <button className="mt-12 px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-full text-white font-bold shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-all transform hover:-translate-y-1">
+                    <button className="mt-12 px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-full text-white font-bold shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-all transform hover:-translate-y-1">
                       Go to chart
                     </button>
                   </div>
@@ -291,7 +291,7 @@ export default function TestingDashboard() {
                     <h3 className="text-lg font-bold mb-4 text-purple-100">Equity Curve</h3>
                     <div className="flex-1 border-t border-purple-800/30 flex items-end pt-4 relative">
                        {/* SVG Mockup */}
-                       <svg viewBox="0 0 100 50" className="w-full h-full text-blue-500 drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]" preserveAspectRatio="none">
+                       <svg viewBox="0 0 100 50" className="w-full h-full text-purple-500 drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]" preserveAspectRatio="none">
                          <path d="M0 45 C 20 30, 40 10, 60 15 S 80 30, 100 40" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                          <circle cx="60" cy="15" r="2" fill="white" />
                        </svg>
@@ -320,7 +320,7 @@ export default function TestingDashboard() {
                          <div className="border-b border-dashed border-purple-500"></div>
                        </div>
                        {/* Downward Bar */}
-                       <div className="w-24 bg-gradient-to-b from-blue-400 to-blue-600/80 rounded-b-md shadow-[0_0_15px_rgba(59,130,246,0.3)] relative z-10" style={{ height: '80%' }}></div>
+                       <div className="w-24 bg-gradient-to-b from-purple-400 to-purple-600/80 rounded-b-md shadow-[0_0_15px_rgba(59,130,246,0.3)] relative z-10" style={{ height: '80%' }}></div>
                     </div>
                   </div>
                 </div>
@@ -409,7 +409,7 @@ export default function TestingDashboard() {
                   onClick={() => setSessionType('propfirm')}
                   className={`flex-1 py-2 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all ${sessionType === 'propfirm' ? 'bg-purple-800 text-white shadow-lg' : 'text-purple-400 hover:text-purple-200'}`}
                 >
-                  Prop Firm Session <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded flex items-center gap-1"><Play className="w-3 h-3"/> Pro</span>
+                  Prop Firm Session <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded flex items-center gap-1"><Play className="w-3 h-3"/> Pro</span>
                 </button>
               </div>
 

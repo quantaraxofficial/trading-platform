@@ -106,7 +106,7 @@ export function DoubleCurveTool({ id, points, stroke, strokeWidth, isSelected, i
           y={pt.y}
           radius={6}
           fill="white"
-          stroke="#2962ff"
+          stroke="#7c3aed"
           strokeWidth={2}
           draggable
           onDragStart={handleDragStart}

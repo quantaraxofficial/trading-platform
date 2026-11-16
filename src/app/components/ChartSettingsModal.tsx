@@ -129,7 +129,7 @@ function Dropdown({ c, label, value, options, onChange, width = 150, disabled, m
     <>
       <button ref={btn} type="button" role="combobox" aria-label={label} aria-expanded={open} aria-haspopup="listbox" aria-disabled={disabled} onClick={toggleOpen}
         style={{ width, height: 34, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px', borderRadius: 6, fontSize: 14, cursor: disabled ? 'default' : 'pointer',
-          border: `1px solid ${open ? '#2962ff' : c.border}`, background: disabled ? c.disabledBg : 'transparent', color: c.text, opacity: disabled ? 0.5 : 1, fontFamily: 'inherit', textAlign: 'left' }}>
+          border: `1px solid ${open ? '#7c3aed' : c.border}`, background: disabled ? c.disabledBg : 'transparent', color: c.text, opacity: disabled ? 0.5 : 1, fontFamily: 'inherit', textAlign: 'left' }}>
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shown}</span>
         {chevron(open, c.text)}
       </button>
@@ -184,7 +184,7 @@ function Swatch({ c, color, onChange, label, disabled, line, onLine, wide, split
     <>
       <button ref={btn} type="button" aria-label={label} onClick={open} disabled={disabled}
         style={{ height: 34, minWidth: 34, boxSizing: 'border-box', padding: '0 5px', display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 6, cursor: disabled ? 'default' : 'pointer',
-          border: `1px solid ${pos ? '#2962ff' : c.border}`, background: disabled ? c.disabledBg : 'transparent', opacity: disabled ? 0.5 : 1, width: line || wide ? 75 : 34 }}>
+          border: `1px solid ${pos ? '#7c3aed' : c.border}`, background: disabled ? c.disabledBg : 'transparent', opacity: disabled ? 0.5 : 1, width: line || wide ? 75 : 34 }}>
         {box}
         {line && <svg width="30" height="6" viewBox="0 0 30 6" aria-hidden><line x1="0" y1="3" x2="30" y2="3" stroke={c.text} strokeWidth={line.width} strokeDasharray={line.style === 'Dashed' ? '4 3' : line.style === 'Dotted' ? `${line.width} ${line.width * 2}` : undefined} /></svg>}
       </button>
@@ -219,7 +219,7 @@ function ThemeCard({ c, name, bg, panel, text, accent, up, down, selected, onPic
   return (
     <button type="button" role="radio" aria-checked={selected} aria-label={`${name} theme`} data-name="site-theme" data-value={name} onClick={onPick}
       style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 6, padding: 4, borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
-        border: `2px solid ${selected ? '#2962ff' : 'transparent'}`, background: 'transparent', color: c.text }}>
+        border: `2px solid ${selected ? '#7c3aed' : 'transparent'}`, background: 'transparent', color: c.text }}>
       <span aria-hidden style={{ position: 'relative', display: 'block', width: 112, height: 66, borderRadius: 5, overflow: 'hidden', background: bg, border: `1px solid ${c.border}` }}>
         <span style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 9, background: panel }} />
         <span style={{ position: 'absolute', left: 6, top: 3, width: 18, height: 3, borderRadius: 2, background: text, opacity: 0.6 }} />
@@ -441,7 +441,7 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
     {line(<><div style={{ width: 110 }}><Check c={c} label="Background" checked={sl.indBackground} onChange={v => setSl({ indBackground: v })} /></div>
       <input type="range" min={0} max={100} aria-label="Background opacity" value={sl.indBackgroundOpacity} disabled={!sl.indBackground}
         onChange={e => setSl({ indBackgroundOpacity: Number(e.target.value), backgroundOpacity: Number(e.target.value) })}
-        style={{ width: 150, accentColor: '#2962ff', opacity: sl.indBackground ? 1 : 0.45 }} /></>, 0, 64)}
+        style={{ width: 150, accentColor: '#7c3aed', opacity: sl.indBackground ? 1 : 0.45 }} /></>, 0, 64)}
   </>);
 
   const vis3 = (key: 'currencyUnit' | 'scaleModes' | 'navButtons' | 'paneButtons', label: string, w = 180) =>
@@ -488,7 +488,7 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
     {line(<Check c={c} label="Save chart left edge position when changing interval" checked={s.saveLeftEdge} onChange={v => set({ saveLeftEdge: v })} />)}
     {section('Mouse wheel')}
     {row(187, 'Scroll speed', <input key="ws" type="range" min={WHEEL_SPEED_MIN} max={WHEEL_SPEED_MAX} step={0.25} aria-label="Mouse wheel scroll speed"
-      value={s.wheelSpeed ?? 1} onChange={e => set({ wheelSpeed: Number(e.target.value) })} style={{ width: 150, accentColor: '#2962ff' }} data-name="wheel-speed" />,
+      value={s.wheelSpeed ?? 1} onChange={e => set({ wheelSpeed: Number(e.target.value) })} style={{ width: 150, accentColor: '#7c3aed' }} data-name="wheel-speed" />,
       <span key="wsv" style={{ fontSize: 14, width: 44 }}>{(s.wheelSpeed ?? 1).toFixed(2).replace(/\.?0+$/, '')}×</span>,
       (s.wheelSpeed ?? 1) !== 1 ? <button key="wsr" type="button" onClick={() => set({ wheelSpeed: 1 })} data-name="wheel-speed-reset"
         style={{ border: `1px solid ${c.border}`, background: 'transparent', color: c.text, borderRadius: 4, padding: '3px 8px', fontSize: 13, cursor: 'pointer' }}>Reset</button> : null)}
@@ -531,7 +531,7 @@ export default function ChartSettingsModal({ theme, onClose, initialTab, timezon
     {imgError && <div role="alert" style={{ fontSize: 13, color: '#f23645', margin: '-10px 0 10px' }}>{imgError}</div>}
     {s.bgImage && bgImg.data && <>
       {row(173, 'Image strength', <input key="op" type="range" min={5} max={100} aria-label="Background image strength" value={s.bgImageOpacity}
-        onChange={e => set({ bgImageOpacity: Number(e.target.value) })} style={{ width: 150, accentColor: '#2962ff' }} />,
+        onChange={e => set({ bgImageOpacity: Number(e.target.value) })} style={{ width: 150, accentColor: '#7c3aed' }} />,
         <span key="opv" style={{ fontSize: 14, width: 40 }}>{s.bgImageOpacity}%</span>)}
       {desc('Lower lets more of the background color through, so candles stand out')}
       {row(173, 'Image fit', <Dropdown key="fit" c={c} label="Background image fit" value={s.bgImageFit} width={110} options={BG_IMAGE_FITS} onChange={v => set({ bgImageFit: v as any })} />)}
@@ -728,7 +728,7 @@ function LayoutTab({ c, section, line, desc, onRedesign }: {
       {line(radio(!lay.custom, "Default: TradingView's grid", () => widgetLayout.set({ custom: false }), false, 'layout-default'), 0, 38)}
       {line(radio(lay.custom, 'Custom: the widgets where you put them', () => widgetLayout.set({ custom: true }), !hasCustom, 'layout-custom'), 0, 38)}
       {desc(hasCustom ? 'Custom layouts apply on screens at least 900 px wide; smaller ones use the default grid.' : 'Arrange the widgets with Redesign first.')}
-      {line(<button type="button" style={{ ...btn, borderColor: '#2962ff', color: '#2962ff' }} onClick={onRedesign} data-testid="layout-redesign">Redesign…</button>, 0, 40)}
+      {line(<button type="button" style={{ ...btn, borderColor: '#7c3aed', color: '#7c3aed' }} onClick={onRedesign} data-testid="layout-redesign">Redesign…</button>, 0, 40)}
 
       {section('Templates')}
       {items.length === 0 && <div style={{ fontSize: 13, color: c.muted, margin: '4px 0 8px' }}>No layout templates yet.</div>}
@@ -887,7 +887,7 @@ function TemplateMenu({ c, isDark, uid, onDialog }: { c: Colors; isDark: boolean
         setUp(window.innerHeight - r.bottom < 24 + 32 * (2 + list.length) + 12);
         setOpen(o => !o);
       }}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 8px 0 12px', borderRadius: 6, border: `1px solid ${open ? '#2962ff' : c.border}`, background: 'transparent', color: c.text, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
+        style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 8px 0 12px', borderRadius: 6, border: `1px solid ${open ? '#7c3aed' : c.border}`, background: 'transparent', color: c.text, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
         Template {chevron(open, c.text)}
       </button>
       {open && (
@@ -943,7 +943,7 @@ function SaveTemplateDialog({ c, names, onClose, onSave, title = 'Save template 
         <div style={{ fontSize: 14, color: c.muted, marginBottom: 6 }}>Template name:</div>
         <div style={{ position: 'relative' }}>
           <input ref={inputRef} aria-label="Template name" value={name} onChange={e => { setName(e.target.value); setConfirm(false); }} onKeyDown={e => { if (e.key === 'Enter') submit(); }}
-            style={{ width: '100%', boxSizing: 'border-box', height: 34, borderRadius: 6, border: '1px solid #2962ff', padding: '0 34px 0 10px', fontSize: 14, outline: 'none', background: 'transparent', color: c.text }} />
+            style={{ width: '100%', boxSizing: 'border-box', height: 34, borderRadius: 6, border: '1px solid #7c3aed', padding: '0 34px 0 10px', fontSize: 14, outline: 'none', background: 'transparent', color: c.text }} />
           {names.length > 0 && (
             <button type="button" aria-label="Saved templates" onClick={() => setListOpen(o => !o)} style={{ position: 'absolute', right: 4, top: 4, width: 26, height: 26, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {chevron(listOpen, c.text)}

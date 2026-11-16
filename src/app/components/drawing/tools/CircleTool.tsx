@@ -189,13 +189,13 @@ export function CircleTool({
           {isAnchored ? (
             <>
               {/* Center handle moves the whole circle; the right-edge handle resizes it */}
-              <HandleCircle x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleAnchoredMove} onDragEnd={handleAnchoredMoveEnd} />
-              <HandleCircle x={handleX} y={handleY} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleAnchoredResize} onDragEnd={handleAnchoredResizeEnd} />
+              <HandleCircle x={x1} y={y1} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleAnchoredMove} onDragEnd={handleAnchoredMoveEnd} />
+              <HandleCircle x={handleX} y={handleY} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleAnchoredResize} onDragEnd={handleAnchoredResizeEnd} />
             </>
           ) : (
             <>
-              <HandleCircle x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(0)} onDragEnd={handleCircleDragEnd(0)} />
-              <HandleCircle x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(points.length - 1)} onDragEnd={handleCircleDragEnd(points.length - 1)} />
+              <HandleCircle x={x1} y={y1} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(0)} onDragEnd={handleCircleDragEnd(0)} />
+              <HandleCircle x={x2} y={y2} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(points.length - 1)} onDragEnd={handleCircleDragEnd(points.length - 1)} />
             </>
           )}
         </>

@@ -1,5 +1,5 @@
 "use client";
-
+
 import SiteNav from '../components/external/SiteNav';
 import React, { useState, useEffect } from 'react';
 import { Check, Zap, Shield, Star, Crown, ArrowRight, Sparkles } from 'lucide-react';
@@ -76,7 +76,7 @@ export default function PricingPage() {
   const siteFeatures = [
     { title: "Advanced Charting", desc: "High-performance charts with lightning fast interactions.", icon: <Sparkles className="text-purple-500" /> },
     { title: "Technical Analysis", desc: "Over 50+ drawing tools and hundreds of built-in indicators.", icon: <Zap className="text-indigo-500" /> },
-    { title: "Cloud Persistence", desc: "Never lose a drawing. Everything is synced to your account.", icon: <Shield className="text-blue-500" /> },
+    { title: "Cloud Persistence", desc: "Never lose a drawing. Everything is synced to your account.", icon: <Shield className="text-purple-500" /> },
     { title: "Bar Replay", desc: "Practice your strategies by replaying historical price action.", icon: <RotateCcw className="text-pink-500" size={20}/> }
   ];
 

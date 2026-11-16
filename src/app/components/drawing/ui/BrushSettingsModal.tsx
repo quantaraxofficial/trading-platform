@@ -273,7 +273,7 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
                     style={{ 
                       width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', 
                       display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                      borderColor: showStartArrowDropdown ? '#2962ff' : '#e0e3eb'
+                      borderColor: showStartArrowDropdown ? '#7c3aed' : '#e0e3eb'
                     }}
                   >
                     {selectedShape?.lineStart === 'arrow' ? (
@@ -314,7 +314,7 @@ export function BrushSettingsModal({ onClose, initialPosition }: BrushSettingsMo
                     style={{ 
                       width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', 
                       display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                      borderColor: showEndArrowDropdown ? '#2962ff' : '#e0e3eb'
+                      borderColor: showEndArrowDropdown ? '#7c3aed' : '#e0e3eb'
                     }}
                   >
                     {selectedShape?.lineEnd === 'arrow' ? (

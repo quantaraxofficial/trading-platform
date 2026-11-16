@@ -1336,7 +1336,7 @@ function AppLayout() {
           </div>
         )}
               </div>
-              {multi && <div aria-hidden style={{ ...rect(active), boxShadow: "inset 0 0 0 1px #2962ff", pointerEvents: "none", zIndex: 60 }} />}
+              {multi && <div aria-hidden style={{ ...rect(active), boxShadow: "inset 0 0 0 1px #7c3aed", pointerEvents: "none", zIndex: 60 }} />}
             </div>
           );
         })()}

@@ -108,8 +108,8 @@ function AlertDialog({ onClose, theme, symbol: chartSymbol = 'XAUUSD', initialPr
 
   const dark = theme === 'dark';
   const c = dark
-    ? { bg: '#1e222d', text: '#d1d4dc', muted: '#787b86', border: '#2a2e39', input: '#2a2e39', hover: 'rgba(255,255,255,0.06)', btn: '#d1d4dc', btnText: '#131722', link: '#5b9cf6' }
-    : { bg: '#ffffff', text: '#131722', muted: '#787b86', border: '#e0e3eb', input: '#ffffff', hover: '#f0f3fa', btn: '#131722', btnText: '#ffffff', link: '#2962ff' };
+    ? { bg: '#1e222d', text: '#d1d4dc', muted: '#787b86', border: '#2a2e39', input: '#2a2e39', hover: 'rgba(255,255,255,0.06)', btn: '#d1d4dc', btnText: '#131722', link: '#a78bfa' }
+    : { bg: '#ffffff', text: '#131722', muted: '#787b86', border: '#e0e3eb', input: '#ffffff', hover: '#f0f3fa', btn: '#131722', btnText: '#ffffff', link: '#7c3aed' };
   const field: React.CSSProperties = { height: 34, boxSizing: 'border-box', borderRadius: 6, border: `1px solid ${c.border}`, background: c.input, color: c.text, fontSize: 14, outline: 'none', fontFamily: 'inherit' };
   const label: React.CSSProperties = { width: 130, flex: 'none', fontSize: 14, color: c.muted };
   const row: React.CSSProperties = { display: 'flex', alignItems: 'center', minHeight: 30 };
@@ -147,7 +147,7 @@ function AlertDialog({ onClose, theme, symbol: chartSymbol = 'XAUUSD', initialPr
                     <input ref={valueRef} aria-label="Value" inputMode="decimal" value={value}
                       onChange={e => setValue(e.target.value.replace(/[^0-9.\-]/g, ''))}
                       onKeyDown={e => { if (e.key === 'ArrowUp') { e.preventDefault(); nudge(1); } else if (e.key === 'ArrowDown') { e.preventDefault(); nudge(-1); } else if (e.key === 'Enter') submit(); }}
-                      style={{ ...field, width: '100%', padding: '0 28px 0 8px', border: `1px solid ${valid ? '#2962ff' : '#f23645'}` }} />
+                      style={{ ...field, width: '100%', padding: '0 28px 0 8px', border: `1px solid ${valid ? '#7c3aed' : '#f23645'}` }} />
                     <div style={{ position: 'absolute', right: 4, top: 3, display: 'flex', flexDirection: 'column', color: c.muted }}>
                       <button type="button" aria-label="Increase" onClick={() => nudge(1)} style={{ ...link, color: c.muted, height: 14 }}><ChevronUp size={13} /></button>
                       <button type="button" aria-label="Decrease" onClick={() => nudge(-1)} style={{ ...link, color: c.muted, height: 14 }}><ChevronDown size={13} /></button>
@@ -272,7 +272,7 @@ function Select({ value, options, onChange, c, field, dark, ariaLabel, width, co
       <button type="button" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(o => !o)}
         style={compact
           ? { display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: 0, color: c.text, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }
-          : { ...field, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 8px', cursor: 'pointer', borderColor: open ? '#2962ff' : c.border }}>
+          : { ...field, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 8px', cursor: 'pointer', borderColor: open ? '#7c3aed' : c.border }}>
         {current} {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
       </button>
       {open && (
@@ -304,7 +304,7 @@ function SoundSelect({ value, onChange, c, field, dark }: { value: string; onCha
   return (
     <div ref={ref} style={{ position: 'relative', width: 150 }}>
       <button type="button" aria-label="Sound" aria-haspopup="listbox" aria-expanded={open} onClick={() => { setExpanded(groupOf); setOpen(o => !o); }}
-        style={{ ...field, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 8px', cursor: 'pointer', borderColor: open ? '#2962ff' : c.border }}>
+        style={{ ...field, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 8px', cursor: 'pointer', borderColor: open ? '#7c3aed' : c.border }}>
         {soundName(value)} {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
       </button>
       {open && (

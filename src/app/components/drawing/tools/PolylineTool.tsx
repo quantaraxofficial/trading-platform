@@ -99,7 +99,7 @@ export function PolylineTool({
         listening={false}
       />
       {(isSelected || isHovering) && pixelPoints.map((pt, i) => (
-        <HandleCircle key={i} x={pt.x} y={pt.y} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(i)} onDragEnd={handleCircleDragEnd(i)} />
+        <HandleCircle key={i} x={pt.x} y={pt.y} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(i)} onDragEnd={handleCircleDragEnd(i)} />
       ))}
       {pixelPoints.length >= 2 && lineEndStyle === 'Arrow' && (() => {
         const last = pixelPoints[pixelPoints.length - 1];

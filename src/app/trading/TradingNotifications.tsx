@@ -99,7 +99,7 @@ function NoticeCard({ n, onClose, stacked }: { n: TradeNotice; onClose: () => vo
             </span>
           </div>
           <div style={{ marginTop: 6, fontSize: 13, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <span style={{ background: buy ? "rgba(41,98,255,0.1)" : "rgba(242,54,69,0.1)", color: buy ? C.buy : C.sell, borderRadius: 4, padding: "1px 5px" }}>
+            <span style={{ background: buy ? "rgba(124, 58, 237,0.1)" : "rgba(242,54,69,0.1)", color: buy ? C.buy : C.sell, borderRadius: 4, padding: "1px 5px" }}>
               {buy ? "Buy" : "Sell"} {formatQty(n.qty)}
             </span>
             {n.price !== undefined && <span>at {formatPrice(n.price, n.precision)}</span>}

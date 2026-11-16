@@ -188,7 +188,7 @@ export default function OptimizerReport() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 220, flex: "1 1 280px" }}>
               <div style={{ flex: 1, height: 6, borderRadius: 3, background: "var(--st-fill)", overflow: "hidden", maxWidth: 360 }}>
-                <div data-name="optimizer-progress" style={{ width: `${pct}%`, height: "100%", background: status === "done" ? "var(--tv-color-accent, #2962ff)" : "#089981", transition: "width .3s" }} />
+                <div data-name="optimizer-progress" style={{ width: `${pct}%`, height: "100%", background: status === "done" ? "var(--tv-color-accent, #7c3aed)" : "#089981", transition: "width .3s" }} />
               </div>
               <span style={{ fontSize: 13, whiteSpace: "nowrap" }} data-name="optimizer-count">{cursor.toLocaleString()} of {total.toLocaleString()} tested</span>
               <span style={{ fontSize: 12, color: "var(--st-text-secondary)", whiteSpace: "nowrap" }}>
@@ -264,7 +264,7 @@ function Summary({ run, ranking, paramText, onApply, applied, onShowAll }: {
         <>
           <div style={{ display: "flex", alignItems: "baseline", gap: 12, margin: "20px 0 8px" }}>
             <p style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Runners-up</p>
-            <button type="button" onClick={onShowAll} style={{ border: "none", background: "transparent", color: "var(--tv-color-accent, #2962ff)", cursor: "pointer", fontSize: 13, padding: 0 }}>All results</button>
+            <button type="button" onClick={onShowAll} style={{ border: "none", background: "transparent", color: "var(--tv-color-accent, #7c3aed)", cursor: "pointer", fontSize: 13, padding: 0 }}>All results</button>
           </div>
           <table className="st-table">
             <thead><tr><th>#</th><th>Settings</th>{["netProfit", "profitFactor", "maxDrawdownPct", "winRate", "totalTrades"].map(k => <th key={k} style={{ textAlign: "right" }}>{info(k).short}</th>)}<th /></tr></thead>

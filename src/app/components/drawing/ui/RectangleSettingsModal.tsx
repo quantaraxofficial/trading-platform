@@ -50,7 +50,7 @@ function LocalNumberInput({ value, onChange, style }: { value: string; onChange?
         onKeyDown={handleKeyDown}
         style={{ 
           width: '60px', height: '34px', 
-          border: isFocused ? '2px solid #2962ff' : '1px solid var(--tv-sub-border)', 
+          border: isFocused ? '2px solid #7c3aed' : '1px solid var(--tv-sub-border)', 
           borderRadius: '4px', padding: isFocused ? '0 7px' : '0 8px', 
           fontSize: '13px', color: 'var(--tv-sub-text)', outline: 'none', 
           backgroundColor: 'var(--tv-sub-bg)',
@@ -334,7 +334,7 @@ export function RectangleSettingsModal({ onClose }: RectangleSettingsModalProps)
               <button onClick={() => updateProp('italic', !selectedShape?.italic)} style={{ width: '34px', height: '34px', border: '1px solid var(--tv-sub-border)', borderRadius: '4px', background: selectedShape?.italic ? '#e0e3eb' : 'var(--tv-sub-bg)', fontStyle: 'italic', fontFamily: 'serif', fontSize: '15px', color: 'var(--tv-sub-text)', cursor: 'pointer' }}>I</button>
             </div>
 
-            <textarea value={selectedShape?.text || ''} onChange={e => updateProp('text', e.target.value)} placeholder="Add text" style={{ width: '100%', height: '80px', border: '1px solid #2962ff', borderRadius: '6px', padding: '8px 12px', fontSize: '13px', fontFamily: 'inherit', resize: 'none', outline: 'none', color: 'var(--tv-sub-text)', boxSizing: 'border-box' }} />
+            <textarea value={selectedShape?.text || ''} onChange={e => updateProp('text', e.target.value)} placeholder="Add text" style={{ width: '100%', height: '80px', border: '1px solid #7c3aed', borderRadius: '6px', padding: '8px 12px', fontSize: '13px', fontFamily: 'inherit', resize: 'none', outline: 'none', color: 'var(--tv-sub-text)', boxSizing: 'border-box' }} />
           </div>
         )}
 

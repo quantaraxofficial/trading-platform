@@ -686,6 +686,10 @@ Posting signals out
     a splash showing progress; closing it stops both. Its own data folder (TradePilot Local), so it
     never mixes with the live app. Run desktop\dist\win-unpacked\TradePilot.exe after `npm run dist`.
     Market data needs the site's .env.local (TWELVEDATA_API_KEY) in the branch folder
+  - TradePilot purple (#7c3aed) instead of blue across the interface: accents, buttons, borders and
+    focus, selections and drawing handles, toggles and tabs, the buy side, Redesign's outlines and
+    Done, the classic themes' accent, the Pine editor's selection (drawing colours, palettes, named
+    colours, chart data series, the other site themes' own accents and Pine's color.blue stay)
 ======================================================================
 17b. ECONOMIC CALENDAR
 ======================================================================

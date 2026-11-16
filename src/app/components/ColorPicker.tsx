@@ -142,7 +142,7 @@ export default function ColorPicker({ color, onChange, onClose, theme = 'light',
                         backgroundColor: c,
                         borderRadius: '4px',
                         cursor: 'pointer',
-                        border: isSelected ? '2px solid #2962ff' : '1px solid rgba(0,0,0,0.1)',
+                        border: isSelected ? '2px solid #7c3aed' : '1px solid rgba(0,0,0,0.1)',
                         boxSizing: 'border-box'
                       }}
                       title={c}
@@ -170,7 +170,7 @@ export default function ColorPicker({ color, onChange, onClose, theme = 'light',
                 min="0" max="100"
                 value={opacity}
                 onChange={handleOpacityChange}
-                style={{ flex: 1, accentColor: '#2962ff' }}
+                style={{ flex: 1, accentColor: '#7c3aed' }}
               />
               <span style={{ fontSize: '12px', minWidth: '32px' }}>{opacity}%</span>
             </div>

@@ -12,8 +12,8 @@ import React, { useEffect, useState } from "react";
 import { useChartTick } from "./core/useChartTick";
 import { paneGeometry } from "../../lib/priceScaleSide";
 
-const BLUE = "#2962ff";
-const BAND = "rgba(41, 98, 255, 0.25)";
+const BLUE = "#7c3aed";
+const BAND = "rgba(124, 58, 237, 0.25)";
 const TARGET = "#089981";
 const ENTRY = "#787b86";
 const STOP = "#f23645";

@@ -195,7 +195,7 @@ export default function DomPanel() {
                 onClick={() => orderAt(side, i)}
                 style={{
                   borderLeft: side === "buy" ? grid : "none", borderRight: grid, borderBottom: grid, cursor: "pointer",
-                  background: best ? (side === "buy" ? "rgba(41,98,255,0.12)" : "rgba(242,54,69,0.12)") : "transparent",
+                  background: best ? (side === "buy" ? "rgba(124, 58, 237,0.12)" : "rgba(242,54,69,0.12)") : "transparent",
                   outline: hovered ? `1px dashed ${color}` : "none", outlineOffset: -1,
                 }}
               />
@@ -239,7 +239,7 @@ export default function DomPanel() {
               {cell("buy")}
               <div role="gridcell" style={{
                 display: "flex", alignItems: "center", justifyContent: "center", borderRight: grid, borderBottom: grid, fontSize: 12, fontVariantNumeric: "tabular-nums",
-                background: isLast ? C.seg : i === posIdx ? (pos!.side === "buy" ? "rgba(41,98,255,0.15)" : "rgba(242,54,69,0.15)") : "transparent",
+                background: isLast ? C.seg : i === posIdx ? (pos!.side === "buy" ? "rgba(124, 58, 237,0.15)" : "rgba(242,54,69,0.15)") : "transparent",
                 fontWeight: i === posIdx ? 600 : 400, color: i === posIdx ? (pos!.side === "buy" ? C.buy : C.sell) : C.text,
               }}>{formatPrice(price, prec)}</div>
               {cell("sell")}

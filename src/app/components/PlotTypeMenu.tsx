@@ -68,7 +68,7 @@ export function PlotTypeMenu({ value, priceLine, onSelect, onPriceLine, onClose,
         style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 40, padding: "0 10px 0 12px", cursor: "pointer" }}>
         Price line
         <span style={{ position: "relative", width: 38, height: 20, borderRadius: 10, transition: "background .15s",
-          background: priceLine ? "#2962ff" : isDark ? "#50535e" : "#a3a3a3" }}>
+          background: priceLine ? "#7c3aed" : isDark ? "#50535e" : "#a3a3a3" }}>
           <span style={{ position: "absolute", top: 3, left: priceLine ? 21 : 3, width: 14, height: 14, borderRadius: "50%", background: "#ffffff", transition: "left .15s" }} />
         </span>
       </div>

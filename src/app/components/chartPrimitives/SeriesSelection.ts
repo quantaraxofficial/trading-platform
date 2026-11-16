@@ -45,7 +45,7 @@ export class SeriesSelection {
     target.useMediaCoordinateSpace(({ context: ctx }: any) => {
       ctx.save();
       ctx.lineWidth = 1.5;
-      ctx.strokeStyle = '#2962FF';
+      ctx.strokeStyle = '#7c3aed';
       ctx.fillStyle = '#ffffff';
       for (let i = Math.ceil(first / step) * step; i <= last; i += step) {
         const b = bars[i];

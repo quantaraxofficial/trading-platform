@@ -92,16 +92,16 @@ export function InfiniteLineTool({
       )}
       {showHandles && kind === 'horizontal_line' && y !== null && (
         <HandleRect x={paneW * 0.9} y={y} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2}
-          fill="white" stroke="#2962ff" strokeWidth={1.5} draggable
+          fill="white" stroke="#7c3aed" strokeWidth={1.5} draggable
           onDragStart={(e: any) => { e.cancelBubble = true; }} onDragMove={onHandleDrag} onDragEnd={onHandleDrag} />
       )}
       {showHandles && kind === 'vertical_line' && x !== null && (
         <HandleRect x={x} y={paneH * 0.9} width={9} height={9} offsetX={4.5} offsetY={4.5} cornerRadius={2}
-          fill="white" stroke="#2962ff" strokeWidth={1.5} draggable
+          fill="white" stroke="#7c3aed" strokeWidth={1.5} draggable
           onDragStart={(e: any) => { e.cancelBubble = true; }} onDragMove={onHandleDrag} onDragEnd={onHandleDrag} />
       )}
       {showHandles && kind === 'cross_line' && x !== null && y !== null && (
-        <HandleCircle x={x} y={y} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable
+        <HandleCircle x={x} y={y} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable
           onDragStart={(e: any) => { e.cancelBubble = true; }} onDragMove={onHandleDrag} onDragEnd={onHandleDrag} />
       )}
     </Group>

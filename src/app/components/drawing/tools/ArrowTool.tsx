@@ -115,7 +115,7 @@ export function ArrowTool({
         strokeWidth={width}
         dash={dash}
         hitStrokeWidth={14}
-        shadowColor={isSelected ? '#2962ff' : 'transparent'}
+        shadowColor={isSelected ? '#7c3aed' : 'transparent'}
         shadowBlur={isSelected && !isDragging ? 5 : 0}
         shadowOpacity={0.35}
         lineCap="round"
@@ -127,7 +127,7 @@ export function ArrowTool({
           stroke={color}
           strokeWidth={width}
           hitStrokeWidth={14}
-          shadowColor={isSelected ? '#2962ff' : 'transparent'}
+          shadowColor={isSelected ? '#7c3aed' : 'transparent'}
           shadowBlur={isSelected && !isDragging ? 5 : 0}
           shadowOpacity={0.35}
           lineCap="round"
@@ -141,7 +141,7 @@ export function ArrowTool({
           <HandleCircle
             x={x1} y={y1}
             radius={6}
-            fill="white" stroke="#2962ff" strokeWidth={2}
+            fill="white" stroke="#7c3aed" strokeWidth={2}
             draggable
             onDragStart={handleDragStart}
             onDragMove={handleCircleDragMove(0)}
@@ -150,7 +150,7 @@ export function ArrowTool({
           <HandleCircle
             x={x2} y={y2}
             radius={6}
-            fill="white" stroke="#2962ff" strokeWidth={2}
+            fill="white" stroke="#7c3aed" strokeWidth={2}
             draggable
             onDragStart={handleDragStart}
             onDragMove={handleCircleDragMove(points.length - 1)}

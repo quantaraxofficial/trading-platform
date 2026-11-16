@@ -422,7 +422,7 @@ export function MultiSelectSubBar() {
             right: '6px',
             height: '3px',
             borderRadius: '2px',
-            background: '#2962ff',
+            background: '#7c3aed',
           }} />
         </button>
         {showTextColorPicker && (

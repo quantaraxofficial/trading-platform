@@ -63,7 +63,7 @@ export default function CollabOverlay({ symbol }: { symbol: string }) {
   const paneWidth = pane.width, paneHeight = pane.height;
 
   const nameOf = (id: string, fallback: string) => peers.find(p => p.id === id)?.name ?? fallback;
-  const colorOf = (id: string) => peers.find(p => p.id === id)?.color ?? "#2962ff";
+  const colorOf = (id: string) => peers.find(p => p.id === id)?.color ?? "#7c3aed";
 
   return (
     <div aria-hidden data-name="collab-overlay" style={{ position: "fixed", left: pane.left, top: pane.top, width: paneWidth, height: paneHeight, pointerEvents: "none", overflow: "hidden", zIndex: 40 }}>

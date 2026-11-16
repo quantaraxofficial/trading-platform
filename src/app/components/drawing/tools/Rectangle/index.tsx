@@ -218,15 +218,15 @@ export function RectangleTool({
         <>
           {/* Corner handles (Circles) */}
           <HandleCircle 
-            x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} cursor={cornerCursor(x1, y1)}
+            x={x1} y={y1} radius={6} fill="white" stroke="#7c3aed" strokeWidth={1.5} cursor={cornerCursor(x1, y1)}
             draggable={!isLocked} onDragMove={(e) => handleDragMove(0, e)} 
           />
           <HandleCircle 
-            x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} cursor={cornerCursor(x2, y2)}
+            x={x2} y={y2} radius={6} fill="white" stroke="#7c3aed" strokeWidth={1.5} cursor={cornerCursor(x2, y2)}
             draggable={!isLocked} onDragMove={(e) => handleDragMove(1, e)} 
           />
           <HandleCircle 
-            x={x2} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} cursor={cornerCursor(x2, y1)}
+            x={x2} y={y1} radius={6} fill="white" stroke="#7c3aed" strokeWidth={1.5} cursor={cornerCursor(x2, y1)}
             draggable={!isLocked} onDragMove={(e) => {
               e.cancelBubble = true;
               if (!onUpdatePoints) return;
@@ -240,7 +240,7 @@ export function RectangleTool({
             }} 
           />
           <HandleCircle 
-            x={x1} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} cursor={cornerCursor(x1, y2)}
+            x={x1} y={y2} radius={6} fill="white" stroke="#7c3aed" strokeWidth={1.5} cursor={cornerCursor(x1, y2)}
             draggable={!isLocked} onDragMove={(e) => {
               e.cancelBubble = true;
               if (!onUpdatePoints) return;
@@ -256,19 +256,19 @@ export function RectangleTool({
 
           {/* Side handles (rounded squares), each on its own point's edge */}
           <HandleRect 
-            x={(x1 + x2) / 2 - 5} y={y1 - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} cursor="ns-resize"
+            x={(x1 + x2) / 2 - 5} y={y1 - 5} width={10} height={10} fill="white" stroke="#7c3aed" strokeWidth={1.5} cornerRadius={2} cursor="ns-resize"
             draggable={!isLocked} onDragMove={(e) => handleEdgeDrag(0, 'price', e)} 
           />
           <HandleRect 
-            x={(x1 + x2) / 2 - 5} y={y2 - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} cursor="ns-resize"
+            x={(x1 + x2) / 2 - 5} y={y2 - 5} width={10} height={10} fill="white" stroke="#7c3aed" strokeWidth={1.5} cornerRadius={2} cursor="ns-resize"
             draggable={!isLocked} onDragMove={(e) => handleEdgeDrag(1, 'price', e)} 
           />
           <HandleRect 
-            x={x1 - 5} y={(y1 + y2) / 2 - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} cursor="ew-resize"
+            x={x1 - 5} y={(y1 + y2) / 2 - 5} width={10} height={10} fill="white" stroke="#7c3aed" strokeWidth={1.5} cornerRadius={2} cursor="ew-resize"
             draggable={!isLocked} onDragMove={(e) => handleEdgeDrag(0, 'bar', e)} 
           />
           <HandleRect 
-            x={x2 - 5} y={(y1 + y2) / 2 - 5} width={10} height={10} fill="white" stroke="#2962ff" strokeWidth={1.5} cornerRadius={2} cursor="ew-resize"
+            x={x2 - 5} y={(y1 + y2) / 2 - 5} width={10} height={10} fill="white" stroke="#7c3aed" strokeWidth={1.5} cornerRadius={2} cursor="ew-resize"
             draggable={!isLocked} onDragMove={(e) => handleEdgeDrag(1, 'bar', e)} 
           />
         </>

@@ -10,13 +10,13 @@
   --tv-co-field: #dbdbdb;
   --tv-co-primary: #1a1a1a;
   --tv-co-primary-text: #ffffff;
-  --tv-co-accent: #2962ff;
+  --tv-co-accent: #7c3aed;
   --tv-co-danger: #f23645;
   --tv-co-live: #089981;
   --tv-co-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.2);
   --tv-co-backdrop: rgba(209, 209, 209, 0.3);
   --tv-co-bubble: #f2f2f2;
-  --tv-co-bubble-mine: #e3effd;
+  --tv-co-bubble-mine: #f1ebfe;
 }
 [data-theme="dark"] {
   --tv-co-bg: #1e222d;
@@ -31,7 +31,7 @@
   --tv-co-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.4);
   --tv-co-backdrop: rgba(12, 14, 21, 0.5);
   --tv-co-bubble: #2a2e39;
-  --tv-co-bubble-mine: #142e61;
+  --tv-co-bubble-mine: #2e1a5e;
 }
 
 .tv-co-backdrop { position: fixed; inset: 0; z-index: 10000; background: var(--tv-co-backdrop); display: flex; align-items: center; justify-content: center; }
@@ -149,7 +149,7 @@
 .tv-co-bulk { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; margin-bottom: 6px; border-radius: 6px; background: var(--tv-co-hover); }
 .tv-co-bulk .tv-co-btn { height: 28px; padding: 0 10px; font-size: 13px; }
 .tv-co-pulse { animation: tv-co-pulse 1.6s ease-in-out infinite; }
-@keyframes tv-co-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(41, 98, 255, 0.35); } 50% { box-shadow: 0 0 0 6px rgba(41, 98, 255, 0); } }
+@keyframes tv-co-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.35); } 50% { box-shadow: 0 0 0 6px rgba(124, 58, 237, 0); } }
 @media (prefers-reduced-motion: reduce) { .tv-co-toast, .tv-co-pulse { animation: none; } }
 
 /* Pictures and documents in the chat */

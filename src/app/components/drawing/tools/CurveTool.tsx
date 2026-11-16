@@ -130,10 +130,10 @@ export function CurveTool({ id, points, stroke, strokeWidth, isSelected, isHover
       )}
       {(isSelected || isHovering) && (
         <>
-          <HandleCircle x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(0)} onDragEnd={handleCircleDragEnd(0)} />
-          <HandleCircle x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(1)} onDragEnd={handleCircleDragEnd(1)} />
+          <HandleCircle x={x1} y={y1} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(0)} onDragEnd={handleCircleDragEnd(0)} />
+          <HandleCircle x={x2} y={y2} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(1)} onDragEnd={handleCircleDragEnd(1)} />
           {points.length > 2 && (
-            <HandleCircle x={x3} y={y3} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(2)} onDragEnd={handleCircleDragEnd(2)} />
+            <HandleCircle x={x3} y={y3} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(2)} onDragEnd={handleCircleDragEnd(2)} />
           )}
         </>
       )}

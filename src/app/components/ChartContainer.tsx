@@ -1418,13 +1418,13 @@ export default function ChartContainer({
           if (y !== null && y !== undefined && isFinite(y)) out.push({ y, color, dashed, text });
         };
         const pos = book.positions.find(p => p.symbol === sym);
-        if (pos) add(pos.avgPrice, pos.side === 'buy' ? '#2962ff' : '#f23645', false, `${pos.side === 'sell' ? '−' : ''}${formatQty(pos.qty)}`);
+        if (pos) add(pos.avgPrice, pos.side === 'buy' ? '#7c3aed' : '#f23645', false, `${pos.side === 'sell' ? '−' : ''}${formatQty(pos.qty)}`);
         for (const o of book.orders) {
           if (o.symbol !== sym || (o.status !== 'working' && o.status !== 'inactive')) continue;
           const price = o.type === 'limit' ? o.limitPrice : o.stopPrice;
           if (o.role === 'tp') add(price, '#089981', o.status === 'inactive', `TP ${formatQty(o.qty)}`);
           else if (o.role === 'sl') add(price, '#ff9800', o.status === 'inactive', `SL ${formatQty(o.qty)}`);
-          else add(price, o.side === 'buy' ? '#2962ff' : '#f23645', true, `${formatQty(o.qty)} ${o.type === 'limit' ? 'Limit' : 'Stop'}`);
+          else add(price, o.side === 'buy' ? '#7c3aed' : '#f23645', true, `${formatQty(o.qty)} ${o.type === 'limit' ? 'Limit' : 'Stop'}`);
         }
         return out;
       },
@@ -4580,8 +4580,8 @@ export default function ChartContainer({
               const spreadTicks = Math.round((ask - bid) * Math.pow(10, pricePrecision));
               const button = (side: "sell" | "buy") => {
                 const parts = pip(fmt(side === "sell" ? bid : ask));
-                const color = side === "sell" ? "#f23645" : "#2962ff";
-                const hover = side === "sell" ? "#d5303e" : "#1e53e5";
+                const color = side === "sell" ? "#f23645" : "#7c3aed";
+                const hover = side === "sell" ? "#d5303e" : "#6d28d9";
                 const idleBg = "var(--tv-color-pane-bg)";
                 return (
                   <Tip key={side} text={<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>{side === "sell" ? "Sell Market" : "Buy Market"}<span style={{ width: 1, height: 14, background: "rgba(255,255,255,0.3)" }} /><Kbd>Shift</Kbd><Kbd>{side === "sell" ? "S" : "B"}</Kbd></span>} placement="bottom">
@@ -4594,7 +4594,7 @@ export default function ChartContainer({
                         background: connected ? color : idleBg, color: connected ? "#ffffff" : color,
                         pointerEvents: "auto", cursor: "pointer", minWidth: "78px", height: "34px", fontFamily: "inherit",
                       }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = connected ? hover : (side === "sell" ? "rgba(242, 54, 69, 0.08)" : "rgba(41, 98, 255, 0.08)"); }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = connected ? hover : (side === "sell" ? "rgba(242, 54, 69, 0.08)" : "rgba(124, 58, 237, 0.08)"); }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = connected ? color : idleBg; }}
                       onClick={() => onOpenOrderPanel?.(side)}
                     >
@@ -4701,7 +4701,7 @@ export default function ChartContainer({
         if (!m || !g) return null;
         const { paneLeft } = paneGeometry(chart);
         const dark = theme === 'dark';
-        const color = m.side === 'buy' ? '#2962ff' : '#f23645';
+        const color = m.side === 'buy' ? '#7c3aed' : '#f23645';
         const tz = (window as any).__chartTimezone;
         const when = (ms: number) => {
           const o: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false };
@@ -4952,7 +4952,7 @@ export default function ChartContainer({
                   : "The data provider allows 8 requests a minute. Retrying automatically when the minute resets…"}
               </div>
               {apiLimitReached === 'day' ? (
-                <button type="button" onClick={() => setApiLimitReached(false)} style={{ marginTop: 16, height: 32, padding: '0 16px', borderRadius: 6, border: 'none', background: '#2962ff', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>OK</button>
+                <button type="button" onClick={() => setApiLimitReached(false)} style={{ marginTop: 16, height: 32, padding: '0 16px', borderRadius: 6, border: 'none', background: '#7c3aed', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>OK</button>
               ) : (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite", color: "#f23645", margin: "16px auto 0", display: "block" }}>
                   <path d="M21 12a9 9 0 1 1-6.219-8.56" />
@@ -4961,7 +4961,7 @@ export default function ChartContainer({
               )}
             </div>
           ) : (
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite", color: "#2962ff" }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite", color: "#7c3aed" }}>
               <path d="M21 12a9 9 0 1 1-6.219-8.56" />
               <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
             </svg>

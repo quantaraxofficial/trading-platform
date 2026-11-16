@@ -128,7 +128,7 @@ export default function SymbolDetails({ symbol, quote }: { symbol: string; quote
               <span>{fmtVolume(volume)}</span><span>{fmtVolume(avgVolume)}</span>
             </div>
             <div style={{ display: "flex", gap: 2, height: 4, marginTop: 6, borderRadius: 2, overflow: "hidden" }}>
-              <span style={{ flex: `${volume} 1 0`, background: "#2962ff" }} />
+              <span style={{ flex: `${volume} 1 0`, background: "#7c3aed" }} />
               <span style={{ flex: `${avgVolume} 1 0`, background: "#22ab94" }} />
             </div>
           </div>

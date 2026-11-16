@@ -96,7 +96,7 @@ function AutoTradeDialog({ chartId, onClose }: { chartId: string; onClose: () =>
         <div style={{ fontWeight: 600 }}>{chart.name}</div>
         <div style={{ color: C.muted }}>{displaySymbol(chart.symbol)} · {chart.timeframe} · on {linked?.login} · {linked?.server}
           <span style={{ marginLeft: 6, fontSize: 11, padding: "1px 6px", borderRadius: 4, fontWeight: 600, textTransform: "uppercase",
-            background: isReal ? "rgba(242,54,69,0.12)" : "rgba(41,98,255,0.12)", color: isReal ? C.sell : C.accent }}>{isReal ? "Real" : "Demo"}</span>
+            background: isReal ? "rgba(242,54,69,0.12)" : "rgba(124, 58, 237,0.12)", color: isReal ? C.sell : C.accent }}>{isReal ? "Real" : "Demo"}</span>
         </div>
         <div style={{ marginTop: 8 }} data-name="auto-trade-position">Strategy now: <b>{positionText(chart)}</b></div>
         {!chart.live && (

@@ -230,12 +230,12 @@ export function EllipseTool({
       )}
       {(isSelected || isHovering) && (
         <>
-          <HandleCircle x={ax} y={ay} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleEndpointMove(0)} onDragEnd={handleEndpointEnd(0)} />
-          <HandleCircle x={bx} y={by} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleEndpointMove(1)} onDragEnd={handleEndpointEnd(1)} />
+          <HandleCircle x={ax} y={ay} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleEndpointMove(0)} onDragEnd={handleEndpointEnd(0)} />
+          <HandleCircle x={bx} y={by} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleEndpointMove(1)} onDragEnd={handleEndpointEnd(1)} />
           {hasCurvature && (
             <>
-              <HandleCircle x={topX} y={topY} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCurvatureMove('top')} onDragEnd={handleCurvatureEnd('top')} />
-              <HandleCircle x={bottomX} y={bottomY} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCurvatureMove('bottom')} onDragEnd={handleCurvatureEnd('bottom')} />
+              <HandleCircle x={topX} y={topY} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCurvatureMove('top')} onDragEnd={handleCurvatureEnd('top')} />
+              <HandleCircle x={bottomX} y={bottomY} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCurvatureMove('bottom')} onDragEnd={handleCurvatureEnd('bottom')} />
             </>
           )}
         </>

@@ -352,7 +352,7 @@ export function TrendLine({
         <>
           <HandleCircle
             ref={(node: any) => { handleRefs.current[0] = node; }}
-            x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2}
+            x={x1} y={y1} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2}
             draggable={!isLocked}
             onDragStart={(e) => { e.cancelBubble = true; draggingIndexRef.current = 0; setIsDraggingHandle(true); }}
             onDragMove={handleCircleDrag(0)}
@@ -360,12 +360,12 @@ export function TrendLine({
           />
           {showMiddlePoint && (
             <Circle
-              x={(x1 + x2) / 2} y={(y1 + y2) / 2} radius={5} fill="white" stroke="#2962ff" strokeWidth={1}
+              x={(x1 + x2) / 2} y={(y1 + y2) / 2} radius={5} fill="white" stroke="#7c3aed" strokeWidth={1}
             />
           )}
           <HandleCircle
             ref={(node: any) => { handleRefs.current[1] = node; }}
-            x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={2}
+            x={x2} y={y2} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2}
             draggable={!isLocked}
             onDragStart={(e) => { e.cancelBubble = true; draggingIndexRef.current = 1; setIsDraggingHandle(true); }}
             onDragMove={handleCircleDrag(1)}

@@ -139,14 +139,14 @@ export default function EmaSettingsModal({ onClose, theme, config, onChangeConfi
   const plotButton = (key: string, st: { color: string; lineWidth: number; lineStyle: string }, label: string) => (
     <button type="button" aria-label={label} data-picker-anchor={key} onClick={e => openPicker(key, e)}
       style={{ display: "flex", alignItems: "center", gap: 8, height: 34, padding: "0 8px 0 4px", borderRadius: 6, cursor: "pointer", boxSizing: "border-box",
-        border: `1px solid ${picker?.key === key ? "#2962ff" : fieldBorder}`, background: "transparent" }}>
+        border: `1px solid ${picker?.key === key ? "#7c3aed" : fieldBorder}`, background: "transparent" }}>
       <span style={{ width: 24, height: 24, borderRadius: 4, background: st.color, boxSizing: "border-box", border: /^#?f{6}$/i.test(st.color.replace("#", "")) ? "1px solid #dbdbdb" : "none" }} />
       <svg width="30" height="6" viewBox="0 0 30 6" aria-hidden><line x1="0" y1="3" x2="30" y2="3" stroke={st.color} strokeWidth={st.lineWidth} strokeDasharray={dash(st.lineStyle, st.lineWidth)} /></svg>
     </button>
   );
   const colorOnlyButton = (key: string, color: string, label: string) => (
     <button type="button" aria-label={label} data-picker-anchor={key} onClick={e => openPicker(key, e)}
-      style={{ width: 34, height: 34, padding: 4, borderRadius: 6, cursor: "pointer", boxSizing: "border-box", border: `1px solid ${picker?.key === key ? "#2962ff" : fieldBorder}`, background: "transparent" }}>
+      style={{ width: 34, height: 34, padding: 4, borderRadius: 6, cursor: "pointer", boxSizing: "border-box", border: `1px solid ${picker?.key === key ? "#7c3aed" : fieldBorder}`, background: "transparent" }}>
       <span style={{ display: "block", width: "100%", height: "100%", borderRadius: 4, background: color }} />
     </button>
   );
@@ -245,7 +245,7 @@ export default function EmaSettingsModal({ onClose, theme, config, onChangeConfi
                 {plotButton("ema", cfg, "EMA color and line")}
                 <button type="button" aria-label="Plot type" title={PLOT_TYPES.find(t => t.id === plotType)?.label} data-picker-anchor="type" onClick={e => openPicker("type", e)}
                   style={{ width: 34, height: 34, padding: 0, borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxSizing: "border-box",
-                    border: `1px solid ${picker?.key === "type" ? "#2962ff" : fieldBorder}`, background: "transparent", color: textColor }}>
+                    border: `1px solid ${picker?.key === "type" ? "#7c3aed" : fieldBorder}`, background: "transparent", color: textColor }}>
                   <PlotTypeIcon type={plotType} />
                 </button>
               </div>
@@ -298,7 +298,7 @@ export default function EmaSettingsModal({ onClose, theme, config, onChangeConfi
         <div style={{ padding: "16px 20px", borderTop: `1px solid ${borderColor}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div ref={defaultsRef} style={{ position: "relative" }}>
             <button type="button" aria-haspopup="menu" aria-expanded={defaultsOpen} onClick={() => setDefaultsOpen(o => !o)}
-              style={{ display: "flex", alignItems: "center", gap: 6, height: 34, padding: "0 12px", border: `1px solid ${defaultsOpen ? "#2962ff" : fieldBorder}`, borderRadius: 6, cursor: "pointer", fontSize: 14, background: "transparent", color: textColor }}>
+              style={{ display: "flex", alignItems: "center", gap: 6, height: 34, padding: "0 12px", border: `1px solid ${defaultsOpen ? "#7c3aed" : fieldBorder}`, borderRadius: 6, cursor: "pointer", fontSize: 14, background: "transparent", color: textColor }}>
               Defaults <ChevronDown size={14} style={{ transform: defaultsOpen ? "rotate(180deg)" : undefined }} />
             </button>
             {defaultsOpen && (

@@ -218,7 +218,7 @@ export default function AnalyticsApp() {
                   <button key={a.id} onClick={() => { setAccount(a.id); setSelectedKey(null); }} data-account={a.id}
                     className={`w-full text-left px-3 py-2 rounded-xl border transition-all ${current?.id === a.id ? "border-purple-500/60 bg-purple-700/20" : "border-transparent hover:bg-purple-800/20"}`}>
                     <div className="flex items-center gap-2 text-sm text-white">
-                      {a.id === "mt5" ? <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-gradient-to-br from-emerald-600 to-blue-600">MT5</span>
+                      {a.id === "mt5" ? <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-gradient-to-br from-emerald-600 to-purple-600">MT5</span>
                         : "platform" in a && a.platform ? <PlatformBadge platform={a.platform as "mt5" | "ctrader"} /> : <Wallet size={14} className="text-purple-400" />}
                       <span className="truncate">{a.label}</span>
                     </div>

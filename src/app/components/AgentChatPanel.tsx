@@ -127,7 +127,7 @@ export default function AgentChatPanel({ theme, onClose }: AgentChatPanelProps) 
   const border = isDark ? "#2a2e39" : "#e0e3eb";
   const text = isDark ? "#d1d4dc" : "#131722";
   const muted = "#787b86";
-  const accent = "#2962ff";
+  const accent = "#7c3aed";
   const agentBubbleBg = isDark ? "#2a2e39" : "#f0f3fa";
   const userBubbleBg = accent;
 

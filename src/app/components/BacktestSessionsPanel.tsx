@@ -90,10 +90,10 @@ export default function BacktestSessionsPanel() {
               <button key={s.id} type="button" data-name="backtest-session" data-session={s.id} onClick={() => open(s)}
                 title={here ? "Open in this tab — click to open it in a new tab too" : "Open in a new tab and carry on"}
                 className="tv-bts-row"
-                style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 10px", margin: "2px 0", borderRadius: 6, border: here ? "1px solid #2962ff" : "1px solid transparent", background: "transparent", color: "var(--tv-color-text)", cursor: "pointer", fontFamily: "inherit" }}>
+                style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 10px", margin: "2px 0", borderRadius: 6, border: here ? "1px solid #7c3aed" : "1px solid transparent", background: "transparent", color: "var(--tv-color-text)", cursor: "pointer", fontFamily: "inherit" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
-                  {here && <span style={{ fontSize: 11, color: "#2962ff", fontWeight: 600 }}>Open here</span>}
+                  {here && <span style={{ fontSize: 11, color: "#7c3aed", fontWeight: 600 }}>Open here</span>}
                   <span style={{ fontSize: 11, fontWeight: 600, color: st.color, border: `1px solid ${st.color}`, borderRadius: 10, padding: "0 6px", lineHeight: "16px" }}>{st.text}</span>
                 </div>
                 <div style={{ fontSize: 12, color: "var(--tv-color-text-muted)", marginTop: 2 }}>
@@ -105,7 +105,7 @@ export default function BacktestSessionsPanel() {
                       {left.text}{s.length && !left.done ? <span style={{ fontWeight: 400, color: "var(--tv-color-text-muted)" }}> of {lengthText(s.length)}</span> : null}
                     </div>
                     <div style={{ marginTop: 4, height: 3, borderRadius: 2, background: "var(--tv-color-border)", overflow: "hidden" }}>
-                      <div style={{ width: `${Math.round(left.progress * 100)}%`, height: "100%", background: left.done ? "#089981" : "#2962ff" }} />
+                      <div style={{ width: `${Math.round(left.progress * 100)}%`, height: "100%", background: left.done ? "#089981" : "#7c3aed" }} />
                     </div>
                   </div>
                 )}

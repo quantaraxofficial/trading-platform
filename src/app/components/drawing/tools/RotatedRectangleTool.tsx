@@ -130,10 +130,10 @@ export function RotatedRectangleTool({
       )}
       {showHandles && (
         <>
-          <HandleCircle x={ax} y={ay} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} draggable onDragStart={move.start} onDragMove={dragEnd(0)} onDragEnd={dragEnd(0)} />
-          <HandleCircle x={bx} y={by} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} draggable onDragStart={move.start} onDragMove={dragEnd(1)} onDragEnd={dragEnd(1)} />
+          <HandleCircle x={ax} y={ay} radius={6} fill="white" stroke="#7c3aed" strokeWidth={1.5} draggable onDragStart={move.start} onDragMove={dragEnd(0)} onDragEnd={dragEnd(0)} />
+          <HandleCircle x={bx} y={by} radius={6} fill="white" stroke="#7c3aed" strokeWidth={1.5} draggable onDragStart={move.start} onDragMove={dragEnd(1)} onDragEnd={dragEnd(1)} />
           {hasWidth && corners.map((p, i) => (
-            <HandleCircle key={i} x={p.x} y={p.y} radius={6} fill="white" stroke="#2962ff" strokeWidth={1.5} draggable onDragStart={move.start} onDragMove={dragCorner(i)} onDragEnd={dragCorner(i)} />
+            <HandleCircle key={i} x={p.x} y={p.y} radius={6} fill="white" stroke="#7c3aed" strokeWidth={1.5} draggable onDragStart={move.start} onDragMove={dragCorner(i)} onDragEnd={dragCorner(i)} />
           ))}
         </>
       )}

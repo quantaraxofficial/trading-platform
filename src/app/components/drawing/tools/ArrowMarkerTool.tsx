@@ -135,7 +135,7 @@ export function ArrowMarkerTool({
         fill={color}
         sceneFunc={sceneFunc}
         hitFunc={hitFunc}
-        shadowColor={isSelected ? '#2962ff' : 'transparent'}
+        shadowColor={isSelected ? '#7c3aed' : 'transparent'}
         shadowBlur={isSelected && !isDragging ? 6 : 0}
         shadowOpacity={0.4}
       />
@@ -155,8 +155,8 @@ export function ArrowMarkerTool({
 
       {(isSelected || isHovering) && (
         <>
-          <HandleCircle x={x1} y={y1} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(0)} onDragEnd={handleCircleDragEnd(0)} />
-          <HandleCircle x={x2} y={y2} radius={6} fill="white" stroke="#2962ff" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(points.length - 1)} onDragEnd={handleCircleDragEnd(points.length - 1)} />
+          <HandleCircle x={x1} y={y1} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(0)} onDragEnd={handleCircleDragEnd(0)} />
+          <HandleCircle x={x2} y={y2} radius={6} fill="white" stroke="#7c3aed" strokeWidth={2} draggable onDragStart={handleDragStart} onDragMove={handleCircleDragMove(points.length - 1)} onDragEnd={handleCircleDragEnd(points.length - 1)} />
         </>
       )}
     </Group>

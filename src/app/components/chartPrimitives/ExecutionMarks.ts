@@ -8,7 +8,7 @@ import type { IChartApi } from 'lightweight-charts';
 export interface ExecFill { qty: number; price: number; time: number }
 export interface ExecMark { key: string; time: number; side: 'buy' | 'sell'; fills: ExecFill[]; label?: string }
 
-const BLUE = '#2962ff', RED = '#f23645';
+const BLUE = '#7c3aed', RED = '#f23645';
 const GAP = 4, LEN = 15, HEAD = 5, PILL_W = 18, PILL_PAD = 7;
 
 type Bar = { time: number; high: number; low: number };
@@ -92,7 +92,7 @@ export class ExecutionMarks {
         if (lit) {
           // the pill behind the arrow
           const top = Math.min(g.tip, g.tail) - PILL_PAD, h = LEN + PILL_PAD * 2, x0 = g.x - PILL_W / 2, r = PILL_W / 2;
-          ctx.fillStyle = m.side === 'buy' ? 'rgba(41, 98, 255, 0.22)' : 'rgba(242, 54, 69, 0.22)';
+          ctx.fillStyle = m.side === 'buy' ? 'rgba(124, 58, 237, 0.22)' : 'rgba(242, 54, 69, 0.22)';
           ctx.beginPath();
           ctx.moveTo(x0 + r, top); ctx.arcTo(x0 + PILL_W, top, x0 + PILL_W, top + h, r); ctx.arcTo(x0 + PILL_W, top + h, x0, top + h, r);
           ctx.arcTo(x0, top + h, x0, top, r); ctx.arcTo(x0, top, x0 + PILL_W, top, r); ctx.closePath(); ctx.fill();

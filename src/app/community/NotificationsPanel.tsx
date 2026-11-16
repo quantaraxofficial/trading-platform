@@ -41,11 +41,11 @@ export default function NotificationsPanel() {
     <div data-testid="notifications-panel" style={{ display: "flex", flexDirection: "column", height: "100%", color: "var(--tv-color-text)", fontSize: 13 }}>
       <div style={{ display: "flex", alignItems: "center", padding: "12px 12px 8px", gap: 8 }}>
         <span style={{ fontSize: 16, fontWeight: 600, flex: 1 }}>Notifications</span>
-        {data.unread > 0 && <button onClick={readAll} style={{ border: "none", background: "transparent", color: "var(--tv-color-accent, #2962ff)", cursor: "pointer", fontSize: 13 }}>Mark all read</button>}
+        {data.unread > 0 && <button onClick={readAll} style={{ border: "none", background: "transparent", color: "var(--tv-color-accent, #7c3aed)", cursor: "pointer", fontSize: 13 }}>Mark all read</button>}
       </div>
       <div style={{ flex: 1, overflowY: "auto" }}>
         {!user ? <Empty>Sign in to get notifications</Empty> : !loaded && !data.items.length ? <Empty>Loading…</Empty> : data.items.length === 0 ? (
-          <Empty>Nothing yet. Follow traders in the <a href="/community" target="_blank" rel="noreferrer" style={{ color: "var(--tv-color-accent, #2962ff)" }}>community</a> to hear when they publish an indicator or strategy.</Empty>
+          <Empty>Nothing yet. Follow traders in the <a href="/community" target="_blank" rel="noreferrer" style={{ color: "var(--tv-color-accent, #7c3aed)" }}>community</a> to hear when they publish an indicator or strategy.</Empty>
         ) : data.items.map(n => {
           const href = noticeHref(n);
           const row = (
@@ -63,7 +63,7 @@ export default function NotificationsPanel() {
             onClick={() => user?.uid && !n.read && markNotificationsRead(user.uid, [n.id]).then(set, () => {})}>{row}</a> : <div key={n.id}>{row}</div>;
         })}
       </div>
-      <a href="/community" target="_blank" rel="noreferrer" style={{ padding: "10px 12px", borderTop: "1px solid var(--tv-color-border)", color: "var(--tv-color-accent, #2962ff)", textDecoration: "none" }}>Open the community ↗</a>
+      <a href="/community" target="_blank" rel="noreferrer" style={{ padding: "10px 12px", borderTop: "1px solid var(--tv-color-border)", color: "var(--tv-color-accent, #7c3aed)", textDecoration: "none" }}>Open the community ↗</a>
     </div>
   );
 }

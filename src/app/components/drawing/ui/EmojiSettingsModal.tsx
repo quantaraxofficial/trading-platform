@@ -195,7 +195,7 @@ export function EmojiSettingsModal({ onClose }: EmojiSettingsModalProps) {
               color: activeTab === tab ? 'var(--tv-sub-text)' : '#787b86',
               background: 'transparent',
               border: 'none',
-              borderBottom: activeTab === tab ? '2px solid #2962ff' : '2px solid transparent',
+              borderBottom: activeTab === tab ? '2px solid #7c3aed' : '2px solid transparent',
               cursor: 'pointer',
             }}
           >

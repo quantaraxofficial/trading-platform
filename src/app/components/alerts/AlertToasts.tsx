@@ -28,7 +28,7 @@ export function SymbolChip({ symbol, dark }: { symbol: string; dark: boolean }) 
   const name = displaySymbol(symbol.split(":").pop() || symbol);
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, height: 22, boxSizing: "border-box", padding: "2px 7px 2px 2px", borderRadius: 30, background: dark ? "#2a2e39" : "#f0f3fa", fontSize: 14, lineHeight: "18px", fontWeight: 400, color: dark ? "#d1d4dc" : "#131722", verticalAlign: "middle", maxWidth: 160 }}>
-      <span aria-hidden style={{ width: 18, height: 18, borderRadius: "50%", background: "#2962ff", color: "#fff", fontSize: 10, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none" }}>{name.charAt(0)}</span>
+      <span aria-hidden style={{ width: 18, height: 18, borderRadius: "50%", background: "#7c3aed", color: "#fff", fontSize: 10, fontWeight: 600, display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none" }}>{name.charAt(0)}</span>
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
     </span>
   );
@@ -70,8 +70,8 @@ export default function AlertToasts({ theme }: { theme?: string }) {
   if (!toasts.length) return null;
 
   const c = dark
-    ? { bg: "#1e222d", border: "#2a2e39", text: "#d1d4dc", time: "#868993", link: "#5b9cf6", icon: "#4dd0e1", strip: "rgba(77, 208, 225, 0.1)" }
-    : { bg: "#ffffff", border: "#e0e3eb", text: "#131722", time: "#8c8c8c", link: "#2962ff", icon: "#00bcd4", strip: "rgba(0, 188, 212, 0.1)" };
+    ? { bg: "#1e222d", border: "#2a2e39", text: "#d1d4dc", time: "#868993", link: "#a78bfa", icon: "#4dd0e1", strip: "rgba(77, 208, 225, 0.1)" }
+    : { bg: "#ffffff", border: "#e0e3eb", text: "#131722", time: "#8c8c8c", link: "#7c3aed", icon: "#00bcd4", strip: "rgba(0, 188, 212, 0.1)" };
 
   return (
     <div style={{ position: "fixed", left: 64, bottom: 12, zIndex: 10010, display: "flex", flexDirection: "column-reverse", gap: 8, pointerEvents: "none" }}>

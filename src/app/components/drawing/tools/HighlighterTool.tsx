@@ -108,7 +108,7 @@ export function HighlighterTool({
           x={x1} y={y1}
           radius={6}
           fill="white"
-          stroke="#2962ff"
+          stroke="#7c3aed"
           strokeWidth={2}
           draggable
           onDragMove={handleStartDragMove}
@@ -120,7 +120,7 @@ export function HighlighterTool({
           x={x2} y={y2}
           radius={6}
           fill="white"
-          stroke="#2962ff"
+          stroke="#7c3aed"
           strokeWidth={2}
           draggable
           onDragMove={handleEndDragMove}

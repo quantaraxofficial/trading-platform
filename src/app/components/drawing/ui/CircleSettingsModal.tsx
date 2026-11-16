@@ -214,7 +214,7 @@ export function CircleSettingsModal({ onClose }: CircleSettingsModalProps) {
               onChange={e => updateProp('text', e.target.value)} 
               placeholder="Add text" 
               style={{ 
-                width: '100%', height: '120px', border: '1px solid #2962ff', borderRadius: '4px', 
+                width: '100%', height: '120px', border: '1px solid #7c3aed', borderRadius: '4px', 
                 padding: '10px 12px', fontSize: '14px', fontFamily: 'inherit', resize: 'none', 
                 outline: 'none', color: 'var(--tv-sub-text)', boxSizing: 'border-box' 
               }} 

@@ -318,7 +318,7 @@ export default function PineSettingsModal({
         <div style={{ padding: "16px 20px", borderTop: `1px solid ${borderColor}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div ref={defaultsRef} style={{ position: "relative" }}>
             <button type="button" aria-haspopup="menu" aria-expanded={defaultsOpen} onClick={() => setDefaultsOpen((o) => !o)}
-              style={{ display: "flex", alignItems: "center", gap: 6, height: 34, padding: "0 12px", border: `1px solid ${defaultsOpen ? "#2962ff" : fieldBorder}`, borderRadius: 6, cursor: "pointer", fontSize: 14, background: "transparent", color: textColor }}>
+              style={{ display: "flex", alignItems: "center", gap: 6, height: 34, padding: "0 12px", border: `1px solid ${defaultsOpen ? "#7c3aed" : fieldBorder}`, borderRadius: 6, cursor: "pointer", fontSize: 14, background: "transparent", color: textColor }}>
               Defaults <ChevronDown size={14} style={{ transform: defaultsOpen ? "rotate(180deg)" : undefined }} />
             </button>
             {defaultsOpen && (

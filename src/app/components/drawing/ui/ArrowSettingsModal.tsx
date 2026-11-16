@@ -50,7 +50,7 @@ function Select({ options, value, onChange, style }: { options: string[]; value:
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          width: '100%', height: '34px', border: isOpen ? '2px solid #2962ff' : '1px solid var(--tv-sub-border)', 
+          width: '100%', height: '34px', border: isOpen ? '2px solid #7c3aed' : '1px solid var(--tv-sub-border)', 
           borderRadius: '4px', background: 'var(--tv-sub-bg)', display: 'flex', alignItems: 'center', 
           justifyContent: 'space-between', padding: isOpen ? '0 9px' : '0 10px', 
           fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer', outline: 'none', textAlign: 'left'
@@ -76,7 +76,7 @@ function Select({ options, value, onChange, style }: { options: string[]; value:
                 key={opt}
                 style={{ 
                   padding: '8px 12px', fontSize: '13px', cursor: 'pointer',
-                  backgroundColor: value === opt ? '#2962ff' : 'transparent',
+                  backgroundColor: value === opt ? '#7c3aed' : 'transparent',
                   color: value === opt ? '#ffffff' : 'var(--tv-sub-text)'
                 }}
                 onClick={() => { onChange && onChange(opt); setIsOpen(false); }}
@@ -118,7 +118,7 @@ function ExtendDropdown({
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          width: '100%', height: '34px', border: isOpen ? '2px solid #2962ff' : '1px solid var(--tv-sub-border)', 
+          width: '100%', height: '34px', border: isOpen ? '2px solid #7c3aed' : '1px solid var(--tv-sub-border)', 
           borderRadius: '4px', background: 'var(--tv-sub-bg)', display: 'flex', alignItems: 'center', 
           justifyContent: 'space-between', padding: isOpen ? '0 9px' : '0 10px', 
           fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer', outline: 'none'
@@ -194,7 +194,7 @@ function StatsDropdown({
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          width: '100%', height: '34px', border: isOpen ? '2px solid #2962ff' : '1px solid var(--tv-sub-border)', 
+          width: '100%', height: '34px', border: isOpen ? '2px solid #7c3aed' : '1px solid var(--tv-sub-border)', 
           borderRadius: '4px', background: 'var(--tv-sub-bg)', display: 'flex', alignItems: 'center', 
           justifyContent: 'space-between', padding: isOpen ? '0 9px' : '0 10px', 
           fontSize: '13px', color: 'var(--tv-sub-text)', cursor: 'pointer', outline: 'none'

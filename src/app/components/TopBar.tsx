@@ -490,7 +490,7 @@ export default function TopBar({ theme, toggleTheme, interval, onIntervalChange,
         {onRedesignClick && (
           <Tip text="Redesign: move the toolbars and panels anywhere" placement="bottom">
             <button className={`tv-hdr-btn tv-wide-only ${redesigning ? "active" : ""}`} onClick={onRedesignClick} aria-label="Redesign layout" data-name="redesign-layout"
-              style={redesigning ? { color: "#2962ff" } : undefined}>
+              style={redesigning ? { color: "#7c3aed" } : undefined}>
               <RedesignIcon />
             </button>
           </Tip>

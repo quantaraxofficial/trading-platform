@@ -80,10 +80,10 @@ export default function LayoutEditor({ rects, visible, W, H, onChange, onDone, o
   return createPortal(
     <div data-name="layout-editor" style={{ position: "fixed", inset: 0, zIndex: 20000 }}>
       <style>{`
-        @keyframes tv-redesign-glow { 0%,100% { box-shadow: 0 0 0 2px #2962ff, 0 0 10px 1px rgba(41,98,255,.55), inset 0 0 12px rgba(41,98,255,.25); }
-          50% { box-shadow: 0 0 0 2px #5b8cff, 0 0 22px 5px rgba(41,98,255,.85), inset 0 0 18px rgba(41,98,255,.35); } }
+        @keyframes tv-redesign-glow { 0%,100% { box-shadow: 0 0 0 2px #7c3aed, 0 0 10px 1px rgba(124, 58, 237,.55), inset 0 0 12px rgba(124, 58, 237,.25); }
+          50% { box-shadow: 0 0 0 2px #a78bfa, 0 0 22px 5px rgba(124, 58, 237,.85), inset 0 0 18px rgba(124, 58, 237,.35); } }
         .tv-redesign-widget { animation: tv-redesign-glow 1.8s ease-in-out infinite; }
-        .tv-redesign-widget.active { animation: none; box-shadow: 0 0 0 2px #82a5ff, 0 0 26px 7px rgba(41,98,255,.9); }
+        .tv-redesign-widget.active { animation: none; box-shadow: 0 0 0 2px #82a5ff, 0 0 26px 7px rgba(124, 58, 237,.9); }
       `}</style>
       {/* the chart behind is dimmed and can't be clicked while redesigning */}
       <div aria-hidden style={{ position: "absolute", inset: 0, background: "rgba(10,14,30,.28)" }} />
@@ -96,13 +96,13 @@ export default function LayoutEditor({ rects, visible, W, H, onChange, onDone, o
             onPointerDown={begin(w.id, "move")}
             style={{
               position: "absolute", left: r.x, top: r.y, width: r.w, height: r.h, borderRadius: 6, cursor: active === w.id ? "grabbing" : "grab",
-              background: on ? "rgba(41,98,255,.10)" : "repeating-linear-gradient(45deg, rgba(41,98,255,.10) 0 8px, rgba(41,98,255,.04) 8px 16px)",
-              border: on ? "none" : "1px dashed #5b8cff", touchAction: "none",
+              background: on ? "rgba(124, 58, 237,.10)" : "repeating-linear-gradient(45deg, rgba(124, 58, 237,.10) 0 8px, rgba(124, 58, 237,.04) 8px 16px)",
+              border: on ? "none" : "1px dashed #a78bfa", touchAction: "none",
             }}>
             <div style={{
               position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", pointerEvents: "none",
               display: "flex", flexDirection: r.w < 120 ? "column" : "row", alignItems: "center", gap: 6, padding: r.w < 120 ? "6px 4px" : "4px 10px",
-              borderRadius: 6, background: "#2962ff", color: "#fff", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
+              borderRadius: 6, background: "#7c3aed", color: "#fff", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
               writingMode: r.w < 90 && r.h > 160 ? "vertical-rl" : undefined, boxShadow: "0 2px 8px rgba(0,0,0,.3)",
             }}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden><path d="M7 1v12M1 7h12M7 1 5 3M7 1l2 2M7 13l-2-2M7 13l2-2M1 7l2-2M1 7l2 2M13 7l-2-2M13 7l-2 2" /></svg>
@@ -118,7 +118,7 @@ export default function LayoutEditor({ rects, visible, W, H, onChange, onDone, o
               <div style={{ position: "absolute", left: "50%", top: 3, height: 4, width: 28, marginLeft: -14, borderRadius: 2, background: "#82a5ff" }} />
             </div>}
             {w.resizeW && w.resizeH && <div onPointerDown={begin(w.id, "wh")} title="Drag to resize"
-              style={{ position: "absolute", right: -6, bottom: -6, width: 14, height: 14, borderRadius: 3, background: "#2962ff", border: "2px solid #fff", cursor: "nwse-resize", touchAction: "none" }} />}
+              style={{ position: "absolute", right: -6, bottom: -6, width: 14, height: 14, borderRadius: 3, background: "#7c3aed", border: "2px solid #fff", cursor: "nwse-resize", touchAction: "none" }} />}
           </div>
         );
       })}
@@ -126,15 +126,15 @@ export default function LayoutEditor({ rects, visible, W, H, onChange, onDone, o
       {/* where it snapped */}
       {guides.map((g, i) => (
         <div key={i} aria-hidden style={g.axis === "x"
-          ? { position: "absolute", left: g.at - 0.5, top: 0, bottom: 0, width: 1, background: "#5b8cff", boxShadow: "0 0 6px #2962ff" }
-          : { position: "absolute", top: g.at - 0.5, left: 0, right: 0, height: 1, background: "#5b8cff", boxShadow: "0 0 6px #2962ff" }} />
+          ? { position: "absolute", left: g.at - 0.5, top: 0, bottom: 0, width: 1, background: "#a78bfa", boxShadow: "0 0 6px #7c3aed" }
+          : { position: "absolute", top: g.at - 0.5, left: 0, right: 0, height: 1, background: "#a78bfa", boxShadow: "0 0 6px #7c3aed" }} />
       ))}
 
       {/* the controls */}
       <div data-name="layout-editor-bar" onPointerDown={e => e.stopPropagation()}
         style={{
           position: "absolute", left: "50%", bottom: 28, transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 8, padding: "10px 12px",
-          borderRadius: 10, background: "#131722", color: "#d1d4dc", boxShadow: "0 0 0 1px #2962ff, 0 8px 28px rgba(0,0,0,.45)", fontSize: 13,
+          borderRadius: 10, background: "#131722", color: "#d1d4dc", boxShadow: "0 0 0 1px #7c3aed, 0 8px 28px rgba(0,0,0,.45)", fontSize: 13,
           fontFamily: "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif", maxWidth: "calc(100vw - 32px)", flexWrap: "wrap",
         }}>
         <span style={{ fontWeight: 600, color: "#fff" }}>Redesign</span>
@@ -165,7 +165,7 @@ function EditorButton({ children, onClick, primary, name }: { children: React.Re
   return (
     <button type="button" onClick={onClick} data-name={name}
       style={{ height: 30, padding: "0 12px", borderRadius: 6, fontSize: 13, fontFamily: "inherit", cursor: "pointer",
-        border: primary ? "none" : "1px solid #434651", background: primary ? "#2962ff" : "transparent", color: "#fff" }}>
+        border: primary ? "none" : "1px solid #434651", background: primary ? "#7c3aed" : "transparent", color: "#fff" }}>
       {children}
     </button>
   );

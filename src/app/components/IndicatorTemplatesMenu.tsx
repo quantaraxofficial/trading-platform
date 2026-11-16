@@ -314,7 +314,7 @@ function OpenIndicatorTemplateDialog({ onApply, onClose }: { onApply: (t: Indica
                       else if (e.key === "Escape") { e.preventDefault(); setRenamingId(null); }
                     }}
                     onBlur={e => commitRename(t.id, e.target.value)}
-                    style={{ width: "100%", boxSizing: "border-box", height: 28, padding: "0 8px", fontSize: 14, borderRadius: 4, border: "1px solid #2962ff", outline: "none", background: "transparent", color: "var(--tv-color-text)" }}
+                    style={{ width: "100%", boxSizing: "border-box", height: 28, padding: "0 8px", fontSize: 14, borderRadius: 4, border: "1px solid #7c3aed", outline: "none", background: "transparent", color: "var(--tv-color-text)" }}
                   />
                 ) : (
                   <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "14px", minWidth: 0 }}>

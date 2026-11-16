@@ -14,10 +14,10 @@ export type PinePalette = ReturnType<typeof pinePalette>;
 export function pinePalette(isDark: boolean) {
   return isDark ? {
     bg: "#131722", menu: "#1e222d", text: "#d1d4dc", muted: "#868993", faint: "#787b86", border: "#4a4a4a", hover: "#2a2e39",
-    primaryBg: "#ffffff", primaryText: "#000000", blue: "#5b9cf6", danger: "#f23645", shadow: "0 2px 4px rgba(0,0,0,.4)", overlay: "rgba(0,0,0,.5)", inputBg: "#131722",
+    primaryBg: "#ffffff", primaryText: "#000000", blue: "#a78bfa", danger: "#f23645", shadow: "0 2px 4px rgba(0,0,0,.4)", overlay: "rgba(0,0,0,.5)", inputBg: "#131722",
   } : {
     bg: "#ffffff", menu: "#ffffff", text: "#0f0f0f", muted: "#707070", faint: "#9c9c9c", border: "#ebebeb", hover: "#f2f2f2",
-    primaryBg: "#0f0f0f", primaryText: "#ffffff", blue: "#2962ff", danger: "#f23645", shadow: "0 2px 4px rgba(0,0,0,.2)", overlay: "rgba(0,0,0,.4)", inputBg: "#ffffff",
+    primaryBg: "#0f0f0f", primaryText: "#ffffff", blue: "#7c3aed", danger: "#f23645", shadow: "0 2px 4px rgba(0,0,0,.2)", overlay: "rgba(0,0,0,.4)", inputBg: "#ffffff",
   };
 }
 

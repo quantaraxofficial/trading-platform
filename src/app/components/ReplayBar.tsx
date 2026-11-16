@@ -514,7 +514,7 @@ function LiveChoice({ onPick }: { onPick: (live: boolean) => void }) {
   const option = (live: boolean, title: string, text: string) => (
     <button type="button" data-testid={live ? "replay-choice-live" : "replay-choice-bars"} onClick={() => onPick(live)} autoFocus={live}
       style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, width: "100%", padding: "12px 14px", borderRadius: 8, cursor: "pointer", textAlign: "left",
-        border: `1px solid ${live ? "#2962ff" : "var(--tv-color-border)"}`, background: live ? "rgba(41, 98, 255, 0.08)" : "transparent", color: "var(--tv-color-text)", fontFamily: "inherit" }}>
+        border: `1px solid ${live ? "#7c3aed" : "var(--tv-color-border)"}`, background: live ? "rgba(124, 58, 237, 0.08)" : "transparent", color: "var(--tv-color-text)", fontFamily: "inherit" }}>
       <span style={{ fontSize: 14, fontWeight: 600 }}>{title}</span>
       <span style={{ fontSize: 12, lineHeight: "17px", color: "var(--tv-color-text-muted)" }}>{text}</span>
     </button>

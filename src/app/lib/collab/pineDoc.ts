@@ -50,7 +50,7 @@ class PineDocSync {
       } else if (e.type === "cursor") {
         const peer = collab.peerById(e.id);
         if (!e.anchor || !e.head) this.cursors.delete(e.id);
-        else this.cursors.set(e.id, { id: e.id, uid: e.uid, name: peer?.name || "Someone", color: peer?.color || "#2962ff", anchor: e.anchor, head: e.head, at: Date.now() });
+        else this.cursors.set(e.id, { id: e.id, uid: e.uid, name: peer?.name || "Someone", color: peer?.color || "#7c3aed", anchor: e.anchor, head: e.head, at: Date.now() });
         this.redraw?.();
         this.emit();
       } else if (e.type === "left") {

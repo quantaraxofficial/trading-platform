@@ -157,8 +157,8 @@ export function ThemeEditor({ initial, isNew, onClose, onSave, title }: { initia
               <div className="tv-co-msg"><span className="tv-co-avatar sm" style={{ background: "#e91e63" }}>A</span>
                 <div className="tv-co-msg-body"><div className="tv-co-msg-meta"><b style={{ color: "#e91e63" }}>Asha</b><span style={{ color: t.text || undefined, opacity: 0.7 }}>10:42</span></div>
                   <div className="tv-co-msg-text" style={{ color: t.text || undefined }}>Gold is holding the 4,000 support</div></div></div>
-              <div className="tv-co-msg mine"><span className="tv-co-avatar sm" style={{ background: "#2962ff" }}>Y</span>
-                <div className="tv-co-msg-body"><div className="tv-co-msg-meta"><b style={{ color: "#2962ff" }}>You</b></div>
+              <div className="tv-co-msg mine"><span className="tv-co-avatar sm" style={{ background: "#7c3aed" }}>Y</span>
+                <div className="tv-co-msg-body"><div className="tv-co-msg-meta"><b style={{ color: "#7c3aed" }}>You</b></div>
                   <div className="tv-co-msg-text" style={{ color: t.text || undefined }}>Agreed, watching for a retest</div></div></div>
               <div style={{ marginTop: 10, height: 3, borderRadius: 2, background: t.accent || "var(--tv-co-accent)", width: "60%" }} />
             </div>

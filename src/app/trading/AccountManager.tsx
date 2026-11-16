@@ -547,10 +547,10 @@ function PerformanceChart({ trades, showCum, showRun }: { trades: Trade[]; showC
         ))}
         {showCum && (
           <>
-            <path d={area} fill="#2962ff" opacity={0.15} />
-            <path d={line} fill="none" stroke="#2962ff" strokeWidth={2} vectorEffect="non-scaling-stroke" />
-            {cum.map((v, i) => <circle key={i} cx={x(i)} cy={y(v)} r={3} fill="#2962ff" />)}
-            <rect x={plotW + 2} y={y(cum[n - 1]) - 9} width={PAD_R - 4} height={18} rx={2} fill="#2962ff" />
+            <path d={area} fill="#7c3aed" opacity={0.15} />
+            <path d={line} fill="none" stroke="#7c3aed" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+            {cum.map((v, i) => <circle key={i} cx={x(i)} cy={y(v)} r={3} fill="#7c3aed" />)}
+            <rect x={plotW + 2} y={y(cum[n - 1]) - 9} width={PAD_R - 4} height={18} rx={2} fill="#7c3aed" />
             <text x={plotW + 8} y={y(cum[n - 1]) + 4} fontSize={11} fill="#fff">{cum[n - 1].toFixed(2)}</text>
           </>
         )}

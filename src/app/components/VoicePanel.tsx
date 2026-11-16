@@ -87,7 +87,7 @@ export default function VoicePanel() {
       onDrop={e => { const f = imageIn(e.dataTransfer.files); setDragging(false); if (f) { e.preventDefault(); attachImage(f, f.name); } }}>
       <style>{STYLE}</style>
       {dragging && (
-        <div aria-hidden style={{ position: "absolute", inset: 8, zIndex: 3, borderRadius: 14, border: "2px dashed var(--tv-color-accent)", background: "rgba(41, 98, 255, 0.08)",
+        <div aria-hidden style={{ position: "absolute", inset: 8, zIndex: 3, borderRadius: 14, border: "2px dashed var(--tv-color-accent)", background: "rgba(124, 58, 237, 0.08)",
           display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "var(--tv-color-accent)", pointerEvents: "none" }}>Drop the picture here</div>
       )}
 

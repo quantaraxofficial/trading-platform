@@ -155,7 +155,7 @@ export default function TvSelect({ value, onChange, children, className, style, 
         style={{
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, textAlign: "left",
           cursor: disabled ? "default" : "pointer", font: "inherit", minWidth: 0, ...style,
-          ...(open ? { borderColor: "#2962ff" } : {}),
+          ...(open ? { borderColor: "#7c3aed" } : {}),
         }}
       >
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{current?.label}</span>

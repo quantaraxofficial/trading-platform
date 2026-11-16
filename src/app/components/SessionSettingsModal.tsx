@@ -91,7 +91,7 @@ function ColorPickerPopup({ colorStr, onChange, style, isDark }: any) {
                 backgroundColor: colHex,
                 borderRadius: "2px",
                 cursor: "pointer",
-                border: hex.toLowerCase() === colHex.toLowerCase() ? "2px solid #2962ff" : `1px solid ${isDark ? "#434651" : "#e0e3eb"}`
+                border: hex.toLowerCase() === colHex.toLowerCase() ? "2px solid #7c3aed" : `1px solid ${isDark ? "#434651" : "#e0e3eb"}`
               }}
             />
           ))
@@ -104,7 +104,7 @@ function ColorPickerPopup({ colorStr, onChange, style, isDark }: any) {
           <input 
             type="range" min="0" max="100" value={opacity} 
             onChange={(e) => applyColor(hex, parseInt(e.target.value))}
-            style={{ flex: 1, accentColor: "#2962ff" }} 
+            style={{ flex: 1, accentColor: "#7c3aed" }} 
           />
           <div style={{ 
             width: "40px", height: "24px", 
@@ -126,7 +126,7 @@ function ColorSquare({ color, onClick, isDark, isActive }: any) {
       onClick={onClick}
       style={{ 
         width: "28px", height: "28px", 
-        border: isActive ? "2px solid #2962ff" : `1px solid ${isDark ? "#434651" : "#e0e3eb"}`, 
+        border: isActive ? "2px solid #7c3aed" : `1px solid ${isDark ? "#434651" : "#e0e3eb"}`, 
         borderRadius: "4px",
         cursor: "pointer",
         position: "relative",
@@ -150,7 +150,7 @@ function CheckBox({ checked, onChange, label, subtext, labelStyle }: any) {
           height: '18px',
           borderRadius: '3px',
           border: checked ? 'none' : '1px solid #b2b5be',
-          backgroundColor: checked ? '#2962ff' : 'transparent',
+          backgroundColor: checked ? '#7c3aed' : 'transparent',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -402,7 +402,7 @@ export default function SessionSettingsModal({ isOpen, onClose, config, onSave, 
               style={{
                 padding: "16px 12px", cursor: "pointer", fontSize: "14px", fontWeight: "500",
                 color: activeTab === tab ? (isDark ? "#2962ff" : "#2962ff") : (isDark ? "#787b86" : "#131722"),
-                borderBottom: activeTab === tab ? "2px solid #2962ff" : "2px solid transparent",
+                borderBottom: activeTab === tab ? "2px solid #7c3aed" : "2px solid transparent",
                 marginBottom: "-1px"
               }}
             >
@@ -584,7 +584,7 @@ export default function SessionSettingsModal({ isOpen, onClose, config, onSave, 
           <div style={{ fontSize: "14px", color: isDark ? "#2962ff" : "#2962ff", cursor: "pointer" }} onClick={() => setLocalConfig(defaultSessionConfig)}>Defaults</div>
           <div style={{ display: "flex", gap: "8px" }}>
             <button onClick={cancel} style={{ padding: "8px 24px", borderRadius: "4px", border: `1px solid ${border}`, backgroundColor: "transparent", color: text, cursor: "pointer", fontSize: "14px" }}>Cancel</button>
-            <button onClick={() => onSave(localConfig)} style={{ padding: "8px 24px", borderRadius: "4px", border: "none", backgroundColor: "#2962ff", color: "white", cursor: "pointer", fontSize: "14px", fontWeight: "500" }}>Ok</button>
+            <button onClick={() => onSave(localConfig)} style={{ padding: "8px 24px", borderRadius: "4px", border: "none", backgroundColor: "#7c3aed", color: "white", cursor: "pointer", fontSize: "14px", fontWeight: "500" }}>Ok</button>
           </div>
         </div>
 

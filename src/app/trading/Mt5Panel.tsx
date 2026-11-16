@@ -97,7 +97,7 @@ export default function Mt5Panel() {
             <div style={{ fontWeight: 600, whiteSpace: "nowrap" }} data-name="mt5-account-title">
               {linked?.login} · {linked?.server}
               <span data-name="mt5-mode" style={{ marginLeft: 8, fontSize: 11, padding: "1px 6px", borderRadius: 4, fontWeight: 600, textTransform: "uppercase",
-                background: (a?.mode || linked?.mode) === "real" ? "rgba(242,54,69,0.12)" : "rgba(41,98,255,0.12)", color: (a?.mode || linked?.mode) === "real" ? C.sell : C.accent }}>
+                background: (a?.mode || linked?.mode) === "real" ? "rgba(242,54,69,0.12)" : "rgba(124, 58, 237,0.12)", color: (a?.mode || linked?.mode) === "real" ? C.sell : C.accent }}>
                 {(a?.mode || linked?.mode) === "real" ? "Real" : (a?.mode || linked?.mode) === "contest" ? "Contest" : "Demo"}
               </span>
             </div>

@@ -174,7 +174,7 @@ export function TextEditorOverlay({ initialText, x, y, onCommit, onCancel, onDra
       {geom && (
         <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
           {geom.sel.map((q, i) => (
-            <polygon key={i} points={q.map(p => `${p.x},${p.y}`).join(' ')} fill="#2962ff" fillOpacity={0.3} />
+            <polygon key={i} points={q.map(p => `${p.x},${p.y}`).join(' ')} fill="#7c3aed" fillOpacity={0.3} />
           ))}
           <line key={tick} className="tv-text-caret" x1={geom.caret[0].x} y1={geom.caret[0].y} x2={geom.caret[1].x} y2={geom.caret[1].y}
             stroke={geom.color} strokeWidth={1} shapeRendering="crispEdges" />

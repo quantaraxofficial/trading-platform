@@ -7,7 +7,7 @@ export type CollabRoleKey = "admin" | "controller" | "editor" | "participant" | 
 export const COLLAB_ROLES: Record<CollabRoleKey, { label: string; color: string; hint: string }> = {
   admin: { label: "Admin", color: "#f5a000", hint: "Owns the collab: manages everyone and can end it" },
   controller: { label: "Controller", color: "#9c27b0", hint: "Adds people (and edits)" },
-  editor: { label: "Editor", color: "#2962ff", hint: "Edits the chart or the script" },
+  editor: { label: "Editor", color: "#7c3aed", hint: "Edits the chart or the script" },
   participant: { label: "Participant", color: "#089981", hint: "Can't edit, but talks in voice or shares alerts" },
   viewer: { label: "Viewer", color: "#787b86", hint: "Watches and chats" },
 };

@@ -170,7 +170,7 @@ export function HSVColorPickerPopup({ hex, onApply, onPick, isDark }: HSVColorPi
           onClick={() => onApply(/^#[0-9a-fA-F]{6}$/.test(hexInput) ? hexInput : currentHex)}
           style={{
             height: '28px', padding: '0 12px', borderRadius: '4px', border: 'none',
-            backgroundColor: '#2962ff', color: '#ffffff', fontSize: '13px', cursor: 'pointer', flexShrink: 0,
+            backgroundColor: '#7c3aed', color: '#ffffff', fontSize: '13px', cursor: 'pointer', flexShrink: 0,
           }}
         >
           Add
