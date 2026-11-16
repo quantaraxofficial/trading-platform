@@ -112,6 +112,18 @@ export const TOURS: Tour[] = [
       },
     ],
   },
+  {
+    id: "session-position-orders",
+    title: "Position drawings as orders",
+    page: "chart",
+    steps: [
+      {
+        target: '[data-testid="bt-session-position-orders"]',
+        title: "Draw your trades",
+        body: "Turn this on and a Long or Short Position you draw places that order in this backtest session: entry, take profit and stop loss from the drawing. Move the drawing and the order moves with it.",
+      },
+    ],
+  },
   // Everything TradePilot adds to a TradingView-style chart, across its pages (on request only)
   {
     id: "site-guide",
