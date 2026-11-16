@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>TradePilot settings</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  html, body { margin: 0; height: 100%; background: var(--page); color: var(--text); font-size: 14px; user-select: none; }
+  .top { height: 34px; display: flex; align-items: center; padding-left: 16px; gap: 10px; -webkit-app-region: drag; font-weight: 600; }
+  main { padding: 8px 24px 24px; height: calc(100% - 34px); box-sizing: border-box; overflow-y: auto; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 20px 0 8px; }
+  .row { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--sep); }
+  .row .t { flex: 1; } .row .t small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .switch { position: relative; width: 38px; height: 22px; flex: none; }
+  .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; inset: 0; cursor: default; }
+  .switch span { position: absolute; inset: 0; border-radius: 11px; background: var(--hover2); transition: background .15s; pointer-events: none; }
+  .switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .switch input:checked + span { background: var(--accent); }
+  .switch input:checked + span::after { transform: translateX(16px); }
+  .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .seg { display: flex; border: 1px solid var(--sep); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; padding: 6px 12px; color: var(--muted); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  select { background: var(--hover); color: var(--text); border: 1px solid var(--sep); border-radius: 6px; padding: 5px 8px; font: inherit; }
+  .btn { border: 1px solid var(--sep); background: var(--hover); border-radius: 8px; padding: 7px 14px; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .note { color: var(--muted); font-size: 12.5px; margin-top: 8px; min-height: 18px; }
+  .restart { display: none; margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: rgba(139,92,246,.14); align-items: center; gap: 12px; }
+  .restart.show { display: flex; } .restart span { flex: 1; }
+  .about { display: flex; gap: 14px; align-items: center; padding: 12px 0; }
+  .about svg { flex: none; }
+</style>
+</head>
+<body>
+  <div class="top">Settings</div>
+  <main>
+    <h2>General</h2>
+    <div class="row"><div class="t">Start with Windows<small>Open TradePilot when you sign in to your computer</small></div>
+      <label class="switch"><input type="checkbox" id="openAtLogin"><span></span></label></div>
+    <div class="row"><div class="t">Restore tabs and windows<small>Open your charts as you left them</small></div>
+      <label class="switch"><input type="checkbox" id="restoreTabs"><span></span></label></div>
+
+    <h2>Appearance</h2>
+    <div class="row"><div class="t">Theme<small>The app and your charts</small></div>
+      <div class="seg" id="theme"><button data-v="system">System</button><button data-v="dark">Dark</button><button data-v="light">Light</button></div></div>
+    <div class="row"><div class="t">Zoom<small>Ctrl + / Ctrl − / Ctrl 0 in any tab</small></div>
+      <select id="zoom">
+        <option value="80">80%</option><option value="90">90%</option><option value="100">100%</option><option value="110">110%</option>
+        <option value="120">120%</option><option value="130">130%</option><option value="150">150%</option></select></div>
+
+    <h2>Performance</h2>
+    <div class="row"><div class="t">Hardware acceleration<small>Use the graphics card for smoother charts. Turn off only if the window flickers or goes blank.</small></div>
+      <label class="switch"><input type="checkbox" id="hardwareAcceleration"><span></span></label></div>
+    <div class="restart" id="restart"><span>Restart TradePilot to apply this.</span><button class="btn primary" id="relaunch">Restart now</button></div>
+    <div class="row"><div class="t">Clear cache<small>Frees disk space; your sign-in and settings stay</small></div>
+      <button class="btn" id="clear">Clear</button></div>
+
+    <h2>About</h2>
+    <div class="about">
+      <svg width="44" height="44" viewBox="0 0 24 24"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a855f7"/><stop offset="1" stop-color="#6366f1"/></linearGradient></defs><rect width="24" height="24" rx="6" fill="url(#g)"/><path d="M18.5 8.5l-6 6-3.5-3.5-4.5 4.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14.5 8.5h4v4" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div style="flex:1"><div style="font-weight:600">TradePilot for Windows</div><div class="note" id="ver" style="margin:2px 0 0"></div></div>
+      <button class="btn" id="updates">Check for updates</button>
+    </div>
+    <div class="note" id="msg"></div>
+  </main>
+  <script src="settings.js"></script>
+</body>
+</html>

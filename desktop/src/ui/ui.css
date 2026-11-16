@@ -1,0 +1,14 @@
+/* The app's own pages: TradePilot's look (the site's dark navy / white, the brand purple) */
+:root {
+  --bar: #0c0e15; --tab: #131722; --text: #d1d4dc; --muted: #787b86; --sep: #2a2e39;
+  --hover: #1e222d; --hover2: #2a2e39; --accent: #8b5cf6; --page: #131722; --panel: #1e222d;
+  color-scheme: dark;
+}
+:root.light {
+  --bar: #e7e9ef; --tab: #ffffff; --text: #131722; --muted: #6a6d78; --sep: #d1d4dc;
+  --hover: #f0f3fa; --hover2: #dfe2ea; --accent: #7c3aed; --page: #ffffff; --panel: #ffffff;
+  color-scheme: light;
+}
+html, body { font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; cursor: default; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }

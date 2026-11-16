@@ -668,6 +668,13 @@ Posting signals out
     Contact page in the home page's look (help links beside the form). Hover animations on the
     feature, Coming soon and roadmap cards. Analytics a size larger on big screens (1600px+), and its
     logo goes to the home page
+  - TradePilot for Windows (desktop/, Electron 45): an installable app built like TradingView Desktop:
+    a title bar of chart tabs (symbol, price, change), "+", new windows, a main menu (settings, new
+    tab / window, reopen closed tab, open link from clipboard, zoom, System / Dark / Light, exit), the
+    same keys (Ctrl+T / W / Tab / 1-9, Ctrl+N, Ctrl+Shift+T, zoom, F11), tab menus and drag to
+    reorder, tabs and windows restored, start with Windows, hardware acceleration, clear cache,
+    updates from the site's /desktop/ folder; tradepilot:// links. Build: desktop/README.md. The
+    site's favicon is TradePilot's mark
 ======================================================================
 17b. ECONOMIC CALENDAR
 ======================================================================

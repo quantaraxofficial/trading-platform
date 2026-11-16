@@ -1,0 +1,47 @@
+{
+  "name": "tradepilot-desktop",
+  "productName": "TradePilot",
+  "version": "1.0.0",
+  "description": "TradePilot for Windows: the TradePilot site in its own app window, with chart tabs, multiple windows and desktop settings",
+  "main": "src/main.js",
+  "author": "TradePilot",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "icon": "node scripts/make-icon.cjs",
+    "dist": "electron-builder --win nsis --x64",
+    "dist:dir": "electron-builder --win dir --x64"
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  },
+  "devDependencies": {
+    "electron": "45.3.3",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "io.tradepilot.desktop",
+    "productName": "TradePilot",
+    "copyright": "© 2026 TradePilot",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["src/**/*", "package.json"],
+    "asar": true,
+    "protocols": [{ "name": "TradePilot", "schemes": ["tradepilot"] }],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.png",
+      "artifactName": "TradePilot-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "TradePilot",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
+    },
+    "publish": [{ "provider": "generic", "url": "https://34-93-138-162.sslip.io/desktop/" }]
+  }
+}
