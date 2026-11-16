@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>TradePilot reminder</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  html, body { margin: 0; height: 100%; background: var(--page); color: var(--text); user-select: none; overflow: hidden; }
+  body { box-sizing: border-box; border: 1px solid var(--accent); border-radius: 0; display: flex; flex-direction: column; padding: 18px 20px 16px; gap: 10px;
+    background: radial-gradient(circle at 100% 0%, rgba(124,58,237,.28), transparent 55%), var(--page); -webkit-app-region: drag; }
+  .top { display: flex; align-items: center; gap: 12px; }
+  .bell { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #a855f7, #6366f1); flex: none;
+    animation: shake 1s ease-in-out infinite; transform-origin: 50% 10%; }
+  @keyframes shake { 0%, 50%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(-14deg); } 20%, 40% { transform: rotate(14deg); } }
+  .title { font-size: 16px; font-weight: 700; } .when { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .chart { display: flex; align-items: baseline; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--hover); }
+  .chart b { font-size: 18px; } .chart span { color: var(--muted); font-size: 13px; }
+  .btns { display: flex; gap: 8px; margin-top: auto; -webkit-app-region: no-drag; }
+  button { flex: 1 1 auto; height: 36px; padding: 0 12px; white-space: nowrap; border-radius: 9px; border: 1px solid var(--sep); background: transparent; color: var(--text); font-weight: 600; font-size: 13px; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: linear-gradient(90deg, #7c3aed, #4f46e5); border: none; color: #fff; }
+  button.stop { color: #f23645; }
+  @media (prefers-reduced-motion: reduce) { .bell { animation: none; } }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="bell" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
+    <div><div class="title" id="title">Trading time</div><div class="when" id="when"></div></div>
+  </div>
+  <div class="chart"><b id="sym"></b><span id="tf"></span></div>
+  <div class="btns">
+    <button class="primary" data-a="open" autofocus>Open the chart</button>
+    <button data-a="snooze">Snooze 5 min</button>
+    <button class="stop" data-a="stop">Stop</button>
+  </div>
+  <script src="alarm.js"></script>
+</body>
+</html>

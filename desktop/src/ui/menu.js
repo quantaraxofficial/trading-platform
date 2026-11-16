@@ -12,6 +12,7 @@ const I = {
   reload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 12a8 8 0 1 1-2.3-5.6L20 8.7"/><path d="M20 4v4.7h-4.7"/></svg>',
   dup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
 };
 const LOGO = '<svg width="40" height="40" viewBox="0 0 24 24"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a855f7"/><stop offset="1" stop-color="#6366f1"/></linearGradient></defs><rect width="24" height="24" rx="6" fill="url(#g)"/><path d="M18.5 8.5l-6 6-3.5-3.5-4.5 4.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14.5 8.5h4v4" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const item = (action, icon, label, key = "", disabled = false, cls = "") =>
@@ -33,6 +34,7 @@ window.tp.on("overlay", (d) => {
   if (d.kind === "main") {
     menu.innerHTML = `<div class="head">${LOGO}<span class="name">TradePilot</span><span class="ver">Version ${d.version}</span></div><div class="sep"></div>
       ${item("settings", "settings", "Settings", "Ctrl + ,")}
+      ${item("reminders", "bell", "Trading reminders")}
       ${item("new-tab", "tab", "New tab", "Ctrl + T")}
       ${item("new-window", "win", "New window", "Ctrl + N")}
       ${item("reopen", "reopen", "Reopen closed tab", "Ctrl + Shift + T", !d.canReopen)}

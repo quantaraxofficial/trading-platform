@@ -29,6 +29,7 @@ window.tp.on("update", (m) => { $("msg").textContent = m; });
 for (const id of ["openAtLogin", "restoreTabs", "hardwareAcceleration"]) $(id).addEventListener("change", (e) => set(id, e.target.checked));
 $("theme").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) set("theme", b.dataset.v); });
 $("zoom").addEventListener("change", (e) => set("zoom", +e.target.value));
+$("reminders").addEventListener("click", () => window.tp.send("settings:reminders"));
 $("relaunch").addEventListener("click", () => window.tp.send("settings:relaunch"));
 $("clear").addEventListener("click", (e) => { window.tp.send("settings:clear-cache"); e.target.textContent = "Cleared"; e.target.disabled = true; });
 $("updates").addEventListener("click", () => { $("msg").textContent = "Checking…"; window.tp.send("settings:check-updates"); });

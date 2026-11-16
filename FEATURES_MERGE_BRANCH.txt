@@ -27,6 +27,8 @@ Contents
 ======================================================================
 Every tool was studied in TradingView Desktop (points, default levels, colours, look) and
 added with TradingView's icons, order and shortcuts.
+  - Measure with Shift: Shift + drag measures until release; Shift + a single click starts a
+    measure that follows the mouse and ends on the next click (Escape cancels)
 
 Lines
   - Ray, extended line, info line (price change, %, pips/ticks, bars, time span, angle),
@@ -686,6 +688,12 @@ Posting signals out
     a splash showing progress; closing it stops both. Its own data folder (TradePilot Local), so it
     never mixes with the live app. Run desktop\dist\win-unpacked\TradePilot.exe after `npm run dist`.
     Market data needs the site's .env.local (TWELVEDATA_API_KEY) in the branch folder
+  - Trading reminders (both apps, main menu or Settings): name, symbol, timeframe, days and time.
+    At that time TradePilot opens on that chart (even when closed: a Windows Task Scheduler task
+    per reminder, "TradePilot Local\Reminder <id>" for this app) and rings: an always-on-top window
+    with a chime that repeats until Stop, Open the chart or Snooze 5 min, plus a notification. Only
+    while the market's open: forex, metals, indices and stocks not from Friday 22:00 to Sunday 22:00
+    UTC (weekend days shown dimmed), crypto always. On / off switch, Test, edit, delete
   - TradePilot purple (#7c3aed) instead of blue across the interface: accents, buttons, borders and
     focus, selections and drawing handles, toggles and tabs, the buy side, Redesign's outlines and
     Done, the classic themes' accent, the Pine editor's selection (drawing colours, palettes, named

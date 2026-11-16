@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>Trading reminders</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  html, body { margin: 0; height: 100%; background: var(--page); color: var(--text); font-size: 14px; }
+  .top { height: 34px; display: flex; align-items: center; padding-left: 16px; -webkit-app-region: drag; font-weight: 600; user-select: none; }
+  main { padding: 6px 24px 24px; height: calc(100% - 34px); box-sizing: border-box; overflow-y: auto; }
+  .intro { color: var(--muted); font-size: 13px; line-height: 19px; margin: 0 0 14px; }
+  .list { display: flex; flex-direction: column; gap: 8px; }
+  .item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--sep); border-radius: 10px; }
+  .item .t { flex: 1; min-width: 0; } .item .t b { display: block; } .item .t small { color: var(--muted); font-size: 12.5px; }
+  .item .err { color: #f23645; font-size: 12px; }
+  .icon-btn { width: 30px; height: 30px; border-radius: 7px; border: 0; background: transparent; color: var(--muted); display: flex; align-items: center; justify-content: center; }
+  .icon-btn:hover { background: var(--hover); color: var(--text); }
+  .empty { padding: 26px; text-align: center; color: var(--muted); border: 1px dashed var(--sep); border-radius: 10px; }
+  .btn { border: 1px solid var(--sep); background: var(--hover); border-radius: 8px; padding: 8px 14px; color: var(--text); }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .form { margin-top: 16px; padding: 16px; border: 1px solid var(--accent); border-radius: 12px; display: none; flex-direction: column; gap: 12px; }
+  .form.show { display: flex; }
+  label.f { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+  input, select { background: var(--hover); color: var(--text); border: 1px solid var(--sep); border-radius: 8px; padding: 8px 10px; font: inherit; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .days { display: flex; gap: 6px; flex-wrap: wrap; }
+  .day { width: 44px; height: 32px; border-radius: 8px; border: 1px solid var(--sep); background: transparent; color: var(--muted); }
+  .day.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .day.closed:not(.on) { opacity: .55; }
+  .note { font-size: 12.5px; color: var(--muted); min-height: 17px; }
+  .actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .switch { position: relative; width: 38px; height: 22px; flex: none; }
+  .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; inset: 0; }
+  .switch span { position: absolute; inset: 0; border-radius: 11px; background: var(--hover2); transition: background .15s; pointer-events: none; }
+  .switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .switch input:checked + span { background: var(--accent); }
+  .switch input:checked + span::after { transform: translateX(16px); }
+</style>
+</head>
+<body>
+  <div class="top">Trading reminders</div>
+  <main>
+    <p class="intro">At the time you pick, TradePilot opens on your chart and rings until you stop it, even if the app is closed (Windows starts it). Forex, gold, indices and stocks don't ring while their market is shut for the weekend; crypto rings every day.</p>
+    <div class="list" id="list"></div>
+    <div style="margin-top:12px"><button class="btn primary" id="add">+ New reminder</button></div>
+
+    <div class="form" id="form" data-name="reminder-form">
+      <label class="f">Name<input id="f-name" maxlength="60" placeholder="London open"></label>
+      <div class="row2">
+        <label class="f">Symbol<input id="f-symbol" list="symbols" maxlength="20" placeholder="XAU/USD"></label>
+        <label class="f">Timeframe<select id="f-interval">
+          <option value="1min">1 minute</option><option value="5min">5 minutes</option><option value="15min" selected>15 minutes</option>
+          <option value="30min">30 minutes</option><option value="1h">1 hour</option><option value="4h">4 hours</option><option value="1day">1 day</option></select></label>
+      </div>
+      <datalist id="symbols"><option value="XAU/USD"><option value="EUR/USD"><option value="GBP/USD"><option value="USD/JPY"><option value="BTC/USD"><option value="ETH/USD"><option value="AAPL"><option value="TSLA"><option value="NFLX"></datalist>
+      <label class="f">Days<div class="days" id="f-days"></div></label>
+      <div class="note" id="f-note"></div>
+      <label class="f" style="max-width:160px">Time<input id="f-time" type="time" value="13:25"></label>
+      <div class="actions"><button class="btn" id="cancel">Cancel</button><button class="btn primary" id="save">Save</button></div>
+    </div>
+    <div class="note" id="msg" style="margin-top:10px"></div>
+  </main>
+  <script src="reminders-ui.js"></script>
+</body>
+</html>

@@ -3,9 +3,9 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 const SEND = new Set(["ui:ready", "tab:activate", "tab:close", "tab:new", "tab:move", "tab:menu", "window:new", "menu:open", "overlay:close",
-  "menu:action", "settings:relaunch", "settings:clear-cache", "settings:check-updates", "starting:answer"]);
-const INVOKE = new Set(["settings:get", "settings:set"]);
-const ON = new Set(["state", "overlay", "zoom", "settings", "update", "starting"]);
+  "menu:action", "settings:relaunch", "settings:clear-cache", "settings:check-updates", "starting:answer", "settings:reminders", "reminders:test", "alarm:answer"]);
+const INVOKE = new Set(["settings:get", "settings:set", "reminders:get", "reminders:save"]);
+const ON = new Set(["state", "overlay", "zoom", "settings", "update", "starting", "alarm"]);
 
 contextBridge.exposeInMainWorld("tp", {
   send: (channel, ...args) => { if (SEND.has(channel)) ipcRenderer.send(channel, ...args); },

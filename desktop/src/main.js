@@ -27,7 +27,7 @@ const AUTH_HOSTS = [/\.firebaseapp\.com$/, /^accounts\.google\.com$/, /^apis\.go
 
 // ---- settings and session (userData/settings.json)
 const SETTINGS_FILE = () => path.join(app.getPath("userData"), "settings.json");
-const DEFAULTS = { openAtLogin: false, restoreTabs: true, hardwareAcceleration: true, theme: "system", zoom: 1, windows: [] };
+const DEFAULTS = { openAtLogin: false, restoreTabs: true, hardwareAcceleration: true, theme: "system", zoom: 1, windows: [], reminders: [] };
 let settings = { ...DEFAULTS };
 function loadSettings() {
   try { settings = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE(), "utf8")) }; } catch { settings = { ...DEFAULTS }; }
@@ -99,9 +99,9 @@ class AppWindow {
     this.win.on("closed", () => { for (const t of this.tabs) destroyView(t.view); this.tabs = []; windows.delete(this); if (!quitting) rememberSession(); });
     this.win.on("focus", () => { lastFocused = this; });
     this.win.webContents.on("before-input-event", (e, input) => this.shortcut(e, input));
-    const urls = state.tabs && state.tabs.length ? state.tabs : [HOME_URL];
+    const urls = state.tabs && state.tabs.length ? state.tabs : state.tabs ? [] : [HOME_URL];
     urls.forEach((u, i) => this.addTab(u, i === (state.active ?? 0)));
-    if (!this.active) this.activate(this.tabs[0].id);
+    if (!this.active && this.tabs.length) this.activate(this.tabs[0].id);
     windows.add(this);
     lastFocused = this;
   }
@@ -354,6 +354,7 @@ ipcMain.on("menu:action", (e, action, arg) => {
   const close = () => w.closeOverlay();
   switch (action) {
     case "settings": close(); openSettings(); break;
+    case "reminders": close(); openReminders(); break;
     case "new-tab": close(); w.addTab(HOME_URL); break;
     case "new-window": close(); new AppWindow(); break;
     case "reopen": close(); reopenClosed(w); break;
@@ -393,6 +394,7 @@ ipcMain.handle("settings:set", (_e, key, value) => {
   saveSettings(true);
   return publicSettings();
 });
+ipcMain.on("settings:reminders", () => openReminders());
 ipcMain.on("settings:relaunch", () => { quitting = true; rememberSession(); app.relaunch(); app.exit(0); });
 ipcMain.on("settings:clear-cache", async () => { await session.fromPartition(PARTITION).clearCache(); });
 ipcMain.on("settings:check-updates", () => checkForUpdates(true));
@@ -417,6 +419,8 @@ function checkForUpdates(manual = false) {
 
 // ---- start
 app.on("second-instance", (_e, argv) => {
+  const due = reminderArg(argv);
+  if (due) { fireReminder(due); return; }
   const link = argv.find(a => a.startsWith("tradepilot://"));
   const w = lastFocused && windows.has(lastFocused) ? lastFocused : [...windows][0];
   if (!w) { new AppWindow(link ? { tabs: [linkToUrl(link) || HOME_URL] } : {}); return; }
@@ -440,11 +444,15 @@ app.whenReady().then(() => {
   });
   ses.setPermissionCheckHandler((_wc, permission, origin) => origin === SITE_ORIGIN && allowed.has(permission));
 
+  const fromTask = reminderArg(process.argv);
+  if (fromTask && !reminderDue(fromTask)) { app.quit(); return; }
+  startReminderClock();
   const open = () => {
     const link = process.argv.find(a => a.startsWith("tradepilot://"));
     const saved = settings.restoreTabs && settings.windows?.length ? settings.windows : [{}];
     saved.forEach((s, i) => new AppWindow(i === 0 && link ? { ...s, tabs: [...(s.tabs || []), linkToUrl(link) || HOME_URL], active: (s.tabs || []).length } : s));
     setTimeout(() => checkForUpdates(false), 15000);
+    if (fromTask) fireReminder(fromTask);
   };
   if (LOCAL) startLocalEdition(open); else open();
 });
@@ -471,6 +479,99 @@ function startLocalEdition(open) {
     if (ok) { open(); splash.destroy(); }
     else if (!failed) app.quit();
   });
+}
+
+// ---- trading reminders (reminders.js): the window to set them, Windows' tasks, the clock, the ringing
+const reminders = require("./reminders");
+let remindersWin = null;
+const reminderArg = (argv) => (argv.find(a => a.startsWith("--reminder=")) || "").slice("--reminder=".length) || null;
+const findReminder = (id) => (settings.reminders || []).find(r => r.id === id) || null;
+const reminderDue = (id) => { const r = findReminder(id); return !!(r && r.enabled !== false && reminders.marketOpen(r.symbol)); };
+
+function openReminders() {
+  if (remindersWin && !remindersWin.isDestroyed()) { remindersWin.focus(); return; }
+  const c = colors();
+  remindersWin = new BrowserWindow({
+    width: 620, height: 680, minWidth: 480, minHeight: 420, show: false, parent: lastFocused?.win, title: "Trading reminders", icon: ICON, backgroundColor: c.page,
+    titleBarStyle: "hidden", titleBarOverlay: { color: c.page, symbolColor: c.text, height: TITLE_H },
+    webPreferences: { preload: path.join(__dirname, "preload-ui.js"), contextIsolation: true, sandbox: true },
+  });
+  remindersWin.loadFile(UI("reminders.html"));
+  remindersWin.once("ready-to-show", () => remindersWin.show());
+  remindersWin.webContents.on("before-input-event", (e, input) => { if (input.type === "keyDown" && input.key === "Escape") { e.preventDefault(); remindersWin.close(); } });
+  remindersWin.on("closed", () => { remindersWin = null; });
+}
+
+// what the window may save: each reminder's own fields, checked
+function cleanReminder(r) {
+  const id = String(r?.id || "").replace(/[^a-z0-9]/gi, "").slice(0, 20);
+  const time = /^\d{2}:\d{2}$/.test(r?.time) ? r.time : null;
+  const days = Array.isArray(r?.days) ? [...new Set(r.days.map(Number).filter(d => d >= 0 && d <= 6))] : [];
+  const symbol = String(r?.symbol || "").toUpperCase().replace(/[^A-Z0-9/._-]/g, "").slice(0, 20);
+  if (!id || !time || !days.length || !symbol) return null;
+  return { id, name: String(r.name || "").slice(0, 60), symbol, interval: String(r.interval || "15min").replace(/[^a-z0-9]/gi, "").slice(0, 10),
+    intervalLabel: String(r.intervalLabel || "").slice(0, 6), time, days, enabled: r.enabled !== false };
+}
+ipcMain.handle("reminders:get", () => ({ reminders: settings.reminders || [], colors: colors(), dark: isDark() }));
+ipcMain.handle("reminders:save", async (_e, next) => {
+  const previous = (settings.reminders || []).map(r => r.id);
+  const list = (Array.isArray(next) ? next : []).map(cleanReminder).filter(Boolean).slice(0, 30);
+  await reminders.syncTasks(list, previous, !!LOCAL);
+  settings.reminders = list;
+  saveSettings(true);
+  return { reminders: list };
+});
+ipcMain.on("reminders:test", (_e, id) => fireReminder(id, { test: true }));
+
+// ringing: the chart opens at once (a tab, the window to the front), the alarm until it's answered
+let ringing = null;
+const lastRung = new Map();
+let snoozeTimer = null;
+function fireReminder(id, { test = false, snoozed = false } = {}) {
+  const r = findReminder(id);
+  if (!r) return;
+  if (!test && !reminders.marketOpen(r.symbol)) return;
+  const minute = new Date().toISOString().slice(0, 16);
+  if (!test && !snoozed && lastRung.get(id) === minute) return;
+  lastRung.set(id, minute);
+  if (!snoozed) openReminderChart(r);
+  ringing = r;
+  reminders.ring(r, { ...colors(), dark: isDark() });
+}
+function openReminderChart(r) {
+  let w = lastFocused && windows.has(lastFocused) ? lastFocused : [...windows][0];
+  if (!w) w = new AppWindow({ tabs: [] });
+  const tab = w.addTab(`${SITE}/chart?symbol=${encodeURIComponent(r.symbol)}`);
+  // (its timeframe, once the chart's there)
+  tab.view.webContents.once("did-finish-load", () => setTimeout(() => {
+    tab.view.webContents.executeJavaScript(`window.dispatchEvent(new CustomEvent("tv:set-interval",{detail:{interval:${JSON.stringify(r.interval)}}}))`).catch(() => {});
+  }, 2500));
+  if (w.win.isMinimized()) w.win.restore();
+  w.win.show();
+  w.win.focus();
+}
+ipcMain.on("alarm:answer", (_e, action) => {
+  reminders.closeAlarm();
+  const r = ringing;
+  ringing = null;
+  clearTimeout(snoozeTimer);
+  if (!r) return;
+  if (action === "snooze") snoozeTimer = setTimeout(() => fireReminder(r.id, { snoozed: true }), 5 * 60 * 1000);
+  if (action === "open") {
+    const w = lastFocused && windows.has(lastFocused) ? lastFocused : [...windows][0];
+    if (w) { if (w.win.isMinimized()) w.win.restore(); w.win.show(); w.win.focus(); }
+  }
+});
+
+// while the app runs: its own clock (the tasks start it when it's closed)
+function startReminderClock() {
+  setInterval(() => {
+    const now = new Date();
+    const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    for (const r of settings.reminders || []) {
+      if (r.enabled !== false && r.time === hhmm && r.days.includes(now.getDay())) fireReminder(r.id);
+    }
+  }, 15000);
 }
 
 app.on("before-quit", () => { rememberSession(); quitting = true; saveSettings(true); if (LOCAL) require("./local-servers").stopLocal(); });
