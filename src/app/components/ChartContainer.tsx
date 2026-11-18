@@ -57,7 +57,8 @@ import { saveBacktest } from "@/app/analytics/data";
 import { statusLine, type StatusLineSettings } from "../lib/statusLine";
 import { loadFavoriteIndicators, saveFavoriteIndicators } from "@/app/utils/favoriteIndicators";
 import { rememberExchangeTimezone, toChartTime, exchangeTimezoneOf } from "@/app/utils/exchangeTime";
-import { createSeriesMarkers } from "lightweight-charts";
+import { createSeriesMarkers, MismatchDirection } from "lightweight-charts";
+import { futureTimes } from "../lib/futureTimes";
 import { PineChartView } from "./pine/PineChartView";
 import { usePineIndicators, isPineIndicator } from "./pine/usePineIndicators";
 import { precomputeAllTimeframes, getAggCachedData, setAggCachedData, AGGREGATABLE_INTERVALS } from "@/app/utils/aggregateCandles";
@@ -2856,6 +2857,64 @@ export default function ChartContainer({
     return () => window.removeEventListener('keydown', onKey, true);
   }, [mode]);
 
+  // Bars the live feed missed (its connection dropped, the computer slept, the tab was asleep) are
+  // fetched and put back: before, a gap stayed in the chart until a reload ("the chart drops bits")
+  // — and on TwelveData's symbols the candles stopped moving altogether after one. The latest bars
+  // from the server, the ones the chart lacks merged in; the view and the drawings stay where they were.
+  const backfillRef = useRef({ busy: false, at: 0 });
+  const backfillGap = async (why: string) => {
+    const st = backfillRef.current;
+    if (st.busy || Date.now() - st.at < 15000) return;   // (at most every 15 s)
+    st.busy = true; st.at = Date.now();
+    const sym = symbolRef.current, iv = intervalRef.current;
+    try {
+      const got = await fetchStockData(sym, iv);
+      if (sym !== symbolRef.current || iv !== intervalRef.current || modeRef.current !== 'idle' || (window as any).__replayActive) return;
+      const raw = rawBars();
+      const cs = candleSeriesRef.current, ch = chartRef.current;
+      if (!raw.length || !got?.length || !cs || !ch) return;
+      const have = new Set(raw.map((b: any) => b.time));
+      const add = got.filter((b: any) => b.time > raw[0].time && !have.has(b.time) && !weekendBar(sym, b.time));
+      if (!add.length) return;
+      const oldShown = fullDataRef.current.slice();
+      const range = ch.timeScale().getVisibleLogicalRange();
+      // (the view keeps its bars: shifted by those added before its left edge, or by all of them at the live edge)
+      const atEdge = !!range && range.to >= oldShown.length - 2;
+      const leftTime = range ? oldShown[Math.max(0, Math.min(oldShown.length - 1, Math.floor(range.from)))]?.time : undefined;
+      const shift = atEdge ? add.length : leftTime === undefined ? 0 : add.filter((b: any) => b.time < leftTime).length;
+      fullDataRef.current = [...raw, ...add].sort((a: any, b: any) => a.time - b.time);
+      (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${sym}|${iv}`;
+      cs.setData(fullDataRef.current);
+      if (volumeSeriesRef.current) volumeSeriesRef.current.setData(volumeHistogram(fullDataRef.current, volumeConfigRef.current.upColor, volumeConfigRef.current.downColor));
+      updateEmaData(fullDataRef.current);
+      if (range && shift) ch.timeScale().setVisibleLogicalRange({ from: range.from + shift, to: range.to + shift });
+      const shown = fullDataRef.current;
+      setDrawings(prev => remapDrawingPoints(prev, shown, 'DrawingRemap-LiveGap', oldShown));
+      console.info('[LiveGap] filled', add.length, 'missing bars', { symbol: sym, interval: iv, why });
+    } catch { /* tried again on the next gap */ } finally { st.busy = false; }
+  };
+  const backfillGapRef = useRef(backfillGap);
+  backfillGapRef.current = backfillGap;
+
+  // Back to the chart after a while away (the tab hidden, the computer asleep, the network back): if
+  // bars should have come since the last one, fetch them
+  useEffect(() => {
+    const check = () => {
+      if (document.visibilityState !== 'visible' || modeRef.current !== 'idle' || (window as any).__replayActive) return;
+      const raw = rawBars();
+      if (!raw.length) return;
+      const step = getIntervalMs(intervalRef.current) / 1000;
+      if (!(step > 0) || step >= 86400) return;
+      const next = futureTimes(symbolRef.current, intervalRef.current, raw[raw.length - 1].time, step, 1)[0];
+      // (a bar after the next one should have opened by now)
+      if (next !== undefined && next + step < Date.now() / 1000) void backfillGapRef.current('back on the page');
+    };
+    document.addEventListener('visibilitychange', check);
+    window.addEventListener('online', check);
+    return () => { document.removeEventListener('visibilitychange', check); window.removeEventListener('online', check); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Live prices from the paper-trading quote feed move the last candle (or open the next one)
   useEffect(() => {
     const onLive = (e: Event) => {
@@ -2884,6 +2943,9 @@ export default function ChartContainer({
         bar = { ...last, high: Math.max(last.high, hi), low: Math.min(last.low, lo), close: d.price, volume: vol(last) };
         bars[bars.length - 1] = bar;
       } else if (start !== null && start > last.time) {
+        // (bars missing between the last one and this: the feed was away — fetched and put back)
+        const expected = futureTimes(d.symbol, intervalRef.current, last.time, step, 1)[0];
+        if (expected !== undefined && start > expected) void backfillGapRef.current('vantage gap');
         const open = typeof d.open === 'number' ? d.open : d.price;
         bar = { time: start, open, high: Math.max(open, hi), low: Math.min(open, lo), close: d.price, volume: d.ticks };
         bars.push(bar);
@@ -2892,7 +2954,11 @@ export default function ChartContainer({
         bar = { time: end, open: last.close, high: Math.max(last.close, d.price), low: Math.min(last.close, d.price), close: d.price };
         bars.push(bar);
         opened = true;
-      } else return;
+      } else {
+        // (more than a bar since the last one: the missing bars from the server, then the ticks go on)
+        if (start === null && step < 86400 && t >= end + step) void backfillGapRef.current('ticks after a gap');
+        return;
+      }
       if (brickTypeRef.current) {
         fullDataRef.current = bars.slice();
         (window as any).__chartFullData = fullDataRef.current; (window as any).__chartDataKey = `${symbolRef.current}|${intervalRef.current}`;
@@ -3418,6 +3484,26 @@ export default function ChartContainer({
     setSeries(candleSeries);
     candleSeriesRef.current = candleSeries;
     (window as any).__chartInstance = newChart;
+
+    // The time axis goes on past the last candle, as TradingView's does: an invisible series of
+    // empty bars (times only) after it, on the market's hours (lib/futureTimes), so the axis shows the
+    // times and dates ahead and the crosshair a time there. The chart's own last bar, right margin and
+    // "scroll to the latest" stay the candles' (empty bars don't count as data). Redone only when the
+    // last candle's time changes (a new bar, another timeframe, a replay's step), not on every tick.
+    const futureAxis = newChart.addSeries(LineSeries, { visible: false, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false });
+    let futureFrom = NaN, futureKey = '';
+    const extendAxis = () => {
+      try {
+        const last = candleSeries.dataByIndex(Number.MAX_SAFE_INTEGER, MismatchDirection.NearestLeft) as any;
+        const key = `${symbolRef.current}|${intervalRef.current}`;
+        if (!last || typeof last.time !== 'number') { if (!Number.isNaN(futureFrom)) futureAxis.setData([]); futureFrom = NaN; return; }
+        if (last.time === futureFrom && key === futureKey) return;
+        futureFrom = last.time; futureKey = key;
+        const sec = Math.floor(getIntervalMs(intervalRef.current) / 1000);
+        futureAxis.setData(futureTimes(symbolRef.current, intervalRef.current, last.time, sec, 1000).map(time => ({ time: time as any })));
+      } catch { /* the chart is going */ }
+    };
+    candleSeries.subscribeDataChanged(extendAxis);
     (window as any).__chartSeries = candleSeries;
 
     // Loads a window of history (end date, optionally a start date) into the chart and every

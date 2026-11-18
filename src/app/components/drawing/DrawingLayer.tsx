@@ -81,6 +81,42 @@ const TEXT_SPOT_TYPES = [...TEXT_LINE_TYPES, 'rectangle', 'circle', 'ellipse'];
 // TradingView's cursor over a part of a drawing: a handle shows its own resize arrows if it
 // has them (`cursor` attr) or else the plain arrow; the label spot of a selected shape the
 // I-beam; anything else on the shape (line, border, fill) the pointing hand.
+// The drawing a node belongs to (its nearest ancestor with an id, not the preview)
+function drawingIdOf(node: any): string | null {
+  let cur = node;
+  while (cur) {
+    const id = cur.attrs?.id;
+    if (id && id !== 'preview') return id;
+    if (id === 'preview') return null;
+    cur = cur.parent;
+  }
+  return null;
+}
+
+// The drawing under a point, as TradingView picks it: a filled background (a Long / Short's zones,
+// marked tvFill) gives way to any other drawing's lines, text or handles at the same spot, so a
+// rectangle drawn inside a position can still be picked and dragged out of it. `under`: the pick
+// went through another drawing's fill (that drawing is then raised so its own drags work)
+function pickAt(stage: any, point: { x: number; y: number }): { shape: any; id: string | null; under: boolean } | null {
+  const shape = stage.getIntersection(point);
+  if (!shape) return null;
+  const id = drawingIdOf(shape);
+  if (!shape.getAttr('tvFill')) return { shape, id, under: false };
+  const groups: any[] = stage.find((n: any) => n.getAttr('id') && n.getAttr('id') !== 'preview' && n.getAttr('id') !== id && n.isListening() && n.isVisible());
+  for (let i = groups.length - 1; i >= 0; i--) {
+    const g = groups[i];
+    const r = g.getClientRect();
+    if (point.x < r.x - 6 || point.x > r.x + r.width + 6 || point.y < r.y - 6 || point.y > r.y + r.height + 6) continue;
+    const shapes: any[] = typeof g.find === 'function' ? g.find((n: any) => n.getClassName?.() !== 'Group' && n.getClassName?.() !== 'Layer') : [g];
+    for (let j = shapes.length - 1; j >= 0; j--) {
+      const sh = shapes[j];
+      if (!sh.isListening() || sh.getAttr('tvFill') || typeof sh.intersects !== 'function') continue;
+      if (sh.intersects(point)) return { shape: sh, id: drawingIdOf(sh), under: true };
+    }
+  }
+  return { shape, id, under: false };
+}
+
 function shapePartCursor(node: any, drawing: { id: string; type: string } | undefined, selected: boolean): string {
   for (let n = node; n && n.getType?.() !== 'Stage'; n = n.getParent?.()) {
     const c = n.getAttr?.('cursor');
@@ -298,6 +334,9 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
   // using the coordinates the chart's crosshair handler hands us, entirely
   // independent of the wrapper's CSS pointer-events state.
   const [hoveredShapeId, setHoveredShapeId] = useState<string | null>(null);
+  // A drawing picked through another one's filled area (pickAt): drawn on top while it's hovered or
+  // selected, so its handles and body take the drag rather than the position over it
+  const [raisedId, setRaisedId] = useState<string | null>(null);
   // The cursor for the part of a drawing under the mouse, and the one held during a drag
   // (a handle's own cursor, or the closed hand when a whole shape is moved)
   const [hoverCursor, setHoverCursor] = useState<string | null>(null);
@@ -467,20 +506,12 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
       // Clean up ephemeral measure tools on any chart click
       setDrawings(prev => prev.filter(d => d.type !== 'measure'));
 
-      // getIntersection uses Konva's internal hit canvas
-      const shape = stageRef.current.getIntersection(param.point);
+      // getIntersection uses Konva's internal hit canvas (a position's fill gives way: pickAt)
+      const picked = pickAt(stageRef.current, param.point);
+      const shape = picked?.shape;
       if (shape) {
-        // Find the topmost group/shape with an ID
-        let current = shape;
-        let foundId = null;
-        while (current) {
-          if (current.attrs && current.attrs.id) {
-            foundId = current.attrs.id;
-            // Ignore preview shapes
-            if (foundId !== 'preview') break;
-          }
-          current = current.parent;
-        }
+        const foundId = picked!.id;
+        setRaisedId(picked!.under ? foundId : null);
         
         if (foundId && foundId !== 'preview') {
           console.log('[DrawingLayer] Shape found via hit-test:', foundId);
@@ -510,6 +541,7 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
         }
       }
       console.log('[DrawingLayer] No shape found at click pos, clearing selection');
+      setRaisedId(null);
       setSelectedShapeId(null);
       clearSelection();
     };
@@ -549,18 +581,11 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
         return;
       }
 
-      const shape = stageRef.current.getIntersection(point);
+      const picked = pickAt(stageRef.current, point);
+      const shape = picked?.shape;
       if (shape) {
-        let current = shape;
-        let foundId: string | null = null;
-        while (current) {
-          if (current.attrs && current.attrs.id) {
-            foundId = current.attrs.id;
-            if (foundId !== 'preview') break;
-          }
-          current = current.parent;
-        }
-        const id = foundId && foundId !== 'preview' ? foundId : null;
+        const id = picked!.id;
+        if (picked!.under && id) setRaisedId(id);
         setHoveredShapeId(id);
         setHoverCursor(id ? shapePartCursor(shape, drawingsRef.current.find(d => d.id === id), selectedIdRef.current === id) : null);
         return;
@@ -586,18 +611,10 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
       const point = { x: e.clientX - stageBox.left, y: e.clientY - stageBox.top };
       if (point.x < 0 || point.y < 0 || point.x > stageBox.width || point.y > stageBox.height) return;
 
-      const shape = stageRef.current.getIntersection(point);
-      if (!shape) return;
-      let current: any = shape;
-      let foundId: string | null = null;
-      while (current) {
-        if (current.attrs && current.attrs.id) {
-          foundId = current.attrs.id;
-          if (foundId !== 'preview') break;
-        }
-        current = current.parent;
-      }
-      if (foundId && foundId !== 'preview') {
+      const picked = pickAt(stageRef.current, point);
+      if (!picked) return;
+      const foundId = picked.id;
+      if (foundId) {
         // Stop the browser's middle-click autoscroll cursor and any focus/paste
         // side effects now that the click actually did something on the page.
         e.preventDefault();
@@ -2350,7 +2367,12 @@ export default function DrawingLayer({ chart, series, width, height, theme = 'li
             )
           )}
 
-          {drawings.filter(d => d.visible).map(d => {
+          {(() => {
+            const vis = drawings.filter(d => d.visible);
+            // (one picked through another's fill is drawn last, on top, while hovered or selected)
+            const up = raisedId && (raisedId === hoveredShapeId || raisedId === selectedShapeId) ? vis.find(d => d.id === raisedId) : null;
+            return up ? [...vis.filter(d => d !== up), up] : vis;
+          })().map(d => {
             let shown = remotePreviews.has(d.id) ? { ...d, ...remotePreviews.get(d.id) } : d;
             if (editingTextId === d.id && draftText !== null) {
               const cell = editingTextKey ? editingTextKey.split(',').map(Number) : null;

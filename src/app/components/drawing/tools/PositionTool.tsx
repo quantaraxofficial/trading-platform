@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { withAlpha } from '@/app/lib/chartBackgroundImage';
 import { Group, Rect, Text, Line, Circle } from 'react-konva';
 import { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { logicalToPixel, priceToPixel, pixelToLogical, pixelToPrice } from '../core/coordinates';
@@ -273,8 +274,11 @@ export function PositionTool({
   const labelHeight = fontSize + 12;
   const infoWidth = Math.max(infoLine1.length * charWidth + 20, infoLine2.length * charWidth + 20, 170);
   const infoHeight = 32;
-  const targetBadgeColor = '#089981';
-  const stopBadgeColor = '#f23645';
+  // The labels in the zones' own colours, solid (the defaults are TradingView's #089981 / #f23645;
+  // a position recoloured blue and grey has blue and grey labels, as on TradingView)
+  const solid = (c: string) => withAlpha(c, 1).replace(/,\s*[\d.]+\)$/, ', 1)');
+  const targetBadgeColor = solid(targetFillColor);
+  const stopBadgeColor = solid(stopFillColor);
 
   // Outer edges of the two zones (where their labels sit) and the info box, on the target side
   const targetOuter = isLong ? Math.min(targetY, entryY) : Math.max(targetY, entryY);
@@ -318,8 +322,9 @@ export function PositionTool({
   return (
     <Group id={id} draggable={isSelected || isHovering} onDragStart={handleDragStart} onDragMove={handleDragMove} onDragEnd={handleDragEnd} onClick={onSelect} onTap={onSelect}>
       {/* The two zones, in full */}
-      <Rect x={leftX} y={Math.min(targetY, entryY)} width={rectWidth} height={Math.abs(targetY - entryY)} fill={targetFillColor} />
-      <Rect x={leftX} y={Math.min(stopY, entryY)} width={rectWidth} height={Math.abs(stopY - entryY)} fill={stopFillColor} />
+      {/* (tvFill: a background, so drawings inside the zones can still be picked: DrawingLayer's pickAt) */}
+      <Rect x={leftX} y={Math.min(targetY, entryY)} width={rectWidth} height={Math.abs(targetY - entryY)} fill={targetFillColor} tvFill />
+      <Rect x={leftX} y={Math.min(stopY, entryY)} width={rectWidth} height={Math.abs(stopY - entryY)} fill={stopFillColor} tvFill />
 
       {played}
 

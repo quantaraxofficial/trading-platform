@@ -30,6 +30,11 @@ added with TradingView's icons, order and shortcuts.
   - Measure with Shift: Shift + drag measures until release; Shift + a single click starts a
     measure that follows the mouse and ends on the next click (Escape cancels)
 
+  - A Long / Short Position's labels (target, stop, PnL) are in its own colours: recoloured blue and
+    grey, its labels are blue and grey
+  - A drawing inside another's filled area (a rectangle inside a Long / Short) can be picked and
+    dragged out: fills give way to other drawings' lines, text and handles, as on TradingView
+
 Lines
   - Ray, extended line, info line (price change, %, pips/ticks, bars, time span, angle),
     trend angle (arc with the angle in degrees)
@@ -214,6 +219,8 @@ Small screens and browsers
   - Fixed React crashes when a drawing leaves the loaded bars and comes back
   - "Save this replay" is kept in the account (not just the browser)
   - Switching timeframe in a replay keeps the candle size and the replay bar's place
+  - The time axis goes on past the last candle (in replay too), with its times and dates, on the
+    market's hours: count ahead and mark a range forward; the crosshair shows a time there
   - Switching timeframe in a replay never shows the future: the replay keeps the exact moment it
     reached (a bar ends where the next starts: 45-minute bars restart every 4 hours, which showed up
     to 30 minutes ahead). To a longer timeframe, the bar the replay is part-way through shows as
@@ -227,6 +234,8 @@ Small screens and browsers
 ======================================================================
 4. TRADING: PAPER TRADING AND METATRADER 5
 ======================================================================
+  - Bars the live feed missed (connection dropped, computer asleep, tab away) are fetched back from
+    the server and put in: no gaps in the chart until a reload, and the candles keep moving
 Paper trading
   - Buy / Sell project the order on the chart with draggable TP / SL
   - Trades made right after the page opens are never lost
