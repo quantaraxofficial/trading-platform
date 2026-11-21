@@ -8,6 +8,8 @@ call, and keeps working when the AI is down or out of its free tier.
 """
 import re
 
+from .community_scripts import match_community_script
+
 # ---- what's said, tidied: lower case, no punctuation, misheard trading words put right, politeness off
 _MISHEARD = [
     (r"\bfair value caps?\b", "fair value gap"), (r"\b(fbg|fvd|ffg|fbgs|fvds|ffgs)\b", "fvg"),
@@ -214,9 +216,14 @@ def _one(t):
     m = re.match(r"^(?:add|put|apply|insert|load|plot)(?: the| an| a)? (.+?)(?: indicator)?(?: to| on)?(?: the| my| this)?(?: chart)?$", t)
     if m and m.group(1) in _IND_PHRASES:
         return {"type": "indicator", "name": _IND_PHRASES[m.group(1)]}
+    # (an Editors' pick, every word said in its name: "add chess", "add the stop loss clustering")
+    if m and match_community_script(m.group(1), strict=True):
+        return {"type": "indicator", "name": match_community_script(m.group(1), strict=True)}
     m = re.match(r"^(?:remove|delete|hide|take off|turn off|get rid of)(?: the)? (.+?)(?: indicator)?(?: from(?: the| my)? chart)?$", t)
     if m and m.group(1) in _IND_PHRASES:
         return {"type": "indicator", "name": _IND_PHRASES[m.group(1)], "remove": True}
+    if m and match_community_script(m.group(1), strict=True):
+        return {"type": "indicator", "name": match_community_script(m.group(1), strict=True), "remove": True}
     # chart type: "switch to heikin ashi", "line chart"
     m = re.match(r"^(?:(?:switch|change|go)(?: the chart)?(?: to)?|use|show)?\s*(?:a |the )?(.+?)( chart| candles)?$", t)
     if m and m.group(1) in _CHART_TYPES and (m.group(2) or m.group(1) in _CHART_TYPES_ALONE or re.match(r"^(?:switch|change|go|use)", t)):

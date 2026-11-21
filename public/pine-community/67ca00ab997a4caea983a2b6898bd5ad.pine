@@ -1,0 +1,704 @@
+//@version=6
+// This Pine Script(TM) code is subject to the terms of the Mozilla Public License 2.0
+// (c) EdgeTools
+// Version 1.0, September 2026
+
+indicator("Vol-Control Fund Positioning", shorttitle="VCPOS", overlay=false, max_lines_count=500, max_labels_count=50, max_bars_back=5000)
+
+// How it works
+//
+// Volatility-control funds and risk-control indices scale their equity exposure
+// by target volatility / realised volatility, capped at a maximum leverage. Their
+// positioning is therefore a deterministic function of past returns and can be
+// reconstructed from the price of the underlying alone. Banks publish their own
+// estimates of this positioning to clients; their specifications and asset
+// figures are not public, so this script rebuilds the mechanism from published
+// index rules and does not attempt to match anyone's numbers.
+//
+// Four archetypes are blended with equal weights by default. The true split of
+// assets between designs is not observable, so the weights cannot be
+// calibrated; they matter little for the percentile and more for daily changes.
+// Presets replace the blend with a single documented rule where one exists
+// (S&P risk control decay factors 0.94/0.97 and 0.8705/0.99725, per the JPMorgan
+// 424B2 prospectus on S&P Risk Control Index notes, SEC, 2026), or with a
+// generic design; Custom exposes all archetype settings.
+//   A  S&P Risk Control style: realised vol = max of two exponentially weighted
+//      volatilities, decay 0.94 (short) and 0.97 (long), variance recursion
+//      Var_t = lambda * Var_t-1 + (1 - lambda) * ln(P_t / P_t-1)^2, annualised
+//      with 252 days (S&P Dow Jones Indices, Index Mathematics Methodology,
+//      risk control section, accessed 27 September 2026).
+//   B  One-month equal-weight realised vol (root mean square of log returns).
+//   C  Three-month equal-weight realised vol.
+//   D  Equity/Treasury portfolio (default 60/40 with IEF) scaled to target vol
+//      on the EWMA variance of the portfolio return, so the stock-bond
+//      correlation enters; its equity exposure is the equity weight times the
+//      scale. Excluded from the blend where bond data are missing.
+// Exposure_k = min(max leverage, target vol / realised vol_k), applied with an
+// implementation lag (S&P uses two days between observation and rebalancing).
+//
+// Outputs: blended exposure, its percentile over a rolling window, the change
+// already scheduled for the next session (known because of the lag), the size
+// of the next-session move beyond which target exposure falls, and the change
+// in target exposure for hypothetical moves of 1, 2 and 3 per cent (bond return
+// assumed zero in these scenarios). Because realised vol is built from squared
+// returns, large up moves also lower exposure.
+//
+// Validation (EdgeTools/research/43_vol_control_positioning, SPY 1993 to 2026):
+// the percentile does not depend on the target vol except through the leverage
+// cap, so a single target is used. With the default four-archetype blend,
+// exposure fell by 25 to 61 per cent within 20 sessions in 9 of 10
+// pre-specified shock episodes. The top decile of the percentile was followed
+// by an average 21 session cut of 6.0 to 7.6 pp; the lower zones did not differ
+// from each other, so zones are descriptive labels.
+//
+// References:
+//   Harvey, C.R., Hoyle, E., Korgaonkar, R., Rattray, S., Sargaison, M. and
+//   Van Hemert, O. (2018) 'The Impact of Volatility Targeting', Journal of
+//   Portfolio Management, 45(1).
+//   Moreira, A. and Muir, T. (2017) 'Volatility-Managed Portfolios', Journal of
+//   Finance, 72(4).
+//
+// This is a positioning estimate for education and analysis, not a trading
+// signal, and no timing rule built on it has been backtested. The assets run by
+// vol-control strategies are not observable, so the optional dollar flow is only
+// as good as the figure entered for it.
+
+// Model inputs
+use_chart_symbol = input.bool(true, "Use Chart Symbol", group="Model",
+    tooltip="Off: model runs on the symbol below regardless of the chart.")
+custom_symbol = input.symbol("SP:SPX", "Underlying", group="Model",
+    tooltip="Used only when the chart symbol is switched off. The model is meant for broad equity indices.")
+fund_preset = input.string("Blend of Four Designs", "Fund Type Preset",
+    options=["Blend of Four Designs", "S&P Risk Control Index", "Risk Control, Fast Decay", "Risk Control, Simple Weighted", "Balanced 60/40 Vol Control", "Custom"],
+    group="Model",
+    tooltip="Blend: the four designs below with equal weights, the validated default. S&P Risk Control Index: max of EWMA vols with decay 0.94 and 0.97, the rule of the S&P 500 Daily Risk Control indices, which S&P describes as used by defined benefit plans and variable annuity insurers. Fast Decay: decay 0.8705 and 0.99725, documented for one S&P Global 100 risk control index with a 5% target; on SPY its top zone did not separate. Simple Weighted: max of 21 and 63 day equal-weight vols; S&P allows simple weighting but does not publish the windows, so 21 and 63 are assumptions. Balanced 60/40: equity and Treasury portfolio scaled to target vol, a generic design, not a documented product. Custom: settings in the Archetypes group.")
+bond_symbol = input.symbol("NASDAQ:IEF", "Bond Leg (Blend, 60/40, Custom)", group="Model",
+    tooltip="Treasury ETF used as the bond leg of design D. Continuous futures contain roll gaps that distort volatility. For non-US indices, prefer a preset without design D.")
+target_vol_pct = input.float(10.0, "Target Volatility (%)", minval=2.0, maxval=30.0, step=0.5, group="Model",
+    tooltip="Scales the exposure level and scenario sizes. The percentile changes only where the leverage cap binds.")
+max_leverage_pct = input.float(150.0, "Maximum Leverage (%)", minval=50.0, maxval=300.0, step=5.0, group="Model",
+    tooltip="150% is the maximum leverage used in S&P's own risk control index illustrations.")
+impl_lag = input.int(2, "Implementation Lag (days)", minval=0, maxval=5, group="Model",
+    tooltip="Days between the volatility observation and the rebalance. S&P risk control indices use two.")
+pct_lookback = input.int(1260, "Percentile Lookback (days)", minval=252, maxval=2520, group="Model",
+    tooltip="1260 trading days, roughly five years.")
+aum_bn = input.float(0.0, "Assumed AUM (USD bn, 0 = off)", minval=0.0, step=10.0, group="Model",
+    tooltip="Vol-control AUM is not publicly observable. Leave at zero to show flows as percentage points of exposure only.")
+in_weight_a = input.float(1.0, "A: EWMA Weight", minval=0.0, step=0.25, group="Archetypes (Custom preset only)",
+    tooltip="Relative weights of the four designs. Zero switches a design off. The settings in this group apply only when the preset is Custom.")
+in_lambda_s = input.float(0.94, "A: Short Decay Factor", minval=0.80, maxval=0.995, step=0.005, group="Archetypes (Custom preset only)",
+    tooltip="0.94 and 0.97 follow the S&P risk control rules; the higher of the two volatilities is used.")
+in_lambda_l = input.float(0.97, "A: Long Decay Factor", minval=0.80, maxval=0.999, step=0.005, group="Archetypes (Custom preset only)")
+in_weight_b = input.float(1.0, "B: Short Window Weight", minval=0.0, step=0.25, group="Archetypes (Custom preset only)")
+in_window_b = input.int(21, "B: Window (days)", minval=5, maxval=126, group="Archetypes (Custom preset only)")
+in_weight_c = input.float(1.0, "C: Long Window Weight", minval=0.0, step=0.25, group="Archetypes (Custom preset only)")
+in_window_c = input.int(63, "C: Window (days)", minval=10, maxval=252, group="Archetypes (Custom preset only)")
+in_weight_d = input.float(1.0, "D: Multi-Asset Weight", minval=0.0, step=0.25, group="Archetypes (Custom preset only)")
+in_equity_share_pct = input.float(60.0, "D: Equity Share (%)", minval=10.0, maxval=100.0, step=5.0, group="Archetypes (Custom preset only)")
+// Display
+display_mode = input.string("Percentile", "Main Line", options=["Percentile", "Exposure %"], group="Display",
+    tooltip="Percentile: rank of today's exposure within the lookback. Exposure %: estimated equity exposure in per cent of capital.")
+show_signal_zones = input.bool(true, "Show Zone Thresholds", group="Display")
+very_high_threshold = input.float(90.0, "Very High From (percentile)", minval=50.0, maxval=99.0, group="Display",
+    tooltip="Descriptive labels. On SPY only the top decile was followed by a measurably larger exposure cut; the lower cut-offs did not separate.")
+high_threshold = input.float(70.0, "High From (percentile)", minval=50.0, maxval=99.0, group="Display")
+low_threshold = input.float(30.0, "Low Below (percentile)", minval=1.0, maxval=50.0, group="Display")
+very_low_threshold = input.float(10.0, "Very Low Below (percentile)", minval=1.0, maxval=50.0, group="Display")
+show_area_fill = input.bool(true, "Show Gradient Area", group="Display",
+    tooltip="Shades the area between the main line and the midpoint, towards the bearish colour above and the bullish colour below.")
+show_markers = input.bool(true, "Show Zone Entry Dots", group="Display",
+    tooltip="Dots where the reading enters the very high or very low zone.")
+show_last_label = input.bool(true, "Show Last Value Label", group="Display")
+background_mode = input.string("Extremes", "Background Mode", options=["Off", "Extremes", "All Zones"], group="Display",
+    tooltip="Extremes: only the very high and very low zones are tinted. All Zones: high and low as well, at half the strength.")
+background_intensity = input.int(92, "Background Transparency (%)", minval=75, maxval=98, step=1, group="Display")
+show_scenarios = input.bool(true, "Show Move Scenarios in Dashboard", group="Display")
+
+show_candle_coloring = input.bool(true, "Color Candles by Indicator", group="Candle Coloring")
+candle_base_transparency = input.int(20, "Candle Base Transparency", minval=0, maxval=60, step=5, group="Candle Coloring")
+
+show_dashboard = input.bool(true, "Show Analytics Dashboard", group="Dashboard")
+dashboard_position = input.string("Top Right", "Dashboard Position",
+    options=["Top Right", "Top Left", "Bottom Right", "Bottom Left", "Top Center", "Bottom Center"],
+    group="Dashboard")
+dashboard_size = input.string("Normal", "Dashboard Size",
+    options=["Tiny", "Small", "Normal", "Large"], group="Dashboard")
+dashboard_mode = input.string("Professional", "Dashboard Mode", options=["Professional", "Simple"], group="Dashboard",
+    tooltip="Simple: zone, exposure, history rank, tomorrow's scheduled change and the move size that lowers exposure. Professional: all model details and move scenarios.")
+
+show_watermark = input.bool(true, "Show Watermark", group="Watermark")
+watermark_position = input.string("Bottom Right", "Watermark Position",
+    options=["Top Right", "Top Left", "Bottom Right", "Bottom Left", "Top Center", "Bottom Center"],
+    group="Watermark")
+watermark_size = input.string("Large", "Watermark Size",
+    options=["Small", "Normal", "Large", "Huge"], group="Watermark")
+
+// Appearance
+color_scheme = input.string("EdgeTools", "Color Theme",
+    options=["Gold", "EdgeTools", "Behavioral", "Quant", "Ocean", "Fire", "Matrix", "Arctic"],
+    group="Appearance")
+use_dark_mode = input.bool(true, "Optimize for Dark Theme", group="Appearance")
+main_line_width = input.int(2, "Main Line Width", minval=1, maxval=5, group="Appearance")
+enable_glow = input.bool(true, "Enable Glow Effect", group="Appearance")
+color_mode = input.string("Gradient", "Line Coloring", options=["Gradient", "Zones"], group="Appearance",
+    tooltip="Gradient blends the theme colours continuously and therefore shows intermediate shades between them. Zones uses the theme colours only, in five steps.")
+
+// Alerts
+enable_alerts = input.bool(true, "Enable Alerts", group="Alert System",
+    tooltip="Off suppresses all alert conditions of this script, even if an alert has been created.")
+delever_alert_pp = input.float(10.0, "Deleveraging Alert (pp per day)", minval=1.0, maxval=50.0, step=0.5, group="Alert System")
+
+// Colour themes
+var color primary_color = #2196F3
+var color bullish_color = #4CAF50
+var color bearish_color = #FF5252
+var color neutral_color = #808080
+var color text_color = color.white
+var color bg_color = #000000
+var color table_bg_color = #1E1E1E
+var color header_bg_color = #2D2D2D
+
+switch color_scheme
+    "Gold" =>
+        primary_color := use_dark_mode ? #FFD700 : #DAA520
+        bullish_color := use_dark_mode ? #FFA500 : #FF8C00
+        bearish_color := use_dark_mode ? #FF5252 : #D32F2F
+        neutral_color := use_dark_mode ? #C0C0C0 : #808080
+        text_color := use_dark_mode ? color.white : color.black
+        bg_color := use_dark_mode ? #000000 : #FFFFFF
+        table_bg_color := use_dark_mode ? #1A1A00 : #FFFEF0
+        header_bg_color := use_dark_mode ? #2D2600 : #F5F5DC
+
+    "EdgeTools" =>
+        primary_color := use_dark_mode ? #3b82f6 : #2563eb
+        bullish_color := use_dark_mode ? #22c55e : #16a34a
+        bearish_color := use_dark_mode ? #ef4444 : #dc2626
+        neutral_color := use_dark_mode ? #737373 : #525252
+        text_color := use_dark_mode ? #fafafa : #0a0a0a
+        bg_color := use_dark_mode ? #0a0a0a : #fafafa
+        table_bg_color := use_dark_mode ? #171717 : #f9f9f9
+        header_bg_color := use_dark_mode ? #262626 : #e5e5e5
+
+    "Behavioral" =>
+        primary_color := #808080
+        bullish_color := #00FF00
+        bearish_color := #8B0000
+        neutral_color := #FFBF00
+        text_color := use_dark_mode ? color.white : color.black
+        bg_color := use_dark_mode ? #000000 : #FFFFFF
+        table_bg_color := use_dark_mode ? #1A1A1A : #F8F8F8
+        header_bg_color := use_dark_mode ? #2D2D2D : #E8E8E8
+
+    "Quant" =>
+        primary_color := #808080
+        bullish_color := #FFA500
+        bearish_color := #8B0000
+        neutral_color := #4682B4
+        text_color := use_dark_mode ? color.white : color.black
+        bg_color := use_dark_mode ? #000000 : #FFFFFF
+        table_bg_color := use_dark_mode ? #0D0D0D : #FAFAFA
+        header_bg_color := use_dark_mode ? #1A1A1A : #F0F0F0
+
+    "Ocean" =>
+        primary_color := use_dark_mode ? #20B2AA : #008B8B
+        bullish_color := use_dark_mode ? #00CED1 : #4682B4
+        bearish_color := use_dark_mode ? #FF4500 : #B22222
+        neutral_color := use_dark_mode ? #87CEEB : #2F4F4F
+        text_color := use_dark_mode ? #F0F8FF : #191970
+        bg_color := use_dark_mode ? #001F3F : #F0F8FF
+        table_bg_color := use_dark_mode ? #001A2E : #E6F7FF
+        header_bg_color := use_dark_mode ? #002A47 : #CCF2FF
+
+    "Fire" =>
+        primary_color := use_dark_mode ? #FF6347 : #DC143C
+        bullish_color := use_dark_mode ? #FFD700 : #FF8C00
+        bearish_color := use_dark_mode ? #8B0000 : #800000
+        neutral_color := use_dark_mode ? #FFA500 : #CD853F
+        text_color := use_dark_mode ? #FFFAF0 : #2F1B14
+        bg_color := use_dark_mode ? #2F1B14 : #FFFAF0
+        table_bg_color := use_dark_mode ? #261611 : #FFF8F0
+        header_bg_color := use_dark_mode ? #3D241A : #FFE4CC
+
+    "Matrix" =>
+        primary_color := use_dark_mode ? #00FF41 : #006400
+        bullish_color := use_dark_mode ? #39FF14 : #228B22
+        bearish_color := use_dark_mode ? #FF073A : #8B0000
+        neutral_color := use_dark_mode ? #00FFFF : #008B8B
+        text_color := use_dark_mode ? #C0FF8C : #003300
+        bg_color := use_dark_mode ? #0D1B0D : #F0FFF0
+        table_bg_color := use_dark_mode ? #0A1A0A : #E8FFF0
+        header_bg_color := use_dark_mode ? #112B11 : #CCFFCC
+
+    "Arctic" =>
+        primary_color := use_dark_mode ? #87CEFA : #4169E1
+        bullish_color := use_dark_mode ? #00BFFF : #0000CD
+        bearish_color := use_dark_mode ? #FF1493 : #8B008B
+        neutral_color := use_dark_mode ? #B0E0E6 : #483D8B
+        text_color := use_dark_mode ? #F8F8FF : #191970
+        bg_color := use_dark_mode ? #191970 : #F8F8FF
+        table_bg_color := use_dark_mode ? #141B47 : #F0F8FF
+        header_bg_color := use_dark_mode ? #1E2A5C : #E0F0FF
+
+zone_transparency = use_dark_mode ? 90 : 95
+band_transparency = use_dark_mode ? 70 : 85
+table_transparency = use_dark_mode ? 80 : 15
+
+// Helpers
+f_get_table_position(string pos) =>
+    switch pos
+        "Top Right" => position.top_right
+        "Top Left" => position.top_left
+        "Bottom Right" => position.bottom_right
+        "Bottom Left" => position.bottom_left
+        "Top Center" => position.top_center
+        "Bottom Center" => position.bottom_center
+        => position.top_right
+
+f_get_text_size(string sz) =>
+    switch sz
+        "Tiny" => size.tiny
+        "Small" => size.small
+        "Normal" => size.normal
+        "Large" => size.large
+        "Huge" => size.huge
+        => size.normal
+
+// Model
+annualisation = 252.0
+target_vol = target_vol_pct / 100.0
+max_leverage = max_leverage_pct / 100.0
+
+is_custom = fund_preset == "Custom"
+is_blend = fund_preset == "Blend of Four Designs"
+is_balanced = fund_preset == "Balanced 60/40 Vol Control"
+is_fast = fund_preset == "Risk Control, Fast Decay"
+// Simple-weighted risk control replaces the EWMA pair of design A with the max
+// of the two window vols, mirroring the EWMA rule with equal weights.
+simple_max = fund_preset == "Risk Control, Simple Weighted"
+
+weight_a = is_custom ? in_weight_a : is_balanced ? 0.0 : 1.0
+weight_b = is_custom ? in_weight_b : is_blend ? 1.0 : 0.0
+weight_c = is_custom ? in_weight_c : is_blend ? 1.0 : 0.0
+weight_d = is_custom ? in_weight_d : is_blend or is_balanced ? 1.0 : 0.0
+lambda_s = is_custom ? in_lambda_s : is_fast ? 0.8705 : 0.94
+lambda_l = is_custom ? in_lambda_l : is_fast ? 0.99725 : 0.97
+window_b = is_custom ? in_window_b : 21
+window_c = is_custom ? in_window_c : 63
+equity_share_pct = is_custom ? in_equity_share_pct : 60.0
+
+equity_share = equity_share_pct / 100.0
+all_weights_zero = weight_a + weight_b + weight_c + weight_d <= 0
+eff_weight_a = all_weights_zero ? 1.0 : weight_a
+
+f_leverage(float vol) =>
+    na(vol) ? na : vol <= 0 ? max_leverage : math.min(max_leverage, target_vol / vol)
+
+f_leverage_d(float vol) =>
+    na(vol) ? na : equity_share * f_leverage(vol)
+
+// Archetypes without data (warm-up, missing bond leg) drop out and the remaining
+// weights are renormalised.
+f_blend(float ka, float kb, float kc, float kd) =>
+    float s = 0.0
+    float w = 0.0
+    if eff_weight_a > 0 and not na(ka)
+        s += eff_weight_a * ka
+        w += eff_weight_a
+    if weight_b > 0 and not na(kb)
+        s += weight_b * kb
+        w += weight_b
+    if weight_c > 0 and not na(kc)
+        s += weight_c * kc
+        w += weight_c
+    if weight_d > 0 and not na(kd)
+        s += weight_d * kd
+        w += weight_d
+    w > 0 ? s / w : na
+
+// Runs in the daily context of the underlying. Returns the state needed both for
+// the history and for the next-session scenarios.
+f_model() =>
+    float r = math.log(close / close[1])
+    float r2 = nz(r * r)
+    var float var_s = na
+    var float var_l = na
+    var int n_ret = 0
+    if not na(r)
+        n_ret += 1
+        var_s := na(var_s) ? r2 : lambda_s * var_s + (1 - lambda_s) * r2
+        var_l := na(var_l) ? r2 : lambda_l * var_l + (1 - lambda_l) * r2
+    bool warm = n_ret >= math.max(window_c, window_b, 63)
+    float vol_b = warm ? math.sqrt(annualisation * math.sum(r2, window_b) / window_b) : na
+    float vol_c = warm ? math.sqrt(annualisation * math.sum(r2, window_c) / window_c) : na
+    float vol_a = not warm ? na : simple_max ? math.max(vol_b, vol_c) : math.sqrt(annualisation * math.max(var_s, var_l))
+
+    float bond_px = request.security(bond_symbol, "D", close, lookahead=barmerge.lookahead_off, ignore_invalid_symbol=true)
+    float rb = math.log(bond_px / bond_px[1])
+    var float var_ps = na
+    var float var_pl = na
+    var int n_port = 0
+    if not na(r) and not na(rb)
+        float rp = equity_share * r + (1 - equity_share) * rb
+        float rp2 = rp * rp
+        n_port += 1
+        var_ps := na(var_ps) ? rp2 : lambda_s * var_ps + (1 - lambda_s) * rp2
+        var_pl := na(var_pl) ? rp2 : lambda_l * var_pl + (1 - lambda_l) * rp2
+    float vol_d = warm and n_port >= 63 ? math.sqrt(annualisation * math.max(var_ps, var_pl)) : na
+
+    float exp_target = f_blend(f_leverage(vol_a), f_leverage(vol_b), f_leverage(vol_c), f_leverage_d(vol_d))
+    float exp_live = exp_target[impl_lag]
+    float exp_next = impl_lag >= 1 ? exp_target[impl_lag - 1] : exp_target
+    var int n_live = 0
+    if not na(exp_live)
+        n_live += 1
+    float pr = ta.percentrank(exp_live, pct_lookback)
+    float pctl = n_live > pct_lookback ? pr : na
+    float sum_b = math.sum(r2, window_b - 1)
+    float sum_c = math.sum(r2, window_c - 1)
+    float d_state_s = n_port >= 63 ? var_ps : na
+    float d_state_l = n_port >= 63 ? var_pl : na
+    // Changes are taken in daily bars here so that they keep their meaning on
+    // weekly or intraday charts.
+    float chg_1d = exp_live - exp_live[1]
+    float chg_5d = exp_live - exp_live[5]
+    [exp_live, exp_target, exp_next, pctl, var_s, var_l, sum_b, sum_c, d_state_s, d_state_l, vol_a, vol_b, vol_c, vol_d, chg_1d, chg_5d]
+
+// Data
+model_symbol = use_chart_symbol ? syminfo.tickerid : custom_symbol
+
+[exp_live, exp_target, exp_next, pctl, d_var_s, d_var_l, d_sum_b, d_sum_c, d_var_ps, d_var_pl, vol_a, vol_b, vol_c, vol_d, exp_change_1d, exp_change_5d] = request.security(model_symbol, "D", f_model(), lookahead=barmerge.lookahead_off, ignore_invalid_symbol=true)
+
+// Scenarios for the next session
+// Target exposure after a hypothetical next-session simple return x of the
+// equity, bond return zero, once that return has entered every estimate.
+f_target_after(float x) =>
+    float rr = math.log(1 + x)
+    float r2n = rr * rr
+    float vs = lambda_s * d_var_s + (1 - lambda_s) * r2n
+    float vl = lambda_l * d_var_l + (1 - lambda_l) * r2n
+    float vb = math.sqrt(annualisation * (d_sum_b + r2n) / window_b)
+    float vc = math.sqrt(annualisation * (d_sum_c + r2n) / window_c)
+    float va = simple_max ? math.max(vb, vc) : math.sqrt(annualisation * math.max(vs, vl))
+    float rp2n = math.pow(equity_share * rr, 2)
+    float vps = lambda_s * d_var_ps + (1 - lambda_s) * rp2n
+    float vpl = lambda_l * d_var_pl + (1 - lambda_l) * rp2n
+    float vd = na(vps) or na(vpl) ? na : math.sqrt(annualisation * math.max(vps, vpl))
+    f_blend(f_leverage(va), f_leverage(vb), f_leverage(vc), f_leverage_d(vd))
+
+f_delta_after(float x) =>
+    f_target_after(x) - exp_target
+
+// Smallest absolute move in the given direction that lowers target exposure.
+f_sell_trigger(float direction) =>
+    float eps = 1e-6
+    float result = na
+    if not na(exp_target)
+        if f_delta_after(direction * 0.10) < -eps
+            float lo = 0.0
+            float hi = 0.10
+            if f_delta_after(0.0) < -eps
+                hi := 0.0
+            else
+                for i = 0 to 39
+                    float mid = (lo + hi) / 2
+                    if f_delta_after(direction * mid) < -eps
+                        hi := mid
+                    else
+                        lo := mid
+            result := hi
+    result
+
+// Zones
+hi_cut = math.max(very_high_threshold, high_threshold)
+mid_hi_cut = math.min(very_high_threshold, high_threshold)
+lo_cut = math.min(very_low_threshold, low_threshold)
+mid_lo_cut = math.max(very_low_threshold, low_threshold)
+
+is_valid = not na(pctl)
+is_very_high = is_valid and pctl >= hi_cut
+is_high = is_valid and pctl >= mid_hi_cut and pctl < hi_cut
+is_very_low = is_valid and pctl < lo_cut
+is_low = is_valid and pctl < mid_lo_cut and pctl >= lo_cut
+is_neutral = is_valid and pctl >= mid_lo_cut and pctl < mid_hi_cut
+
+zone_str = not is_valid ? "Warming up" : is_very_high ? "Very high" : is_high ? "High" :
+     is_very_low ? "Very low" : is_low ? "Low" : "Mid range"
+implication_str = is_valid ? "exposure vs " + str.tostring(math.round(pct_lookback / 252)) + "y history" : "n/a"
+
+scheduled_change = exp_next - exp_live
+// On intraday charts the daily change is repeated on every bar of the session,
+// so the event is only counted on the first bar of a new day.
+new_day = ta.change(time("D")) != 0
+delever_event = not na(exp_change_1d) and exp_change_1d * 100 <= -delever_alert_pp and barstate.isconfirmed and
+     (not timeframe.isintraday or new_day)
+
+// Zone colours and background
+get_zone_color() =>
+    if is_very_high
+        bearish_color
+    else if is_high
+        color.new(bearish_color, 40)
+    else if is_very_low
+        bullish_color
+    else if is_low
+        color.new(bullish_color, 40)
+    else
+        primary_color
+
+zone_color = get_zone_color()
+
+// Continuous line colour: bullish at 0, primary at 50, bearish at 100.
+f_gradient(float p) =>
+    na(p) ? neutral_color : p < 50 ? color.from_gradient(p, 0, 50, bullish_color, primary_color) :
+         color.from_gradient(p, 50, 100, primary_color, bearish_color)
+
+use_gradient = color_mode == "Gradient"
+zone_base = is_very_high or is_high ? bearish_color : is_very_low or is_low ? bullish_color : primary_color
+line_color = use_gradient ? f_gradient(pctl) : is_valid ? zone_color : neutral_color
+
+color final_bg_color = na
+if is_valid and background_mode != "Off"
+    float soft = background_intensity + (100 - background_intensity) * 0.5
+    if is_very_high
+        final_bg_color := color.new(bearish_color, background_intensity)
+    else if is_very_low
+        final_bg_color := color.new(bullish_color, background_intensity)
+    else if background_mode == "All Zones" and is_high
+        final_bg_color := color.new(bearish_color, soft)
+    else if background_mode == "All Zones" and is_low
+        final_bg_color := color.new(bullish_color, soft)
+
+bgcolor(final_bg_color, title="Zone Background")
+
+// Candle colouring
+zone_candle_transparency = candle_base_transparency + (is_high or is_low ? 25 : is_neutral ? 35 : 0)
+candle_color = not show_candle_coloring or not is_valid ? na :
+     use_gradient ? color.new(line_color, candle_base_transparency) : color.new(zone_base, zone_candle_transparency)
+barcolor(candle_color, title="Candle Coloring")
+
+// Plots
+is_pct_mode = display_mode == "Percentile"
+main_value = is_pct_mode ? pctl : exp_live * 100
+
+mid_level = is_pct_mode ? 50.0 : 100.0
+top_level = is_pct_mode ? 100.0 : max_leverage_pct
+show_pct_levels = is_pct_mode and show_signal_zones
+
+// Only the extremes get a band; the inner thresholds stay as faint lines.
+p_band_top = plot(show_pct_levels ? 100.0 : na, "Band Top", display=display.none, editable=false)
+p_hi = plot(show_pct_levels ? hi_cut : na, "Very High Threshold", color=color.new(bearish_color, band_transparency), linewidth=1)
+plot(show_pct_levels ? mid_hi_cut : na, "High Threshold", color=color.new(bearish_color, 80), linewidth=1)
+plot(show_pct_levels ? mid_lo_cut : na, "Low Threshold", color=color.new(bullish_color, 80), linewidth=1)
+p_lo = plot(show_pct_levels ? lo_cut : na, "Very Low Threshold", color=color.new(bullish_color, band_transparency), linewidth=1)
+p_band_bottom = plot(show_pct_levels ? 0.0 : na, "Band Bottom", display=display.none, editable=false)
+fill(p_band_top, p_hi, color=color.new(bearish_color, zone_transparency), title="Very High Band")
+fill(p_lo, p_band_bottom, color=color.new(bullish_color, zone_transparency), title="Very Low Band")
+plot(not is_pct_mode ? max_leverage_pct : na, "Leverage Cap", color=color.new(bearish_color, 50), style=plot.style_circles, linewidth=1)
+
+// Gradient area between the line and the midpoint, split so that each side
+// fades towards its own colour.
+area_on = show_area_fill and not na(main_value)
+p_mid = plot(mid_level, "Midpoint", color=color.new(neutral_color, 65), linewidth=1)
+p_area_up = plot(area_on ? math.max(main_value, mid_level) : na, "Area Upper", display=display.none, editable=false)
+p_area_dn = plot(area_on ? math.min(main_value, mid_level) : na, "Area Lower", display=display.none, editable=false)
+fill(p_area_up, p_mid, top_level, mid_level, color.new(bearish_color, 60), color.new(bearish_color, 100), title="Area Above Midpoint")
+fill(p_mid, p_area_dn, mid_level, 0.0, color.new(bullish_color, 100), color.new(bullish_color, 60), title="Area Below Midpoint")
+
+plot(enable_glow ? main_value : na, "Glow Outer", color=color.new(line_color, 90), linewidth=main_line_width + 6)
+plot(enable_glow ? main_value : na, "Glow Inner", color=color.new(line_color, 78), linewidth=main_line_width + 3)
+plot(main_value, "Main Line", color=line_color, linewidth=main_line_width)
+
+very_high_entry = is_very_high and not is_very_high[1] and is_valid[1]
+very_low_entry = is_very_low and not is_very_low[1] and is_valid[1]
+neutral_entry = is_neutral and not is_neutral[1] and is_valid[1]
+
+plot(show_markers and (very_high_entry or very_low_entry) ? main_value : na, "Zone Entry",
+     color=line_color, style=plot.style_circles, linewidth=main_line_width + 4)
+
+var label last_label = na
+if barstate.islast
+    label.delete(last_label)
+    if show_last_label and not na(main_value)
+        string last_txt = is_pct_mode ? str.tostring(main_value, "0") : str.tostring(main_value, "0.0") + "%"
+        last_label := label.new(bar_index, main_value, last_txt, style=label.style_label_left,
+             color=line_color, textcolor=color.white, size=size.small)
+
+plot(exp_live * 100, "Exposure %", display=display.data_window)
+plot(pctl, "Exposure Percentile", display=display.data_window)
+plot(exp_change_1d * 100, "Exposure Change 1d (pp)", display=display.data_window)
+plot(math.max(vol_a, vol_b, vol_c) * 100, "Highest Realised Vol %", display=display.data_window)
+plot(vol_d * 100, "Portfolio Vol D %", display=display.data_window)
+
+// Watermark
+watermark_table_pos = f_get_table_position(watermark_position)
+watermark_text_sz = f_get_text_size(watermark_size)
+watermark_text_sz_small = watermark_size == "Huge" ? size.large : watermark_size == "Large" ? size.normal : size.small
+watermark_text_sz_tiny = watermark_size == "Huge" ? size.normal : watermark_size == "Large" ? size.small : size.tiny
+
+var table infoTable = table.new(watermark_table_pos, 2, 4, border_width=0, bgcolor=color.new(color.black, 100))
+
+if show_watermark and barstate.islast
+    table.clear(infoTable, 0, 0)
+    color watermarkTextColor = use_dark_mode ? color.new(color.white, 30) : color.new(color.black, 40)
+
+    table.cell(infoTable, 0, 0, syminfo.ticker + ", " + timeframe.period, bgcolor=color.new(color.black, 100),
+         text_color=watermarkTextColor, text_size=watermark_text_sz, text_halign=text.align_right)
+    table.cell(infoTable, 1, 0, "", bgcolor=color.new(color.black, 100), text_color=watermarkTextColor, text_size=watermark_text_sz)
+
+    string indexLine = "Vol-Control Exposure: " + (na(exp_live) ? "n/a" : str.tostring(exp_live * 100, "0.0") + "%")
+    table.cell(infoTable, 0, 1, indexLine, bgcolor=color.new(color.black, 100),
+         text_color=watermarkTextColor, text_size=watermark_text_sz_small, text_halign=text.align_right)
+    table.cell(infoTable, 1, 1, "", bgcolor=color.new(color.black, 100), text_color=watermarkTextColor, text_size=watermark_text_sz_small)
+
+    string zoneLine = zone_str + (is_valid ? " | rank " + str.tostring(pctl, "0") + " of 100" : "")
+    table.cell(infoTable, 0, 2, zoneLine, bgcolor=color.new(color.black, 100),
+         text_color=watermarkTextColor, text_size=watermark_text_sz_tiny, text_halign=text.align_right)
+    table.cell(infoTable, 1, 2, "", bgcolor=color.new(color.black, 100), text_color=watermarkTextColor, text_size=watermark_text_sz_tiny)
+
+    table.cell(infoTable, 0, 3, implication_str, bgcolor=color.new(color.black, 100),
+         text_color=color.new(zone_color, 20), text_size=watermark_text_sz_small, text_halign=text.align_right)
+    table.cell(infoTable, 1, 3, "", bgcolor=color.new(color.black, 100), text_color=watermarkTextColor, text_size=watermark_text_sz_small)
+
+// Dashboard
+f_pp(float x) =>
+    na(x) ? "n/a" : (x >= 0 ? "+" : "") + str.tostring(x * 100, "0.0") + " pp"
+
+f_flow(float x) =>
+    aum_bn > 0 and not na(x) ? f_pp(x) + " | " + (x >= 0 ? "+" : "") + str.tostring(x * aum_bn, "0.0") + " bn" : f_pp(x)
+
+f_trigger_text(float x, string sign, string fmt) =>
+    na(x) ? "none within 10%" : x <= 0 ? "any move" : sign + str.tostring(x * 100, fmt) + "%"
+
+// Ten-step bar for a 0 to 100 reading.
+f_bar(float p) =>
+    int filled = na(p) ? 0 : int(math.round(p / 10))
+    str.repeat("▰", filled) + str.repeat("▱", 10 - filled)
+
+f_delta_color(float x) =>
+    na(x) ? neutral_color : x < -0.0005 ? bearish_color : x > 0.0005 ? bullish_color : neutral_color
+
+dashboard_table_pos = f_get_table_position(dashboard_position)
+dashboard_text_sz = f_get_text_size(dashboard_size)
+dashboard_text_sz_small = dashboard_size == "Large" ? size.normal : dashboard_size == "Normal" ? size.small : size.tiny
+
+// Data checks shown in the status row. Crypto trades every day, so the 252-day
+// annualisation understates its volatility; the percentile is unaffected.
+no_data = na(exp_target) and bar_index > 400
+bond_missing = weight_d > 0 and not na(vol_a) and na(vol_d)
+crypto_underlying = use_chart_symbol and syminfo.type == "crypto"
+// Continuous futures jump at each roll unless back-adjusted, and the jump is read
+// as a return, which inflates realised vol around roll dates.
+futures_underlying = use_chart_symbol and syminfo.type == "futures"
+status_text = no_data ? "No daily data for this symbol" : not is_valid ? "Warming up" :
+     bond_missing ? "Bond leg missing, D excluded" : crypto_underlying ? "Crypto: levels scaled for 252 days" :
+     futures_underlying ? "Futures: use back-adjusted or SP:SPX" :
+     timeframe.isintraday ? "Daily model on intraday chart" : "Active"
+status_color = no_data ? bearish_color : not is_valid ? primary_color :
+     bond_missing or crypto_underlying or futures_underlying or timeframe.isintraday ? neutral_color : bullish_color
+
+preset_short = switch fund_preset
+    "Blend of Four Designs" => "Blend"
+    "S&P Risk Control Index" => "S&P risk control"
+    "Risk Control, Fast Decay" => "Fast decay"
+    "Risk Control, Simple Weighted" => "Simple weighted"
+    "Balanced 60/40 Vol Control" => "60/40"
+    => "Custom"
+
+var table dashboard = table.new(dashboard_table_pos, 2, 18, border_width=1,
+     bgcolor=color.new(table_bg_color, table_transparency))
+
+f_row_bg(int row) =>
+    color.new(table_bg_color, row % 2 == 0 ? 45 : 25)
+
+f_label(int row, string txt) =>
+    table.cell(dashboard, 0, row, txt, text_color=color.new(text_color, 25), bgcolor=f_row_bg(row),
+         text_size=dashboard_text_sz_small, text_halign=text.align_left)
+
+f_value(int row, string txt, color col) =>
+    table.cell(dashboard, 1, row, txt, text_color=col, bgcolor=f_row_bg(row),
+         text_size=dashboard_text_sz_small, text_halign=text.align_right)
+
+f_header(int row, string left, string right) =>
+    color hc = color.new(header_bg_color, 10)
+    table.cell(dashboard, 0, row, left, text_color=text_color, bgcolor=hc, text_size=dashboard_text_sz, text_halign=text.align_left)
+    table.cell(dashboard, 1, row, right, text_color=color.new(text_color, 30), bgcolor=hc, text_size=dashboard_text_sz_small, text_halign=text.align_right)
+
+f_zone_row(int row) =>
+    color zb = color.new(zone_color, 82)
+    table.cell(dashboard, 0, row, "Positioning", text_color=text_color, bgcolor=zb, text_size=dashboard_text_sz, text_halign=text.align_left)
+    table.cell(dashboard, 1, row, zone_str, text_color=zone_color, bgcolor=zb, text_size=dashboard_text_sz, text_halign=text.align_right)
+
+f_status_row(int row) =>
+    color sb = color.new(status_color, 88)
+    table.cell(dashboard, 0, row, "Model Status", text_color=color.new(text_color, 25), bgcolor=sb, text_size=dashboard_text_sz_small, text_halign=text.align_left)
+    table.cell(dashboard, 1, row, status_text, text_color=status_color, bgcolor=sb, text_size=dashboard_text_sz_small, text_halign=text.align_right)
+
+rank_text = is_valid ? f_bar(pctl) + "  " + str.tostring(pctl, "0") : "n/a"
+
+if show_dashboard and barstate.islast and dashboard_mode == "Simple"
+    table.clear(dashboard, 0, 0, 1, 17)
+    f_header(0, "VCPOS", preset_short)
+    f_zone_row(1)
+    f_label(2, "Invested in Equities")
+    f_value(2, na(exp_live) ? "n/a" : str.tostring(exp_live * 100, "0") + "% of capital", text_color)
+    f_label(3, "Rank vs " + str.tostring(math.round(pct_lookback / 252)) + "y History")
+    f_value(3, rank_text, line_color)
+    string tomorrow_text = impl_lag < 1 or na(scheduled_change) ? "n/a" :
+         scheduled_change > 0.0005 ? "Buying " + f_pp(scheduled_change) :
+         scheduled_change < -0.0005 ? "Selling " + f_pp(scheduled_change) : "No change"
+    f_label(4, "Next Session")
+    f_value(4, tomorrow_text, f_delta_color(scheduled_change))
+    float s_trig_dn = f_sell_trigger(-1.0)
+    float s_trig_up = f_sell_trigger(1.0)
+    f_label(5, "Moves That Trigger Selling")
+    f_value(5, f_trigger_text(s_trig_dn, "-", "0.0") + " / " + f_trigger_text(s_trig_up, "+", "0.0"), bearish_color)
+    f_status_row(6)
+
+if show_dashboard and barstate.islast and dashboard_mode == "Professional"
+    table.clear(dashboard, 0, 0, 1, 17)
+    f_header(0, "VCPOS", preset_short + " | " + str.tostring(target_vol_pct, "#.#") + "% | lag " + str.tostring(impl_lag))
+    f_zone_row(1)
+    f_label(2, "Equity Exposure")
+    f_value(2, na(exp_live) ? "n/a" : str.tostring(exp_live * 100, "0.0") + "%", text_color)
+    f_label(3, "Percentile (" + str.tostring(pct_lookback) + "d)")
+    f_value(3, rank_text, line_color)
+    f_label(4, "Change 1d / 5d")
+    f_value(4, f_pp(exp_change_1d) + " / " + f_pp(exp_change_5d), f_delta_color(exp_change_1d))
+    f_label(5, "Scheduled Next Session")
+    f_value(5, impl_lag >= 1 ? f_flow(scheduled_change) : "no lag set", f_delta_color(scheduled_change))
+    string vol_text = na(vol_a) ? "n/a" : str.tostring(vol_a * 100, "0.0") + " / " + str.tostring(vol_b * 100, "0.0") + " / " +
+         str.tostring(vol_c * 100, "0.0") + " / " + (na(vol_d) ? "n/a" : str.tostring(vol_d * 100, "0.0"))
+    f_label(6, "Realised Vol A / B / C / D")
+    f_value(6, vol_text, text_color)
+    f_label(7, "Target Falls on Move Below")
+    f_value(7, f_trigger_text(f_sell_trigger(-1.0), "-", "0.00"), bearish_color)
+    f_label(8, "Target Falls on Move Above")
+    f_value(8, f_trigger_text(f_sell_trigger(1.0), "+", "0.00"), bearish_color)
+
+    int last_row = 8
+    if show_scenarios
+        // Scenario rows change the target, which is traded impl_lag sessions later,
+        // so they must not be read as additions to the scheduled row above.
+        f_header(9, "Next Session Move", "Target Change, Traded in " + str.tostring(impl_lag) + "d")
+        array<float> moves = array.from(-0.03, -0.02, -0.01, 0.0, 0.01, 0.02, 0.03)
+        for i = 0 to array.size(moves) - 1
+            float mv = array.get(moves, i)
+            float d = na(exp_target) ? na : f_delta_after(mv)
+            int row = 10 + i
+            f_label(row, mv == 0 ? "Flat" : (mv > 0 ? "+" : "") + str.tostring(mv * 100, "0") + "%")
+            color dc = f_delta_color(d)
+            table.cell(dashboard, 1, row, f_flow(d), text_color=dc, bgcolor=color.new(dc, 86),
+                 text_size=dashboard_text_sz_small, text_halign=text.align_right)
+        last_row := 16
+
+    f_status_row(last_row + 1)
+
+// Alert conditions
+alertcondition(very_high_entry and enable_alerts, title="Very High",
+     message="VCPOS {{ticker}}: estimated vol-control exposure entered the very high zone")
+alertcondition(very_low_entry and enable_alerts, title="Very Low",
+     message="VCPOS {{ticker}}: estimated vol-control exposure entered the very low zone")
+alertcondition(neutral_entry and enable_alerts, title="Mid Range Entry",
+     message="VCPOS {{ticker}}: estimated vol-control exposure back in the mid range")
+alertcondition(delever_event and enable_alerts, title="Deleveraging Event",
+     message="VCPOS {{ticker}}: one-day cut in estimated vol-control exposure exceeded the alert threshold")

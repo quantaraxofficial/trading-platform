@@ -1,0 +1,325 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © RedKTrader
+// November, 2026
+//@version = 6
+
+// Internal build = 0.70
+indicator("RedK DualTF Volume-Accelerated CCI", shorttitle = "RedK VA-CCI v1.0", 
+  overlay = false, precision = 1)
+
+// =====================================================================================================
+//  RedK DualTF VA-CCI (Volume-Accelerated CCI)
+//  A volume-weighted take on the classic Commodity Channel Index, with a stochastic mode, 
+//  Context (higher timeframe) plot, TF alignment markers, adjustable Control Levels, a set of 6 alerts
+//  and many visual enhancements  
+//  - Volume Weighted ON  : the CCI mean becomes a volume-weighted average and the mean deviation
+//                          is volume-weighted as well
+//  - Volume Weighted OFF : matches TradingView's built-in CCI
+//  - Optional Stochastic mode rescales the CCI to a fixed +100 / -100 oscillator
+//  - Optional soft cap keeps extreme readings (beyond +/-200) from disrupting the pane height
+// =====================================================================================================
+
+
+// *****************************************************************************************************
+//  Selectable moving-average type
+// -----------------------------------------------------------------------------------------------------
+f_getMA(_data, _len, MAtype) =>
+    value = switch MAtype
+        'SMA' => ta.sma(_data, _len)
+        'EMA' => ta.ema(_data, _len)
+        'HMA' => ta.hma(_data, _len)
+        'RMA' => ta.rma(_data, _len)
+        => ta.wma(_data, _len)
+    value
+
+// *****************************************************************************************************
+//  Weighted mean deviation around the current mean
+//  With all weights = 1 this equals ta.dev(), so VA-CCI matches the original indicator
+// -----------------------------------------------------------------------------------------------------
+f_wdev(_src, _w, _avg, _length) =>
+    num = 0.0  ,  den = 0.0
+    for i = 0 to _length - 1
+        wi = nz(_w[i])
+        num += wi * math.abs(_src[i] - _avg)
+        den += wi
+    wdev = nz(num / den)
+
+// *****************************************************************************************************
+//  Volume-Accelerated CCI
+//  Note: _src and volume are both read in whatever context this runs in (chart or security),
+//  so when called inside request.security() it correctly uses the HTF source and HTF volume.
+// -----------------------------------------------------------------------------------------------------
+f_CalcVA_CCI(int _len, float _src, float _lamc, bool _volWeighted, bool _stoch, int _stochLen) =>
+    _vol   = na(volume) or not _volWeighted ? 1.0 : volume
+    // weighted average: equals SMA when _vol = 1, otherwise a VWAP
+    _avg   = nz(math.sum(_src * _vol, _len) / math.sum(_vol, _len))
+    // weighted deviation from the mean
+    _mdev  = f_wdev(_src, _vol, _avg, _len)
+    // original CCI formula
+    _cci   = (_src - _avg) / (_lamc * _mdev)
+    // stochastic of the CCI, rescaled to +100 / -100
+    _stc   = 2 * ta.stoch(_cci, _cci, _cci, _stochLen) - 100
+    _stoch ? _stc : _cci
+
+// *****************************************************************************************************
+//  Soft cap: values unchanged within +/-200, then eases toward +/-250 (never reaches it)
+//  The curve starts with slope 1 at 200, so there is no visible kink
+// -----------------------------------------------------------------------------------------------------
+f_softCap(float _x, bool _on) =>
+    float _y = _x
+    if _on and not na(_x) and math.abs(_x) > 200
+        _y := math.sign(_x) * (200 + 50 * (1 - math.exp(-(math.abs(_x) - 200) / 50)))
+    _y
+
+// -----------------------------------------------------------------------------------------------------
+//   Inputs
+// -----------------------------------------------------------------------------------------------------
+grpC   = "Current Timeframe CCI"
+grpH   = "Context Timeframe CCI"
+grpsig = "Signal Line"
+grplvl = "Levels & Markers"
+disnon = display.none
+
+// ---  Main CCI Plot -------------------------------------------------------------------------------------
+cciLen   = input.int(10, minval = 1, title = "CCI Length", inline = "cci", group = grpC, display = disnon)
+cciSrc   = input.source(hlc3, title = "Source", inline = "cci", group = grpC, display = disnon,
+  tooltip = "Set length and source price for CCI calculation")
+
+LamC     = input.float(0.015, "Lambert's Constant", minval = 0.001, step = 0.001, group = grpC, display = disnon,
+  tooltip = "Adjust Lambert's original constant (0.015)."+ 
+  "\nThis sets the original CCI so that most values fall between +100 and -100" +
+  ".\nLeave as default to match the classic CCI.")
+
+VolWeighted = input.bool(true, "Volume Weighted", group = grpC, display = disnon,
+  tooltip = '''When on, CCI is volume-aware in its calculation. This emphasises moves that happen on higher participation.
+  \nTo match TradingView's built-in CCI: turn Volume Weighted off, set Smoothing to 1, keep Stochastic Mode off,
+  and use the same Length and Source.\nFor symbols with no volume data, this option has no effect''')
+
+stoch_in  = input.bool(false, "Stochastic Mode", inline = "stoch", group = grpC, display = disnon)
+stoch_len = input.int(10, "⠀⠀⠀⠀⠀⠀⠀Length", minval = 2, inline = "stoch", group = grpC, display = disnon, active = stoch_in,
+  tooltip = "Rescales the CCI to a fixed +100 / -100 range, based on its own high-low range " +
+  "over this many bars. Note that this setting applies to both the Current and the Context plots.")
+
+smooth    = input.int(3, minval = 1, title = "Smoothing", inline = "smooth", group = grpC, display = disnon)
+smth_type = input.string('WMA', title = "Averaging", options = ['EMA', 'HMA', 'RMA', 'SMA', 'WMA'], display = disnon,
+  inline = "smooth", group = grpC, active = smooth > 1,
+  tooltip = "Optional smoothing to apply to the main CCI plot." +
+  "\nHelps remove noise but introduces lag. Keep to small values or disable (set to 1).")
+
+col_cci_long  = input.color(#66ff00, title = "Bullish", inline = "cci_c", group = grpC, display = disnon)
+col_cci_short = input.color(#ff1a1a, title = "Bearish", inline = "cci_c", group = grpC, display = disnon)
+
+// --- CCI Signal line ------------------------------------------------------------------------------------
+signal_len   = input.int(5, "Length", minval = 1, inline = "sig", group = grpsig, display = disnon)
+sig_avg_type = input.string('EMA', title = "Averaging", options = ['EMA', 'HMA', 'RMA', 'SMA', 'WMA'], display = disnon,
+  inline = "sig", group = grpsig, active = signal_len > 1, tooltip = "Length and Averaging method for the CCI Signal Line.")
+col_signal   = input.color(color.gray, title = "Color", active = signal_len > 1, group = grpsig, display = disnon)
+
+// --- Context (Higher) TF ----------------------------------------------------------------------------
+show_htf = input.bool(false, "Context CCI Multiplier", inline = "ctxt", group = grpH, display = disnon)
+htf_mult   = input.int(5, "", minval = 2, maxval = 60, inline = "ctxt", group = grpH,
+  display = disnon, active = show_htf,
+  tooltip = "Show/Hide the Context CCI plot, and set the multiplier for the Context TF." +
+  "\nContext TF = chart TF × this value, e.g. 5 on a 1H chart = 5H.")
+
+htf_update = input.string('Live Update', "Context Update", options = ['Live Update', 'Last Closed Bar'], group = grpH,
+  display = disnon, active = show_htf,
+  tooltip = "Live Update (default): the Context CCI updates as the higher-TF bar develops — most responsive. " +
+  "Last Closed Bar: the Context CCI only changes when the higher-TF bar closes — steadier, no intrabar movement.")
+            
+col_cciH_long  = input.color(color.new(#dbdbdb, 20), title = "Bullish", inline = "htf_c", group = grpH, active = show_htf, display = disnon)
+col_cciH_short = input.color(color.new(#636363, 20), title = "Bearish", inline = "htf_c", group = grpH, active = show_htf, display = disnon)
+
+// --- Levels & Markers -------------------------------------------------------------------------------
+soft_cap   = input.bool(false, "Soft Cap Beyond ±200", group = grplvl, active = not stoch_in, display = disnon,
+  tooltip = "Optional: values within ±200 are unchanged, and beyond that, they ease toward ±250 so a single extreme value " +
+  "on either plot does not flatten the indicator's pane.\nTurn off to see un-softened CCI values." +
+  "\nDisabled in Stochastic mode.")
+
+ctrl_up    = input.float(70,  "Upper Control Level", minval = 1,    maxval = 200, step = 5, group = grplvl, display = disnon,
+  tooltip = "Optional Control Levels. Use to mark levels where the main CCI plot is stretched too far up or down." +
+  "\nThey work in both regular and Stochastic modes - used by alerts.")
+ctrl_dn    = input.float(-70, "Lower Control Level", minval = -200, maxval = -1,  step = 5, group = grplvl, display = disnon)
+
+// gradient fill between the main CCI plot and the Control Levels
+show_lvlfill = input.bool(true, "Control Level Fill", group = grplvl, display = disnon,
+  tooltip = "Shade the area where the main CCI plot goes beyond a Control Level")
+
+show_align = input.bool(true, "TF Alignment Markers", group = grplvl, active = show_htf, display = disnon,
+  tooltip = "Show TF Alignment Markers when the Current TF CCI and the Context CCI agree on direction" )
+
+
+// =====================================================================================================
+//   Calculations
+// -----------------------------------------------------------------------------------------------------
+midline   = 0
+ext_up    = 200
+ext_dn    = -200
+stb_up    = 100     // Stochastic range bounds
+stb_dn    = -100
+
+// Current TF VA-CCI + optional smoothing
+cciCTF_raw = f_CalcVA_CCI(cciLen, cciSrc, LamC, VolWeighted, stoch_in, stoch_len)
+cciCTF     = smooth > 1 ? f_getMA(cciCTF_raw, smooth, smth_type) : cciCTF_raw
+
+// Signal line
+cci_sig = signal_len > 1 ? f_getMA(cciCTF, signal_len, sig_avg_type) : cciCTF
+
+// Resolve Context TF via the built-in (multiplier method)
+htf_tf = timeframe.from_seconds(int(timeframe.in_seconds(timeframe.period) * htf_mult))
+
+// Context TF must be >= chart TF.
+htf_secs    = timeframe.in_seconds(htf_tf)
+chart_secs  = timeframe.in_seconds(timeframe.period)
+
+// Common flags
+htf_invalid     = htf_secs < chart_secs
+htf_is_higher   = htf_secs > chart_secs
+use_last_closed = htf_update == 'Last Closed Bar' and htf_is_higher
+
+// Pull the Context VA-CCI
+// Get live HTF value (updates intrabar on the forming HTF bar)
+cciHi_live = request.security(syminfo.tickerid, htf_tf,
+     f_CalcVA_CCI(cciLen, cciSrc, LamC, VolWeighted, stoch_in, stoch_len),
+     lookahead = barmerge.lookahead_off)
+
+// *****************************************************************************************************
+// Last Closed Bar = Matches TradingView's "Wait for timeframe closes".
+// We re-use the same request.security() call and hold its value from the last HTF close.
+// This approach overrides barmerge.gaps_on - we're manually filling those gaps.
+// *****************************************************************************************************
+
+// This chart bar is the last bar of the HTF bar when both close at the same time.
+htf_bar_closes = time_close == time_close(htf_tf)
+var float cciHi_closed = na
+
+// Capture the HTF value only then, and only after the chart bar is confirmed;
+// hold that value until the next HTF close. This also saves a request.security() call
+if htf_bar_closes and barstate.isconfirmed
+    cciHi_closed := cciHi_live
+
+// The confirmed-bar value is only meaningful when the Context TF is higher than the chart TF;
+// equal/lower uses the live value (avoids a pointless one-bar lag).
+cciHi = (htf_invalid or not show_htf) ? na : (use_last_closed ? cciHi_closed : cciHi_live)
+
+
+// Direction / alignment state (alignment requires a valid, shown Context)
+ctf_up   = cciCTF > midline
+htf_up   = cciHi  > midline
+aligned_up   = show_htf and not htf_invalid and ctf_up  and htf_up
+aligned_down = show_htf and not htf_invalid and (not ctf_up) and (not htf_up)
+
+// Display values (soft cap applied to plotted lines only - states and alerts use the uncapped values;
+// Control Levels are limited to +/-200, where the cap changes nothing)
+cciCTF_dsp  = f_softCap(cciCTF,  soft_cap)
+cci_sig_dsp = f_softCap(cci_sig, soft_cap)
+cciHi_dsp   = f_softCap(cciHi,   soft_cap)
+
+
+// =====================================================================================================
+//   Plots
+// -----------------------------------------------------------------------------------------------------
+// Levels first so z-order keeps the main line on top
+
+dw          = display.data_window
+d_sl        = display.status_line
+dsp_dp_dw   = display.pane + display.data_window
+
+// if a higher TF is enabled, related plots will show in panel and data window, otherwise hide all
+dsp_htf     = show_htf ? dsp_dp_dw + d_sl : disnon
+dsp_htf_am  = show_htf ? dsp_dp_dw : disnon
+
+// Reference lines: +/-200 in raw mode (soft cap zone), +/-100 in Stochastic mode (range bounds)
+dsp_ext = stoch_in ? display.none : display.all
+dsp_stb = stoch_in ? display.all  : display.none
+
+hline(midline,  title = "Zero Line",           color = color.new(color.blue,  50), linestyle = hline.style_solid)
+hline(ctrl_up,  title = "Upper Control Level", color = color.new(color.green, 30), linestyle = hline.style_dashed)
+hline(ctrl_dn,  title = "Lower Control Level", color = color.new(color.red,   30), linestyle = hline.style_dashed)
+hline(ext_up,   title = "+200",                color = color.new(color.green, 60), linestyle = hline.style_dotted, display = dsp_ext)
+hline(ext_dn,   title = "-200",                color = color.new(color.red,   60), linestyle = hline.style_dotted, display = dsp_ext)
+hline(stb_up,   title = "+100 (Stochastic)",   color = color.new(color.green, 60), linestyle = hline.style_dotted, display = dsp_stb)
+hline(stb_dn,   title = "-100 (Stochastic)",   color = color.new(color.red,   60), linestyle = hline.style_dotted, display = dsp_stb)
+
+
+p1 = plot(cciCTF_dsp, title = "Current CCI", color = ctf_up ? col_cci_long : col_cci_short, linewidth = 3)
+
+plot(cci_sig_dsp, title = "CCI Signal", color = col_signal, linewidth = 1, display = d_sl + dsp_dp_dw)
+
+p2 = plot(cciHi_dsp, title = "Context CCI",
+     color = htf_up ? col_cciH_long : col_cciH_short, linewidth = 1, display = dsp_htf)
+
+pl_midline = plot(midline, "zero line ref", color = color.new(color.white, 100),
+     editable = false, display = display.none)
+
+// Context sentiment fill (above / below zero line) - gradient spans the range of the active mode
+fill_top = stoch_in ? 100 : 250
+fill(p2, pl_midline, top_value = fill_top, bottom_value = 0,
+    top_color = color.new(col_cciH_long, 20), bottom_color = color.new(col_cciH_long, 90))
+fill(pl_midline, p2, top_value = 0, bottom_value = -fill_top,
+    top_color = color.new(col_cciH_short, 90), bottom_color = color.new(col_cciH_short, 20))
+
+//  gradient fill for extreme values above & below the control levels
+dsp_lvlfill = show_lvlfill ? display.all : display.none
+fill(p1, pl_midline, top_value = fill_top, bottom_value = ctrl_up,
+    top_color = color.new(col_cci_long, 10), bottom_color = color.new(col_cci_long, 100),
+    title = "Upper Control Level Fill", display = dsp_lvlfill)
+fill(p1, pl_midline, top_value = ctrl_dn, bottom_value = -fill_top,
+    top_color = color.new(col_cci_short, 100), bottom_color = color.new(col_cci_short, 10),
+    title = "Lower Control Level Fill", display = dsp_lvlfill)
+
+//==========================================================================================================
+// TF Alignment markers - a square on every bar while the alignment holds 
+
+plotshape(show_align and aligned_up,   title = "Bull Alignment",
+  display = not show_align ? disnon : dsp_htf_am,
+     style = shape.square, location = location.top,    color = col_cciH_long,  size = size.tiny)
+plotshape(show_align and aligned_down, title = "Bear Alignment",
+  display = not show_align ? disnon : dsp_htf_am,
+     style = shape.square, location = location.bottom, color = col_cciH_short, size = size.tiny)
+
+
+// =====================================================================================================
+//   Alerts — all based on the main (Current TF) VA-CCI plot,
+//      independent of the Context setting.
+// -----------------------------------------------------------------------------------------------------
+
+// Cross events calculated globally on every bar, then used in the alert conditions
+x_zero_up   = ta.crossover(cciCTF, midline)
+x_zero_dn   = ta.crossunder(cciCTF, midline)
+x_zero_any  = ta.cross(cciCTF, midline)
+x_ctrl_up   = ta.crossover(cciCTF, ctrl_up)
+x_ctrl_dn   = ta.crossunder(cciCTF, ctrl_dn)
+x_ctrlU_any = ta.cross(cciCTF, ctrl_up)
+x_ctrlD_any = ta.cross(cciCTF, ctrl_dn)
+
+alertcondition(x_zero_up,  title = "RedK VA-CCI crosses above zero (Bullish)",
+  message = "{{ticker}} — RedK VA-CCI crossed ABOVE the zero line (bullish)")
+alertcondition(x_zero_dn,  title = "RedK VA-CCI crosses below zero (Bearish)",
+  message = "{{ticker}} — RedK VA-CCI crossed BELOW the zero line (bearish)")
+alertcondition(x_zero_any, title = "RedK VA-CCI swings around zero (Up or Down)",
+  message = "{{ticker}} — RedK VA-CCI crossed the zero line")
+
+alertcondition(x_ctrl_up,  title = "RedK VA-CCI crosses above Upper Control Level",
+  message = "{{ticker}} — RedK VA-CCI crossed ABOVE the Upper Control Level")
+alertcondition(x_ctrl_dn,  title = "RedK VA-CCI crosses below Lower Control Level",
+  message = "{{ticker}} — RedK VA-CCI crossed BELOW the Lower Control Level")
+alertcondition(x_ctrlU_any or x_ctrlD_any,
+  title = "RedK VA-CCI crosses any Control Level (Up or Down)",
+  message = "{{ticker}} — RedK VA-CCI crossed a Control Level")
+
+
+// =====================================================================================================
+//  Debug: show the resolved Context TF in the Data Window for confirmation
+// -----------------------------------------------------------------------------------------------------
+dbg = input.bool(false, "Debug: show selected Context TF in Data Window", group = grpH, active = show_htf,
+  display = disnon, tooltip = "Will display as minutes, then hours if > 60, then days if > 1,440.")
+
+htf_mins = htf_secs / 60.0
+
+plot(dbg and htf_mins <= 60                       ? htf_mins        : na, "Context TF (mins)",
+  display = dbg and show_htf ? dw : disnon)
+plot(dbg and htf_mins >  60 and htf_mins <= 1440  ? htf_mins / 60.0 : na, "Context TF (hrs)",
+  display = dbg and show_htf ? dw : disnon)
+plot(dbg and htf_mins >  1440                     ? htf_mins / 1440.0 : na, "Context TF (days)",
+  display = dbg and show_htf ? dw : disnon)

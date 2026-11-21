@@ -31,6 +31,11 @@ class FastPathTests(SimpleTestCase):
         self.check("open eurjpy", {"type": "symbol", "symbol": "EUR/JPY"})
         self.check("add RSI", {"type": "indicator", "name": "Relative Strength Index"})
         self.check("remove the ema", {"type": "indicator", "name": "Moving Average Exponential", "remove": True})
+        # Editors' picks by name; a built-in's own word still means the built-in
+        self.check("add chess", {"type": "indicator", "name": "Chess"})
+        self.check("add the stop loss clustering indicator", {"type": "indicator", "name": "Stop Loss Clustering (Breakouts) [Kioseff Trading]"})
+        self.check("remove the tick cvd", {"type": "indicator", "name": "Tick CVD [Kioseff Trading]", "remove": True})
+        self.check("add volume", {"type": "indicator", "name": "Volume"})
         self.check("switch to heikin ashi", {"type": "chart_type", "chart_type": "ha"})
         self.check("dark mode", {"type": "theme", "theme": "classic-dark"})
         self.check("undo", {"type": "command", "id": "drawings-undo"})

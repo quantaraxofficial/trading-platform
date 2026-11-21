@@ -1,0 +1,1096 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Uncle_the_shooter
+
+//@version=6
+indicator("Confluence Profile", overlay = true,
+     max_bars_back = 2050, max_boxes_count = 500, max_labels_count = 500, max_lines_count = 200)
+
+// ═══════════════════════════════ SETTINGS ═══════════════════════════════
+
+// ─── General ───
+gGen   = "General"
+atrLen = input.int(100, "ATR length", minval = 1, group = gGen,
+     tooltip = "ATR is the average candle size over this many recent candles. Every setting expressed \"in ATR\" is a multiple of it, so the indicator behaves the same on any market and timeframe.")
+tolAtr = input.float(0.15, "Tolerance (ATR)", minval = 0.01, step = 0.01, group = gGen,
+     tooltip = "How close two components (e.g. a Fib level and an Order Block) must be to count as the same price area and add up in the Confluence column.\n0.15 = 15% of an average candle. Higher values find confluence more easily but less precisely.")
+
+// ─── Fibonacci ───
+gFib = "Fibonacci and volume – swings (trailing)"
+en1  = input.bool(true, "F1 / V1 – short swing", group = gFib, inline = "s1")
+len1 = input.int(10, "", minval = 2, group = gFib, inline = "s1",
+     tooltip = "Short swing. The number is the pivot length (candles on each side). See the long swing for details.")
+en2  = input.bool(true, "F2 / V2 – medium swing", group = gFib, inline = "s2")
+len2 = input.int(30, "", minval = 2, group = gFib, inline = "s2",
+     tooltip = "Medium swing. The number is the pivot length (candles on each side). See the long swing for details.")
+en3  = input.bool(true, "F3 / V3 – long swing", group = gFib, inline = "s3")
+len3 = input.int(80, "", minval = 2, group = gFib, inline = "s3",
+     tooltip = "The number is the pivot length: how many candles on each side must be lower (for a high) or higher (for a low).\n\nTRAILING – the swing always covers the most recent leg of price, from the latest swing high to the latest swing low (or vice versa):\n• when price extends beyond the newer extreme, that extreme moves with it,\n• when price breaks beyond the older extreme, a new leg starts,\n• when a new pivot is confirmed, the swing moves to the newest leg. If two highs are confirmed in a row, the lowest low between them is used as the swing low (and vice versa), so there is never a higher high or lower low inside the measured leg.\nFib levels therefore always describe the current move and never need to be redrawn by hand. Level 0 is the more recent extreme, level 1 the older one.\n\nEach swing defines:\n• Fib levels (columns F1, F2, F3),\n• a volume profile (columns V1, V2, V3) – from the start of the swing to the last closed candle, between the swing low and swing high.\n\nThe longest enabled swing (usually F3) also sets the height of the profile and how far back Order Blocks, FVGs and the Vext column reach.\n\nIf two swings land in the same place, the second one is skipped (its column header shows e.g. \"=F1\").")
+useEnds = input.bool(true, "Include 0% and 100% (swing high and low)", group = gFib,
+     tooltip = "The swing extremes themselves also count as levels.")
+showSwPts = input.bool(true, "Mark swing points 0 and 1 on the chart", group = gFib,
+     tooltip = "Shows exactly what each swing measures:\n• label \"F1: 1\" at the older extreme (start of the measurement),\n• label \"F1: 0\" at the more recent extreme (end of the measurement),\n• a dashed line between them.\nIn columns F1–F3, levels 0 and 1 are then drawn in the text color instead of red, with a 0 or 1 next to them.")
+
+gLv = "Fibonacci – levels"
+lvTip = "Enable / disable the level and set its value."
+showX1 = input.bool(false, "Beyond recent extreme", group = gLv, inline = "x1")
+valX1  = input.float(-0.618, "", step = 0.001, group = gLv, inline = "x1", tooltip = lvTip)
+showX2 = input.bool(false, "Beyond recent extreme", group = gLv, inline = "x2")
+valX2  = input.float(-0.272, "", step = 0.001, group = gLv, inline = "x2", tooltip = lvTip)
+showI1 = input.bool(false, "Retracement", group = gLv, inline = "i1")
+valI1  = input.float(0.236, "", step = 0.001, group = gLv, inline = "i1", tooltip = lvTip)
+showI2 = input.bool(true,  "Retracement", group = gLv, inline = "i2")
+valI2  = input.float(0.382, "", step = 0.001, group = gLv, inline = "i2", tooltip = lvTip)
+showI3 = input.bool(true,  "Retracement", group = gLv, inline = "i3")
+valI3  = input.float(0.500, "", step = 0.001, group = gLv, inline = "i3", tooltip = lvTip)
+showI4 = input.bool(true,  "Retracement", group = gLv, inline = "i4")
+valI4  = input.float(0.618, "", step = 0.001, group = gLv, inline = "i4", tooltip = lvTip)
+showI5 = input.bool(true,  "Retracement", group = gLv, inline = "i5")
+valI5  = input.float(0.786, "", step = 0.001, group = gLv, inline = "i5", tooltip = lvTip)
+showE0 = input.bool(true,  "Beyond older extreme", group = gLv, inline = "e0")
+valE0  = input.float(1.272, "", step = 0.001, group = gLv, inline = "e0", tooltip = lvTip)
+showE1 = input.bool(false,  "Beyond older extreme", group = gLv, inline = "e1")
+valE1  = input.float(1.618, "", step = 0.001, group = gLv, inline = "e1", tooltip = lvTip)
+showE2 = input.bool(false, "Beyond older extreme", group = gLv, inline = "e2")
+valE2  = input.float(2.000, "", step = 0.001, group = gLv, inline = "e2",
+     tooltip = "Levels are measured from the swing's more recent extreme (0) to its older extreme (1).\n• Retracement (0–1): inside the swing.\n• Beyond older extreme (> 1): e.g. below the low when the last move was up.\n• Beyond recent extreme (< 0): continuation targets.\n\nLevels outside the swing (> 1 and < 0) extend the profile's price range and enable the Vext column.")
+
+// ─── Order Blocks ───
+gOB          = "Order Blocks"
+useOB        = input.bool(true, "Include Order Blocks", group = gOB,
+     tooltip = "OB column. An Order Block is removed once price closes beyond it.")
+pivot_length = input.int(12, "Pivot length", minval = 1, group = gOB,
+     tooltip = "An Order Block forms at a high or low confirmed by this many candles on each side. Independent of the Fib swings.")
+use_wicks    = input.bool(true, "Include wicks", group = gOB,
+     tooltip = "On – the Order Block covers the full candle including wicks. Off – body only.")
+ob_min_atr   = input.float(0.1, "Min. height (ATR)", minval = 0.0, step = 0.05, group = gOB,
+     tooltip = "Smaller Order Blocks are ignored.")
+
+// ─── FVG ───
+gFVG        = "Fair Value Gaps"
+useFVG      = input.bool(true, "Include FVGs", group = gFVG,
+     tooltip = "FVG column. A gap is removed once price closes beyond it.")
+fvg_min_atr = input.float(0.25, "Min. height (ATR)", minval = 0.0, step = 0.05, group = gFVG,
+     tooltip = "Smaller gaps are ignored. 0 = every gap.")
+fillNone    = "None"
+fillShrink  = "Shrink"
+fillCE      = "Remove at 50%"
+fvgFill     = input.string(fillShrink, "Gap fill", options = [fillNone, fillShrink, fillCE], group = gFVG,
+     tooltip = "What happens when price trades into a gap:\n• Shrink – the filled part of the gap is cut off.\n• Remove at 50% – a candle close beyond the midpoint removes the gap.\n• None – the gap stays intact until price breaks through it.")
+
+// ─── Volume ───
+gVol       = "Volume"
+useVol     = input.bool(true, "Include volume (V1, V2, V3)", group = gVol,
+     tooltip = "Volume profiles of the three Fib swings – each from the start of its swing to the last closed candle.")
+useVolZ    = input.bool(true, "Include extended-history volume (Vext)", group = gVol,
+     tooltip = "Only active when levels outside the swing (> 1 or < 0) are enabled. If its range is almost the same as V1, V2 or V3, the column is skipped (header shows e.g. \"=V3\") so the same volume is not counted twice.")
+volMode    = input.string("Nodes", "Volume mode", options = ["Nodes", "Total volume"], group = gVol,
+     tooltip = "Nodes – only areas with clearly higher volume than their surroundings (recommended).\nTotal volume – raw volume; prices traded recently always appear \"hot\".")
+
+// ─── Weights ───
+gW    = "Confluence weights"
+wTip  = "How much this component adds to the Confluence column (a full hit = its weight).\n1 = default, 0 = excluded from the sum (the column is still drawn), 2 = counts double.\nA weight other than 1 is shown in the column header, e.g. \"×0.5\"."
+wF1   = input.float(1.0, "F1 · F2 · F3", minval = 0.0, step = 0.1, group = gW, inline = "wf")
+wF2   = input.float(1.0, "",   minval = 0.0, step = 0.1, group = gW, inline = "wf")
+wF3   = input.float(1.0, "",   minval = 0.0, step = 0.1, group = gW, inline = "wf", tooltip = wTip)
+wOB   = input.float(1.0, "OB · FVG", minval = 0.0, step = 0.1, group = gW, inline = "wz")
+wFVG  = input.float(1.0, "",  minval = 0.0, step = 0.1, group = gW, inline = "wz", tooltip = wTip)
+wV1   = input.float(1.0, "V1 · V2 · V3 · Vext", minval = 0.0, step = 0.1, group = gW, inline = "wv")
+wV2   = input.float(1.0, "",   minval = 0.0, step = 0.1, group = gW, inline = "wv")
+wV3   = input.float(1.0, "",   minval = 0.0, step = 0.1, group = gW, inline = "wv")
+wVz   = input.float(1.0, "", minval = 0.0, step = 0.1, group = gW, inline = "wv",
+     tooltip = wTip + "\n\nTip: profiles V1–V3 partly overlap (a shorter swing sits inside a longer one), so the same volume node can be counted several times. Lower volume weights (e.g. 0.5) reduce this effect.")
+
+// ─── Appearance ───
+gLook        = "Appearance"
+mxOffset     = input.int(4, "Offset from last candle", minval = 0, group = gLook,
+     tooltip = "In candles.")
+laneW        = input.int(4, "Column width", minval = 1, maxval = 20, group = gLook,
+     tooltip = "In candles. Applies to columns F1 … Vext.")
+sumW         = input.int(20, "Confluence column width", minval = 4, maxval = 100, group = gLook,
+     tooltip = "In candles. Length of the longest confluence bar.")
+colBull      = input.color(#1D9E75, "Color: support / bullish", group = gLook,
+     tooltip = "Bullish OBs and FVGs, and confluence bars below price.")
+colBear      = input.color(#E24B4A, "Color: resistance / bearish", group = gLook,
+     tooltip = "Bearish OBs and FVGs, and confluence bars above price.")
+txtSizeS     = input.string("Small", "Text size", options = ["Tiny", "Small", "Normal", "Large"], group = gLook,
+     tooltip = "Column headers and the label at the current price.")
+frameTr      = input.int(70, "Column frame transparency (%)", minval = 0, maxval = 100, group = gLook,
+     tooltip = "0 = solid, clearly visible frames. 100 = frames hidden.")
+mirror       = input.bool(true, "Mirror layout (Confluence next to candles, bars toward price)", group = gLook,
+     tooltip = "On – the Confluence (Σ) column sits right next to the candles and its bars grow to the left, toward price (like the TradingView volume profile). Columns F1, F2, F3, OB, FVG, V1, V2, V3, Vext follow behind it.\nOff – columns F1 … Vext first, Confluence last on the right, with bars growing to the right.")
+colFrame     = color.new(color.gray, frameTr)
+zonesOnChart = input.string("None", "Show zones on candles", options = ["None", "FVG", "OB", "Both"], group = gLook,
+     tooltip = "Also draws the Order Blocks and FVGs counted in the profile directly on the chart, so you can see where they come from.")
+
+// Constants
+rows             = 81     // minimum number of profile rows
+quantLv          = 8      // number of color intensity steps
+minCell          = 0.05   // cells below 5% intensity are not drawn
+dirTint          = true   // OB/FVG colored by direction
+sumSide          = true   // Σ colored by side (support / resistance)
+showHeaders      = true
+showPriceLn      = true
+showSumTxt       = true
+exactEdges       = true   // OB/FVG drawn with exact edges in the profile
+obSourceLookback = 5      // OB source candle: at most this many candles before the pivot
+obWickMode       = true   // oversized OB → use only the swing candle's wick
+obWickAtr        = 2.0
+volMaxBars       = 2000   // maximum historical lookback (✂ in the column header when reached)
+volBinAtr        = 0.1    // volume profile resolution
+volDupPct        = 80     // profiles sharing ≥ 80% of their range are treated as one
+volHVN           = "Nodes"
+hvnWinAtr        = 1.0    // neighborhood for volume nodes: ± 1 ATR
+colCold          = #378ADD
+colMid           = #EF9F27
+colHot           = #E24B4A
+transpStrong     = 10
+transpWeak       = 85
+colTxt           = chart.fg_color
+txtSize          = txtSizeS == "Tiny" ? size.tiny : txtSizeS == "Small" ? size.small : txtSizeS == "Normal" ? size.normal : size.large
+colTxtBg         = color.new(chart.bg_color, 25)
+
+// ═══════════════════════════════ FIBONACCI ═══════════════════════════════
+atrV = ta.atr(atrLen)
+
+// Highest high (hi = true) or lowest low (hi = false) over bar offsets [o1, o2]; returns [price, bar_index].
+// On ties the most recent bar wins.
+f_extreme(int o1, int o2, bool hi) =>
+    float p = na
+    int   i = na
+    int   a = math.max(0, o1)
+    int   b = math.min(o2, math.min(bar_index, volMaxBars))
+    if a <= b
+        for off = a to b
+            float v = hi ? high[off] : low[off]
+            if na(p) or (hi ? v > p : v < p)
+                p := v
+                i := bar_index - off
+    [p, i]
+
+// Trailing swing built on an alternating zigzag of confirmed pivots.
+// A = older swing point, B = newer swing point; the swing is always the leg A → B.
+// • Two confirmed highs in a row: the lowest low between them is inserted as the swing low (and vice versa),
+//   so no higher high or lower low can lie inside the measured leg.
+// • Between confirmations, price extending beyond B moves B; price breaking beyond A starts a new leg from B.
+// Direction: hB = true → last leg up, levels measured from the high.
+trailFib(int len) =>
+    var float pA = na
+    var int   iA = na
+    var bool  hA = false
+    var float pB = na
+    var int   iB = na
+    var bool  hB = true
+    if na(pB)
+        pA := low
+        iA := bar_index
+        hA := false
+        pB := high
+        iB := bar_index
+        hB := true
+    ph = ta.pivothigh(high, len, len)
+    pl = ta.pivotlow(low,  len, len)
+    int p = bar_index - len
+
+    // ── Confirmed pivot high ──
+    if not na(ph) and barstate.isconfirmed
+        if hB and iB < p
+            // Two highs in a row: insert the lowest low between them, then take the leg up to the highest high since
+            [lp, li] = f_extreme(bar_index - p + 1, bar_index - iB - 1, false)
+            if not na(lp)
+                [hp, hi_] = f_extreme(0, bar_index - li - 1, true)
+                pA := lp
+                iA := li
+                hA := false
+                pB := hp
+                iB := hi_
+                hB := true
+                // Price may already have broken below the inserted low: the leg then runs down from the new high
+                [lp2, li2] = f_extreme(0, bar_index - iB - 1, false)
+                if not na(lp2) and lp2 < pA
+                    pA := pB
+                    iA := iB
+                    hA := true
+                    pB := lp2
+                    iB := li2
+                    hB := false
+        else if not hB and p > iB
+            // High after the current swing low: new leg up
+            [hp, hi_] = f_extreme(0, bar_index - iB - 1, true)
+            if not na(hp)
+                pA := pB
+                iA := iB
+                hA := false
+                pB := hp
+                iB := hi_
+                hB := true
+        else if not hB and p > iA
+            // Lower high between the older high and the current low: it becomes the start of the leg down
+            pA := ph
+            iA := p
+            hA := true
+
+    // ── Confirmed pivot low ──
+    if not na(pl) and barstate.isconfirmed
+        if not hB and iB < p
+            // Two lows in a row: insert the highest high between them, then take the leg down to the lowest low since
+            [hp, hi_] = f_extreme(bar_index - p + 1, bar_index - iB - 1, true)
+            if not na(hp)
+                [lp, li] = f_extreme(0, bar_index - hi_ - 1, false)
+                pA := hp
+                iA := hi_
+                hA := true
+                pB := lp
+                iB := li
+                hB := false
+                // Price may already have broken above the inserted high: the leg then runs up from the new low
+                [hp2, hi2] = f_extreme(0, bar_index - iB - 1, true)
+                if not na(hp2) and hp2 > pA
+                    pA := pB
+                    iA := iB
+                    hA := false
+                    pB := hp2
+                    iB := hi2
+                    hB := true
+        else if hB and p > iB
+            // Low after the current swing high: new leg down
+            [lp, li] = f_extreme(0, bar_index - iB - 1, false)
+            if not na(lp)
+                pA := pB
+                iA := iB
+                hA := true
+                pB := lp
+                iB := li
+                hB := false
+        else if hB and p > iA
+            // Higher low between the older low and the current high: it becomes the start of the leg up
+            pA := pl
+            iA := p
+            hA := false
+
+    // ── Trailing on the current bar (outside bar: a bullish candle is treated as low first, then high) ──
+    bool grn = close >= open
+    for step = 0 to 1
+        bool doLow = grn ? step == 0 : step == 1
+        if doLow
+            if not hB and low < pB
+                pB := low
+                iB := bar_index
+            else if hB and low < pA
+                pA := pB
+                iA := iB
+                hA := true
+                pB := low
+                iB := bar_index
+                hB := false
+        else
+            if hB and high > pB
+                pB := high
+                iB := bar_index
+            else if not hB and high > pA
+                pA := pB
+                iA := iB
+                hA := false
+                pB := high
+                iB := bar_index
+                hB := true
+
+    float tHigh = hB ? pB : pA
+    float tLow  = hB ? pA : pB
+    int   iHigh = hB ? iB : iA
+    int   iLow  = hB ? iA : iB
+    // Swing start = the older point (volume profile anchor)
+    [tHigh, tLow, hB, iA, iHigh, iLow]
+
+[h1, l1, z1, a1, ih1, il1] = trailFib(len1)
+[h2, l2, z2, a2, ih2, il2] = trailFib(len2)
+[h3, l3, z3, a3, ih3, il3] = trailFib(len3)
+
+
+// Enabled levels (constant, built once)
+var array<float> ratios = array.new<float>()
+
+f_addLvl(bool on, float v) =>
+    if on
+        ratios.push(v)
+
+if barstate.isfirst
+    f_addLvl(useEnds, 0.0)
+    f_addLvl(useEnds, 1.0)
+    f_addLvl(showX1, valX1)
+    f_addLvl(showX2, valX2)
+    f_addLvl(showI1, valI1)
+    f_addLvl(showI2, valI2)
+    f_addLvl(showI3, valI3)
+    f_addLvl(showI4, valI4)
+    f_addLvl(showI5, valI5)
+    f_addLvl(showE0, valE0)
+    f_addLvl(showE1, valE1)
+    f_addLvl(showE2, valE2)
+
+// ═══════════════════════════════ OB / FVG ═══════════════════════════════
+type Zone
+    float top
+    float bot
+    int   leftIdx
+    bool  isBull
+    bool  isFvg
+    float ce
+    float top0
+    float bot0
+    bool  armed     = false
+    bool  touching  = false
+    bool  epConf    = false
+    bool  confirmed = false
+    int   tests     = 0
+
+var array<Zone> obZones  = array.new<Zone>()
+var array<Zone> fvgZones = array.new<Zone>()
+
+is_green(int offset) =>
+    close[offset] > open[offset]
+
+is_red(int offset) =>
+    close[offset] < open[offset]
+
+f_addZone(array<Zone> zs, float t, float b, int leftIdx, bool isBull, bool isFvg) =>
+    if zs.size() >= 300
+        zs.shift()
+    zs.push(Zone.new(t, b, leftIdx, isBull, isFvg, (t + b) / 2, t, b))
+
+f_buildOB(int sourceIdx, float t, float b, bool isBull) =>
+    if (t - b) >= atrV * ob_min_atr
+        f_addZone(obZones, t, b, bar_index - sourceIdx, isBull, false)
+
+f_createOBExtended(bool isBull) =>
+    int idx = pivot_length
+    int src = idx
+    if isBull and not is_red(idx)
+        for k = idx + 1 to idx + obSourceLookback
+            if is_red(k)
+                src := k
+                break
+    else if not isBull and not is_green(idx)
+        for k = idx + 1 to idx + obSourceLookback
+            if is_green(k)
+                src := k
+                break
+    float t = use_wicks ? high[src] : math.max(open[src], close[src])
+    float b = use_wicks ? low[src]  : math.min(open[src], close[src])
+    if isBull
+        b := math.min(b, use_wicks ? low[idx] : math.min(open[idx], close[idx]))
+    else
+        t := math.max(t, use_wicks ? high[idx] : math.max(open[idx], close[idx]))
+    int srcUsed = src
+    if obWickMode and (t - b) > atrV * obWickAtr
+        if isBull
+            t := math.min(open[idx], close[idx])
+            b := low[idx]
+        else
+            t := high[idx]
+            b := math.max(open[idx], close[idx])
+        srcUsed := idx
+    f_buildOB(srcUsed, t, b, isBull)
+
+// Zone tracking: a close beyond the zone (or beyond the CE, if enabled) removes it; a touch (wicks included) counts as a test;
+// a close on the correct side during a touch counts as a rejection (confirmation).
+// A zone is armed only after price has left it once – a touch at the moment of creation is not a test.
+f_track(array<Zone> zs) =>
+    bool bUp = false
+    bool bDn = false
+    bool eUp = false
+    bool eDn = false
+    if zs.size() > 0
+        for i = zs.size() - 1 to 0
+            Zone z = zs.get(i)
+            if z.isBull and close < z.bot
+                zs.remove(i)
+                bDn := true
+                continue
+            if not z.isBull and close > z.top
+                zs.remove(i)
+                bUp := true
+                continue
+            if z.isFvg and fvgFill == fillCE and (z.isBull ? close < z.ce : close > z.ce)
+                zs.remove(i)
+                continue
+            bool touch = low <= z.top and high >= z.bot
+            if not z.armed
+                if not touch
+                    z.armed := true
+            else
+                if touch and not z.touching
+                    z.tests  := z.tests + 1
+                    z.epConf := false
+                if touch and not z.epConf
+                    if z.isBull and close > z.top
+                        z.confirmed := true
+                        z.epConf    := true
+                        eUp := true
+                    else if not z.isBull and close < z.bot
+                        z.confirmed := true
+                        z.epConf    := true
+                        eDn := true
+            z.touching := touch
+            if z.isFvg and fvgFill == fillShrink and touch
+                if z.isBull
+                    if low <= z.bot
+                        zs.remove(i)
+                        continue
+                    z.top := math.min(z.top, low)
+                else
+                    if high >= z.top
+                        zs.remove(i)
+                        continue
+                    z.bot := math.max(z.bot, high)
+    [bUp, bDn, eUp, eDn]
+
+pivot_low  = ta.pivotlow(low, pivot_length, pivot_length)
+pivot_high = ta.pivothigh(high, pivot_length, pivot_length)
+
+// Zones are created and updated on closed candles only, so they do not change within a candle
+if useOB and barstate.isconfirmed
+    if not na(pivot_low)
+        f_createOBExtended(true)
+    if not na(pivot_high)
+        f_createOBExtended(false)
+
+if useFVG and barstate.isconfirmed
+    if low > high[2] and (low - high[2]) >= atrV * fvg_min_atr
+        f_addZone(fvgZones, low, high[2], bar_index - 2, true, true)
+    if high < low[2] and (low[2] - high) >= atrV * fvg_min_atr
+        f_addZone(fvgZones, low[2], high, bar_index - 2, false, true)
+
+if barstate.isconfirmed
+    [obBU, obBD, obEU, obED] = f_track(obZones)
+    [fvBU, fvBD, fvEU, fvED] = f_track(fvgZones)
+
+
+// ═══════════════════════════════ PROFILE MATRIX ═══════════════════════════════
+var array<box>   mBoxes  = array.new<box>()
+var array<label> mLabels = array.new<label>()
+var array<line>  mLines  = array.new<line>()
+
+heatCol(float v) =>
+    v < 0.5 ? color.from_gradient(v, 0.0, 0.5, colCold, colMid) : color.from_gradient(v, 0.5, 1.0, colMid, colHot)
+
+dirCol(color c, float v) =>
+    color.from_gradient(v, 0.0, 1.0, color.gray, c)
+
+cellCol(color c, float v) =>
+    color.new(c, transpWeak + (transpStrong - transpWeak) * math.min(1.0, math.max(0.0, v)))
+
+// Confluence tolerance in price units – shared by all components, independent of the matrix grid
+// ATR of the last closed candle: the profile geometry does not change within a candle
+float atrC = nz(atrV[1], atrV)
+float tol  = tolAtr * atrC
+
+// Row range for the price interval [a, b].
+// Row height ≤ tolerance: rows whose centers lie within [a, b] (exact).
+// Row height > tolerance (range too large for 200 rows): every row touching [a, b], so nothing is dropped from the matrix.
+f_rowsIn(float a, float b, float lo, float rh, int N) =>
+    int rA = 0
+    int rB = -1
+    if rh <= tol
+        rA := math.max(0, int(math.ceil((a - lo) / rh - 0.5)))
+        rB := math.min(N - 1, int(math.floor((b - lo) / rh - 0.5)))
+    else
+        rA := math.max(0, int(math.floor((a - lo) / rh)))
+        rB := math.min(N - 1, int(math.floor((b - lo) / rh)))
+    [rA, rB]
+
+// Profile value at price c: maximum of the bins within c ± t (0 outside the profile grid)
+f_volAt(array<float> vp, int off, int nb, float pLo, float vb, float c, float t) =>
+    float v = 0.0
+    float a = c - t
+    float b = c + t
+    if nb > 0 and b >= pLo and a <= pLo + nb * vb
+        int bA = math.max(0, int(math.floor((a - pLo) / vb)))
+        int bB = math.min(nb - 1, int(math.floor((b - pLo) / vb)))
+        if bA <= bB
+            for i = bA to bB
+                v := math.max(v, vp.get(off + i))
+    v
+
+// Volume profile of closed bars 1..endOff (newest to oldest), with prices clipped to [pLo, pHi].
+// Uses its own ATR-based bin grid anchored at pLo; each candle's volume is spread evenly across its high–low range, and the portion outside [pLo, pHi] is discarded.
+// Returns the raw profile (or the excess over the local average in node mode); normalization is done by the caller.
+f_buildProf(int endOff, float pLo, float pHi) =>
+    float vb = math.max(volBinAtr * atrC, (pHi - pLo) / 500.0)
+    int   nb = math.max(1, int(math.ceil((pHi - pLo) / vb)))
+    prof = array.new<float>(nb, 0.0)
+    for off = 1 to math.max(1, endOff)
+        float bh = high[off]
+        float bl = low[off]
+        float bv = nz(volume[off])
+        if bv > 0 and bh >= pLo and bl <= pHi
+            if bh > bl
+                float ch = math.min(bh, pHi)
+                float cl = math.max(bl, pLo)
+                int bA = math.max(0, math.min(nb - 1, int(math.floor((cl - pLo) / vb))))
+                int bB = math.max(0, math.min(nb - 1, int(math.floor((ch - pLo) / vb))))
+                for bi = bA to bB
+                    float bBot = pLo + bi * vb
+                    float ov = math.min(ch, bBot + vb) - math.max(cl, bBot)
+                    if ov > 0
+                        prof.set(bi, prof.get(bi) + bv * ov / (bh - bl))
+            else
+                int bi = math.max(0, math.min(nb - 1, int(math.floor((bl - pLo) / vb))))
+                prof.set(bi, prof.get(bi) + bv)
+    if volMode == volHVN
+        int hw = math.max(1, int(math.round(hvnWinAtr * atrC / vb)))
+        raw = prof.copy()
+        for bi = 0 to nb - 1
+            int qa = math.max(0, bi - hw)
+            int qb = math.min(nb - 1, bi + hw)
+            float sm = 0.0
+            for q = qa to qb
+                sm += raw.get(q)
+            prof.set(bi, math.max(0.0, raw.get(bi) - sm / (qb - qa + 1)))
+    [prof, vb, nb]
+
+// Whether a zone belongs to the window. win = [swing window start, lower window start, upper window start, swing low, swing high].
+// Zone inside the swing – swing window; below the low – lower window; above the high – upper window.
+f_inWin(Zone z, array<float> win) =>
+    float m = (z.top + z.bot) / 2
+    float st = m < win.get(3) ? win.get(1) : m > win.get(4) ? win.get(2) : win.get(0)
+    z.leftIdx >= st
+
+// Marks the zone's rows in the directional lane (1 = row within the zone expanded by the tolerance)
+f_zonesToLane(array<Zone> zs, array<float> win, array<float> bullL, array<float> bearL, float lo, float rh, int N) =>
+    if zs.size() > 0
+        float hi = lo + rh * N
+        for z in zs
+            if not f_inWin(z, win)
+                continue
+            float zb = z.bot - tol
+            float zt = z.top + tol
+            if zt > lo and zb < hi
+                [rA, rB] = f_rowsIn(zb, zt, lo, rh, N)
+                if rA <= rB
+                    for r = rA to rB
+                        if z.isBull
+                            bullL.set(r, 1.0)
+                        else
+                            bearL.set(r, 1.0)
+
+// Exactly at price c: [bullish zone present, bearish zone present] within the tolerance
+f_zonesAt(array<Zone> zs, array<float> win, float c) =>
+    bool bu = false
+    bool be = false
+    for z in zs
+        if f_inWin(z, win) and c >= z.bot - tol and c <= z.top + tol
+            if z.isBull
+                bu := true
+            else
+                be := true
+    [bu, be]
+
+// Lane cell value: [intensity 0–1, direction (1 bullish, −1 bearish, 0 neutral)]
+f_cell(int lane, int r, int N, array<float> fibL, array<float> obBull, array<float> obBear, array<float> fvBull, array<float> fvBear, array<float> volL) =>
+    float v = 0.0
+    int dd = 0
+    if lane <= 2
+        v := fibL.get(lane * N + r)
+    else if lane <= 4
+        float bu = lane == 3 ? obBull.get(r) : fvBull.get(r)
+        float be = lane == 3 ? obBear.get(r) : fvBear.get(r)
+        v := math.min(1.0, math.max(bu, be))
+        dd := dirTint ? (bu >= be ? 1 : -1) : 0
+    else
+        v := volL.get((lane - 5) * N + r)
+    [v, dd]
+
+f_quant(float v) =>
+    v < minCell ? 0 : math.max(1, math.min(quantLv, int(math.round(v * quantLv))))
+
+f_runCol(int q, int d) =>
+    float vq = q * 1.0 / quantLv
+    color c = d == 1 ? dirCol(colBull, vq) : d == -1 ? dirCol(colBear, vq) : heatCol(vq)
+    cellCol(c, vq)
+
+// OB/FVG lane with exact edges: one zone = one rectangle from its bottom to its top
+f_drawZonesExact(array<Zone> zs, array<float> win, int x1, int x2, float lo, float rh, int N, int budget) =>
+    int sk = 0
+    float hi = lo + rh * N
+    for z in zs
+        if f_inWin(z, win) and z.top > lo and z.bot < hi
+            color c = dirTint ? (z.isBull ? colBull : colBear) : heatCol(1.0)
+            if mBoxes.size() < budget
+                mBoxes.push(box.new(x1, math.min(z.top, hi), x2, math.max(z.bot, lo), border_color = color.new(c, 20), border_width = 1, bgcolor = color.new(c, 60)))
+            else
+                sk += 1
+    sk
+
+// Zones on the candles (for comparison with the matrix): fill = current extent, dashed border = original FVG extent
+f_drawOnChart(array<Zone> zs, array<float> win, int budget) =>
+    int sk = 0
+    int n  = 0
+    if zs.size() > 0
+        for i = zs.size() - 1 to 0
+            if n >= 40
+                break
+            Zone z = zs.get(i)
+            if not f_inWin(z, win)
+                continue
+            color c = z.isBull ? colBull : colBear
+            if z.isFvg and (z.top != z.top0 or z.bot != z.bot0)
+                if mBoxes.size() < budget
+                    mBoxes.push(box.new(z.leftIdx, z.top0, bar_index, z.bot0, border_color = color.new(c, 30), border_width = 1, border_style = line.style_dashed, bgcolor = color(na)))
+                else
+                    sk += 1
+            if mBoxes.size() < budget
+                mBoxes.push(box.new(z.leftIdx, z.top, bar_index, z.bot, border_color = color.new(c, 30), border_width = 1, bgcolor = color.new(c, 85)))
+            else
+                sk += 1
+            n += 1
+    sk
+
+// Left edge of a column (0 = F1 … 8 = Vext); order always starts at F1 (closest to the Confluence column in mirror mode)
+f_laneX(int lane, int xL0, int nLanes) =>
+    xL0 + lane * (laneW + 1)
+
+f_lbl(int x, float y, string t, string st, string sz, string tip = "") =>
+    label.new(x, y, t, style = st, color = colTxtBg, textcolor = colTxt, size = sz, tooltip = tip)
+
+f_px(float p) =>
+    str.tostring(p, format.mintick)
+
+// The profile is calculated on the last bar only
+bool doCalc   = barstate.islast and not na(atrV)
+float curScore = na
+string curTxt  = ""
+
+if doCalc
+    // ── Swings ──
+    hs     = array.from(h1, h2, h3)
+    ls     = array.from(l1, l2, l3)
+    zs_    = array.from(z1, z2, z3)
+    ens    = array.from(en1, en2, en3)
+    names  = array.from("F1", "F2", "F3")
+    dupOf  = array.from(-1, -1, -1)
+    anch   = array.from(a1, a2, a3)
+    iHs    = array.from(ih1, ih2, ih3)
+    iLs    = array.from(il1, il2, il3)
+    lens   = array.from(len1, len2, len3)
+    swDesc = array.from("short", "medium", "long")
+    active = array.from(false, false, false)
+    for k = 0 to 2
+        float d = hs.get(k) - ls.get(k)
+        active.set(k, ens.get(k) and not na(d) and d > 0)
+
+    // ── Duplicates: high and low within the tolerance = the same swing, counted once ──
+    for k = 1 to 2
+        for m = 0 to k - 1
+            if active.get(k) and active.get(m) and dupOf.get(k) < 0
+                if math.abs(hs.get(k) - hs.get(m)) <= tol and math.abs(ls.get(k) - ls.get(m)) <= tol
+                    dupOf.set(k, m)
+        if dupOf.get(k) >= 0
+            active.set(k, false)
+
+    // ── Fib levels (price, swing) ──
+    lvP = array.new<float>()
+    lvK = array.new<int>()
+    lvR = array.new<float>()
+    for k = 0 to 2
+        if not active.get(k) or ratios.size() == 0
+            continue
+        float h = hs.get(k)
+        float l = ls.get(k)
+        float d = h - l
+        for rt in ratios
+            float p = zs_.get(k) ? h - d * rt : l + d * rt
+            lvP.push(p)
+            lvK.push(k)
+            lvR.push(rt)
+
+    // ── Longest active swing: its price range separates the V1–V3 profiles (inside) from Vext (outside) ──
+    int kL = -1
+    for k = 0 to 2
+        if active.get(k)
+            kL := k
+    float swLL = kL >= 0 ? ls.get(kL) : na
+    float swHL = kL >= 0 ? hs.get(kL) : na
+
+    // ── Range: outermost enabled Fib levels of the active swings (and their extremes), always including price ──
+    float fLo = swLL
+    float fHi = swHL
+    for p in lvP
+        fLo := na(fLo) ? p : math.min(fLo, p)
+        fHi := na(fHi) ? p : math.max(fHi, p)
+    float cRef = nz(close[1], close)   // reference price: last closed candle
+    float rLo = na(fLo) ? cRef - 10 * atrC : math.min(fLo, cRef) - tol
+    float rHi = na(fHi) ? cRef + 10 * atrC : math.max(fHi, cRef) + tol
+
+    // ── Grid: reference price centered in a row; row height not greater than the tolerance (up to 200 rows) ──
+    int   N  = math.min(200, math.max(rows, int(math.ceil((rHi - rLo) / tol))))
+    float rh = (rHi - rLo) / N
+    int   rc = math.max(0, math.min(N - 1, int(math.floor((cRef - rLo) / rh))))
+    float lo = cRef - (rc + 0.5) * rh
+    float hi = lo + N * rh
+    // Sampling window at the row center: exact (tolerance) or, on a coarse grid, everything touching the row
+    float tR = rh <= tol ? tol : tol + rh / 2
+
+    // ── Vext window: from the last closed bar back to the candle where price LAST touched the outermost Fib level ──
+    // (below the low or above the high of the longest swing – whichever touch is most recent).
+    // If neither outermost level was ever touched: back to where price extended furthest beyond the swing.
+    int  spanL = kL >= 0 ? math.min(bar_index - anch.get(kL), volMaxBars - 1) : -1
+    int  endZ  = -1
+    bool cutZ  = false
+    if kL >= 0
+        bool needLo = fLo < swLL
+        bool needHi = fHi > swHL
+        if needLo or needHi
+            int   lim     = math.min(volMaxBars - 1, bar_index)
+            int   offLo   = -1
+            int   offHi   = -1
+            int   offMinL = -1
+            int   offMaxH = -1
+            float minL    = swLL
+            float maxH    = swHL
+            for off = 0 to lim
+                if needLo and offLo < 0
+                    if low[off] <= fLo
+                        offLo := off
+                    else if low[off] < minL
+                        minL    := low[off]
+                        offMinL := off
+                if needHi and offHi < 0
+                    if high[off] >= fHi
+                        offHi := off
+                    else if high[off] > maxH
+                        maxH    := high[off]
+                        offMaxH := off
+                // The first (most recent) touch of either outermost level ends the search
+                if offLo >= 0 or offHi >= 0
+                    break
+            if offLo >= 0 or offHi >= 0
+                endZ := offLo >= 0 ? offLo : offHi
+            else
+                endZ := math.max(offMinL, offMaxH)
+                cutZ := lim < bar_index
+
+    // ── OB/FVG window: the longer of the longest-swing and Vext windows (plus margin for the OB source candle) ──
+    float zStart = kL >= 0 ? bar_index - math.max(spanL, endZ) - obSourceLookback : 0
+    zWin = array.from(zStart, zStart, zStart, -1e300, 1e300)
+
+    // ── Volume profiles: 0–2 = V1–V3 (swing bars and prices), 3 = Vext (Vext window bars, full profile price range) ──
+    volL   = array.new<float>(4 * N, 0.0)
+    volOn  = array.from(false, false, false, false)
+    volDup = array.from(-1, -1, -1, -1)
+    volEnd = array.from(0, 0, 0, 0)
+    volCut = array.from(false, false, false, false)
+    vProf  = array.new<float>()
+    vOff   = array.from(0, 0, 0, 0)
+    vNb    = array.from(0, 0, 0, 0)
+    vBin   = array.from(0.0, 0.0, 0.0, 0.0)
+    vLo    = array.from(0.0, 0.0, 0.0, 0.0)
+    vHiP   = array.from(0.0, 0.0, 0.0, 0.0)
+    if useVol
+        for k = 0 to 2
+            if active.get(k)
+                int span = bar_index - anch.get(k)
+                volEnd.set(k, math.min(span, volMaxBars - 1))
+                volCut.set(k, span > volMaxBars - 1)
+                volOn.set(k, true)
+                vLo.set(k, ls.get(k))
+                vHiP.set(k, hs.get(k))
+        if useVolZ and endZ >= 0
+            volEnd.set(3, endZ)
+            volCut.set(3, cutZ)
+            volOn.set(3, true)
+            vLo.set(3, fLo)
+            vHiP.set(3, fHi)
+        // The same (or nearly the same) bar range = one profile, counted once
+        // (e.g. Vext with outer Fib levels disabled equals the longest swing's profile)
+        for k = 1 to 3
+            for m = 0 to k - 1
+                if volOn.get(k) and volOn.get(m) and volDup.get(k) < 0
+                    float shortL = math.min(volEnd.get(k), volEnd.get(m)) + 1.0
+                    float longL  = math.max(volEnd.get(k), volEnd.get(m)) + 1.0
+                    if shortL / longL * 100.0 >= volDupPct
+                        volDup.set(k, m)
+            if volDup.get(k) >= 0
+                volOn.set(k, false)
+        for k = 0 to 3
+            if not volOn.get(k)
+                continue
+            [prof, vb, nb] = f_buildProf(volEnd.get(k), vLo.get(k), vHiP.get(k))
+            float pMax = prof.max()
+            if pMax > 0
+                for bi = 0 to nb - 1
+                    prof.set(bi, prof.get(bi) / pMax)
+            vOff.set(k, vProf.size())
+            vNb.set(k, nb)
+            vBin.set(k, vb)
+            vProf.concat(prof)
+
+        // Sample each profile at the row centers
+        for r = 0 to N - 1
+            float c = lo + (r + 0.5) * rh
+            for k = 0 to 3
+                if volOn.get(k)
+                    volL.set(k * N + r, f_volAt(vProf, vOff.get(k), vNb.get(k), vLo.get(k), vBin.get(k), c, tR))
+
+    // ── Fib lanes (F1, F2, F3): rows within the tolerance of a level get 1 ──
+    fibL = array.new<float>(3 * N, 0.0)
+    if lvP.size() > 0
+        for j = 0 to lvP.size() - 1
+            int k = lvK.get(j)
+            float p = lvP.get(j)
+            if active.get(k) and p + tol >= lo and p - tol < hi
+                [rA, rB] = f_rowsIn(p - tol, p + tol, lo, rh, N)
+                if rA <= rB
+                    for r = rA to rB
+                        fibL.set(k * N + r, 1.0)
+
+    // ── OB / FVG lanes (zones within the window only) ──
+    obBull = array.new<float>(N, 0.0)
+    obBear = array.new<float>(N, 0.0)
+    fvBull = array.new<float>(N, 0.0)
+    fvBear = array.new<float>(N, 0.0)
+    f_zonesToLane(obZones,  zWin, obBull, obBear, lo, rh, N)
+    f_zonesToLane(fvgZones, zWin, fvBull, fvBear, lo, rh, N)
+
+    // ── Row Σ (for drawing): each component contributes at most its weight ──
+    wFib = array.from(wF1, wF2, wF3)
+    wVol = array.from(wV1, wV2, wV3, wVz)
+    sArr = array.new<float>(N, 0.0)
+    for r = 0 to N - 1
+        float s = 0.0
+        for k = 0 to 2
+            s += fibL.get(k * N + r) * wFib.get(k)
+        s += math.max(obBull.get(r), obBear.get(r)) * wOB
+        s += math.max(fvBull.get(r), fvBear.get(r)) * wFVG
+        for k = 0 to 3
+            s += volL.get(k * N + r) * wVol.get(k)
+        sArr.set(r, s)
+    float sMax = sArr.max()
+
+    // ── Σ at price – calculated exactly at the closing price (price label) ──
+    float c0 = close
+    float sc = 0.0
+    string comp = ""
+    for k = 0 to 2
+        bool hit = false
+        if lvP.size() > 0
+            for j = 0 to lvP.size() - 1
+                if lvK.get(j) == k and active.get(k) and math.abs(lvP.get(j) - c0) <= tol
+                    hit := true
+                    break
+        if hit and wFib.get(k) > 0
+            sc += wFib.get(k)
+            comp += " " + names.get(k)
+    [obU, obE] = f_zonesAt(obZones, zWin, c0)
+    [fvU, fvE] = f_zonesAt(fvgZones, zWin, c0)
+    sc += (obU or obE) ? wOB : 0
+    sc += (fvU or fvE) ? wFVG : 0
+    comp += obU and wOB > 0 ? " OB↑" : ""
+    comp += obE and wOB > 0 ? " OB↓" : ""
+    comp += fvU and wFVG > 0 ? " FVG↑" : ""
+    comp += fvE and wFVG > 0 ? " FVG↓" : ""
+    vNames = array.from("V1", "V2", "V3", "Vext")
+    for k = 0 to 3
+        if volOn.get(k)
+            float v = f_volAt(vProf, vOff.get(k), vNb.get(k), vLo.get(k), vBin.get(k), c0, tol)
+            sc += v * wVol.get(k)
+            comp += v >= 0.5 and wVol.get(k) > 0 ? " " + vNames.get(k) : ""
+    curScore := sc
+    curTxt := comp
+
+    // ── Drawing (last bar only) ──
+    if barstate.islast
+        for o in mBoxes
+            box.delete(o)
+        for o in mLabels
+            label.delete(o)
+        for o in mLines
+            line.delete(o)
+        mBoxes.clear()
+        mLabels.clear()
+        mLines.clear()
+
+        int nLanes  = 9
+        int x0      = bar_index + mxOffset
+        // Layout: standard [F1 … Vext][Σ], mirrored [Σ][F1 … Vext]
+        int xS      = mirror ? x0 : x0 + nLanes * (laneW + 1)
+        int xL0     = mirror ? x0 + sumW + 1 : x0
+        int xEnd    = mirror ? xL0 + nLanes * (laneW + 1) - 1 : xS + sumW
+        int budget  = 490 - (nLanes + 1)
+        int skipped = 0
+
+        // Σ first; adjacent rows with the same length and color are merged into one rectangle
+        if sMax > 0
+            int runS  = -1
+            int runL  = 0
+            int runQ  = 0
+            int runSd = 0
+            for r = 0 to N
+                int lenR = 0
+                int qR   = 0
+                int sd   = 0
+                if r < N
+                    float v = sArr.get(r) / sMax
+                    qR := f_quant(v)
+                    if qR > 0
+                        lenR := math.max(1, int(math.round(sumW * v)))
+                        sd   := sumSide ? (r < rc ? 1 : r > rc ? -1 : 0) : 0
+                if r == N or lenR != runL or qR != runQ or sd != runSd
+                    if runS >= 0 and runQ > 0
+                        if mBoxes.size() < budget
+                            mBoxes.push(box.new(mirror ? xS + sumW - runL : xS, lo + r * rh, mirror ? xS + sumW : xS + runL, lo + runS * rh, border_color = color(na), border_width = 0, bgcolor = f_runCol(runQ, runSd)))
+                        else
+                            skipped += 1
+                    runS  := r
+                    runL  := lenR
+                    runQ  := qR
+                    runSd := sd
+        mBoxes.push(box.new(xS, hi, xS + sumW, lo, border_color = colFrame, border_width = 1, bgcolor = color(na)))
+
+        // OB / FVG with exact edges
+        if exactEdges
+            int xOB = f_laneX(3, xL0, nLanes)
+            int xFV = f_laneX(4, xL0, nLanes)
+            skipped += f_drawZonesExact(obZones,  zWin, xOB, xOB + laneW, lo, rh, N, budget)
+            skipped += f_drawZonesExact(fvgZones, zWin, xFV, xFV + laneW, lo, rh, N, budget)
+
+        // Zones on the candles
+        if zonesOnChart == "OB" or zonesOnChart == "Both"
+            skipped += f_drawOnChart(obZones, zWin, budget)
+        if zonesOnChart == "FVG" or zonesOnChart == "Both"
+            skipped += f_drawOnChart(fvgZones, zWin, budget)
+
+        // Swing points 0 and 1 on the chart (labels at the same point are merged)
+        if showSwPts
+            ptX = array.new<int>()
+            ptY = array.new<float>()
+            ptU = array.new<bool>()
+            ptT = array.new<string>()
+            for k = 0 to 2
+                if not active.get(k)
+                    continue
+                int   xNew = zs_.get(k) ? iHs.get(k) : iLs.get(k)
+                int   xOld = zs_.get(k) ? iLs.get(k) : iHs.get(k)
+                float yNew = zs_.get(k) ? hs.get(k) : ls.get(k)
+                float yOld = zs_.get(k) ? ls.get(k) : hs.get(k)
+                if mLines.size() < 195
+                    mLines.push(line.new(xOld, yOld, xNew, yNew, color = color.new(colTxt, 50), style = line.style_dashed, width = 1))
+                for e = 0 to 1
+                    int    x   = e == 0 ? xNew : xOld
+                    float  y   = e == 0 ? yNew : yOld
+                    bool   isH = e == 0 ? zs_.get(k) : not zs_.get(k)
+                    string t   = names.get(k) + ": " + (e == 0 ? "0" : "1")
+                    int    f   = -1
+                    if ptX.size() > 0
+                        for q = 0 to ptX.size() - 1
+                            if ptX.get(q) == x and ptY.get(q) == y
+                                f := q
+                                break
+                    if f >= 0
+                        ptT.set(f, ptT.get(f) + "\n" + t)
+                    else
+                        ptX.push(x)
+                        ptY.push(y)
+                        ptU.push(isH)
+                        ptT.push(t)
+            if ptX.size() > 0
+                for q = 0 to ptX.size() - 1
+                    mLabels.push(label.new(ptX.get(q), ptY.get(q), ptT.get(q), style = ptU.get(q) ? label.style_label_down : label.style_label_up,
+                         color = colTxtBg, textcolor = colTxt, size = txtSize,
+                         tooltip = "1 = older extreme (start of the measurement)\n0 = more recent extreme (end of the measurement)\nPrice: " + f_px(ptY.get(q))))
+
+        // Lanes 0–2: Fib (F1, F2, F3) – levels drawn as lines at their exact price
+        int lnSkipped = 0
+        if lvP.size() > 0
+            for j = 0 to lvP.size() - 1
+                int k = lvK.get(j)
+                float p = lvP.get(j)
+                float rt = lvR.get(j)
+                if active.get(k) and p >= lo and p < hi
+                    int x1 = f_laneX(k, xL0, nLanes)
+                    bool isEnd = showSwPts and (rt == 0.0 or rt == 1.0)
+                    if mLines.size() < 190
+                        mLines.push(line.new(x1, p, x1 + laneW, p, color = isEnd ? colTxt : colHot, width = 2))
+                    else
+                        lnSkipped += 1
+                    if isEnd
+                        mLabels.push(label.new(x1 + laneW, p, rt == 0.0 ? "0" : "1", style = label.style_none, textcolor = colTxt, size = size.tiny))
+
+        // Lanes 3 OB, 4 FVG, 5–8 volume (V1, V2, V3, Vext)
+        for lane = 0 to nLanes - 1
+            int x1 = f_laneX(lane, xL0, nLanes)
+            int x2 = x1 + laneW
+            if lane <= 2 or (exactEdges and (lane == 3 or lane == 4)) or (lane >= 5 and not volOn.get(lane - 5))
+                mBoxes.push(box.new(x1, hi, x2, lo, border_color = colFrame, border_width = 1, bgcolor = color(na)))
+                continue
+            int runS = -1
+            int runQ = 0
+            int runD = 0
+            for r = 0 to N
+                int qR = 0
+                int dR = 0
+                if r < N
+                    [v, dd] = f_cell(lane, r, N, fibL, obBull, obBear, fvBull, fvBear, volL)
+                    qR := f_quant(v)
+                    dR := qR > 0 ? dd : 0
+                if r == N or qR != runQ or dR != runD
+                    if runS >= 0 and runQ > 0
+                        if mBoxes.size() < budget
+                            mBoxes.push(box.new(x1, lo + r * rh, x2, lo + runS * rh, border_color = color(na), border_width = 0, bgcolor = f_runCol(runQ, runD)))
+                        else
+                            skipped += 1
+                    runS := r
+                    runQ := qR
+                    runD := dR
+            mBoxes.push(box.new(x1, hi, x2, lo, border_color = colFrame, border_width = 1, bgcolor = color(na)))
+
+        // Column headers
+        if showHeaders
+            laneNames = array.from("F1", "F2", "F3", "OB", "FVG", "V1", "V2", "V3", "Vext")
+            for lane = 0 to nLanes - 1
+                string t   = laneNames.get(lane)
+                string tip = ""
+                // Second line: pivot length (candles on each side)
+                if lane <= 2 or (lane >= 5 and lane <= 7)
+                    int ks = lane <= 2 ? lane : lane - 5
+                    t += "\np" + str.tostring(lens.get(ks))
+                    string swTxt = active.get(ks) ? "\n1 = " + (zs_.get(ks) ? "low " + f_px(ls.get(ks)) : "high " + f_px(hs.get(ks))) + " (older extreme)\n0 = " + (zs_.get(ks) ? "high " + f_px(hs.get(ks)) : "low " + f_px(ls.get(ks))) + " (more recent extreme)" : ""
+                    tip := (lane <= 2 ? "Fibonacci levels – " : "Volume profile – ") + swDesc.get(ks) + " swing, pivot " + str.tostring(lens.get(ks)) + " candles on each side." + swTxt
+                if lane == 3
+                    t += "\np" + str.tostring(pivot_length)
+                    tip := "Order Blocks – pivot " + str.tostring(pivot_length) + " candles on each side, min. " + str.tostring(ob_min_atr) + " ATR."
+                if lane == 4
+                    tip := "Fair Value Gaps – min. " + str.tostring(fvg_min_atr) + " ATR, gap fill: " + fvgFill + "."
+                if lane == 8
+                    tip := "Extended-history volume profile – from the last closed candle back to the last touch of the outermost Fib level."
+                if lane <= 2
+                    t += not ens.get(lane) ? "\noff" : ""
+                    t += dupOf.get(lane) >= 0 ? "\n=" + names.get(dupOf.get(lane)) : ""
+                if lane == 8
+                    t += not useVol or not useVolZ ? "\noff" : volDup.get(3) >= 0 ? "\n=" + laneNames.get(5 + volDup.get(3)) : not volOn.get(3) ? "\nn/a" : volCut.get(3) ? "\n✂" : ""
+                if lane >= 5 and lane <= 7
+                    int kv = lane - 5
+                    t += not useVol or not ens.get(kv) ? "\noff" : dupOf.get(kv) >= 0 ? "\n=" + laneNames.get(5 + dupOf.get(kv)) : volDup.get(kv) >= 0 ? "\n=" + laneNames.get(5 + volDup.get(kv)) : volCut.get(kv) ? "\n✂" : ""
+                float wl = lane <= 2 ? wFib.get(lane) : lane == 3 ? wOB : lane == 4 ? wFVG : wVol.get(lane - 5)
+                if wl != 1.0
+                    t   += "\n×" + str.tostring(wl, "#.##")
+                    tip += "\nConfluence weight: " + str.tostring(wl, "#.##") + (wl == 0 ? " (excluded from the sum)" : "")
+                int xc = f_laneX(lane, xL0, nLanes) + int(laneW / 2)
+                mLabels.push(f_lbl(xc, hi, t, label.style_label_down, txtSize, tip))
+            mLabels.push(f_lbl(xS + int(sumW / 2), hi, "Confluence\n(sum)", label.style_label_down, txtSize,
+                 "Weighted sum of all columns at each price: a hit on a Fib level, OB or FVG adds its weight; a volume profile adds from 0 up to its weight (see \"Confluence weights\").\nA longer, stronger bar = more factors stacked at the same price.\nGreen = below price (support), red = above price (resistance)."))
+
+        // Current price
+        if showPriceLn
+            mLines.push(line.new(x0, close, xEnd, close, color = colTxt, style = line.style_dotted, width = 1))
+
+        if showSumTxt
+            mLabels.push(f_lbl(xEnd + 1, close, "Confluence " + str.tostring(curScore, "#.#") + (comp != "" ? ":" + comp : ""), label.style_label_left, txtSize,
+                 "Confluence at the current price and the components contributing to it."))
+
+// ═══════════════════════════════ WARNINGS ═══════════════════════════════
+float cumVol = ta.cum(nz(volume))
+var table info = table.new(position.top_right, 1, 1)
+if barstate.islast
+    if cumVol == 0
+        table.cell(info, 0, 0, "Confluence Profile: this market provides no volume data – columns V1, V2, V3 and Vext are empty.",
+             text_color = color.white, text_size = size.small, bgcolor = color.new(color.gray, 20))

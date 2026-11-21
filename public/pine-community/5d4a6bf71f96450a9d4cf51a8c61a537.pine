@@ -1,0 +1,373 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © SamRecio
+
+//@version=6
+indicator("Pong")
+
+///_____________________________________________________________________________________________________________________
+///UDTs
+///‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+type paddle
+    box bx
+
+type ball
+    label lab
+
+type disp
+    box bx
+
+enum style
+    s1 = "Classic"
+    s2 = "CRT Glow"
+    s3 = "Amber Terminal"
+    s4 = "Oscilloscope"
+    s5 = "DOOM"
+
+///_____________________________________________________________________________________________________________________
+///Inputs
+///‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+//Groups
+var group1 = "Data Inputs"
+var group2 = "Game Settings"
+var group3 = "Style"
+
+sym = input.symbol("", title = "Symbol", group = group1)
+src = input.source(close, title = "Data Source", group = group1)
+ma_typ = input.string("NONE", title = "Smoothing", options = ["NONE","EMA","SMA","VWMA","HMA","LSMA"], group = group1, inline = "MA")
+ma_len = input.int(20, title  = "", group = group1, inline = "MA", active = ma_typ != "NONE"?true:false)
+
+custom = input.bool(false, title = "Custom Mode", group = group2)
+auto_len = input.int(100, title = "Market Lookback", group = group2, tooltip = "When using Auto Mode, the script determines the source's relative position based on highest and lowest values within a lookback length.\n\nEssentially using Donchian Channels to scale price into an oscillator, where 100 = Highest and 0 = Lowest.", active = custom?false:true)
+cpu_multi = input.float(2, title = "CPU Paddle Speed %", minval = 1, maxval = 20, group = group2, tooltip = "The paddle moves in incraments of % width of the paddle. By default (2%), the paddle can move 2% of it's width on every update.\n\nThe direction is determined by the ball's relative Y location to the paddle.")
+
+manual_hst = input.float(100, title = "Upper Boundary", group = group2, active = custom?true:false)
+manual_lst = input.float(0, title = "Lower Boundary", group = group2, tooltip = "Boundaries can be positive or negative.", active = custom?true:false)
+
+disp_style = input.enum(style.s1, title = "Style", group = group3)
+
+///_____________________________________________________________________________________________________________________
+///Colors
+///‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+var invis = color.rgb(0,0,0,100)
+
+get_colors(style _style) =>
+    //Screen Color
+    var c1 = switch _style
+        style.s1 => #000000 
+        style.s3 => #1A0C00
+        style.s2 => #001100
+        style.s4 => #001B33
+        style.s5 => #1A0000
+
+    //Paddle Color
+    var c2 = switch _style
+        style.s1 => #FFFFFF 
+        style.s3 => #FFB000
+        style.s2 => #00FF00
+        style.s4 => #00FFFF
+        style.s5 => #FF0000
+
+    //Ball/Midline Color
+    var c3 = switch _style
+        style.s1 => #FFFFFF 
+        style.s3 => #FFD966
+        style.s2 => #ADFF2F
+        style.s4 => #33FFDD
+        style.s5 => #FF4D00
+ 
+    //Score Color
+    var c4 = switch _style
+        style.s1 => #FFFFFF 
+        style.s3 => #FFF2CC
+        style.s2 => #CCFFCC
+        style.s4 => #99FFFF
+        style.s5 => #FFB000
+
+    [c1, c2, c3, color.new(c4,50)]
+
+[screen_col,paddle_col,ball_col,score_col] = get_colors(disp_style)
+
+
+///_____________________________________________________________________________________________________________________
+///Setup
+///‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+get_src = request.security(sym,"",nz(src))
+
+hh = nz(ta.highest(get_src,auto_len),get_src)
+ll = nz(ta.lowest(get_src,auto_len),get_src)
+
+varip auto_market = ((get_src - ll) / (hh-ll)) * 100
+auto_market := ((get_src - ll) / (hh-ll)) * 100
+
+varip hst = custom ? manual_hst : 100 
+hst := custom ? manual_hst : 100
+
+varip lst = custom  ? manual_lst : 0
+lst := custom  ? manual_lst : 0
+
+market_src = custom ? get_src : auto_market
+
+ma = ma_typ == "EMA"?ta.ema(market_src,ma_len):
+     ma_typ == "SMA"?ta.sma(market_src,ma_len):
+     ma_typ == "VWMA"?ta.vwma(market_src,ma_len):
+     ma_typ == "HMA"?ta.hma(market_src,ma_len):
+     ma_typ == "LSMA"?ta.linreg(market_src,ma_len,0):market_src
+
+//Screen Setup
+offset = 2 //In front of current bar
+width = 159 // It helps if this value is odd. >>>Max 500
+
+//Paddle Size is typically 20% of screen height for pong.
+//Since our values determine the center of the paddles, the screen needs to extend 1/2 of a paddle past our top and bottom boundaries.
+//When our values reach the top or bottom, the paddles do not go off screen.
+//By doing this we are increasing the screen height by 1 paddle height. 
+//Therefore our paddles need to be equal to 1/4 boundary width(hst-lst) to be equal to 1/5 screen height.
+
+//Paddle Size
+varip ps = (hst-lst)/4 
+ps := (hst-lst)/4
+//Screen Top & Bottom
+varip top = hst + ps/2
+top := hst + ps/2
+varip bot = lst - ps/2
+bot := lst - ps/2
+//Screen Left & Right
+varip left = bar_index + offset
+left := bar_index + offset
+varip right = bar_index + width + offset
+right := bar_index + width + offset
+//Screen Middle X & Y
+varip x_mid = int(math.avg(left,right))
+x_mid := int(math.avg(left,right))
+varip y_mid = math.avg(top,bot)
+y_mid := math.avg(top,bot)
+
+///_____________________________________________________________________________________________________________________
+///Bonk Math
+///‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+//There are essentially 3 unique actions that can occur, each resulting in the ball's direction being changed from + to -. 
+//The outcome is determined by the ball's direction of movement (+/- Slope), and the ball's location on the paddle (Y-Location).
+
+//Action A: Its angle is doubled, and its speed is doubled.
+//Action B: Its angle is reversed, and its speed is decreased if it is going faster than base speed (1). 
+//Action C: Its angle is preserved, and its speed is preserved. <- Basic Bounce
+
+//The center 60% of the paddles result in a Basic Bounce, the upper and lower 20% can result in A or B.
+
+//If the ball is going upwards, and hits the top -> A 
+//If the ball is going upwards, and hits the bottom -> B 
+
+//If the ball is going downwards, and hits the bottom -> A 
+//If the ball is going downwards, and hits the top -> B 
+
+bonk_math(_top,_bot,_ball_pos,_dir,_slope) =>
+    upper = _top - ps/5
+    lower = _bot + ps/5
+    int _dir_out = na
+    float _slope_out = na
+    if _ball_pos < lower
+        if _slope < 0
+            _slope_out := _slope * 2                        //A
+            _dir_out := _dir * -2
+        else
+            _slope_out := _slope * -1                       //B
+            _dir_out := _dir > 1 ? _dir/2 : _dir * -1
+    else if _ball_pos > upper
+        if _slope > 0
+            _slope_out := _slope * 2                        //A
+            _dir_out := _dir * -2
+        else
+            _slope_out := _slope * -1                       //B
+            _dir_out := _dir > 1 ? _dir/2 : _dir * -2
+    else
+        _slope_out := _slope
+        _dir_out := _dir * -1
+        
+    [_dir_out,_slope_out]
+
+///_____________________________________________________________________________________________________________________
+///Variables
+///‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+varip market_pos = ma // Market Paddle Position
+market_pos := math.min(hst,math.max(lst,ma))
+
+varip int market_score = 0
+varip int cpu_score = 0
+
+varip screen = disp.new(box.new(left-1,top,right+1,bot, bgcolor = screen_col, border_color = screen_col))
+varip mid_line = disp.new(box.new(x_mid,top,x_mid,bot, bgcolor = invis, border_color = ball_col, border_style = line.style_dotted))
+varip cs_disp = disp.new(box.new(x_mid,top,right+1,top-ps, text = str.tostring(cpu_score), bgcolor = invis, border_color = invis, text_color = score_col))
+varip ms_disp = disp.new(box.new(left-1,top,x_mid,top-ps, text = str.tostring(market_score), bgcolor = invis, border_color = invis, text_color = score_col))
+
+varip market_p = paddle.new(box.new(left-1,market_pos+ps/2,left,market_pos-ps/2, bgcolor = paddle_col, border_color = invis))
+
+varip float cpu_pos = y_mid
+varip cpu_p =  paddle.new(box.new(right,cpu_pos+ps/2,right+1,cpu_pos-ps/2, bgcolor = paddle_col, border_color = invis))
+
+varip np = true //new point
+
+varip float ball_y = na
+varip int ball_x = na
+varip float ball_slope = na
+varip int ball_dir = 1
+varip ball = ball.new(label.new(left+int(width/2),y_mid, style = label.style_square, color = ball_col, size = size.auto))
+
+varip ng_start = false
+
+///_____________________________________________________________________________________________________________________
+///NewGame
+///‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+if barstate.islast and ng_start == false
+    market_score := 0
+    cpu_score := 0
+    cpu_pos := y_mid
+    ball_dir := 1
+    np := true
+    ng_start := true
+
+///_____________________________________________________________________________________________________________________
+///Ball Logic
+///‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+if np
+    ball_x := x_mid
+    ball_y := y_mid
+    ball_slope := math.round(math.random((hst-lst)/width,-(hst-lst)/width),2)
+    np := false
+else 
+    ball_x += ball_dir
+    ball_y += ball_slope
+    
+///_____________________________________________________________________________________________________________________
+///CPU Logic
+///‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+varip cpu_speed = cpu_multi/100 * ps
+cpu_speed := cpu_multi/100 * ps
+
+varip look_dir = math.sign(ball_y - cpu_pos)
+look_dir := math.sign(ball_y - cpu_pos)
+
+cpu_pos += switch
+    look_dir < 0 and ball_slope > 0  and ball_dir < 0 => 0
+    look_dir > 0 and ball_slope < 0 and ball_dir < 0 => 0
+    => look_dir * cpu_speed
+
+cpu_pos := math.min(hst,math.max(lst,cpu_pos))
+
+
+///_____________________________________________________________________________________________________________________
+///Scoring & Paddle Hits
+///‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+varip m_bot = market_pos - (ps/2)
+m_bot := market_pos - (ps/2)
+varip m_top = market_pos + (ps/2)
+m_top := market_pos + (ps/2)
+
+varip c_bot = cpu_pos - (ps/2)
+c_bot := cpu_pos - (ps/2)
+varip c_top = cpu_pos + (ps/2)
+c_top := cpu_pos + (ps/2)
+
+
+if ball_dir < 0 and ball_x <= left
+    if (ball_y <= m_top and ball_y >= m_bot)
+        [new_dir,new_slope] = bonk_math(m_top,m_bot,ball_y,ball_dir,ball_slope)
+        ball_dir := new_dir
+        ball_slope := new_slope
+        log.info("Bonk")
+        alert("Bonk", alert.freq_all)
+    else
+        cpu_score += 1
+        ball_dir := 1
+        np := true
+        log.info("CPU Scored!")
+        alert("CPU Scored!", alert.freq_all)
+    
+if ball_dir > 0 and ball_x >= right
+    if (ball_y <= c_top and ball_y >= c_bot)
+        [new_dir,new_slope] = bonk_math(c_top,c_bot,ball_y,ball_dir,ball_slope)
+        ball_dir := new_dir
+        ball_slope := new_slope
+        log.info("Bonk")
+        alert("Bonk", alert.freq_all)
+    else
+        market_score += 1
+        ball_dir := -1
+        np := true
+        log.info("Market Scored!")
+        alert("Market Scored!", alert.freq_all)
+
+if ball_y <= bot or ball_y >= top
+    ball_slope *= -1
+
+///_____________________________________________________________________________________________________________________
+///Display Visuals
+///‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+if barstate.islast
+    
+    //Market Paddle
+    market_p.bx.set_lefttop(left-1,market_pos+ps/2)
+    market_p.bx.set_rightbottom(left,market_pos-ps/2)
+
+    //CPU Paddle
+    cpu_p.bx.set_lefttop(right,cpu_pos+ps/2)
+    cpu_p.bx.set_rightbottom(right+1,cpu_pos-ps/2)
+    
+    //Screen
+    screen.bx.set_lefttop(left-1,top)
+    screen.bx.set_rightbottom(right+1,bot)
+
+    mid_line.bx.set_lefttop(x_mid,top)
+    mid_line.bx.set_rightbottom(x_mid,bot)
+
+    //Update Scoreboard
+    ms_disp.bx.set_lefttop(left-1,top)
+    ms_disp.bx.set_rightbottom(x_mid,top-ps)
+    ms_disp.bx.set_text(str.tostring(market_score))
+
+    cs_disp.bx.set_lefttop(x_mid,top)
+    cs_disp.bx.set_rightbottom(right+1,top-ps)
+    cs_disp.bx.set_text(str.tostring(cpu_score))
+    
+    //Move Ball
+    ball.lab.set_xy(ball_x,ball_y)
+
+///_____________________________________________________________________________________________________________________
+///Plotting
+///‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+plot(ma, title = "MA", color = paddle_col)
+plot(market_src, title = "Data Feed", color = score_col)
+ 
+plotchar(hst, title = "Upper", char = "-", location = location.absolute, color = score_col, display = display.all - display.status_line)
+plotchar(y_mid, title = "Mid-Line", char = "=", location = location.absolute, color = score_col, display = display.all - display.status_line)
+plotchar(lst, title = "Lower", char = "-", location = location.absolute, color = score_col, display = display.all - display.status_line)
+
+//Force Margin
+//Creates a plot in front of the game screen to force a margin for chart auto-scrolling.
+//To edit this margin manually for your chart go to Settings > Canvas > Margins > Right
+plot(y_mid, offset = width+50, color = invis, show_last = 1, editable = false, display = display.pane)
+
+///_____________________________________________________________________________________________________________________
+///Pinging
+///‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+//Pulling and plotting crypto to force update the indicator.
+btc = request.security("COINBASE:BTCUSD","",nz(volume))
+plot(btc, display = display.none, editable = false)
+eth = request.security("COINBASE:ETHUSD","",nz(volume))
+plot(eth, display = display.none, editable = false)
+ping = request.security_lower_tf("","1S",nz(volume))
+plot(ping.size(), display = display.none, editable = false)
+
+

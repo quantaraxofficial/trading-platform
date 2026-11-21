@@ -1,0 +1,177 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © et20tradeview
+
+//@version=6
+indicator("Kalman D7", overlay=true)
+
+
+//pre --- EMA inputs ---
+show_pul = input.bool(defval=false, title="Show EMA", group ="EMA Settings")
+source = input(close, title="Source", group ="EMA Settings")
+factor = input.float(defval= 0.5 , minval=0.1, step=0.1, group ="EMA Settings", tooltip = "EMA length1")   //first ema
+factor2 = input.float(defval= 0.5 , minval=0.1, step=0.1, group ="EMA Settings",tooltip="EMA Length2")    // second ema
+
+
+//1. --- standard values ---
+qlen  =5  // short Q lookback
+
+// base Kalman filter settings
+r_ratiob   = input.int(50, "R base", step=5, group="Kalman Settings", tooltip="Uncertainty measurement lookback")
+q_ratiob   = input.float(0.002, "q multiplier base", step=0.001, group="Kalman Settings", tooltip="Process noise variance, higher values makes the filter more responsive to change")
+r_gate_multb      = input.float(1, "R Gate Multiplier base", step=0.1 , group="Kalman Settings", tooltip="R sensitivity baseline")
+
+
+// shorter Kalman filter  more responsive with q = 0.005
+r_ratios   = input.int(50, "R fast", step=5, group="Kalman Settings", tooltip="Uncertainty measurement lookback")
+q_ratios   = input.float(0.005, "q multiplier fast", step=0.001, group="Kalman Settings", tooltip="Process noise variance, higher values makes the filter more responsive to change")
+r_gate_mults      = input.float(1, "R Gate Multiplier fast", step=0.1, group="Kalman Settings", tooltip="R sensitivity baseline")
+
+
+// --- 2. Helper Functions ---
+
+pine_ema(src, length) => 
+    alpha = 2 / (length + 1)
+    sum = src
+    
+    //The original code by Tradingview
+    // sum = 0
+    //sum := na(sum[1]) ? sma(src, length) : alpha * src + (1 - alpha) * nz(sum[1])
+    
+    sum := alpha * src + (1 - alpha) * nz(sum[1])
+
+//------------------
+clamp(x, a, b) =>
+    math.min(math.max(x, a), b)
+
+
+// --- 3. Generate state measurement----
+ema1 = pine_ema(source, factor)
+ema2 = pine_ema(ema1, factor2)
+
+
+// --- 4. The Kalman Loop ---
+
+// --- 4a. Initialize Kalman ---
+var float kf_stateb = na
+var float p_covb    = 1.0
+var float kf_states = na
+var float p_covs    = 1.0
+
+
+// ---4b. Kalman function ---
+
+calc_kalman(float src, float p_state, float p_cv, float R_raw, float Q_raw, float res_var, float q_ratio, float gate_mult) =>
+    float q_process = clamp(nz(Q_raw, 0.1), 0.001, 10.0) * q_ratio
+    
+    float r_dynamic_floor = res_var * gate_mult
+    float r_adaptive = math.max(nz(R_raw, 1.0), r_dynamic_floor)
+
+    float current_p_cov = p_cv + q_process
+    float k_gain = current_p_cov / (current_p_cov + r_adaptive + 1e-10)
+    
+    float next_state = nz(p_state, src)
+    float next_cov   = current_p_cov
+
+    if not na(k_gain)
+        next_state := next_state + k_gain * (src - next_state)
+        next_cov   := (1 - k_gain) * current_p_cov
+    
+    [next_state, next_cov]
+
+
+//-----end kalman function
+
+
+// --- 5. Kalman filter baseline version ---
+
+//  ---I Calculate residual---
+residualb = ema2 - nz(kf_stateb[1], ema2)
+
+// --- II Normalized Variance ---
+vol_baseb = ta.atr(14)
+vol_baseb := math.max(vol_baseb, 1e-6)
+
+// --- III Squared variance---
+// We square both the residual and the ATR to maintain unit consistency (Variance/Variance)
+residual_varianceb = math.pow(residualb, 2) / math.pow(vol_baseb, 2)
+
+// --- IV  Noise Estimation (R and Q) ---
+// R is the long-term baseline of variance
+R_rawb = ta.rma(residual_varianceb, r_ratiob)
+R_rawb := nz(R_rawb, 1.0)
+
+// Q is the short-term burst of variance (the "Process Noise")
+Q_rawb = ta.rma(residual_varianceb, qlen)
+Q_rawb := nz(Q_rawb, 0.1)
+
+
+// --- V Call the kalman function ---
+[new_valb, new_covb] = calc_kalman(ema2, kf_stateb, p_covb, R_rawb, Q_rawb, residual_varianceb, q_ratiob , r_gate_multb)
+
+// --- VI Update state for the next bar ---
+kf_stateb := new_valb
+p_covb    := new_covb
+
+//--- VII Smooth out microtwitch ---
+smoothb= pine_ema(kf_stateb, 3)
+
+////////////////////////////////////////////////////////////////////////////////
+
+// --- 6. Kalman filter fast version ---
+
+//  ---I Calculate residual---
+residuals = ema2 - nz(kf_states[1], ema2)
+
+// --- II Normalized Variance ---
+vol_bases = ta.atr(14)
+vol_bases := math.max(vol_bases, 1e-6)
+
+// --- III Squared variance---
+// We square both the residual and the ATR to maintain unit consistency (Variance/Variance)
+residual_variances = math.pow(residuals, 2) / math.pow(vol_bases, 2)
+
+// --- IV  Noise Estimation (R and Q) ---
+// R is the long-term baseline of variance
+R_raws = ta.rma(residual_variances, r_ratios)
+R_raws := nz(R_raws, 1.0)
+
+// Q is the short-term burst of variance (the "Process Noise")
+Q_raws = ta.rma(residual_variances, qlen)
+Q_raws := nz(Q_raws, 0.1)
+
+
+// --- V Call the kalman function ---
+[new_vals, new_covs] = calc_kalman(ema2, kf_states, p_covs, R_raws, Q_raws, residual_variances, q_ratios , r_gate_mults)
+
+// --- VI Update state for the next bar ---
+kf_states := new_vals
+p_covs    := new_covs
+
+//--- VII Smooth out microtwitch ---
+smooths= pine_ema(kf_states, 5)
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+// --- 7.  Plots ---
+//plot EMA
+//p1 not in use
+p2 = plot( show_pul  ? ema2: na, "Pumori", color=color.new(color.purple, 70), force_overlay = true)
+p3 =  plot(show_pul  ? ema2 : na, offset=-1, color=color.new(color.purple, 70), force_overlay = true)
+fill(p2, p3, color=color.new(#69359C, 70), title="Lag Shading")
+
+
+//Plot Kalman filter
+p4 = plot(smoothb, color=color.rgb(230, 65, 195) ,linewidth=2) 
+p5 = plot(smooths, color=color.rgb(80, 100, 240) ,linewidth=2) 
+
+fillColor = smooths > smoothb ? color.new(color.aqua, 80) : color.new(color.red, 80)
+fill(p4, p5, color=fillColor, title="Kalman fill")
+
+//debugging
+//plot(R_rawb, color=color.blue)
+//plot(Q_rawb , color=color.teal)
+//plot(residual_varianceb, color=color.yellow)
+
+
+

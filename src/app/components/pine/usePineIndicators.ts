@@ -12,6 +12,7 @@ import { getPineInputsMeta, type PineInputMeta, type PineRunResult } from "../..
 import { runPineOffThread } from "../../lib/pineRunner";
 import { VolumeProfileVR, DEFAULT_VP, type VolumeProfileSettings } from "../chartPrimitives/VolumeProfileVR";
 import { builtinScriptKey, scriptDefault } from "../../lib/scriptTemplates";
+import { COMMUNITY_SCRIPTS, communityScriptByName } from "../../lib/communityScripts";
 
 export const VOLUME_PROFILE_VR = "Volume Profile Visible Range";
 // Indicators the chart draws natively (not through Pine)
@@ -23,13 +24,32 @@ BUILTIN_SCRIPTS.filter((s) => s.type === "indicator" && !NATIVE.has(s.name)).for
 
 // Every indicator this hook can add, for the Indicators dialog
 export const PINE_INDICATOR_NAMES = [...Object.keys(CATALOG), VOLUME_PROFILE_VR].sort((a, b) => a.localeCompare(b));
-export const isPineIndicator = (name: string) => name === VOLUME_PROFILE_VR || !!CATALOG[name];
+// Community scripts (Editors' picks, open source): their code is fetched the first time one is used
+const COMMUNITY = new Set(COMMUNITY_SCRIPTS.map((s) => s.name));
+export const isPineIndicator = (name: string) => name === VOLUME_PROFILE_VR || !!CATALOG[name] || COMMUNITY.has(name);
+const codeLoads = new Map<string, Promise<string | null>>();
+export function loadIndicatorCode(name: string): Promise<string | null> {
+  if (CATALOG[name]) return Promise.resolve(CATALOG[name]);
+  const cs = communityScriptByName(name);
+  if (!cs) return Promise.resolve(null);
+  let p = codeLoads.get(name);
+  if (!p) {
+    p = fetch(`/pine-community/${cs.file}`)
+      .then((r) => (r.ok ? r.text() : null))
+      .catch(() => null)
+      .then((code) => { if (code) CATALOG[name] = code; else codeLoads.delete(name); return code; });
+    codeLoads.set(name, p);
+  }
+  return p;
+}
 
 export interface IndicatorEntry { id: string; name: string; visible?: boolean; inputs?: Record<string, any> }
 
 export interface PineIndicatorInstance {
   id: string; name: string; title: string; inputsText: string[]; plots: PineLegendPlot[];
   visible: boolean; overlay: boolean; paneTop?: number; error?: string;
+  // its table.new tables (dashboards, a chess board…), drawn over the chart
+  tables?: PineRunResult["tables"];
 }
 
 // The Volume Profile's settings, as inputs for the settings dialog
@@ -41,7 +61,9 @@ const VP_INPUTS: PineInputMeta[] = [
 ];
 const vpSettings = (inputs?: Record<string, any>): VolumeProfileSettings => ({ ...DEFAULT_VP, ...(inputs || {}) });
 
-interface Live { name: string; inputsKey: string; view?: PineChartView; vp?: VolumeProfileVR; vpOn?: ISeriesApi<SeriesType>; token: number; result?: PineRunResult | null; visible: boolean }
+// busy: a run is under way; again: bars changed meanwhile (one more run when it ends); lastMs: how
+// long the last run took, so a slow script isn't re-run faster than it can finish
+interface Live { name: string; inputsKey: string; view?: PineChartView; vp?: VolumeProfileVR; vpOn?: ISeriesApi<SeriesType>; token: number; result?: PineRunResult | null; visible: boolean; busy?: boolean; again?: boolean; lastMs?: number }
 
 export function usePineIndicators(opts: {
   chart: IChartApi | null;
@@ -81,6 +103,7 @@ export function usePineIndicators(opts: {
         plots: l.view && r ? r.plots.filter((p) => !p.hidden).map((p) => ({ title: p.title, color: p.color, lastValue: p.values.length ? p.values[p.values.length - 1].value : null })) : [],
         visible: l.visible, overlay: l.view ? l.view.overlay : true, paneTop: l.view?.paneTop(),
         error: r?.errors?.length ? r.errors[0].message : undefined,
+        tables: l.view && r && !r.errors?.length ? r.tables : undefined,
       });
     }
     setInstances(list);
@@ -94,8 +117,23 @@ export function usePineIndicators(opts: {
     const ind = optsRef.current.indicators.find((i) => i.id === id);
     const bars = optsRef.current.getBars() || [];
     if (!ind || !bars.length) return;
+    // One run at a time per indicator: bars that change meanwhile get one more run after it
+    if (l.busy) { l.again = true; return; }
+    l.busy = true;
     const token = ++l.token;
-    const result = await runPineOffThread(CATALOG[ind.name], bars, { symbol: optsRef.current.symbol, pineTf: optsRef.current.pineTf, inputOverrides: ind.inputs || {} });
+    const t0 = performance.now();
+    let result: PineRunResult;
+    try {
+      const code = CATALOG[ind.name] ?? await loadIndicatorCode(ind.name);
+      result = code
+        ? await runPineOffThread(code, bars, { symbol: optsRef.current.symbol, pineTf: optsRef.current.pineTf, inputOverrides: ind.inputs || {} })
+        : { plots: [], markers: [], tables: [], strategyReport: null, inputs: [], logs: [], warnings: [], errors: [{ message: "This script couldn't be loaded (no connection?)", code: "CE90003", line: 1 }], meta: { title: ind.name, isStrategy: false, overlay: true, initialCapital: 0 }, execMs: 0 };
+    } finally {
+      l.busy = false;
+      l.lastMs = performance.now() - t0;
+      // a slow script waits as long again as it took before its next re-run
+      if (l.again) { l.again = false; setTimeout(() => runRef.current?.(id), Math.max(250, l.lastMs)); }
+    }
     if (live.current.get(id) !== l || l.token !== token) return; // removed or superseded meanwhile
     if (!l.view) l.view = new PineChartView(ch, optsRef.current.mainSeries, barTimes);
     l.result = result;
@@ -106,6 +144,8 @@ export function usePineIndicators(opts: {
     requestAnimationFrame(() => requestAnimationFrame(publish));
     optsRef.current.onMarkersChanged?.();
   }, [barTimes, publish]);
+  const runRef = useRef(run);
+  runRef.current = run;
 
   // Adds / removes instances as the indicator list changes; re-runs one whose inputs changed
   useEffect(() => {
@@ -183,7 +223,7 @@ export function usePineIndicators(opts: {
     const ind = optsRef.current.indicators.find((i) => i.id === id);
     if (!ind) return null;
     const inst = instances.find((i) => i.id === id);
-    const inputsMeta = ind.name === VOLUME_PROFILE_VR ? VP_INPUTS : getPineInputsMeta(CATALOG[ind.name]);
+    const inputsMeta = ind.name === VOLUME_PROFILE_VR ? VP_INPUTS : getPineInputsMeta(CATALOG[ind.name] || "");
     return {
       scriptName: inst?.title || ind.name,
       templateKey: builtinScriptKey(ind.name),

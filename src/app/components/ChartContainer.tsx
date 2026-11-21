@@ -2140,6 +2140,13 @@ export default function ChartContainer({
 
   // Maps Pine's position.* constant (see resolveIdent's dot-namespace
   // fallback in pineScriptEngine.ts) to CSS anchoring for the table overlay.
+  // A table cell's text_size: size.tiny … size.huge, or a size in points
+  function pineCellFontSize(size: any): string {
+    if (typeof size === "number" && size > 0) return `${size}pt`;
+    const named: Record<string, number> = { auto: 11, tiny: 8, small: 10, normal: 12, large: 16, huge: 22 };
+    return `${named[String(size || "auto").replace(/^size\./, "")] ?? 11}px`;
+  }
+
   function pineTablePositionStyle(position: string): React.CSSProperties {
     const style: React.CSSProperties = { position: "absolute" };
     const p = position || "top_right";
@@ -4880,9 +4887,10 @@ export default function ChartContainer({
           when the Pine Editor panel opens (only the chart canvas itself
           does, via an explicit resize call), so anchoring directly to it
           placed "top_right" behind the editor panel instead of on the chart. */}
-      {pineTables.length > 0 && dimensions.width > 0 && (
+      {(pineTables.length > 0 || pineIndicators.instances.some(i => i.visible && i.tables?.length)) && dimensions.width > 0 && (
         <div style={{ position: "absolute", top: 0, left: 0, width: dimensions.width, height: dimensions.height, pointerEvents: "none", overflow: "hidden", zIndex: 40 }}>
-          {pineTables.map((t, ti) => (
+          {/* the Pine editor script's tables, then each chart indicator's (a dashboard, a board…) */}
+          {[...pineTables, ...pineIndicators.instances.flatMap(i => (i.visible && i.tables) || [])].map((t: any, ti: number) => (
             <div
               key={ti}
               style={{
@@ -4900,13 +4908,22 @@ export default function ChartContainer({
                   {row.map((cell: any, ci: number) => (
                     <div
                       key={ci}
+                      title={cell?.tooltip}
                       style={{
                         display: "table-cell",
                         padding: "3px 8px",
-                        fontSize: "11px",
-                        whiteSpace: "nowrap",
+                        fontSize: pineCellFontSize(cell?.textSize),
+                        whiteSpace: "pre",
+                        textAlign: /left/.test(cell?.textHalign || "") ? "left" : /right/.test(cell?.textHalign || "") ? "right" : "center",
+                        verticalAlign: /top/.test(cell?.textValign || "") ? "top" : /bottom/.test(cell?.textValign || "") ? "bottom" : "middle",
                         color: cell?.textColor || "#d1d4dc",
                         background: cell?.bgcolor || "transparent",
+                        pointerEvents: cell?.tooltip ? "auto" : undefined,
+                        // width / height: a % of the chart, as Pine sizes them
+                        ...(cell?.width ? { width: `${(cell.width / 100) * dimensions.width}px`, maxWidth: `${(cell.width / 100) * dimensions.width}px`, overflow: "hidden" } : {}),
+                        ...(cell?.height ? { height: `${(cell.height / 100) * dimensions.height}px` } : {}),
+                        // (a sized cell keeps its size: no padding, text on one tight line)
+                        ...(cell?.width || cell?.height ? { padding: 0, lineHeight: 1 } : {}),
                       }}
                     >
                       {cell?.text ?? ""}

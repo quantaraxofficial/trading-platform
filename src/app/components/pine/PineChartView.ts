@@ -2,7 +2,7 @@
 // script, else in a pane of its own under it), hline levels, fills, label/line/box drawings and
 // markers. The Pine editor's script and each built-in indicator get one each.
 
-import { AreaSeries, HistogramSeries, LineSeries, LineStyle, LineType, createSeriesMarkers } from 'lightweight-charts';
+import { AreaSeries, BarSeries, CandlestickSeries, HistogramSeries, LineSeries, LineStyle, LineType, createSeriesMarkers } from 'lightweight-charts';
 import type { IChartApi, ISeriesApi, SeriesType } from 'lightweight-charts';
 import type { PineRunResult } from '../../lib/pineScriptEngine';
 import { CandleBodyAwareLine } from '../chartPrimitives/CandleBodyAwareLine';
@@ -74,10 +74,23 @@ export class PineChartView {
       } catch { /* a plot the chart can't take is skipped */ }
     });
 
+    // plotcandle / plotbar: the script's own candles (or OHLC bars), each bar in its colour
+    (result.candles || []).filter(c => !(c as any).hidden).forEach((c, k) => {
+      try {
+        const color = colorOverrides[c.title] || c.color;
+        const common: any = { title: c.title, priceLineVisible: false, lastValueVisible: true, ...priceFormat, ...(autoscaleInfoProvider ? { autoscaleInfoProvider } : {}) };
+        const s: any = c.kind === 'candle'
+          ? chart.addSeries(CandlestickSeries, { upColor: color, downColor: color, borderUpColor: c.borderColor ?? color, borderDownColor: c.borderColor ?? color, wickUpColor: c.wickColor ?? color, wickDownColor: c.wickColor ?? color, ...common }, pane)
+          : chart.addSeries(BarSeries, { upColor: color, downColor: color, thinBars: true, ...common }, pane);
+        s.setData(c.values as any);
+        this._series[1000 + k] = s;
+      } catch { /* skipped */ }
+    });
+
     const markers = result.markers || [];
     // Levels, fills, drawings and markers of a pane hang off one of its series; with no visible
     // plot there, an invisible one spanning the bars
-    let host: ISeriesApi<SeriesType> | null = this._series[0] || null;
+    let host: ISeriesApi<SeriesType> | null = this._series[0] || this._series[1000] || null;
     if (!this.overlay && !host && (hlines.length || fills.length || drawings.length || markers.length)) {
       const times = this._times();
       const v = levels.length ? levels[0] : (drawings.length ? (drawings[0] as any).y ?? (drawings[0] as any).y1 ?? (drawings[0] as any).top : 0);
@@ -111,7 +124,7 @@ export class PineChartView {
 
   // Top of this script's pane in chart pixels (undefined for an overlay script)
   paneTop(): number | undefined {
-    const s = this._series[0] || this._anchor;
+    const s = this._series[0] || this._series[1000] || this._anchor;
     if (this.overlay || !s) return undefined;
     try {
       const idx = s.getPane().paneIndex();

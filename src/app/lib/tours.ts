@@ -124,6 +124,21 @@ export const TOURS: Tour[] = [
       },
     ],
   },
+  // Editors' picks: open-source community scripts in the Indicators dialog
+  {
+    id: "editors-picks",
+    title: "Editors' picks: community scripts",
+    page: "chart",
+    steps: [
+      {
+        target: '[data-name="indicators-editors-picks"], [data-source="editors"]',
+        title: "Editors' picks",
+        body: "Open-source scripts from TradingView's community, by their authors: volume profiles, dashboards, even Chess and Pong. Click one to add it to your chart; the author's name opens the original.",
+        before: () => window.dispatchEvent(new CustomEvent("tv:open-indicators")),
+      },
+    ],
+    after: () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
+  },
   // Everything TradePilot adds to a TradingView-style chart, across its pages (on request only)
   {
     id: "site-guide",

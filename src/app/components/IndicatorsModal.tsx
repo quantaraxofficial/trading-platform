@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Search, X, User, Users, Activity, TrendingUp, Sparkles, Heart, Star } from "lucide-react";
+import { Search, X, User, Users, Activity, TrendingUp, Sparkles, Heart, Star, Bookmark } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { DEFAULT_FAVORITE_INDICATORS, loadFavoriteIndicators, saveFavoriteIndicators } from "@/app/utils/favoriteIndicators";
@@ -10,6 +10,7 @@ import { PINE_INDICATOR_NAMES } from "./pine/usePineIndicators";
 import {
   ADD_SCRIPT_EVENT, getScript, listScripts, profileUrl, searchPeople, initials, type PublishedScript, type ScriptScope, type SearchPerson,
 } from "../community/social";
+import { COMMUNITY_SCRIPTS, COMMUNITY_LICENSE } from "../lib/communityScripts";
 
 interface IndicatorsModalProps {
   onClose: () => void;
@@ -17,10 +18,11 @@ interface IndicatorsModalProps {
 }
 
 // Where the list comes from: the chart's built-ins, or published scripts (yours, shared with you,
-// the community's most used / newest, from people you follow)
-type Source = "builtin" | "mine" | "shared" | "top" | "new" | "following";
+// the community's most used / newest, from people you follow), or TradingView's Editors' picks
+// (open-source scripts by their authors, under the MPL 2.0)
+type Source = "builtin" | "editors" | "mine" | "shared" | "top" | "new" | "following";
 type Kind = "indicator" | "strategy" | "profiles";
-const SCOPE: Record<Exclude<Source, "builtin">, { scope: ScriptScope; sort?: "top" | "new" }> = {
+const SCOPE: Record<Exclude<Source, "builtin" | "editors">, { scope: ScriptScope; sort?: "top" | "new" }> = {
   mine: { scope: "mine" }, shared: { scope: "shared" }, top: { scope: "community", sort: "top" }, new: { scope: "community", sort: "new" }, following: { scope: "following" },
 };
 
@@ -54,7 +56,7 @@ export default function IndicatorsModal({ onClose, onSelect }: IndicatorsModalPr
       const t = setTimeout(() => searchPeople(uid, search.trim()).then(p => { if (!gone) setPeople(p); }, e => !gone && setError(e.message)), 250);
       return () => { gone = true; clearTimeout(t); };
     }
-    if (source === "builtin") { setScripts(null); return; }
+    if (source === "builtin" || source === "editors") { setScripts(null); return; }
     if (!uid) { setScripts([]); return; }
     let gone = false;
     setScripts(null);
@@ -98,9 +100,11 @@ export default function IndicatorsModal({ onClose, onSelect }: IndicatorsModalPr
     "Volume",
     ...PINE_INDICATOR_NAMES,
   ])).filter(n => n.toLowerCase().includes(search.trim().toLowerCase()));
+  const q = search.trim().toLowerCase();
+  const picks = COMMUNITY_SCRIPTS.filter(p => p.kind === kind && (!q || p.name.toLowerCase().includes(q) || p.author.toLowerCase().includes(q)));
 
   const empty: Record<Source, string> = {
-    builtin: "No built-in strategies", mine: "You haven't published any. Use Publish script in the Pine editor.",
+    builtin: "No built-in strategies", editors: "No Editors' picks match", mine: "You haven't published any. Use Publish script in the Pine editor.",
     shared: "Nobody has shared a private script with you", top: "Nothing published yet", new: "Nothing published yet",
     following: "Nothing from people you follow yet",
   };
@@ -168,6 +172,7 @@ export default function IndicatorsModal({ onClose, onSelect }: IndicatorsModalPr
             <SidebarItem icon={<Activity size={18} strokeWidth={1.5} />} label="Technicals" active={source === "builtin"} onClick={() => setSource("builtin")} id="builtin" />
 
             <SectionTitle>Community</SectionTitle>
+            <SidebarItem icon={<Bookmark size={18} strokeWidth={1.5} />} label="Editors' picks" active={source === "editors"} onClick={() => setSource("editors")} id="editors" />
             <SidebarItem icon={<TrendingUp size={18} strokeWidth={1.5} />} label="Top" active={source === "top"} onClick={() => setSource("top")} id="top" />
             <SidebarItem icon={<Sparkles size={18} strokeWidth={1.5} />} label="Newest" active={source === "new"} onClick={() => setSource("new")} id="new" />
             <SidebarItem icon={<Heart size={18} strokeWidth={1.5} />} label="Following" active={source === "following"} onClick={() => setSource("following")} id="following" />
@@ -186,7 +191,9 @@ export default function IndicatorsModal({ onClose, onSelect }: IndicatorsModalPr
 
             {kind !== "profiles" && (
               <div style={{ display: "flex", fontSize: "11px", fontWeight: 600, color: "var(--tv-color-text-muted)", textTransform: "uppercase", marginBottom: "12px", letterSpacing: "0.5px" }}>
-                <span style={{ flex: 1 }}>Script name</span>{source !== "builtin" && <span>Author</span>}
+                <span style={{ flex: 1 }}>Script name</span>
+                {source === "editors" && <span style={{ textTransform: "none", fontWeight: 400, marginRight: 16 }}>Open source · {COMMUNITY_LICENSE}</span>}
+                {source !== "builtin" && <span>Author</span>}
               </div>
             )}
             {error && <div role="alert" style={{ color: "#f23645", fontSize: 13, marginBottom: 8 }}>{error}</div>}
@@ -208,6 +215,10 @@ export default function IndicatorsModal({ onClose, onSelect }: IndicatorsModalPr
               ) : source === "builtin" ? (
                 kind === "strategy" ? <Note>{empty.builtin}</Note> : builtins.map((ind, i) => (
                   <IndicatorRowItem key={ind + i} ind={ind} onSelect={() => onSelect?.(ind)} isFav={favorites.includes(ind)} onToggleFavorite={() => toggleFavorite(ind)} />
+                ))
+              ) : source === "editors" ? (
+                picks.length === 0 ? <Note>{empty.editors}</Note> : picks.map(p => (
+                  <IndicatorRowItem key={p.file} ind={p.name} author={p.author} sourceUrl={p.url} onSelect={() => onSelect?.(p.name)} isFav={favorites.includes(p.name)} onToggleFavorite={() => toggleFavorite(p.name)} />
                 ))
               ) : !uid ? <Note>Sign in to see published scripts</Note>
                 : scripts === null ? <Note>Loading…</Note>
@@ -297,7 +308,8 @@ function ScriptRow({ s, busy, onAdd }: { s: PublishedScript; busy: boolean; onAd
   );
 }
 
-function IndicatorRowItem({ ind, onSelect, isFav, onToggleFavorite }: { ind: string, onSelect: () => void, isFav: boolean, onToggleFavorite: () => void }) {
+// author / sourceUrl: an Editors' pick's author, linking to where it was published
+function IndicatorRowItem({ ind, author, sourceUrl, onSelect, isFav, onToggleFavorite }: { ind: string, author?: string, sourceUrl?: string, onSelect: () => void, isFav: boolean, onToggleFavorite: () => void }) {
   const [hover, setHover] = useState(false);
 
   return (
@@ -318,7 +330,13 @@ function IndicatorRowItem({ ind, onSelect, isFav, onToggleFavorite }: { ind: str
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <span>{ind}</span>
+      <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ind}</span>
+      {author && (
+        <a href={sourceUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} title={`${author}'s original script on TradingView (${COMMUNITY_LICENSE})`}
+          style={{ fontSize: 13, color: "var(--tv-color-text-muted)", textDecoration: "none", whiteSpace: "nowrap", marginLeft: 12 }}>
+          {author}
+        </a>
+      )}
       <div
         onClick={(e) => {
           e.stopPropagation();

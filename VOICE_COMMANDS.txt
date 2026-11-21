@@ -98,6 +98,8 @@ Send a screenshot (the picture button by the text box, paste it, or drop it on t
 - Available: ATR, Awesome Oscillator, Bull Bear Power, Donchian Channels, Asian Session Range,
   Ichimoku, MACD, Momentum, EMA, SMA, Pivot Points, Price Channel, Rate of Change, RSI, Volume,
   Volume Profile, VWAP, Williams %R.
+- Editors' picks (community scripts) by name: "add chess", "add pong", "add the stop loss
+  clustering", "add tick CVD", "remove the delta ladder".
 - Settings: "set the RSI length to 21", "make the EMA 50", "change the MACD fast length to 8".
 
 

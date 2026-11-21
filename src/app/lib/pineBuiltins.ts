@@ -396,6 +396,73 @@ export function vwapAnchored(s: State, c: TaCtx, v: number, anchor: boolean, mul
 export function obv(s: State, c: TaCtx): number {
   return once(s, c, () => { const p = c.barIndex > 0 ? c.bars[c.barIndex - 1].close : NaN; const d = isNa(p) ? 0 : Math.sign(c.bar.close - p); s.v = (s.v ?? 0) + d * (c.bar.volume ?? 0); return s.v; });
 }
+// Williams Accumulation/Distribution: the close against the true range's far side, summed
+export function wad(s: State, c: TaCtx): number {
+  return once(s, c, () => {
+    const p = c.barIndex > 0 ? c.bars[c.barIndex - 1].close : NaN;
+    if (isNa(p)) { s.v = 0; return s.v; }
+    const { high, low, close } = c.bar;
+    const mom = close - p, trueHigh = Math.max(high, p), trueLow = Math.min(low, p);
+    s.v = (s.v ?? 0) + (mom > 0 ? close - trueLow : mom < 0 ? close - trueHigh : 0);
+    return s.v;
+  });
+}
+// Negative / Positive Volume Index: moves with the close's change only on bars whose volume fell / rose
+export function nvi(s: State, c: TaCtx, positive: boolean): number {
+  return once(s, c, () => {
+    const prevV = s.v === undefined || s.v === 0 ? 1 : s.v;
+    const pb = c.barIndex > 0 ? c.bars[c.barIndex - 1] : null;
+    const close = c.bar.close, vol = c.bar.volume ?? 0;
+    if (!pb || !close || !pb.close) { s.v = prevV; return s.v; }
+    const pv = pb.volume ?? 0;
+    s.v = (positive ? vol > pv : vol < pv) ? prevV + ((close - pb.close) / pb.close) * prevV : prevV;
+    return s.v;
+  });
+}
+// Intraday Intensity Index and Williams Variable Accumulation/Distribution of the bar
+export const iii = (c: TaCtx) => { const { high, low, close } = c.bar, v = c.bar.volume ?? 0; return (2 * close - high - low) / ((high - low) * v); };
+export const wvad = (c: TaCtx) => { const { high, low, close, open } = c.bar; return ((close - open) / (high - low)) * (c.bar.volume ?? 0); };
+
+// Center of Gravity: -Σ(src[i]·(i+1)) / Σ src[i] over the length
+export function cog(s: State, c: TaCtx, v: number, len: number): number {
+  return once(s, c, () => {
+    const w = windowOf(s, c, v, Math.round(len));
+    if (!w) return NaN;
+    let num = 0, den = 0;
+    for (let i = 0; i < w.length; i++) { const x = w[w.length - 1 - i]; num += x * (i + 1); den += x; }
+    return den ? -num / den : NaN;
+  });
+}
+// The most frequent value of the window (the smallest of equally frequent ones)
+export function mode(s: State, c: TaCtx, v: number, len: number): number {
+  return once(s, c, () => {
+    const w = windowOf(s, c, v, Math.round(len));
+    if (!w) return NaN;
+    const cnt = new Map<number, number>(); let best = NaN, bc = 0;
+    w.forEach((x) => cnt.set(x, (cnt.get(x) || 0) + 1));
+    cnt.forEach((k, x) => { if (k > bc || (k === bc && x < best)) { best = x; bc = k; } });
+    return best;
+  });
+}
+// Rank Correlation Index: Spearman's correlation of the values' ranks against time, ×100
+export function rci(s: State, c: TaCtx, v: number, len: number): number {
+  return once(s, c, () => {
+    const n = Math.round(len), w = windowOf(s, c, v, n);
+    if (!w || n < 2) return NaN;
+    // time rank: newest = 1; price rank: highest = 1, ties get their average rank
+    const order = w.map((x, i) => ({ x, i })).sort((a, b) => b.x - a.x);
+    const pr = new Array(n);
+    for (let k = 0; k < n;) {
+      let j = k; while (j + 1 < n && order[j + 1].x === order[k].x) j++;
+      const r = (k + j) / 2 + 1;
+      for (let m = k; m <= j; m++) pr[order[m].i] = r;
+      k = j + 1;
+    }
+    let d2 = 0;
+    for (let i = 0; i < n; i++) { const tr = n - i; d2 += (tr - pr[i]) ** 2; }
+    return (1 - (6 * d2) / (n * (n * n - 1))) * 100;
+  });
+}
 export function accdist(s: State, c: TaCtx): number {
   return once(s, c, () => { const { high, low, close } = c.bar; const mfm = high === low ? 0 : ((close - low) - (high - close)) / (high - low); s.v = (s.v ?? 0) + mfm * (c.bar.volume ?? 0); return s.v; });
 }

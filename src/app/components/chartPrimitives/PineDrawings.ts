@@ -1,9 +1,10 @@
-// Paints a Pine script's label.new / line.new / box.new objects, as they stand after the last bar.
+// Paints a Pine script's label.new / line.new / box.new / polyline.new / linefill.new objects, as
+// they stand after the last bar.
 // Attached to a series in the script's pane (the candles for an overlay script), whose price scale
 // places y; x is a bar time, mapped through the chart's bars and extrapolated past the last one.
 
 import type { IChartApi, ISeriesApi, Logical, SeriesAttachedParameter, SeriesType, Time } from 'lightweight-charts';
-import type { PineDrawing, PineLabel, PineLine, PineBox } from '../../lib/pineScriptEngine';
+import type { PineDrawing, PineLabel, PineLine, PineBox, PinePolyline, PineLinefill } from '../../lib/pineScriptEngine';
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif";
 const SIZE: Record<string, number> = { tiny: 9, small: 11, normal: 13, large: 18, huge: 24, auto: 12 };
@@ -45,9 +46,12 @@ export class PineDrawings {
 
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }: any) => {
       const W = mediaSize.width, H = mediaSize.height;
+      // Linefills underneath, then boxes, polylines and lines in the order made
+      for (const d of this._items) if (d.kind === 'linefill') { ctx.save(); this._linefill(ctx, d, X, Y, W, H); ctx.restore(); }
       for (const d of this._items) {
         ctx.save();
         if (d.kind === 'box') this._box(ctx, d, X, Y, W);
+        else if (d.kind === 'polyline') this._polyline(ctx, d, X, Y);
         else if (d.kind === 'line') this._line(ctx, d, X, Y, W, H);
         ctx.restore();
       }
@@ -62,10 +66,10 @@ export class PineDrawings {
     else ctx.setLineDash([]);
   }
 
-  private _line(ctx: CanvasRenderingContext2D, d: PineLine, X: any, Y: any, W: number, H: number) {
+  // A line's two ends on screen, carried to the pane's edge for extend.left / right / both
+  private _ends(d: PineLine, X: any, Y: any, W: number, H: number): [number, number, number, number] | null {
     let x1 = X(d.x1), y1 = Y(d.y1), x2 = X(d.x2), y2 = Y(d.y2);
-    if (x1 === null || y1 === null || x2 === null || y2 === null) return;
-    // extend.left / right / both: carried along the line's slope to the pane's edge
+    if (x1 === null || y1 === null || x2 === null || y2 === null) return null;
     const slope = x2 !== x1 ? (y2 - y1) / (x2 - x1) : 0;
     const far = Math.max(W, H) * 4;
     const right = d.extend === 'right' || d.extend === 'both', left = d.extend === 'left' || d.extend === 'both';
@@ -75,6 +79,13 @@ export class PineDrawings {
       if (right) { const nx = dir > 0 ? W + 10 : -10; y2 = y2 + slope * (nx - x2); x2 = nx; }
       if (left) { const nx = dir > 0 ? -10 : W + 10; y1 = y1 + slope * (nx - x1); x1 = nx; }
     }
+    return [x1, y1, x2, y2];
+  }
+
+  private _line(ctx: CanvasRenderingContext2D, d: PineLine, X: any, Y: any, W: number, H: number) {
+    const e = this._ends(d, X, Y, W, H);
+    if (!e) return;
+    const [x1, y1, x2, y2] = e;
     ctx.strokeStyle = d.color;
     ctx.lineWidth = d.width;
     this._dash(ctx, d.style, d.width);
@@ -90,6 +101,41 @@ export class PineDrawings {
     };
     if (/arrow_right|arrow_both/.test(d.style)) arrow(x1, y1, x2, y2);
     if (/arrow_left|arrow_both/.test(d.style)) arrow(x2, y2, x1, y1);
+  }
+
+  // The area between two lines: their ends joined, as TradingView fills it
+  private _linefill(ctx: CanvasRenderingContext2D, d: PineLinefill, X: any, Y: any, W: number, H: number) {
+    const a = this._ends(d.line1, X, Y, W, H), b = this._ends(d.line2, X, Y, W, H);
+    if (!a || !b) return;
+    ctx.fillStyle = d.color;
+    ctx.beginPath();
+    ctx.moveTo(a[0], a[1]); ctx.lineTo(a[2], a[3]); ctx.lineTo(b[2], b[3]); ctx.lineTo(b[0], b[1]);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // A polyline through its points: straight, or curved (a smooth curve through every point),
+  // closed back to the first point, and filled when it has a fill colour
+  private _polyline(ctx: CanvasRenderingContext2D, d: PinePolyline, X: any, Y: any) {
+    const pts: [number, number][] = [];
+    for (const p of d.points) { const x = X(p.x), y = Y(p.y); if (x !== null && y !== null) pts.push([x, y]); }
+    if (pts.length < 2) return;
+    const ring = d.closed ? [...pts, pts[0]] : pts;
+    ctx.beginPath();
+    ctx.moveTo(ring[0][0], ring[0][1]);
+    if (d.curved && ring.length > 2) {
+      // Catmull-Rom through the points, as Bézier segments
+      for (let i = 0; i < ring.length - 1; i++) {
+        const p0 = ring[i - 1] ?? (d.closed ? ring[ring.length - 2] : ring[i]), p1 = ring[i], p2 = ring[i + 1];
+        const p3 = ring[i + 2] ?? (d.closed ? ring[1] : p2);
+        ctx.bezierCurveTo(p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6, p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6, p2[0], p2[1]);
+      }
+    } else for (let i = 1; i < ring.length; i++) ctx.lineTo(ring[i][0], ring[i][1]);
+    ctx.fillStyle = d.fillColor; // (na: transparent, nothing shows)
+    ctx.fill();
+    ctx.strokeStyle = d.lineColor;
+    ctx.lineWidth = d.lineWidth;
+    this._dash(ctx, d.lineStyle, d.lineWidth);
+    ctx.stroke();
   }
 
   private _box(ctx: CanvasRenderingContext2D, d: PineBox, X: any, Y: any, W: number) {

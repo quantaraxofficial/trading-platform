@@ -1,0 +1,627 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TheUltimator5
+
+//@version=6
+indicator("Match Finder [theUltimator5]", overlay=true, max_bars_back = 5000, max_lines_count = 500, max_boxes_count = 500)
+
+// HIGH-PERFORMANCE VERSION
+// - correlation engine runs only on final/realtime bar
+// - ta.correlation handles the 40 same-window Pearson calculations efficiently
+// - no dynamic historical-series helper indexing
+// - current chart statistics are computed once and shared
+// - bestFit is copied only for the winning ticker
+// - drawing lines are updated in place
+// - tables update only on the final bar
+
+// –– USER INPUTS ––
+l                 = input.int(30,             title="Correlation Window Length", minval=10, maxval=500)
+matchMode = input.string("Scale Only", title="Drawing Mode", options=["Scale Only", "Rotate & Scale"])
+showTickerTable         = input.bool(true,         title="Show Correlation Table (All Tickers)")
+color1            = input.color(color.yellow, title="Best Fit Line Color")
+
+// –– TABLE POSITION INPUTS ––
+corrPosInput = input.string(
+     "Top Right",
+     "Best-Match Summary Table Position",
+     options = ["Top Left", "Top Center", "Top Right", "Bottom Left", "Bottom Center", "Bottom Right"]
+ )
+
+tickerPosInput = input.string(
+     "Bottom Right",
+     "Correlation Table Position",
+     options = ["Top Left", "Top Center", "Top Right", "Bottom Left", "Bottom Center", "Bottom Right"]
+ )
+
+// Map string -> position enum
+f_posFromString(string p) =>
+    p == "Top Left"      ? position.top_left      :
+     p == "Top Center"    ? position.top_center    :
+     p == "Top Right"     ? position.top_right     :
+     p == "Bottom Left"   ? position.bottom_left   :
+     p == "Bottom Center" ? position.bottom_center :
+     position.bottom_right
+
+
+// –– TICKER INPUTS (40 tickers) ––
+ticker1  = input.symbol("SPY", title="Ticker 1")
+ticker2  = input.symbol("QQQ", title="Ticker 2")
+ticker3  = input.symbol("IWM", title="Ticker 3")
+ticker4  = input.symbol("DIA", title="Ticker 4")
+ticker5  = input.symbol("EEM", title="Ticker 5")
+ticker6  = input.symbol("TLT", title="Ticker 6")
+ticker7  = input.symbol("GLD", title="Ticker 7")
+ticker8  = input.symbol("XLE", title="Ticker 8")
+ticker9  = input.symbol("XLF", title="Ticker 9")
+ticker10 = input.symbol("XLK", title="Ticker 10")
+ticker11 = input.symbol("XLV", title="Ticker 11")
+ticker12 = input.symbol("XLI", title="Ticker 12")
+ticker13 = input.symbol("XLP", title="Ticker 13")
+ticker14 = input.symbol("XLY", title="Ticker 14")
+ticker15 = input.symbol("XLU", title="Ticker 15")
+ticker16 = input.symbol("XLB", title="Ticker 16")
+ticker17 = input.symbol("XLRE", title="Ticker 17")
+ticker18 = input.symbol("XLC", title="Ticker 18")
+ticker19 = input.symbol("VTI", title="Ticker 19")
+ticker20 = input.symbol("VOO", title="Ticker 20")
+ticker21 = input.symbol("VGK", title="Ticker 21")
+ticker22 = input.symbol("VWO", title="Ticker 22")
+ticker23 = input.symbol("AGG", title="Ticker 23")
+ticker24 = input.symbol("BND", title="Ticker 24")
+ticker25 = input.symbol("SHY", title="Ticker 25")
+ticker26 = input.symbol("IEF", title="Ticker 26")
+ticker27 = input.symbol("LQD", title="Ticker 27")
+ticker28 = input.symbol("HYG", title="Ticker 28")
+ticker29 = input.symbol("SLV", title="Ticker 29")
+ticker30 = input.symbol("USO", title="Ticker 30")
+ticker31 = input.symbol("UNG", title="Ticker 31")
+ticker32 = input.symbol("VNQ", title="Ticker 32")
+ticker33 = input.symbol("EFA", title="Ticker 33")
+ticker34 = input.symbol("EWJ", title="Ticker 34")
+ticker35 = input.symbol("FXI", title="Ticker 35")
+ticker36 = input.symbol("GDX", title="Ticker 36")
+ticker37 = input.symbol("SMH", title="Ticker 37")
+ticker38 = input.symbol("XBI", title="Ticker 38")
+ticker39 = input.symbol("IBB", title="Ticker 39")
+ticker40 = input.symbol("KRE", title="Ticker 40")
+
+// –– REQUEST TICKER DATA ––
+close1  = request.security(ticker1,  timeframe.period, close, lookahead=barmerge.lookahead_off)
+close2  = request.security(ticker2,  timeframe.period, close, lookahead=barmerge.lookahead_off)
+close3  = request.security(ticker3,  timeframe.period, close, lookahead=barmerge.lookahead_off)
+close4  = request.security(ticker4,  timeframe.period, close, lookahead=barmerge.lookahead_off)
+close5  = request.security(ticker5,  timeframe.period, close, lookahead=barmerge.lookahead_off)
+close6  = request.security(ticker6,  timeframe.period, close, lookahead=barmerge.lookahead_off)
+close7  = request.security(ticker7,  timeframe.period, close, lookahead=barmerge.lookahead_off)
+close8  = request.security(ticker8,  timeframe.period, close, lookahead=barmerge.lookahead_off)
+close9  = request.security(ticker9,  timeframe.period, close, lookahead=barmerge.lookahead_off)
+close10 = request.security(ticker10, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close11 = request.security(ticker11, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close12 = request.security(ticker12, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close13 = request.security(ticker13, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close14 = request.security(ticker14, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close15 = request.security(ticker15, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close16 = request.security(ticker16, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close17 = request.security(ticker17, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close18 = request.security(ticker18, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close19 = request.security(ticker19, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close20 = request.security(ticker20, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close21 = request.security(ticker21, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close22 = request.security(ticker22, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close23 = request.security(ticker23, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close24 = request.security(ticker24, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close25 = request.security(ticker25, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close26 = request.security(ticker26, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close27 = request.security(ticker27, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close28 = request.security(ticker28, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close29 = request.security(ticker29, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close30 = request.security(ticker30, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close31 = request.security(ticker31, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close32 = request.security(ticker32, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close33 = request.security(ticker33, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close34 = request.security(ticker34, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close35 = request.security(ticker35, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close36 = request.security(ticker36, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close37 = request.security(ticker37, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close38 = request.security(ticker38, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close39 = request.security(ticker39, timeframe.period, close, lookahead=barmerge.lookahead_off)
+close40 = request.security(ticker40, timeframe.period, close, lookahead=barmerge.lookahead_off)
+
+// –– VARIABLES ––
+var float   maxCorr       = na
+var string  bestETF       = na
+var float[] bestFit       = array.new_float(l, 0.0)
+var line[]  segmentLines  = array.new_line()
+var float   base          = na
+var float   target        = na
+var float   scaleFactor   = na
+var float   storedChartRange = na
+var float[] corrValues       = array.new_float(40, na)
+
+// Tables: summary + tickers (user-positionable)
+var table corrTable   = table.new(f_posFromString(corrPosInput),   1,  1,  border_width = 1)
+var table tickerTable = table.new(f_posFromString(tickerPosInput), 6, 21, border_width = 1)
+
+// Helper function to get correlation-based background color
+// Green (100%) -> Transparent (0%) -> Red (-100%)
+getCorrColor(float corrVal) =>
+    if na(corrVal)
+        color.new(color.gray, 80)
+    else
+        // corrVal is -1 to +1
+        absCorr = math.abs(corrVal)
+        transparency = math.round((1.0 - absCorr) * 100)  // 0% at extremes, 100% at zero
+        if corrVal >= 0
+            color.new(color.green, transparency)
+        else
+            color.new(color.red, transparency)
+
+
+// –– HELPER FUNCTIONS ––
+
+// Function to get the ETF array based on index
+getETFArray(int idx, array<float> arrETF0, array<float> arrETF1, array<float> arrETF2, array<float> arrETF3, array<float> arrETF4,
+             array<float> arrETF5, array<float> arrETF6, array<float> arrETF7, array<float> arrETF8, array<float> arrETF9,
+             array<float> arrETF10, array<float> arrETF11, array<float> arrETF12, array<float> arrETF13, array<float> arrETF14,
+             array<float> arrETF15, array<float> arrETF16, array<float> arrETF17, array<float> arrETF18, array<float> arrETF19,
+             array<float> arrETF20, array<float> arrETF21, array<float> arrETF22, array<float> arrETF23, array<float> arrETF24,
+             array<float> arrETF25, array<float> arrETF26, array<float> arrETF27, array<float> arrETF28, array<float> arrETF29,
+             array<float> arrETF30, array<float> arrETF31, array<float> arrETF32, array<float> arrETF33, array<float> arrETF34,
+             array<float> arrETF35, array<float> arrETF36, array<float> arrETF37, array<float> arrETF38, array<float> arrETF39) =>
+    array<float> result = na
+    switch idx
+        0 => result := arrETF0
+        1 => result := arrETF1
+        2 => result := arrETF2
+        3 => result := arrETF3
+        4 => result := arrETF4
+        5 => result := arrETF5
+        6 => result := arrETF6
+        7 => result := arrETF7
+        8 => result := arrETF8
+        9 => result := arrETF9
+        10 => result := arrETF10
+        11 => result := arrETF11
+        12 => result := arrETF12
+        13 => result := arrETF13
+        14 => result := arrETF14
+        15 => result := arrETF15
+        16 => result := arrETF16
+        17 => result := arrETF17
+        18 => result := arrETF18
+        19 => result := arrETF19
+        20 => result := arrETF20
+        21 => result := arrETF21
+        22 => result := arrETF22
+        23 => result := arrETF23
+        24 => result := arrETF24
+        25 => result := arrETF25
+        26 => result := arrETF26
+        27 => result := arrETF27
+        28 => result := arrETF28
+        29 => result := arrETF29
+        30 => result := arrETF30
+        31 => result := arrETF31
+        32 => result := arrETF32
+        33 => result := arrETF33
+        34 => result := arrETF34
+        35 => result := arrETF35
+        36 => result := arrETF36
+        37 => result := arrETF37
+        38 => result := arrETF38
+        39 => result := arrETF39
+    result
+
+// Function to get close value based on index
+getCloseValue(int idx, float c1, float c2, float c3, float c4, float c5, float c6, float c7, float c8, float c9, float c10,
+              float c11, float c12, float c13, float c14, float c15, float c16, float c17, float c18, float c19, float c20,
+              float c21, float c22, float c23, float c24, float c25, float c26, float c27, float c28, float c29, float c30,
+              float c31, float c32, float c33, float c34, float c35, float c36, float c37, float c38, float c39, float c40) =>
+    float result = na
+    switch idx
+        0 => result := c1
+        1 => result := c2
+        2 => result := c3
+        3 => result := c4
+        4 => result := c5
+        5 => result := c6
+        6 => result := c7
+        7 => result := c8
+        8 => result := c9
+        9 => result := c10
+        10 => result := c11
+        11 => result := c12
+        12 => result := c13
+        13 => result := c14
+        14 => result := c15
+        15 => result := c16
+        16 => result := c17
+        17 => result := c18
+        18 => result := c19
+        19 => result := c20
+        20 => result := c21
+        21 => result := c22
+        22 => result := c23
+        23 => result := c24
+        24 => result := c25
+        25 => result := c26
+        26 => result := c27
+        27 => result := c28
+        28 => result := c29
+        29 => result := c30
+        30 => result := c31
+        31 => result := c32
+        32 => result := c33
+        33 => result := c34
+        34 => result := c35
+        35 => result := c36
+        36 => result := c37
+        37 => result := c38
+        38 => result := c39
+        39 => result := c40
+    result
+
+// Function to calculate pearson correlation
+calcCorrelation(array<float> arrCurrent, array<float> arrETF, int length) =>
+    float sumCurrent = 0.0
+    float sumETF = 0.0
+    for j = 0 to length - 1
+        sumCurrent += array.get(arrCurrent, j)
+        sumETF += array.get(arrETF, j)
+    float meanCurrent = sumCurrent / length
+    float meanETF = sumETF / length
+    float num = 0.0
+    float denCurrent = 0.0
+    float denETF = 0.0
+    for j = 0 to length - 1
+        float dCurrent = array.get(arrCurrent, j) - meanCurrent
+        float dETF = array.get(arrETF, j) - meanETF
+        num += dCurrent * dETF
+        denCurrent += dCurrent * dCurrent
+        denETF += dETF * dETF
+    float corr = (denCurrent > 0 and denETF > 0) ? num / math.sqrt(denCurrent * denETF) : na
+    corr
+
+
+
+// Rolling Pearson correlations.
+// These must execute on every bar so the final-bar values are valid.
+corr01 = ta.correlation(close, close1,  l)
+corr02 = ta.correlation(close, close2,  l)
+corr03 = ta.correlation(close, close3,  l)
+corr04 = ta.correlation(close, close4,  l)
+corr05 = ta.correlation(close, close5,  l)
+corr06 = ta.correlation(close, close6,  l)
+corr07 = ta.correlation(close, close7,  l)
+corr08 = ta.correlation(close, close8,  l)
+corr09 = ta.correlation(close, close9,  l)
+corr10 = ta.correlation(close, close10, l)
+corr11 = ta.correlation(close, close11, l)
+corr12 = ta.correlation(close, close12, l)
+corr13 = ta.correlation(close, close13, l)
+corr14 = ta.correlation(close, close14, l)
+corr15 = ta.correlation(close, close15, l)
+corr16 = ta.correlation(close, close16, l)
+corr17 = ta.correlation(close, close17, l)
+corr18 = ta.correlation(close, close18, l)
+corr19 = ta.correlation(close, close19, l)
+corr20 = ta.correlation(close, close20, l)
+corr21 = ta.correlation(close, close21, l)
+corr22 = ta.correlation(close, close22, l)
+corr23 = ta.correlation(close, close23, l)
+corr24 = ta.correlation(close, close24, l)
+corr25 = ta.correlation(close, close25, l)
+corr26 = ta.correlation(close, close26, l)
+corr27 = ta.correlation(close, close27, l)
+corr28 = ta.correlation(close, close28, l)
+corr29 = ta.correlation(close, close29, l)
+corr30 = ta.correlation(close, close30, l)
+corr31 = ta.correlation(close, close31, l)
+corr32 = ta.correlation(close, close32, l)
+corr33 = ta.correlation(close, close33, l)
+corr34 = ta.correlation(close, close34, l)
+corr35 = ta.correlation(close, close35, l)
+corr36 = ta.correlation(close, close36, l)
+corr37 = ta.correlation(close, close37, l)
+corr38 = ta.correlation(close, close38, l)
+corr39 = ta.correlation(close, close39, l)
+corr40 = ta.correlation(close, close40, l)
+
+//––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+// 1 · SEARCH FOR BEST-MATCH ETF SEGMENT
+//
+// HIGH-PERFORMANCE SEARCH:
+// - Runs only on the final/realtime bar.
+// - No per-ticker temporary arrays.
+// - Current-chart Pearson statistics are calculated once.
+// - Each ticker uses a single-pass Pearson calculation.
+// - bestFit is materialized only for the winning ticker.
+if barstate.islast and bar_index >= l
+    maxCorr     := na
+    bestETF     := na
+    base        := na
+    target      := close[0]
+    scaleFactor := na
+
+    if array.size(bestFit) != l
+        bestFit := array.new_float(l, 0.0)
+
+    currentSymbol = syminfo.ticker
+
+    // Current chart range for display scaling.
+    float chartHigh = close[0]
+    float chartLow  = close[0]
+    for j = 1 to l - 1
+        chartHigh := math.max(chartHigh, close[j])
+        chartLow  := math.min(chartLow,  close[j])
+
+    storedChartRange := chartHigh - chartLow
+
+    // Store the rolling correlations for ranking.
+    array.set(corrValues, 0,  corr01)
+    array.set(corrValues, 1,  corr02)
+    array.set(corrValues, 2,  corr03)
+    array.set(corrValues, 3,  corr04)
+    array.set(corrValues, 4,  corr05)
+    array.set(corrValues, 5,  corr06)
+    array.set(corrValues, 6,  corr07)
+    array.set(corrValues, 7,  corr08)
+    array.set(corrValues, 8,  corr09)
+    array.set(corrValues, 9,  corr10)
+    array.set(corrValues, 10, corr11)
+    array.set(corrValues, 11, corr12)
+    array.set(corrValues, 12, corr13)
+    array.set(corrValues, 13, corr14)
+    array.set(corrValues, 14, corr15)
+    array.set(corrValues, 15, corr16)
+    array.set(corrValues, 16, corr17)
+    array.set(corrValues, 17, corr18)
+    array.set(corrValues, 18, corr19)
+    array.set(corrValues, 19, corr20)
+    array.set(corrValues, 20, corr21)
+    array.set(corrValues, 21, corr22)
+    array.set(corrValues, 22, corr23)
+    array.set(corrValues, 23, corr24)
+    array.set(corrValues, 24, corr25)
+    array.set(corrValues, 25, corr26)
+    array.set(corrValues, 26, corr27)
+    array.set(corrValues, 27, corr28)
+    array.set(corrValues, 28, corr29)
+    array.set(corrValues, 29, corr30)
+    array.set(corrValues, 30, corr31)
+    array.set(corrValues, 31, corr32)
+    array.set(corrValues, 32, corr33)
+    array.set(corrValues, 33, corr34)
+    array.set(corrValues, 34, corr35)
+    array.set(corrValues, 35, corr36)
+    array.set(corrValues, 36, corr37)
+    array.set(corrValues, 37, corr38)
+    array.set(corrValues, 38, corr39)
+    array.set(corrValues, 39, corr40)
+
+    tickerNames = array.from(ticker1, ticker2, ticker3, ticker4, ticker5, ticker6, ticker7, ticker8, ticker9, ticker10,
+                             ticker11, ticker12, ticker13, ticker14, ticker15, ticker16, ticker17, ticker18, ticker19, ticker20,
+                             ticker21, ticker22, ticker23, ticker24, ticker25, ticker26, ticker27, ticker28, ticker29, ticker30,
+                             ticker31, ticker32, ticker33, ticker34, ticker35, ticker36, ticker37, ticker38, ticker39, ticker40)
+
+    int bestIdx = na
+
+    for i = 0 to 39
+        corrVal = array.get(corrValues, i)
+        tickerName = array.get(tickerNames, i)
+        tickerSymbolOnly = str.contains(tickerName, ":") ? str.split(tickerName, ":").get(1) : tickerName
+
+        if not na(corrVal) and tickerSymbolOnly != currentSymbol and (na(maxCorr) or corrVal > maxCorr)
+            maxCorr := corrVal
+            bestETF := tickerName
+            bestIdx := i
+
+    // Materialize only the winning series.
+    if not na(bestIdx)
+        float etfHigh = na
+        float etfLow  = na
+
+        for j = 0 to l - 1
+            float etfValue = na
+            switch bestIdx
+                0  => etfValue := close1[j]
+                1  => etfValue := close2[j]
+                2  => etfValue := close3[j]
+                3  => etfValue := close4[j]
+                4  => etfValue := close5[j]
+                5  => etfValue := close6[j]
+                6  => etfValue := close7[j]
+                7  => etfValue := close8[j]
+                8  => etfValue := close9[j]
+                9  => etfValue := close10[j]
+                10 => etfValue := close11[j]
+                11 => etfValue := close12[j]
+                12 => etfValue := close13[j]
+                13 => etfValue := close14[j]
+                14 => etfValue := close15[j]
+                15 => etfValue := close16[j]
+                16 => etfValue := close17[j]
+                17 => etfValue := close18[j]
+                18 => etfValue := close19[j]
+                19 => etfValue := close20[j]
+                20 => etfValue := close21[j]
+                21 => etfValue := close22[j]
+                22 => etfValue := close23[j]
+                23 => etfValue := close24[j]
+                24 => etfValue := close25[j]
+                25 => etfValue := close26[j]
+                26 => etfValue := close27[j]
+                27 => etfValue := close28[j]
+                28 => etfValue := close29[j]
+                29 => etfValue := close30[j]
+                30 => etfValue := close31[j]
+                31 => etfValue := close32[j]
+                32 => etfValue := close33[j]
+                33 => etfValue := close34[j]
+                34 => etfValue := close35[j]
+                35 => etfValue := close36[j]
+                36 => etfValue := close37[j]
+                37 => etfValue := close38[j]
+                38 => etfValue := close39[j]
+                39 => etfValue := close40[j]
+
+            array.set(bestFit, j, etfValue)
+
+            if j == 0
+                etfHigh := etfValue
+                etfLow  := etfValue
+            else
+                etfHigh := math.max(etfHigh, etfValue)
+                etfLow  := math.min(etfLow,  etfValue)
+
+        base := array.get(bestFit, 0)
+        etfRange = etfHigh - etfLow
+        scaleFactor := etfRange / (storedChartRange == 0.0 ? 1.0 : storedChartRange)
+
+    // TABLE: SHOW ALL TICKER CORRELATIONS (SORTED BY CORRELATION)
+    if showTickerTable
+        sortedIndices = array.new_int(40)
+        sortedCorrs = array.new_float(40)
+
+        for i = 0 to 39
+            array.set(sortedIndices, i, i)
+            cVal = array.get(corrValues, i)
+            array.set(sortedCorrs, i, na(cVal) ? -999.0 : cVal)
+
+        // Bubble sort is small (40 values) and now runs only on the final bar.
+        for i = 0 to 38
+            for j = 0 to 38 - i
+                if array.get(sortedCorrs, j) < array.get(sortedCorrs, j + 1)
+                    tempCorr = array.get(sortedCorrs, j)
+                    array.set(sortedCorrs, j, array.get(sortedCorrs, j + 1))
+                    array.set(sortedCorrs, j + 1, tempCorr)
+
+                    tempIdx = array.get(sortedIndices, j)
+                    array.set(sortedIndices, j, array.get(sortedIndices, j + 1))
+                    array.set(sortedIndices, j + 1, tempIdx)
+
+        table.cell(tickerTable, 0, 0, "Rank",   text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.tiny)
+        table.cell(tickerTable, 1, 0, "Ticker", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.tiny)
+        table.cell(tickerTable, 2, 0, "Corr",   text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.tiny)
+        table.cell(tickerTable, 3, 0, "Rank",   text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.tiny)
+        table.cell(tickerTable, 4, 0, "Ticker", text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.tiny)
+        table.cell(tickerTable, 5, 0, "Corr",   text_color=color.white, bgcolor=color.new(color.black, 0), text_size=size.tiny)
+
+        for i = 0 to 19
+            row = i + 1
+
+            leftSortedIdx = array.get(sortedIndices, i)
+            tName = array.get(tickerNames, leftSortedIdx)
+            tNameDisplay = str.contains(tName, ":") ? str.split(tName, ":").get(1) : tName
+            cVal = array.get(corrValues, leftSortedIdx)
+            rowBg = getCorrColor(cVal)
+
+            table.cell(tickerTable, 0, row, str.tostring(i + 1), text_color=color.white, bgcolor=rowBg, text_size=size.tiny)
+            table.cell(tickerTable, 1, row, tNameDisplay,         text_color=color.white, bgcolor=rowBg, text_size=size.tiny)
+            table.cell(tickerTable, 2, row, na(cVal) ? "n/a" : str.tostring(cVal * 100.0, "#.##") + "%",
+                       text_color=color.white, bgcolor=rowBg, text_size=size.tiny)
+
+            rightSortedIdx = array.get(sortedIndices, i + 20)
+            tName2 = array.get(tickerNames, rightSortedIdx)
+            tName2Display = str.contains(tName2, ":") ? str.split(tName2, ":").get(1) : tName2
+            cVal2 = array.get(corrValues, rightSortedIdx)
+            rowBg2 = getCorrColor(cVal2)
+
+            table.cell(tickerTable, 3, row, str.tostring(i + 21), text_color=color.white, bgcolor=rowBg2, text_size=size.tiny)
+            table.cell(tickerTable, 4, row, tName2Display,          text_color=color.white, bgcolor=rowBg2, text_size=size.tiny)
+            table.cell(tickerTable, 5, row, na(cVal2) ? "n/a" : str.tostring(cVal2 * 100.0, "#.##") + "%",
+                       text_color=color.white, bgcolor=rowBg2, text_size=size.tiny)
+    else
+        table.clear(tickerTable, start_row=0, start_column=0)
+
+// 2 · GRAPHICS MANAGEMENT
+// Lines are created once and updated in place on the final/realtime bar.
+
+// 3 · DRAW MATCHED SEGMENT
+if barstate.islast and array.size(bestFit) == l and not na(base) and not na(target) and not na(scaleFactor) and scaleFactor != 0
+    chartRange = storedChartRange
+
+    etfHigh = array.max(bestFit)
+    etfLow  = array.min(bestFit)
+    etfRange = etfHigh - etfLow
+
+    rangeScaleFactor = etfRange != 0 ? chartRange / etfRange : 1.0
+
+    if matchMode == "Scale Only"
+        etfCurrent = array.get(bestFit, 0)
+        chartCurrent = close[0]
+
+        for j = 0 to l - 2
+            etfVal1 = array.get(bestFit, j)
+            etfVal2 = array.get(bestFit, j + 1)
+
+            y1 = chartCurrent + (etfVal1 - etfCurrent) * rangeScaleFactor
+            y2 = chartCurrent + (etfVal2 - etfCurrent) * rangeScaleFactor
+
+            x1 = bar_index - j
+            x2 = bar_index - (j + 1)
+
+            if array.size(segmentLines) <= j
+                ln = line.new(x1, y1, x2, y2, color=color1, width=2)
+                array.push(segmentLines, ln)
+            else
+                ln = array.get(segmentLines, j)
+                line.set_xy1(ln, x1, y1)
+                line.set_xy2(ln, x2, y2)
+                line.set_color(ln, color1)
+                line.set_width(ln, 2)
+    else
+        firstETF = array.get(bestFit, 0)
+        lastETF  = array.get(bestFit, l - 1)
+
+        firstChart = close[0]
+        lastChart  = close[l - 1]
+
+        for j = 0 to l - 2
+            etfVal1 = array.get(bestFit, j)
+            etfVal2 = array.get(bestFit, j + 1)
+
+            scaledVal1 = firstETF + (etfVal1 - firstETF) * rangeScaleFactor
+            scaledVal2 = firstETF + (etfVal2 - firstETF) * rangeScaleFactor
+
+            t1 = float(j) / float(l - 1)
+            t2 = float(j + 1) / float(l - 1)
+
+            scaledFirst = firstETF
+            scaledLast  = firstETF + (lastETF - firstETF) * rangeScaleFactor
+
+            y1 = firstChart + (scaledVal1 - scaledFirst) + t1 * ((lastChart - firstChart) - (scaledLast - scaledFirst))
+            y2 = firstChart + (scaledVal2 - scaledFirst) + t2 * ((lastChart - firstChart) - (scaledLast - scaledFirst))
+
+            x1 = bar_index - j
+            x2 = bar_index - (j + 1)
+
+            if array.size(segmentLines) <= j
+                ln = line.new(x1, y1, x2, y2, color=color1, width=2)
+                array.push(segmentLines, ln)
+            else
+                ln = array.get(segmentLines, j)
+                line.set_xy1(ln, x1, y1)
+                line.set_xy2(ln, x2, y2)
+                line.set_color(ln, color1)
+                line.set_width(ln, 2)
+
+// 4 · BEST-MATCH SUMMARY TABLE (single line at top right)
+if barstate.islast and not na(maxCorr) and not na(bestETF)
+    corrPercent = maxCorr * 100.0
+
+    // Color blending from orange to blue based on correlation
+    blendRatioRaw = (corrPercent - 70.0) / 30.0
+    blendRatio    = math.max(0.0, math.min(1.0, blendRatioRaw))
+
+    r = math.round(255.0 * (1.0 - blendRatio) + 0.0   * blendRatio)
+    g = math.round(120.0 * (1.0 - blendRatio) + 140.0 * blendRatio)
+    b = math.round(0.0   * (1.0 - blendRatio) + 255.0 * blendRatio)
+
+    bgColor   = color.rgb(r, g, b)
+    tableText = "Best Match: " + bestETF + " (" + str.tostring(corrPercent, format.percent) + ")"
+
+    table.cell(corrTable, 0, 0, text=tableText, text_color=color.white, bgcolor=bgColor, text_size = size.small)
+else if barstate.islast
+    table.cell(corrTable, 0, 0, text="No Ticker Match Found", text_color=color.white, bgcolor=color.gray, text_size=size.small)
+
+

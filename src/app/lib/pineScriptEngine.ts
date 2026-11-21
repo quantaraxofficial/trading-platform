@@ -67,6 +67,14 @@ export interface PineTableCell {
   text: string;
   textColor?: string;
   bgcolor?: string;
+  // size.* name ("small") or points; align_left / center / right; top / center / bottom
+  textSize?: string | number;
+  textHalign?: string;
+  textValign?: string;
+  tooltip?: string;
+  // the cell's size as a % of the chart's width / height (0: fits its text)
+  width?: number;
+  height?: number;
 }
 
 export interface PineTableResult {
@@ -113,8 +121,15 @@ export interface PineStrategyReport {
   equityCurve: { time: number; equity: number; close: number }[];
 }
 
+// plotcandle / plotbar: candles (or OHLC bars) a script draws itself, with per-bar colours
+export interface PineCandlePlot {
+  title: string; kind: "candle" | "bar"; color: string; wickColor?: string; borderColor?: string;
+  values: { time: number; open?: number; high?: number; low?: number; close?: number; color?: string; wickColor?: string; borderColor?: string }[];
+}
+
 export interface PineRunResult {
   plots: PinePlotResult[];
+  candles?: PineCandlePlot[];
   hlines?: PineHline[];
   fills?: PineFill[];
   drawings?: PineDrawing[];
@@ -125,7 +140,7 @@ export interface PineRunResult {
   logs: string[];
   warnings: string[];
   errors: PineScriptError[];
-  meta: { title: string; shortTitle?: string; isStrategy: boolean; overlay: boolean; initialCapital: number; processOrdersOnClose?: boolean; pyramiding?: number; defaultQtyValue?: number; defaultQtyType?: string; precision?: number; maxLabels?: number; maxLines?: number; maxBoxes?: number };
+  meta: { title: string; shortTitle?: string; isStrategy: boolean; overlay: boolean; initialCapital: number; processOrdersOnClose?: boolean; pyramiding?: number; defaultQtyValue?: number; defaultQtyType?: string; precision?: number; maxLabels?: number; maxLines?: number; maxBoxes?: number; maxPolylines?: number };
   execMs: number;
   // Profiler mode: time spent on each script line (inclusive of the lines a block contains) and
   // how many times it ran
@@ -166,7 +181,33 @@ function tokenize(s: string): Token[] {
   const n = s.length;
   while (i < n) {
     const c = s[i];
-    if (c === " " || c === "\t") { i++; continue; }
+    if (c === " " || c === "\t") {
+      // `vpArr   .set(x)`: spaces before a method / field dot belong to nothing
+      let j = i;
+      while (j < n && (s[j] === " " || s[j] === "\t")) j++;
+      const last = toks[toks.length - 1];
+      if (s[j] === "." && /[a-zA-Z_]/.test(s[j + 1] || "") && last && (last.t === "id" || last.t === ")" || last.t === "]")) {
+        if (last.t === "id") {
+          let k = j + 1;
+          while (k < n && /[a-zA-Z0-9_.]/.test(s[k])) k++;
+          (last as any).v += s.slice(j, k);
+          i = k;
+          continue;
+        }
+        i = j;
+        continue;
+      }
+      i++;
+      continue;
+    }
+    // ''' … ''' / """ … """: Pine v6's long strings (their line breaks were joined already)
+    if ((c === '"' || c === "'") && s.startsWith(c.repeat(3), i)) {
+      const end = s.indexOf(c.repeat(3), i + 3);
+      const body = s.slice(i + 3, end < 0 ? n : end);
+      toks.push({ t: "str", v: body.replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\(.)/g, "$1") });
+      i = end < 0 ? n : end + 3;
+      continue;
+    }
     if (c === '"' || c === "'") {
       const quote = c;
       let j = i + 1, str = "";
@@ -187,6 +228,9 @@ function tokenize(s: string): Token[] {
     if (/[0-9]/.test(c) || (c === "." && /[0-9]/.test(s[i + 1] || ""))) {
       let j = i;
       while (j < n && /[0-9.]/.test(s[j])) j++;
+      // (scientific notation: 1e-6, 2.5E+3)
+      const ex = s.slice(j).match(/^[eE][+-]?[0-9]+/);
+      if (ex) j += ex[0].length;
       toks.push({ t: "num", v: parseFloat(s.slice(i, j)) });
       i = j;
       continue;
@@ -201,8 +245,9 @@ function tokenize(s: string): Token[] {
       else toks.push({ t: "id", v: word });
       i = j;
       // `array.new<float>(…)`, `matrix.new<myType>()`: the type argument only matters to the compiler
-      if (/\.new$/.test(word) && s[i] === "<") {
-        const g = s.slice(i).match(/^<[\w.<>, \[\]]*>(?=\s*\()/);
+      // (`array.new <tape>(…)`, with a space, too)
+      if (/\.new$/.test(word) && /^\s*</.test(s.slice(i, i + 40))) {
+        const g = s.slice(i).match(/^\s*<[\w.<>, \[\]]*>(?=\s*\()/);
         if (g) i += g[0].length;
       }
       continue;
@@ -520,7 +565,9 @@ type Stmt =
   // `obj.field := value` (and `+=` …)
   | { type: "fieldAssign"; target: string; expr: Expr; line: number }
   // `for x in arr` / `for [i, x] in arr`
-  | { type: "forin"; idxVar: string | null; valVar: string; expr: Expr; body: Stmt[]; line: number };
+  | { type: "forin"; idxVar: string | null; valVar: string; expr: Expr; body: Stmt[]; line: number }
+  // an imported library's top-level constants and enums, set once into the variable `prefix`
+  | { type: "libinit"; prefix: string; stmts: Stmt[]; line: number };
 
 function parseExpression(text: string, nextId: () => number): Expr {
   const toks = tokenize(text);
@@ -579,6 +626,7 @@ function parseExpression(text: string, nextId: () => number): Expr {
   }
   function parseUnary(): Expr {
     if (peek().t === "-") { consume(); return { type: "neg", expr: parseUnary() }; }
+    if (peek().t === "+") { consume(); return parseUnary(); }
     if (peek().t === "not") { consume(); return { type: "not", expr: parseUnary() }; }
     return parsePostfix();
   }
@@ -679,7 +727,8 @@ function parseExpression(text: string, nextId: () => number): Expr {
   return result;
 }
 
-interface Line { indent: number; text: string; lineNo: number }
+// alt: another column an `else` of this line's if may sit at (`x =` / its `if` on the next line)
+interface Line { indent: number; text: string; lineNo: number; alt?: number }
 
 function stripComment(raw: string): string {
   let inStr: string | null = null;
@@ -708,6 +757,7 @@ function parseMeta(text: string, meta: PineRunResult["meta"]) {
   meta.maxLabels = count(/max_labels_count\s*=\s*(\d+)/);
   meta.maxLines = count(/max_lines_count\s*=\s*(\d+)/);
   meta.maxBoxes = count(/max_boxes_count\s*=\s*(\d+)/);
+  meta.maxPolylines = count(/max_polylines_count\s*=\s*(\d+)/);
   const capMatch = text.match(/initial_capital\s*=\s*(-?[0-9.]+)/);
   if (capMatch) meta.initialCapital = parseFloat(capMatch[1]);
   meta.processOrdersOnClose = /process_orders_on_close\s*=\s*true/.test(text);
@@ -743,24 +793,57 @@ function mergeContinuationLines(rawLines: string[]): { text: string; indentRaw: 
   let buffer = "";
   let bufferIndentRaw = "";
   let bufferLineNo = -1;
+  // (a string left open at a line's end goes on to the next line: Pine allows long strings, a
+  // tooltip say, to span lines)
+  let inStr: string | null = null;
   for (let ln = 0; ln < rawLines.length; ln++) {
-    const stripped = stripComment(rawLines[ln]);
-    if (depth === 0) {
-      if (!stripped.trim()) continue;
-      buffer = stripped;
-      bufferIndentRaw = stripped;
+    const line = rawLines[ln];
+    // Strip a comment and track brackets and strings, carrying an open string over
+    let code = "";
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (inStr) {
+        if (c === "\\") { code += c + (line[i + 1] ?? ""); i++; continue; }
+        if (line.startsWith(inStr, i)) { code += inStr; i += inStr.length - 1; inStr = null; continue; }
+        code += c;
+        continue;
+      }
+      // (a ''' or """ string runs until its own three quotes)
+      if (c === '"' || c === "'") { inStr = line.startsWith(c.repeat(3), i) ? c.repeat(3) : c; code += inStr; i += inStr.length - 1; continue; }
+      if (c === "/" && line[i + 1] === "/") break;
+      // `label [] boxes`: the array type written with a space (Pine allows it) → `label[]`
+      if (c === "[" && line[i + 1] === "]" && /[A-Za-z0-9_]\s+$/.test(code)) code = code.trimEnd();
+      // `map <string, float>` / `array <float>`: the type's angle brackets written after a space
+      if (c === "<" && /\b(array|matrix|map)\s+$/.test(code)) code = code.trimEnd();
+      if (c === "(" || c === "[") depth++;
+      else if (c === ")" || c === "]") depth--;
+      code += c;
+    }
+    if (!buffer) {
+      if (!code.trim() && !inStr) continue;
+      buffer = code;
+      bufferIndentRaw = code;
       bufferLineNo = ln + 1;
     } else {
-      buffer += " " + stripped.trim();
+      buffer += (inStr ? "" : " ") + code.trim();
     }
-    depth += bracketDelta(stripped);
-    if (depth <= 0) {
-      out.push({ text: buffer, indentRaw: bufferIndentRaw, lineNo: bufferLineNo });
-      buffer = "";
-      depth = 0; // guard against malformed/unbalanced brackets going negative
+    // still inside brackets or a string, or the line ends with a comma: the statement goes on
+    // (a trailing comma before a line no deeper than the statement's first just ends it)
+    if (depth > 0 || inStr) continue;
+    // (a blank line inside a statement still open on a comma doesn't end it)
+    if (!code.trim() && /,\s*$/.test(buffer)) continue;
+    if (/,\s*$/.test(code)) {
+      const width = (t: string) => ((t.match(/^[ \t]*/) || [""])[0]).replace(/\t/g, "    ").length;
+      let k = ln + 1;
+      while (k < rawLines.length && !rawLines[k].replace(/\/\/.*$/, "").trim()) k++;
+      if (k < rawLines.length && width(rawLines[k]) > width(bufferIndentRaw)) continue;
+      buffer = buffer.replace(/,\s*$/, "");
     }
+    out.push({ text: buffer, indentRaw: bufferIndentRaw, lineNo: bufferLineNo });
+    buffer = "";
+    depth = 0; // guard against malformed/unbalanced brackets going negative
   }
-  if (buffer.trim()) out.push({ text: buffer, indentRaw: bufferIndentRaw, lineNo: bufferLineNo });
+  if (buffer.trim()) out.push({ text: buffer.replace(/,\s*$/, ""), indentRaw: bufferIndentRaw, lineNo: bufferLineNo });
   return out;
 }
 
@@ -790,9 +873,11 @@ function matchFuncDecl(text: string): { name: string; paramsText: string; rest: 
 }
 
 function parseParams(paramsText: string, nextId: () => number): FuncParam[] {
-  const trimmed = paramsText.trim();
+  // (the comma inside a `map<string, float>` type isn't a parameter break)
+  const trimmed = paramsText.trim().replace(/\b(map|array|matrix)\s*<([^<>]*(?:<[^<>]*>[^<>]*)*)>/g, (_m, k, inner) => `${k}<${inner.replace(/\s*,\s*/g, "\u0001")}>`);
   if (!trimmed) return [];
-  return splitTopLevel(trimmed).map((chunk) => {
+  return splitTopLevel(trimmed).map((c0) => {
+    const chunk = c0.replace(/\u0001/g, ",");
     // `simple bool flag = true`, `pivotGraphic g`, `array<float> xs`: qualifiers and the type go,
     // the type (its last word) is kept for method overloads
     const m = chunk.trim().match(/^((?:[a-zA-Z_][\w.<>,\[\]]*\s+)*)([a-zA-Z_]\w*)\s*(?:=\s*([\s\S]+))?$/);
@@ -822,7 +907,7 @@ function splitTopLevel(text: string): string[] {
 // paren/bracket depth and string literals so a nested call in <from>/<to>
 // (e.g. `array.size(flv) - 1`) can't be mistaken for the "to"/"by" keyword.
 function splitForHeader(text: string): { varName: string; fromText: string; toText: string; byText: string | null } | null {
-  const m = text.match(/^for\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*([\s\S]*)$/);
+  const m = text.match(/^for\s+(?:(?:int|float)\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*([\s\S]*)$/);
   if (!m) return null;
   const rest = m[2];
   let depth = 0, inStr: string | null = null, toIdx = -1, byIdx = -1;
@@ -855,21 +940,39 @@ function splitForHeader(text: string): { varName: string; fromText: string; toTe
 // before block structure is parsed.
 function startsBlock(text: string): boolean {
   return /^if\b/.test(text) || /^else\b/.test(text) || /^while\b/.test(text) || splitForHeader(text) !== null || matchFuncDecl(text) !== null
-    || switchHead(text) !== null || armSplit(text) !== null
-    || /^(export\s+)?(type|method)\s/.test(text) || /^for\s.*\sin\s/.test(text);
+    || switchHead(text) !== null || ifValueHead(text) !== null || armSplit(text) !== null
+    || /^(export\s+)?(type|method|enum)\s/.test(text) || /^for\s.*\sin\s/.test(text);
 }
 
 // `switch x`, `y = switch x`, `var float y = switch`: the text before `switch`, and its subject
 function switchHead(text: string): { prefix: string; subject: string } | null {
-  const m = text.match(/^((?:var(?:ip)?\s+)?(?:[a-zA-Z_][a-zA-Z0-9_.<>]*\s+)?(?:[a-zA-Z_][a-zA-Z0-9_]*|\[[\w\s,]+\])\s*(?::=|=)\s*)?switch\b\s*(.*)$/);
+  const m = text.match(/^((?:var(?:ip)?\s+)?(?:[a-zA-Z_][a-zA-Z0-9_.<>\[\]]*\s+)?(?:[a-zA-Z_][a-zA-Z0-9_.]*|\[[\w\s,]+\])\s*(?::=|=|\+=|-=|\*=|\/=|%=)\s*)?switch\b\s*(.*)$/);
   if (!m) return null;
   return { prefix: m[1] || "", subject: m[2].trim() };
 }
 
+// `x = if cond`, `x := if cond`, `var y = if …`: an if used as a value (its branches give it)
+function ifValueHead(text: string): { prefix: string; cond: string } | null {
+  const m = text.match(/^((?:var(?:ip)?\s+)?(?:[a-zA-Z_][a-zA-Z0-9_.<>\[\]]*\s+)?(?:[a-zA-Z_][a-zA-Z0-9_.]*|\[[\w\s,]+\])\s*(?::=|=|\+=|-=|\*=|\/=|%=)\s*)if\b\s*(.*)$/);
+  return m ? { prefix: m[1], cond: m[2].trim() } : null;
+}
+
+// An assignment of a value computed by a block (switch / if): `x = …`, `x += …`, `[a, b] = …`
+function assignOf(prefix: string, value: Expr, line: Line, nextId: () => number): Stmt {
+  const assign = parseSimpleStatement({ indent: line.indent, text: prefix + "na", lineNo: line.lineNo }, nextId);
+  if (assign.type === "assign" || assign.type === "tupleAssign" || assign.type === "fieldAssign") {
+    // (a compound `x += switch …` keeps its `x +`)
+    if (assign.expr.type === "arith" && /(\+=|-=|\*=|\/=|%=)\s*$/.test(prefix)) (assign.expr as any).right = value;
+    else assign.expr = value;
+  }
+  return assign;
+}
+
 // A switch arm `cond => body`, split at its top-level `=>` (not one inside brackets or a string).
 // `name(params) => …` is a function declaration, not an arm.
-function armSplit(text: string): { cond: string; body: string } | null {
-  if (matchFuncDecl(text)) return null;
+// (inside a switch nothing is a function declaration: `na (x) => 0` is a case)
+function armSplit(text: string, inSwitch = false): { cond: string; body: string } | null {
+  if (!inSwitch && matchFuncDecl(text)) return null;
   let depth = 0, inStr: string | null = null;
   for (let i = 0; i < text.length - 1; i++) {
     const c = text[i];
@@ -889,6 +992,32 @@ function mergeIndentContinuations(lines: Line[]): Line[] {
     const cur = lines[i];
     let text = cur.text;
     let j = i + 1;
+    // `x =` with its if / switch value on the next, deeper line: one line (its else may line up
+    // under the `x` or under the `if`)
+    if (/(?::=|=|\+=|-=|\*=|\/=|%=)\s*$/.test(cur.text) && !/[=!<>]=\s*$/.test(cur.text) && j < lines.length && lines[j].indent > cur.indent && /^(if|switch)\b/.test(lines[j].text)) {
+      out.push({ indent: cur.indent, text: cur.text.trimEnd() + " " + lines[j].text, lineNo: cur.lineNo, alt: lines[j].indent });
+      i = j + 1;
+      continue;
+    }
+    // An if / while condition wrapped onto deeper lines (`if a > 1` / `  and b == c`): the lines
+    // that start with, or follow a line ending in, an operator are part of the condition
+    // (any line, a switch arm's `false => a` / `  and b` too, goes on into deeper lines that start
+    // with a binary operator: no statement starts with one)
+    const OP_START = /^(and|or|\?|:|[+*\/%]|==|!=|<=|>=|<|>)(\s|$|\()/;
+    const isCond = /^(if|while|else\s+if)\b/.test(cur.text);
+    if (isCond || (startsBlock(cur.text) && j < lines.length && lines[j].indent > cur.indent && OP_START.test(lines[j].text))) {
+      const OP_END = /(\band|\bor|\bnot|[-+*\/%?:,=<>(])\s*$/;
+      let text = cur.text, k = i + 1;
+      while (k < lines.length && lines[k].indent > cur.indent && ((isCond && OP_END.test(text)) || OP_START.test(lines[k].text))) {
+        text += " " + lines[k].text;
+        k++;
+      }
+      if (k > i + 1) {
+        out.push({ indent: cur.indent, text, lineNo: cur.lineNo, alt: cur.alt });
+        i = k;
+        continue;
+      }
+    }
     if (!startsBlock(cur.text)) {
       while (j < lines.length && lines[j].indent > cur.indent) {
         text += " " + lines[j].text;
@@ -916,7 +1045,7 @@ function withLine<T>(lineNo: number, fn: () => T): T {
 // name/op/rhs match. The lookahead keeps it from ever eating a variable
 // that's merely named after a type keyword (nothing follows "color" in
 // `color = get_color()` but whitespace then '=', which the lookahead rejects).
-const TYPE_PREFIX_RE = /^(int|float|bool|string|color|line|label|box|table|linefill|polyline|array<[a-zA-Z_][a-zA-Z0-9_.]*>|matrix<[a-zA-Z_][a-zA-Z0-9_.]*>)\s+(?=[a-zA-Z_])/;
+const TYPE_PREFIX_RE = /^(int|float|bool|string|color|line|label|box|table|linefill|polyline|footprint|volume_row|array<[a-zA-Z_][a-zA-Z0-9_.]*>|matrix<[a-zA-Z_][a-zA-Z0-9_.]*>|map<[a-zA-Z_][\w.]*\s*,\s*[a-zA-Z_][\w.<>]*>|[a-zA-Z_][\w.]*\[\])\s+(?=[a-zA-Z_])/;
 
 // The script's own type names (`type pivotGraphic`), so `pivotGraphic g = …` reads as a declaration
 let udtNames = new Set<string>();
@@ -928,6 +1057,37 @@ function stripTypePrefix(text: string): string {
   const m = t.match(/^([a-zA-Z_][\w.]*(?:<[\w.<>, ]*>)?)\s+(?=[a-zA-Z_]\w*\s*(?::=|=|$))/);
   if (m && (udtNames.has(m[1]) || /^(chart\.point|map<.*>|array<.*>|matrix<.*>)$/.test(m[1]))) t = t.slice(m[0].length);
   return t;
+}
+
+// An enum's value: one object per field (compared by identity, as Pine does), typed so the script's
+// methods for that enum find it, and shown as its title
+function enumValue(type: string, key: string, title: string) {
+  return { __udt: type, __enum: type, key, title, toString() { return title; } };
+}
+
+// One declaration or assignment: `[var] [type] name =|:=|+= …`
+const DECL_RE = /^(?:var(?:ip)?\s+)?(?:(?:simple|series|const)\s+)?(?:[a-zA-Z_][\w.]*(?:<[\w.<>, ]*>|\[\])?\s+)?[a-zA-Z_]\w*\s*(?::=|\+=|-=|\*=|\/=|%=|=(?![=>]))|^[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)+\s*(?::=|\+=|-=|\*=|\/=|%=)|^\[[\w\s,]+\]\s*(?::=|=(?![=>]))/;
+// A call made for its effect: `line.delete(l)`, `arr.push(x)`, `zz.pop()`
+const CALL_STMT_RE = /^[a-zA-Z_][\w.]*(?:\s*\.[a-zA-Z_]\w*)*\s*\(/;
+// Splits a line at commas outside brackets and strings (not at `<`/`>`: those are comparisons here)
+function splitStatements(text: string): string[] {
+  const out: string[] = [];
+  let depth = 0, inStr: string | null = null, start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) { if (c === "\\") { i++; continue; } if (c === inStr) inStr = null; continue; }
+    if (c === '"' || c === "'") { inStr = c; continue; }
+    // `map.new<string, float>()` / `map<string, float> m = …`: a type's comma isn't a break
+    if (c === "<" && /(\.new|\bmap|\barray|\bmatrix)\s*$/.test(text.slice(Math.max(0, i - 8), i))) {
+      const close = text.indexOf(">", i);
+      if (close > 0 && /^<[\w.<, \[\]]*$/.test(text.slice(i, close))) { i = close; continue; }
+    }
+    if (c === "(" || c === "[") depth++;
+    else if (c === ")" || c === "]") depth--;
+    else if (c === "," && depth === 0) { out.push(text.slice(start, i).trim()); start = i + 1; }
+  }
+  out.push(text.slice(start).trim());
+  return out.filter(Boolean);
 }
 
 function parseSimpleStatement(line: Line, nextId: () => number): Stmt {
@@ -975,7 +1135,7 @@ function parseSimpleStatement(line: Line, nextId: () => number): Stmt {
 // chain in the source and burying them as this if's elseBody instead of
 // leaving them for the caller. That was a real, severe bug: an `if` at
 // column 0 followed by `else if` swallowed the ENTIRE REST of the script.
-function parseIfStmt(lines: Line[], start: number, indent: number, nextId: () => number): { stmt: Stmt; next: number } {
+function parseIfStmt(lines: Line[], start: number, indent: number, nextId: () => number, alt?: number): { stmt: Stmt; next: number } {
   const line = lines[start];
   const cond = withLine(line.lineNo, () => parseExpression(line.text.replace(/^if\s*/, ""), nextId));
   let i = start + 1;
@@ -986,15 +1146,17 @@ function parseIfStmt(lines: Line[], start: number, indent: number, nextId: () =>
     i = res.next;
   }
   let elseBody: Stmt[] | null = null;
-  if (i < lines.length && lines[i].indent === indent && /^else\b/.test(lines[i].text)) {
+  if (i < lines.length && (lines[i].indent === indent || (alt !== undefined && lines[i].indent === alt)) && /^else\b/.test(lines[i].text)) {
+    const elseIndent = lines[i].indent;
     if (/^else\s+if\b/.test(lines[i].text)) {
       lines[i] = { ...lines[i], text: lines[i].text.replace(/^else\s+if/, "if") };
-      const res2 = parseIfStmt(lines, i, indent, nextId);
+      const res2 = parseIfStmt(lines, i, indent, nextId, alt);
+      (res2.stmt as any).__elseIf = true;
       elseBody = [res2.stmt];
       i = res2.next;
     } else {
       i++;
-      if (i < lines.length && lines[i].indent > indent) {
+      if (i < lines.length && lines[i].indent > elseIndent) {
         const res3 = parseBlock(lines, i, lines[i].indent, nextId);
         elseBody = res3.stmts;
         i = res3.next;
@@ -1018,7 +1180,7 @@ function parseBlock(lines: Line[], start: number, indent: number, nextId: () => 
         const armIndent = lines[i].indent;
         while (i < lines.length && lines[i].indent >= armIndent) {
           const armLine = lines[i];
-          const parts = armSplit(armLine.text);
+          const parts = armSplit(armLine.text, true);
           if (!parts || armLine.indent !== armIndent) {
             const e = new PineError("Syntax error: each switch case needs the form `value => result`", "CE10001");
             e.line = armLine.lineNo;
@@ -1027,7 +1189,12 @@ function parseBlock(lines: Line[], start: number, indent: number, nextId: () => 
           const cond = parts.cond ? withLine(armLine.lineNo, () => parseExpression(parts.cond, nextId)) : null;
           i++;
           let body: Stmt[] = [];
-          if (parts.body) body = [parseSimpleStatement({ indent: armIndent + 1, text: parts.body, lineNo: armLine.lineNo }, nextId)];
+          if (parts.body) {
+            // `"Pure" => n1 := 1, n2 := 1`: several statements after the arrow
+            const several = splitStatements(parts.body);
+            const texts = several.length > 1 && several.every((p) => DECL_RE.test(p) || CALL_STMT_RE.test(p)) ? several : [parts.body];
+            body = texts.map((t) => parseSimpleStatement({ indent: armIndent + 1, text: t, lineNo: armLine.lineNo }, nextId));
+          }
           else if (i < lines.length && lines[i].indent > armIndent) { const res = parseBlock(lines, i, lines[i].indent, nextId); body = res.stmts; i = res.next; }
           arms.push({ cond, body });
         }
@@ -1035,10 +1202,26 @@ function parseBlock(lines: Line[], start: number, indent: number, nextId: () => 
       const swExpr: Expr = { type: "switch", subject, arms };
       if (sw.prefix) {
         // `x = switch …`: an ordinary assignment whose value is the switch
-        const assign = parseSimpleStatement({ indent: line.indent, text: sw.prefix + "na", lineNo: line.lineNo }, nextId);
-        if (assign.type === "assign" || assign.type === "tupleAssign") assign.expr = swExpr;
-        stmts.push(assign);
+        stmts.push(assignOf(sw.prefix, swExpr, line, nextId));
       } else stmts.push({ type: "expr", expr: swExpr, line: line.lineNo });
+      continue;
+    }
+    // `x = if cond …`: the if's branches give the value; read as a switch without a subject
+    // (else if → its next arm, else → the default; no branch taken → na)
+    const ifv = ifValueHead(line.text);
+    if (ifv) {
+      lines[i] = { ...line, text: "if " + ifv.cond };
+      const res = parseIfStmt(lines, i, line.indent, nextId, line.alt);
+      const arms: { cond: Expr | null; body: Stmt[] }[] = [];
+      let cur: Stmt | null = res.stmt;
+      while (cur && cur.type === "if") {
+        arms.push({ cond: cur.cond, body: cur.body });
+        const eb: Stmt[] | null = cur.elseBody;
+        if (eb && eb.length === 1 && eb[0].type === "if" && (eb[0] as any).__elseIf) cur = eb[0];
+        else { if (eb) arms.push({ cond: null, body: eb }); cur = null; }
+      }
+      stmts.push(assignOf(ifv.prefix, { type: "switch", subject: null, arms }, line, nextId));
+      i = res.next;
       continue;
     }
     // `export` (libraries) changes nothing here
@@ -1054,6 +1237,20 @@ function parseBlock(lines: Line[], start: number, indent: number, nextId: () => 
         i++;
       }
       stmts.push({ type: "typedef", def: { name: typeHead[1], fields }, line: line.lineNo });
+      continue;
+    }
+    // enum Name / its fields, one per indented line: `fast = "Fast"` (or just `fast`). Each value is
+    // its title (Pine shows the title in inputs and str.tostring), unique within the enum
+    const enumHead = line.text.match(/^enum\s+([a-zA-Z_]\w*)\s*$/);
+    if (enumHead) {
+      const obj: Record<string, string> = {};
+      i++;
+      while (i < lines.length && lines[i].indent > line.indent) {
+        const f = lines[i].text.match(/^([a-zA-Z_]\w*)\s*(?:=\s*(["'])((?:\\.|(?!\2).)*)\2)?\s*$/);
+        if (f) obj[f[1]] = enumValue(enumHead[1], f[1], f[3] !== undefined ? f[3] : f[1]);
+        i++;
+      }
+      stmts.push({ type: "assign", name: enumHead[1], expr: { type: "value", value: obj }, isVarDecl: false, line: line.lineNo });
       continue;
     }
     // for x in array / for [i, x] in array
@@ -1075,7 +1272,10 @@ function parseBlock(lines: Line[], start: number, indent: number, nextId: () => 
       i++;
       let body: Stmt[];
       if (fnDecl.rest) {
-        body = [parseSimpleStatement({ indent: line.indent + 1, text: fnDecl.rest, lineNo: line.lineNo }, nextId)];
+        // `f(x) => varip v = x, v += x, v / 2`: several statements, the last one's value is the result
+        const parts = splitStatements(fnDecl.rest);
+        const several = parts.length > 1 && parts.slice(0, -1).every((p) => DECL_RE.test(p) || CALL_STMT_RE.test(p));
+        body = (several ? parts : [fnDecl.rest]).map((t) => parseSimpleStatement({ indent: line.indent + 1, text: t, lineNo: line.lineNo }, nextId));
       } else {
         body = [];
         if (i < lines.length && lines[i].indent > indent) {
@@ -1112,7 +1312,11 @@ function parseBlock(lines: Line[], start: number, indent: number, nextId: () => 
       stmts.push(res.stmt);
       i = res.next;
     } else {
-      stmts.push(parseSimpleStatement(line, nextId));
+      // Several declarations on one line: `a = 0.0, b = 0.0`, `x = input.int(…), y = input.bool(…)`
+      const parts = splitStatements(line.text);
+      if (parts.length > 1 && parts.every(p => DECL_RE.test(p) || CALL_STMT_RE.test(p))) {
+        for (const p of parts) stmts.push(parseSimpleStatement({ ...line, text: p }, nextId));
+      } else stmts.push(parseSimpleStatement(line, nextId));
       i++;
     }
   }
@@ -1209,6 +1413,10 @@ function resolveIdent(name: string, ctx: Ctx): any {
     case "ohlc4": return (ctx.bar.open + ctx.bar.high + ctx.bar.low + ctx.bar.close) / 4;
     case "bar_index": return ctx.barIndex;
     case "na": return NaN;
+    // Every polyline / linefill / table the script has on the chart, oldest first
+    case "polyline.all": return drawStore(ctx).polyline.slice();
+    case "linefill.all": return drawStore(ctx).linefill.slice();
+    case "table.all": return (ctx.globalCtx || ctx).tables.slice();
     case "time": return ctx.bar.time * 1000;
     case "time_close": return ctx.bar.time * 1000 + ctx.barDurationSec * 1000;
     case "strategy.long": return "long";
@@ -1228,6 +1436,94 @@ function resolveIdent(name: string, ctx: Ctx): any {
     case "strategy.position_avg_price": return ctx.strategyState.position ? ctx.strategyState.position.entryPrice : NaN;
     case "strategy.closedtrades": return ctx.strategyState.closedTrades.length;
     case "strategy.opentrades": return ctx.strategyState.position ? 1 : 0;
+    // The strategy's statistics so far, from its closed trades (as in the Strategy Tester)
+    case "strategy.wintrades": return ctx.strategyState.closedTrades.filter((t) => t.netPnl > 0).length;
+    case "strategy.losstrades": return ctx.strategyState.closedTrades.filter((t) => t.netPnl < 0).length;
+    case "strategy.eventrades": return ctx.strategyState.closedTrades.filter((t) => t.netPnl === 0).length;
+    case "strategy.grossprofit": return ctx.strategyState.closedTrades.reduce((a, t) => a + Math.max(0, t.netPnl), 0);
+    case "strategy.grossloss": return -ctx.strategyState.closedTrades.reduce((a, t) => a + Math.min(0, t.netPnl), 0);
+    case "strategy.grossprofit_percent": case "strategy.grossloss_percent": case "strategy.netprofit_percent": {
+      const cap = ctx.strategyInitialCapital || NaN;
+      const v = name === "strategy.netprofit_percent" ? ctx.strategyState.netProfit : resolveIdent(name.replace("_percent", ""), ctx);
+      return (v / cap) * 100;
+    }
+    case "strategy.avg_trade": case "strategy.avg_winning_trade": case "strategy.avg_losing_trade":
+    case "strategy.avg_trade_percent": case "strategy.avg_winning_trade_percent": case "strategy.avg_losing_trade_percent": {
+      const all = ctx.strategyState.closedTrades;
+      const ts = /winning/.test(name) ? all.filter((t) => t.netPnl > 0) : /losing/.test(name) ? all.filter((t) => t.netPnl < 0) : all;
+      if (!ts.length) return NaN;
+      const pct = /_percent$/.test(name);
+      const avg = ts.reduce((a, t) => a + (pct ? t.returnPct : t.netPnl), 0) / ts.length;
+      return /losing/.test(name) ? Math.abs(avg) : avg;
+    }
+    case "strategy.openprofit": case "strategy.openprofit_percent": {
+      const pos = ctx.strategyState.position;
+      if (!pos) return 0;
+      const pnl = (pos.direction === "long" ? 1 : -1) * (ctx.bar.close - pos.entryPrice) * pos.qty;
+      return name === "strategy.openprofit" ? pnl : (pnl / (pos.entryPrice * pos.qty)) * 100;
+    }
+    case "strategy.max_drawdown": return ctx.strategyState.maxDrawdown;
+    case "strategy.max_drawdown_percent": return ctx.strategyState.maxDrawdownPct;
+    case "strategy.max_runup": case "strategy.max_runup_percent": {
+      // the biggest rise of equity above its lowest point before it
+      let low = Infinity, best = 0, bestPct = 0;
+      for (const p of ctx.strategyState.equityCurve) {
+        low = Math.min(low, p.equity);
+        if (p.equity - low > best) { best = p.equity - low; bestPct = low > 0 ? (best / low) * 100 : 0; }
+      }
+      return name === "strategy.max_runup" ? best : bestPct;
+    }
+    case "strategy.position_entry_name": return ctx.strategyState.position ? ctx.strategyState.position.id : "";
+    case "strategy.account_currency": return "USD";
+    case "strategy.closedtrades.first_index": return 0;
+    case "strategy.opentrades.capital_held": { const pos = ctx.strategyState.position; return pos ? pos.entryPrice * pos.qty : 0; }
+    case "strategy.max_contracts_held_all": case "strategy.max_contracts_held_long": case "strategy.max_contracts_held_short": {
+      const want = name.endsWith("long") ? "Long" : name.endsWith("short") ? "Short" : null;
+      const qs = ctx.strategyState.closedTrades.filter((t) => !want || t.type === want).map((t) => t.qty);
+      const pos = ctx.strategyState.position;
+      if (pos && (!want || want.toLowerCase() === pos.direction)) qs.push(pos.qty);
+      return qs.length ? Math.max(...qs) : 0;
+    }
+    case "strategy.margin_liquidation_price": return NaN;
+    // The last bar of the chart (ms), and the bars on screen (all of them, for a script run)
+    case "last_bar_time": { const b = ctx.bars[ctx.bars.length - 1]; return b ? b.time * 1000 : NaN; }
+    case "chart.left_visible_bar_time": return ctx.bars.length ? ctx.bars[0].time * 1000 : NaN;
+    case "chart.right_visible_bar_time": { const b = ctx.bars[ctx.bars.length - 1]; return b ? b.time * 1000 : NaN; }
+    // The chart's own colours (this site's dark chart) and type: ordinary candles
+    case "chart.bg_color": return "#131722";
+    case "chart.fg_color": return "#D1D4DC";
+    case "chart.is_standard": return true;
+    case "chart.is_heikinashi": case "chart.is_kagi": case "chart.is_linebreak": case "chart.is_pnf": case "chart.is_range": case "chart.is_renko": return false;
+    case "weekofyear": return isoWeek(ctx.bar.time * 1000);
+    // Bid / ask are only on a 1-tick chart
+    case "ask": case "bid": return NaN;
+    case "timeframe.isticks": return /T$/i.test(ctx.pineTf || "");
+    case "timeframe.main_period": return (ctx.globalCtx || ctx).pineTf || ctx.pineTf || "";
+    // The trading day: the first / last bar of each (UTC) day; these markets trade around the clock
+    case "session.ismarket": return true;
+    case "session.ispremarket": case "session.ispostmarket": return false;
+    case "session.isfirstbar": case "session.isfirstbar_regular": {
+      const prev = ctx.bars[ctx.barIndex - 1];
+      return !prev || Math.floor(prev.time / 86400) !== Math.floor(ctx.bar.time / 86400);
+    }
+    case "session.islastbar": case "session.islastbar_regular": {
+      const next = ctx.bars[ctx.barIndex + 1];
+      return !!next && Math.floor(next.time / 86400) !== Math.floor(ctx.bar.time / 86400);
+    }
+    // The symbol's details: from its name (XAU/USD → base XAU, quoted in USD)
+    case "syminfo.basecurrency": { const r = (ctx.symbol || "").split(":").pop() || ""; return r.includes("/") ? r.split("/")[0] : r.slice(0, 3); }
+    case "syminfo.description": case "syminfo.main_tickerid": return ctx.symbol || "";
+    case "syminfo.type": {
+      const r = ((ctx.symbol || "").split(":").pop() || "").toUpperCase();
+      return /^(BTC|ETH|SOL|XRP|DOGE|BNB|ADA|LTC|DOT|AVAX|LINK|TRX|MATIC|SHIB)/.test(r) ? "crypto"
+        : /^(XAU|XAG|XPT|XPD|WTI|BRENT|USOIL|UKOIL|NATGAS)/.test(r) ? "cfd"
+        : /^[A-Z]{3}\/?[A-Z]{3}$/.test(r) ? "forex" : "stock";
+    }
+    case "syminfo.pricescale": return Math.round(1 / minTick(ctx));
+    case "syminfo.minmove": case "syminfo.pointvalue": case "syminfo.mincontract": return 1;
+    case "syminfo.volumetype": return "tick";
+    case "syminfo.session": return "regular";
+    case "syminfo.current_contract": case "syminfo.country": case "syminfo.industry": case "syminfo.sector": case "syminfo.isin": return "";
     case "barmerge.lookahead_on": return true;
     case "barmerge.lookahead_off": return false;
     case "syminfo.tickerid": case "syminfo.ticker": return ctx.symbol || "";
@@ -1284,6 +1580,11 @@ function resolveIdent(name: string, ctx: Ctx): any {
     case "ta.tr": return B.tr({}, ctx, false);
     case "ta.vwap": return B.vwap((ctx.callState["v:ta.vwap"] = ctx.callState["v:ta.vwap"] || {}), ctx, (ctx.bar.high + ctx.bar.low + ctx.bar.close) / 3);
     case "ta.obv": return B.obv((ctx.callState["v:ta.obv"] = ctx.callState["v:ta.obv"] || {}), ctx);
+    case "ta.wad": return B.wad((ctx.callState["v:ta.wad"] = ctx.callState["v:ta.wad"] || {}), ctx);
+    case "ta.nvi": return B.nvi((ctx.callState["v:ta.nvi"] = ctx.callState["v:ta.nvi"] || {}), ctx, false);
+    case "ta.pvi": return B.nvi((ctx.callState["v:ta.pvi"] = ctx.callState["v:ta.pvi"] || {}), ctx, true);
+    case "ta.iii": return B.iii(ctx);
+    case "ta.wvad": return B.wvad(ctx);
     case "ta.accdist": return B.accdist((ctx.callState["v:ta.accdist"] = ctx.callState["v:ta.accdist"] || {}), ctx);
     case "ta.pvt": return B.pvt((ctx.callState["v:ta.pvt"] = ctx.callState["v:ta.pvt"] || {}), ctx);
   }
@@ -1291,7 +1592,7 @@ function resolveIdent(name: string, ctx: Ctx): any {
   const dotAt = name.indexOf(".");
   if (dotAt > 0) {
     const head = varOf(ctx, name.slice(0, dotAt));
-    if (head.found && head.value && typeof head.value === "object") return walkFields(head.value, name.slice(dotAt + 1).split("."));
+    if (head.found && head.value && typeof head.value === "object") return walkFields(head.value, identTail(name, dotAt));
   }
   if (name.startsWith("color.")) {
     const c = COLOR_NAMES[name.slice(6)];
@@ -1396,10 +1697,13 @@ function execFieldAssign(s: Extract<Stmt, { type: "fieldAssign" }>, ctx: Ctx) {
 }
 function execForIn(s: Extract<Stmt, { type: "forin" }>, ctx: Ctx, exec: (stmts: Stmt[], ctx: Ctx) => any) {
   const coll = evalNode(s.expr, ctx);
-  const items: any[] = Array.isArray(coll) ? coll.slice() : isMatrix(coll) ? coll.data.map((r) => r.slice()) : [];
+  // (a map: `for [key, value] in m`)
+  const isMap = !!coll?.__map;
+  const entries: [any, any][] | null = isMap ? Array.from(coll.m.entries()) : null;
+  const items: any[] = entries ? entries.map(e => e[1]) : Array.isArray(coll) ? coll.slice() : isMatrix(coll) ? coll.data.map((r) => r.slice()) : [];
   if (items.length > LOOP_LIMIT) throw new PineError("Loop iteration limit exceeded (possible infinite loop)", "CE90003");
   items.forEach((item, i) => {
-    if (s.idxVar) ctx.vars[s.idxVar] = i;
+    if (s.idxVar) ctx.vars[s.idxVar] = entries ? entries[i][0] : i;
     ctx.vars[s.valVar] = item;
     exec(s.body, ctx);
   });
@@ -1557,7 +1861,12 @@ function evalSeriesOverBars(exprNode: Expr, otherBars: Bar[], tf: string, functi
 function evalRequestSecurity(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
   if (node.args.length < 3) return NaN;
   let tf: string;
-  try { tf = String(evalNode(node.args[1], ctx)); } catch { return NaN; }
+  let tfv: any;
+  try { tfv = evalNode(node.args[1], ctx); tf = String(tfv); } catch { return NaN; }
+  // an na timeframe (a script switching one off): na, quietly
+  if (typeof tfv === "number" && isNaN(tfv)) return NaN;
+  // "" (or the chart's own timeframe): the chart's bars, so the expression's value on this bar
+  if (tf === "" || tf === ctx.pineTf) return evalNode(node.args[2], ctx);
   let otherBars = ctx.mtfData[tf];
   // A higher timeframe that wasn't downloaded is built from the chart's own bars
   if ((!otherBars || otherBars.length === 0) && tf && pineTimeframeToSeconds(tf) >= (ctx.barDurationSec || 0)) {
@@ -1589,6 +1898,8 @@ function evalRequestSecurityLowerTf(node: Extract<Expr, { type: "call" }>, ctx: 
   if (node.args.length < 3) return [];
   let tf: string;
   try { tf = String(evalNode(node.args[1], ctx)); } catch { return []; }
+  // the chart's own timeframe: this bar's one value
+  if (tf === "" || tf === ctx.pineTf) return [evalNode(node.args[2], ctx)];
   const otherBars = ctx.mtfData[tf];
   if (!otherBars || otherBars.length === 0) {
     warnOnce(ctx, `request.security_lower_tf(...) for timeframe '${tf}' has no data available and was skipped (returns an empty array).`);
@@ -1603,9 +1914,10 @@ function evalRequestSecurityLowerTf(node: Extract<Expr, { type: "call" }>, ctx: 
   const periodStart = ctx.bar.time;
   const periodEnd = periodStart + (ctx.barDurationSec || Infinity);
   const out: any[] = [];
-  for (let i = 0; i < otherBars.length; i++) {
-    if (otherBars[i].time >= periodStart && otherBars[i].time < periodEnd) out.push(series[i].value);
-  }
+  // (the finer bars are in time order: the period's first one found by binary search)
+  let lo = 0, hi = otherBars.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (otherBars[m].time < periodStart) lo = m + 1; else hi = m; }
+  for (let i = lo; i < otherBars.length && otherBars[i].time < periodEnd; i++) out.push(series[i].value);
   return out;
 }
 
@@ -1632,13 +1944,17 @@ function minTick(ctx: Ctx): number {
 export interface PineLabel { kind: "label"; id: number; xloc?: string; x: number; y: number; yloc: string; text: string; color: string; textColor: string; style: string; size: string; textAlign: string; tooltip?: string }
 export interface PineLine { kind: "line"; id: number; xloc?: string; x1: number; y1: number; x2: number; y2: number; color: string; width: number; style: string; extend: string }
 export interface PineBox { kind: "box"; id: number; xloc?: string; left: number; top: number; right: number; bottom: number; borderColor: string; borderWidth: number; borderStyle: string; bgColor: string; extend: string; text: string; textColor: string; textSize: string; textHalign: string; textValign: string }
-export type PineDrawing = PineLabel | PineLine | PineBox;
+// polyline.new(points, curved, closed, …): its points as (bar time, price)
+export interface PinePolyline { kind: "polyline"; id: number; points: { x: number; y: number }[]; curved: boolean; closed: boolean; lineColor: string; fillColor: string; lineWidth: number; lineStyle: string }
+// linefill.new(line1, line2, color): the area between two of the script's lines
+export interface PineLinefill { kind: "linefill"; id: number; line1: PineLine; line2: PineLine; color: string }
+export type PineDrawing = PineLabel | PineLine | PineBox | PinePolyline | PineLinefill;
 
-interface DrawStore { seq: number; label: PineLabel[]; line: PineLine[]; box: PineBox[]; max: { label: number; line: number; box: number } }
+interface DrawStore { seq: number; label: PineLabel[]; line: PineLine[]; box: PineBox[]; polyline: PinePolyline[]; linefill: PineLinefill[]; max: { label: number; line: number; box: number; polyline: number; linefill: number } }
 
 function drawStore(ctx: Ctx): DrawStore {
   const g = ctx.globalCtx || ctx;
-  if (!g.drawings) g.drawings = { seq: 0, label: [], line: [], box: [], max: { label: 50, line: 50, box: 50 } };
+  if (!g.drawings) g.drawings = { seq: 0, label: [], line: [], box: [], polyline: [], linefill: [], max: { label: 50, line: 50, box: 50, polyline: 50, linefill: 500 } };
   return g.drawings;
 }
 
@@ -1671,14 +1987,127 @@ function addDrawing<T extends PineDrawing>(ctx: Ctx, d: T): T {
   const list = st[d.kind] as PineDrawing[];
   list.push(d);
   // Past the script's max_*_count the oldest object goes, as on TradingView
-  while (list.length > st.max[d.kind]) list.shift();
+  while (list.length > st.max[d.kind]) {
+    const gone = list.shift() as any;
+    if (gone?.kind === "line") st.linefill = st.linefill.filter((f) => f.line1 !== gone && f.line2 !== gone);
+  }
   return d;
 }
 function deleteDrawing(ctx: Ctx, d: any) {
   if (!d || typeof d !== "object" || !d.kind) return;
-  const list = drawStore(ctx)[d.kind as "label" | "line" | "box"] as PineDrawing[];
+  const st = drawStore(ctx);
+  const list = (st as any)[d.kind] as PineDrawing[] | undefined;
+  if (!list) return;
   const i = list.indexOf(d);
   if (i >= 0) list.splice(i, 1);
+  // a linefill goes with either of its lines
+  if (d.kind === "line") st.linefill = st.linefill.filter((f) => f.line1 !== d && f.line2 !== d);
+}
+
+// ---------------------------------------------------------- formatting
+// ISO-8601 week of the year of a time (ms, UTC)
+function isoWeek(ms: number): number {
+  if (typeof ms !== "number" || isNaN(ms)) return NaN;
+  // the week holding this day's Thursday, counted in that Thursday's year
+  const d = new Date(ms);
+  const th = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 4 - (d.getUTCDay() || 7)));
+  return Math.ceil(((th.getTime() - Date.UTC(th.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7);
+}
+
+// A timezone's offset from UTC (ms) at a moment: "UTC+5:30" / "GMT-3" / an IANA name ("Asia/Kolkata")
+function tzOffsetMs(ms: number, tz: any): number {
+  const z = typeof tz === "string" ? tz.trim() : "";
+  if (!z || /^(UTC|GMT|Etc\/UTC)$/i.test(z)) return 0;
+  const m = z.match(/^(?:UTC|GMT)\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?$/i);
+  if (m) return (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] || 0)) * 60000;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: z, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(ms));
+    const g = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+    return Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute"), g("second")) - Math.floor(ms / 1000) * 1000;
+  } catch { return 0; }
+}
+
+// A time in Java SimpleDateFormat style, as Pine's str.format_time / {0,date,…} print it:
+// yyyy yy MMMM MMM MM M dd d EEEE EEE HH H hh h mm m ss s SSS a Z z, 'quoted text'
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+function javaDate(ms: number, fmt: string, tz: any): string {
+  const off = tzOffsetMs(ms, tz), d = new Date(ms + off);
+  const pad = (v: number, n: number) => String(v).padStart(n, "0");
+  const sign = off < 0 ? "-" : "+", oh = Math.floor(Math.abs(off) / 3600000), om = Math.floor((Math.abs(off) % 3600000) / 60000);
+  return fmt.replace(/'([^']*)'|y+|M+|d+|E+|H+|h+|m+|s+|S+|a+|Z+|z+|u+|D+|w+/g, (tok, quoted) => {
+    if (quoted !== undefined) return quoted === "" ? "'" : quoted;
+    const n = tok.length;
+    switch (tok[0]) {
+      case "y": return n === 2 ? pad(d.getUTCFullYear() % 100, 2) : pad(d.getUTCFullYear(), n);
+      case "M": return n >= 4 ? MONTHS[d.getUTCMonth()] : n === 3 ? MONTHS[d.getUTCMonth()].slice(0, 3) : pad(d.getUTCMonth() + 1, n);
+      case "d": return pad(d.getUTCDate(), n);
+      case "E": return n >= 4 ? WEEKDAYS[d.getUTCDay()] : WEEKDAYS[d.getUTCDay()].slice(0, 3);
+      case "u": return String(((d.getUTCDay() + 6) % 7) + 1);
+      case "H": return pad(d.getUTCHours(), n);
+      case "h": return pad(d.getUTCHours() % 12 || 12, n);
+      case "m": return pad(d.getUTCMinutes(), n);
+      case "s": return pad(d.getUTCSeconds(), n);
+      case "S": return pad(d.getUTCMilliseconds(), n);
+      case "a": return d.getUTCHours() < 12 ? "AM" : "PM";
+      case "Z": return `${sign}${pad(oh, 2)}${pad(om, 2)}`;
+      case "z": return off === 0 ? "UTC" : `GMT${sign}${pad(oh, 2)}:${pad(om, 2)}`;
+      case "D": return pad(Math.floor((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(d.getUTCFullYear(), 0, 1)) / 86400000) + 1, n);
+      case "w": return pad(isoWeek(ms + off), n);
+    }
+    return tok;
+  });
+}
+
+// A number in a Java DecimalFormat pattern ("#.##", "0.00", "#,##0.0", "0.00%")
+function decimalFormat(v: number, pat: string): string {
+  if (typeof v !== "number" || isNaN(v)) return "NaN";
+  if (pat.includes("%")) v *= 100;
+  const body = pat.replace(/[^#0.,]/g, "");
+  const [ip, fp = ""] = body.split(".");
+  const minF = (fp.match(/0/g) || []).length, maxF = fp.length;
+  const minI = (ip.replace(/,/g, "").match(/0/g) || []).length;
+  const grouping = ip.includes(",");
+  let s = Math.abs(v).toFixed(maxF);
+  if (maxF > minF) s = s.replace(new RegExp(`0{1,${maxF - minF}}$`), "").replace(/\.$/, "");
+  let [i, f] = s.split(".");
+  i = i.padStart(minI, "0");
+  if (grouping) i = i.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const prefix = pat.slice(0, pat.search(/[#0.,]/)).replace(/'/g, ""), suffix = pat.slice(pat.search(/[#0.,][^#0.,]*$/) + 1).replace(/'/g, "");
+  return (v < 0 && Number(s) !== 0 ? "-" : "") + prefix + i + (f ? "." + f : "") + suffix;
+}
+
+// Pine's str.format: Java MessageFormat. {0}, {0,number}, {0,number,integer|percent|currency|#.##},
+// {0,date[,short|medium|long|full|pattern]}, {0,time[,…]}; '' is a quote, '{…}' literal text
+function pineFormat(fmt: string, args: any[]): string {
+  let out = "", i = 0;
+  while (i < fmt.length) {
+    const c = fmt[i];
+    if (c === "'") {
+      const j = fmt.indexOf("'", i + 1);
+      if (j === i + 1) { out += "'"; i += 2; continue; }
+      if (j < 0) { out += fmt.slice(i + 1); break; }
+      out += fmt.slice(i + 1, j); i = j + 1; continue;
+    }
+    if (c !== "{") { out += c; i++; continue; }
+    // the placeholder, up to its matching brace
+    let depth = 1, j = i + 1;
+    while (j < fmt.length && depth) { if (fmt[j] === "{") depth++; else if (fmt[j] === "}") depth--; j++; }
+    const spec = fmt.slice(i + 1, j - 1).split(","), idx = Number(spec[0].trim()), kind = (spec[1] || "").trim(), style = spec.slice(2).join(",").trim();
+    const v = args[idx];
+    i = j;
+    if (v === undefined) { out += `{${spec.join(",")}}`; continue; }
+    if (kind === "number" || (!kind && typeof v === "number")) {
+      if (typeof v !== "number" || isNaN(v)) { out += "NaN"; continue; }
+      out += style === "integer" ? decimalFormat(v, "#,##0") : style === "percent" ? decimalFormat(v, "#,##0%") : style === "currency" ? "$" + decimalFormat(v, "#,##0.00") : decimalFormat(v, style || "#,##0.###");
+    } else if (kind === "date" || kind === "time") {
+      const pats: Record<string, string> = kind === "date"
+        ? { short: "M/d/yy", medium: "MMM d, yyyy", long: "MMMM d, yyyy", full: "EEEE, MMMM d, yyyy" }
+        : { short: "h:mm a", medium: "h:mm:ss a", long: "h:mm:ss a z", full: "h:mm:ss a z" };
+      out += typeof v === "number" && !isNaN(v) ? javaDate(v, pats[style || "medium"] ?? style, "UTC") : "";
+    } else out += typeof v === "boolean" ? String(v) : typeof v === "number" ? decimalFormat(v, "#,##0.###") : String(v);
+  }
+  return out;
 }
 
 const colorOr = (v: any, def: string) => (typeof v === "string" ? v : typeof v === "number" && isNaN(v) ? "rgba(0, 0, 0, 0)" : def);
@@ -1753,7 +2182,28 @@ function evalDrawing(name: string, node: Extract<Expr, { type: "call" }>, ctx: C
       return { handled: true, value: addDrawing(ctx, bx) };
     }
 
-    case "label.delete": case "line.delete": case "box.delete": deleteDrawing(ctx, obj()); return { handled: true, value: NaN };
+    case "polyline.new": {
+      const pts = A(0, "points"), xloc = A(3, "xloc", "bar_index");
+      const pl: PinePolyline = {
+        kind: "polyline", id: ++st.seq,
+        points: (Array.isArray(pts) ? pts : []).filter(isPoint).map((p: any) => ({ x: pointTime(ctx, p, xloc), y: Number(p.price) })),
+        curved: truthy(A(1, "curved", false)), closed: truthy(A(2, "closed", false)),
+        lineColor: colorOr(A(4, "line_color"), "#2962FF"), fillColor: colorOr(A(5, "fill_color"), "rgba(0, 0, 0, 0)"),
+        lineStyle: strOr(A(6, "line_style"), "style_solid"), lineWidth: Number(A(7, "line_width", 1)) || 1,
+      };
+      return { handled: true, value: addDrawing(ctx, pl) };
+    }
+    case "linefill.new": {
+      const l1 = A(0, "line1"), l2 = A(1, "line2");
+      if (!(live(l1) && l1.kind === "line" && live(l2) && l2.kind === "line")) return { handled: true, value: NaN };
+      // one linefill per pair of lines: a new one for the same pair replaces it
+      st.linefill = st.linefill.filter((f) => !((f.line1 === l1 && f.line2 === l2) || (f.line1 === l2 && f.line2 === l1)));
+      return { handled: true, value: addDrawing(ctx, { kind: "linefill", id: ++st.seq, line1: l1, line2: l2, color: colorOr(A(2, "color"), "rgba(41, 98, 255, 0.2)") } as PineLinefill) };
+    }
+    case "linefill.set_color": return set((d) => { d.color = colorOr(A(1, "color"), d.color); });
+    case "linefill.get_line1": { const d = obj(); return { handled: true, value: live(d) ? d.line1 : NaN }; }
+    case "linefill.get_line2": { const d = obj(); return { handled: true, value: live(d) ? d.line2 : NaN }; }
+    case "label.delete": case "line.delete": case "box.delete": case "polyline.delete": case "linefill.delete": deleteDrawing(ctx, obj()); return { handled: true, value: NaN };
     case "label.copy": case "line.copy": case "box.copy": { const d = obj(); return { handled: true, value: live(d) ? addDrawing(ctx, { ...d, id: ++st.seq }) : NaN }; }
 
     // ---- setters ----
@@ -1845,14 +2295,38 @@ function walkFields(v: any, segs: string[]): any {
 function evalMethod(recv: any, method: string, node: { args: Expr[]; namedArgs: Record<string, Expr>; id: number }, ctx: Ctx): any {
   const synth: Extract<Expr, { type: "call" }> = { type: "call", name: method, args: [{ type: "value", value: recv }, ...node.args], namedArgs: node.namedArgs, id: node.id };
   const g = ctx.globalCtx || ctx;
-  const candidates = (g.methods || {})[method] || [];
+  // (an overload has to take this many arguments: `arr.unshift(v)` inside a library's own
+  // 3-argument `unshift` method is the built-in one)
+  const declared = g.methods ? g.methods[method] : undefined;
+  // An array's own get / set / size / push with no method of the script's by that name: done here
+  // (the commonest calls in a script's loops)
+  if (!declared && Array.isArray(recv) && NO_NAMED(node)) {
+    const a = node.args;
+    switch (method) {
+      case "get": { const i = Math.round(evalNode(a[0], ctx)); return recv[i] !== undefined ? recv[i] : NaN; }
+      case "set": { const i = Math.round(evalNode(a[0], ctx)); recv[i] = a[1] !== undefined ? evalNode(a[1], ctx) : undefined; return NaN; }
+      case "size": return recv.length;
+      case "push": recv.push(a[0] !== undefined ? evalNode(a[0], ctx) : undefined); return NaN;
+      case "first": return recv.length ? recv[0] : NaN;
+      case "last": return recv.length ? recv[recv.length - 1] : NaN;
+    }
+  }
+  const given = 1 + node.args.length + Object.keys(node.namedArgs).length;
+  const candidates = declared ? declared.filter((f) => given <= f.params.length && given >= f.params.filter((p) => !p.default).length) : NO_METHODS;
   const udt = recv && typeof recv === "object" ? recv.__udt : undefined;
-  const user = candidates.find((f) => f.params[0]?.type === udt) || (udt ? candidates.find((f) => !f.params[0]?.type) : undefined);
-  if (user) return callUserFunction(user, synth, ctx);
-  const ns = Array.isArray(recv) ? "array" : recv && recv.__matrix ? "matrix" : recv && recv.__point ? "chart.point" : recv && recv.__pineTable ? "table"
+  const ns = Array.isArray(recv) ? "array" : recv && recv.__matrix ? "matrix" : recv && recv.__map ? "map" : recv && recv.__point ? "chart.point" : recv && recv.__pineTable ? "table"
     : recv && recv.kind ? recv.kind : typeof recv === "string" ? "str" : null;
-  if (ns) return evalCall({ ...synth, name: `${ns}.${method}` }, ctx);
+  // The script's own method for this receiver: its type, or the built-in kind it was declared for
+  // (`method dashRow(table t, …)`, `method sum(array<float> a)`, `method f(float[] a)`)
+  const kindOf = (t: string | undefined) => !t ? "" : /\[\]$|^array</.test(t) ? "array" : /^matrix</.test(t) ? "matrix" : /^map</.test(t) ? "map" : t;
+  const user = candidates.find((f) => f.params[0]?.type === udt && udt)
+    || (ns ? candidates.find((f) => kindOf(f.params[0]?.type) === ns || (ns === "str" && f.params[0]?.type === "color")) : undefined)
+    || (udt ? candidates.find((f) => !f.params[0]?.type) : undefined);
+  if (user) return callUserFunction(user, synth, ctx);
+  if (ns) return evalCall({ ...synth, name: `${ns}.${method}`, __builtin: true } as any, ctx);
   if (candidates.length) return callUserFunction(candidates[0], synth, ctx);
+  // A method on na (a line not drawn yet, an empty array variable): Pine does nothing and gives na
+  if (recv === undefined || recv === null || (typeof recv === "number" && isNaN(recv))) return NaN;
   throw new PineError(`Could not find method '${method}'`, "CE10003");
 }
 
@@ -1900,7 +2374,167 @@ function evalMatrix(name: string, A: (i: number, key: string, def?: any) => any)
     case "matrix.fill": { const x = m(); const v = A(1, "value"); x?.data.forEach((r) => r.fill(v)); return { handled: true, value: NaN }; }
     case "matrix.copy": { const x = m(); return { handled: true, value: x ? { __matrix: true, data: x.data.map((r) => r.slice()) } : NaN }; }
   }
-  return { handled: false };
+  const more = matrixMore(name, A, m);
+  return more === NO_MATRIX ? { handled: false } : { handled: true, value: more };
+}
+
+// The rest of Pine's matrix library (same results as the Pine reference: na for a matrix that isn't
+// one / the wrong shape, rows × columns everywhere)
+const NO_MATRIX = Symbol("no-matrix");
+function matrixMore(name: string, A: (i: number, key: string, def?: any) => any, m: () => PineMatrix | null): any {
+  const mk = (data: any[][]): PineMatrix => ({ __matrix: true, data });
+  const rowsOf = (x: PineMatrix) => x.data.length, colsOf = (x: PineMatrix) => (x.data.length ? x.data[0].length : 0);
+  const flat = (x: PineMatrix) => x.data.flat().filter((v) => typeof v === "number" && !isNaN(v));
+  const transpose = (d: any[][]) => (d.length ? d[0].map((_, c) => d.map((r) => r[c])) : []);
+  const mul = (a: any[][], b: any[][]) => {
+    if (!a.length || !b.length || a[0].length !== b.length) return null;
+    return a.map((r) => b[0].map((_, c) => r.reduce((s, v, k) => s + v * b[k][c], 0)));
+  };
+  const ident = (n: number) => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
+  // Gauss-Jordan with partial pivoting: [inverse, determinant, rank]
+  const gauss = (d: number[][]) => {
+    const n = d.length, cols = n ? d[0].length : 0;
+    const a = d.map((r, i) => [...r, ...(n === cols ? ident(n)[i] : [])]);
+    let det = 1, rank = 0;
+    for (let c = 0, r = 0; c < cols && r < n; c++) {
+      let p = r;
+      for (let i = r + 1; i < n; i++) if (Math.abs(a[i][c]) > Math.abs(a[p][c])) p = i;
+      if (Math.abs(a[p][c]) < 1e-12) { det = 0; continue; }
+      if (p !== r) { [a[p], a[r]] = [a[r], a[p]]; det = -det; }
+      const pv = a[r][c];
+      det *= pv;
+      for (let j = 0; j < a[r].length; j++) a[r][j] /= pv;
+      for (let i = 0; i < n; i++) if (i !== r && a[i][c] !== 0) { const f = a[i][c]; for (let j = 0; j < a[r].length; j++) a[i][j] -= f * a[r][j]; }
+      r++; rank++;
+    }
+    return { inv: n === cols && rank === n ? a.map((r) => r.slice(n)) : null, det: n === cols ? (rank === n ? det : 0) : NaN, rank };
+  };
+  // Eigen-decomposition of a symmetric matrix (Jacobi rotations), descending eigenvalues; columns of
+  // vectors are the eigenvectors. A non-symmetric matrix uses its symmetric part (Pine's results for
+  // those are complex-valued anyway)
+  const eigen = (d: number[][]) => {
+    const n = d.length, a = d.map((r, i) => r.map((v, j) => (v + d[j][i]) / 2)), v = ident(n);
+    for (let sweep = 0; sweep < 100; sweep++) {
+      let off = 0;
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) off += a[i][j] * a[i][j];
+      if (off < 1e-20) break;
+      for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) {
+        if (Math.abs(a[p][q]) < 1e-300) continue;
+        const th = (a[q][q] - a[p][p]) / (2 * a[p][q]);
+        const t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1)), c = 1 / Math.sqrt(t * t + 1), s = t * c;
+        for (let k = 0; k < n; k++) { const akp = a[k][p], akq = a[k][q]; a[k][p] = c * akp - s * akq; a[k][q] = s * akp + c * akq; }
+        for (let k = 0; k < n; k++) { const apk = a[p][k], aqk = a[q][k]; a[p][k] = c * apk - s * aqk; a[q][k] = s * apk + c * aqk; }
+        for (let k = 0; k < n; k++) { const vkp = v[k][p], vkq = v[k][q]; v[k][p] = c * vkp - s * vkq; v[k][q] = s * vkp + c * vkq; }
+      }
+    }
+    const order = a.map((r, i) => i).sort((i, j) => a[j][j] - a[i][i]);
+    return { values: order.map((i) => a[i][i]), vectors: v.map((r) => order.map((i) => r[i])) };
+  };
+  const x = m();
+  const other = () => { const v = A(1, "id2", undefined); return isMatrix(v) ? v : v; };
+  switch (name) {
+    case "matrix.add_col": {
+      if (!x) return NaN;
+      const arr = A(2, "array_id", undefined), at0 = A(1, "column", colsOf(x));
+      const at = typeof at0 === "number" && !isNaN(at0) ? Math.round(at0) : colsOf(x);
+      if (!x.data.length && Array.isArray(arr)) arr.forEach(() => x.data.push([]));
+      x.data.forEach((r, i) => r.splice(at, 0, Array.isArray(arr) ? arr[i] : NaN));
+      return NaN;
+    }
+    case "matrix.remove_col": {
+      if (!x || !colsOf(x)) return [];
+      const c = Math.round(A(1, "column", colsOf(x) - 1));
+      return x.data.map((r) => r.splice(c, 1)[0]);
+    }
+    case "matrix.swap_rows": { if (x) { const a = Math.round(A(1, "row1")), b = Math.round(A(2, "row2")); [x.data[a], x.data[b]] = [x.data[b], x.data[a]]; } return NaN; }
+    case "matrix.swap_columns": { if (x) { const a = Math.round(A(1, "column1")), b = Math.round(A(2, "column2")); x.data.forEach((r) => { [r[a], r[b]] = [r[b], r[a]]; }); } return NaN; }
+    case "matrix.reverse": { if (x) { x.data.reverse(); x.data.forEach((r) => r.reverse()); } return NaN; }
+    case "matrix.sort": {
+      if (!x) return NaN;
+      const c = Math.round(A(1, "column", 0)), desc = String(A(2, "order", "ascending")) === "descending";
+      x.data.sort((p, q) => (desc ? q[c] - p[c] : p[c] - q[c]));
+      return NaN;
+    }
+    case "matrix.submatrix": {
+      if (!x) return NaN;
+      const r0 = Math.round(A(1, "from_row", 0)), r1 = Math.round(A(2, "to_row", rowsOf(x))), c0 = Math.round(A(3, "from_column", 0)), c1 = Math.round(A(4, "to_column", colsOf(x)));
+      return mk(x.data.slice(r0, r1).map((r) => r.slice(c0, c1)));
+    }
+    case "matrix.concat": { const y = other(); if (x && isMatrix(y)) y.data.forEach((r) => x.data.push(r.slice())); return x ?? NaN; }
+    case "matrix.reshape": {
+      if (!x) return NaN;
+      const rr = Math.round(A(1, "rows")), cc = Math.round(A(2, "columns")), f = x.data.flat();
+      x.data = Array.from({ length: rr }, (_, i) => f.slice(i * cc, i * cc + cc));
+      return NaN;
+    }
+    case "matrix.transpose": return x ? mk(transpose(x.data)) : NaN;
+    case "matrix.sum": case "matrix.diff": case "matrix.mult": {
+      const y = other();
+      if (!x) return NaN;
+      if (isMatrix(y)) {
+        if (name === "matrix.mult") return mk(mul(x.data, y.data) ?? []);
+        if (rowsOf(x) !== rowsOf(y) || colsOf(x) !== colsOf(y)) return NaN;
+        return mk(x.data.map((r, i) => r.map((v, j) => (name === "matrix.sum" ? v + y.data[i][j] : v - y.data[i][j]))));
+      }
+      // matrix × array: a column vector, gives an array
+      if (Array.isArray(y) && name === "matrix.mult") { const r = mul(x.data, y.map((v) => [v])); return r ? r.map((row) => row[0]) : []; }
+      const k = Number(y);
+      return mk(x.data.map((r) => r.map((v) => (name === "matrix.sum" ? v + k : name === "matrix.diff" ? v - k : v * k))));
+    }
+    case "matrix.pow": {
+      if (!x || rowsOf(x) !== colsOf(x)) return NaN;
+      let p = Math.round(A(1, "power", 1)), out = ident(rowsOf(x)), base = x.data.map((r) => r.slice());
+      while (p > 0) { if (p & 1) out = mul(out, base)!; base = mul(base, base)!; p >>= 1; }
+      return mk(out);
+    }
+    case "matrix.kron": {
+      const y = other();
+      if (!x || !isMatrix(y)) return NaN;
+      const out: number[][] = [];
+      x.data.forEach((ra) => y.data.forEach((rb) => out.push(ra.flatMap((a) => rb.map((b) => a * b)))));
+      return mk(out);
+    }
+    case "matrix.det": return x && rowsOf(x) === colsOf(x) ? gauss(x.data).det : NaN;
+    case "matrix.rank": return x ? gauss(x.data).rank : NaN;
+    case "matrix.inv": { if (!x || rowsOf(x) !== colsOf(x)) return NaN; const g = gauss(x.data); return g.inv ? mk(g.inv) : NaN; }
+    case "matrix.pinv": {
+      // Moore-Penrose: (AᵀA)⁻¹Aᵀ for full column rank, Aᵀ(AAᵀ)⁻¹ otherwise
+      if (!x) return NaN;
+      const t = transpose(x.data);
+      if (rowsOf(x) >= colsOf(x)) { const g = gauss(mul(t, x.data)!); return g.inv ? mk(mul(g.inv, t)!) : NaN; }
+      const g = gauss(mul(x.data, t)!); return g.inv ? mk(mul(t, g.inv)!) : NaN;
+    }
+    case "matrix.trace": return x ? x.data.reduce((s, r, i) => s + (r[i] ?? 0), 0) : NaN;
+    case "matrix.avg": { if (!x) return NaN; const f = flat(x); return f.length ? f.reduce((a, b) => a + b, 0) / f.length : NaN; }
+    case "matrix.max": { if (!x) return NaN; const f = flat(x); return f.length ? Math.max(...f) : NaN; }
+    case "matrix.min": { if (!x) return NaN; const f = flat(x); return f.length ? Math.min(...f) : NaN; }
+    case "matrix.median": {
+      if (!x) return NaN;
+      const f = flat(x).sort((a, b) => a - b), n = f.length;
+      return n ? (n % 2 ? f[(n - 1) / 2] : (f[n / 2 - 1] + f[n / 2]) / 2) : NaN;
+    }
+    case "matrix.mode": {
+      if (!x) return NaN;
+      const cnt = new Map<number, number>();
+      flat(x).forEach((v) => cnt.set(v, (cnt.get(v) || 0) + 1));
+      let best = NaN, bc = 0;
+      cnt.forEach((c, v) => { if (c > bc || (c === bc && v < best)) { best = v; bc = c; } });
+      return best;
+    }
+    case "matrix.eigenvalues": return x && rowsOf(x) === colsOf(x) ? eigen(x.data).values : [];
+    case "matrix.eigenvectors": return x && rowsOf(x) === colsOf(x) ? mk(eigen(x.data).vectors) : NaN;
+    case "matrix.is_square": return !!x && rowsOf(x) === colsOf(x);
+    case "matrix.is_zero": return !!x && x.data.every((r) => r.every((v) => v === 0));
+    case "matrix.is_binary": return !!x && x.data.every((r) => r.every((v) => v === 0 || v === 1));
+    case "matrix.is_identity": return !!x && rowsOf(x) === colsOf(x) && x.data.every((r, i) => r.every((v, j) => v === (i === j ? 1 : 0)));
+    case "matrix.is_diagonal": return !!x && rowsOf(x) === colsOf(x) && x.data.every((r, i) => r.every((v, j) => i === j || v === 0));
+    case "matrix.is_antidiagonal": { const n = x ? rowsOf(x) : 0; return !!x && n === colsOf(x) && x.data.every((r, i) => r.every((v, j) => i + j === n - 1 || v === 0)); }
+    case "matrix.is_symmetric": return !!x && rowsOf(x) === colsOf(x) && x.data.every((r, i) => r.every((v, j) => v === x.data[j][i]));
+    case "matrix.is_antisymmetric": return !!x && rowsOf(x) === colsOf(x) && x.data.every((r, i) => r.every((v, j) => v === -x.data[j][i]));
+    case "matrix.is_triangular": return !!x && rowsOf(x) === colsOf(x) && (x.data.every((r, i) => r.every((v, j) => j <= i || v === 0)) || x.data.every((r, i) => r.every((v, j) => j >= i || v === 0)));
+    case "matrix.is_stochastic": return !!x && x.data.every((r) => r.every((v) => v >= 0) && Math.abs(r.reduce((a, b) => a + b, 0) - 1) < 1e-10);
+  }
+  return NO_MATRIX;
 }
 
 // ------------------------------------------------------------- pivots
@@ -1957,6 +2591,27 @@ function aggregateBars(bars: Bar[], tf: string): Bar[] {
   return out;
 }
 
+const NO_METHODS: FunctionDef[] = [];
+const DRAW_HEADS = new Set(["label", "line", "box", "polyline", "linefill", "chart"]);
+// A call's name in parts, worked out once per name: `a.b.c.m` → head a, fields [b, c], method m
+interface CallName { builtin: boolean; dot: number; owner: string; head: string; mid: string[]; tail: string }
+const CALL_NAMES = new Map<string, CallName>();
+function callNameParts(name: string): CallName {
+  let p = CALL_NAMES.get(name);
+  if (!p) {
+    const dot = name.lastIndexOf("."), first = name.indexOf(".");
+    const segs = name.split(".");
+    p = { builtin: PINE_FUNCTIONS.has(name), dot, owner: dot > 0 ? name.slice(0, dot) : "", head: first > 0 ? name.slice(0, first) : name, mid: segs.slice(1, -1), tail: dot > 0 ? name.slice(dot + 1) : name };
+    CALL_NAMES.set(name, p);
+  }
+  return p;
+}
+// A dotted identifier's parts after its head (`obj.a.b` → [a, b]), worked out once per name
+const IDENT_TAILS = new Map<string, string[]>();
+const identTail = (name: string, dotAt: number) => { let t = IDENT_TAILS.get(name); if (!t) { t = name.slice(dotAt + 1).split("."); IDENT_TAILS.set(name, t); } return t; };
+const HOT_CALLS: Record<string, number> = { "array.get": 0, "array.set": 1, "array.size": 2, "array.push": 3, na: 4, nz: 5, "math.max": 6, "math.min": 7, "math.abs": 8 };
+const NO_NAMED = (node: { namedArgs: Record<string, Expr> }) => { for (const _k in node.namedArgs) return false; return true; };
+
 function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
   const name = node.name;
   const cs = (ctx.callState[node.id] = ctx.callState[node.id] || {});
@@ -1967,6 +2622,51 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
     if (node.args[i] !== undefined) return evalNode(node.args[i], ctx);
     return def === undefined ? NaN : def;
   };
+
+  // The commonest built-ins (array element access, na / nz, math.max / min / abs), straight to
+  // their work: a script's loops call them millions of times
+  if (!node.namedArgs || NO_NAMED(node)) {
+    const hot = HOT_CALLS[name];
+    if (hot !== undefined) {
+      const a = node.args;
+      switch (hot) {
+        case 0: { const arr = evalNode(a[0], ctx); const i = Math.round(evalNode(a[1], ctx)); return Array.isArray(arr) && arr[i] !== undefined ? arr[i] : NaN; }
+        case 1: { const arr = evalNode(a[0], ctx); const i = Math.round(evalNode(a[1], ctx)); if (Array.isArray(arr)) arr[i] = a[2] !== undefined ? evalNode(a[2], ctx) : undefined; return NaN; }
+        case 2: { const arr = evalNode(a[0], ctx); return Array.isArray(arr) ? arr.length : 0; }
+        case 3: { const arr = evalNode(a[0], ctx); if (Array.isArray(arr)) arr.push(a[1] !== undefined ? evalNode(a[1], ctx) : undefined); return NaN; }
+        case 4: { if (a.length !== 1) break; const v = evalNode(a[0], ctx); return v === undefined || v === null || (typeof v === "number" && isNaN(v)); }
+        case 5: { const v = evalNode(a[0], ctx); const fb = a[1] !== undefined ? evalNode(a[1], ctx) : 0; return v === undefined || (typeof v === "number" && isNaN(v)) ? fb : v; }
+        case 6: case 7: {
+          if (a.length === 2) { const x = evalNode(a[0], ctx), y = evalNode(a[1], ctx); return hot === 6 ? Math.max(x, y) : Math.min(x, y); }
+          break;
+        }
+        case 8: return Math.abs(evalNode(a[0], ctx));
+      }
+    }
+  }
+
+  // Fast path, before the long switch of built-ins (each case a string compare): the script's own
+  // functions (and its libraries'), its types' .new / .copy, and methods on its variables. A name
+  // Pine has as a built-in still goes through the switch, as before.
+  const pn = callNameParts(name);
+  // matrix.* and the drawing namespaces have no case in the switch: straight to their handlers
+  if (pn.builtin && pn.dot > 0) {
+    if (pn.head === "matrix") { const mx = evalMatrix(name, A); if (mx.handled) return mx.value; }
+    else if (DRAW_HEADS.has(pn.head)) { const dr = evalDrawing(name, node, ctx); if (dr.handled) return dr.value; }
+  }
+  if (!pn.builtin) {
+    const fn = ctx.functions[name];
+    if (fn) return callUserFunction(fn, node, ctx);
+    if (pn.dot > 0) {
+      const g = ctx.globalCtx || ctx;
+      const def = g.types ? g.types[pn.owner] : undefined;
+      if (def && pn.tail === "new") return newObject(def, node, ctx);
+      if (!(node as any).__builtin) {
+        const head = varOf(ctx, pn.head);
+        if (head.found && !(def && pn.tail === "copy")) return evalMethod(pn.mid.length ? walkFields(head.value, pn.mid) : head.value, pn.tail, node, ctx);
+      }
+    }
+  }
 
   switch (name) {
     // ---- ta.*: the indicator library (pineBuiltins.ts), one series state per call site ----
@@ -2000,6 +2700,9 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
     case "ta.pivothigh": return node.args.length + Object.keys(node.namedArgs).length >= 3 ? B.pivothigh(cs, ctx, A(0, "source"), A(1, "leftbars"), A(2, "rightbars")) : B.pivothigh(cs, ctx, ctx.bar.high, A(0, "leftbars"), A(1, "rightbars"));
     case "ta.pivotlow": return node.args.length + Object.keys(node.namedArgs).length >= 3 ? B.pivotlow(cs, ctx, A(0, "source"), A(1, "leftbars"), A(2, "rightbars")) : B.pivotlow(cs, ctx, ctx.bar.low, A(0, "leftbars"), A(1, "rightbars"));
     case "ta.cum": return B.cum(cs, ctx, A(0, "source"));
+    case "ta.cog": return B.cog(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.mode": return B.mode(cs, ctx, A(0, "source"), A(1, "length"));
+    case "ta.rci": return B.rci(cs, ctx, A(0, "source"), A(1, "length"));
     case "math.sum": return B.sum(cs, ctx, A(0, "source"), A(1, "length"));
     case "ta.max": return B.allTimeMax(cs, ctx, A(0, "source"));
     case "ta.min": return B.allTimeMin(cs, ctx, A(0, "source"));
@@ -2055,6 +2758,7 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
     case "fixnan": { const v = argAt(0); if (!B.isNa(v)) cs.last = v; return cs.last ?? NaN; }
     case "str.tostring": {
       const v = argAt(0);
+      if (v && typeof v === "object" && v.__enum) return v.title;
       if (typeof v === "boolean") return v ? "true" : "false";
       if (typeof v === "number") {
         if (isNaN(v)) return "NaN";
@@ -2064,19 +2768,23 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
           if (fmt === "mintick" || fmt === "price") { const dec = Math.max(0, Math.round(-Math.log10(minTick(ctx)))); return v.toFixed(dec); }
           if (fmt === "percent") return `${v.toFixed(2)}%`;
           if (fmt === "volume") { const a = Math.abs(v); return a >= 1e9 ? `${(v / 1e9).toFixed(3)}B` : a >= 1e6 ? `${(v / 1e6).toFixed(3)}M` : a >= 1e3 ? `${(v / 1e3).toFixed(3)}K` : String(Math.round(v)); }
-          const decMatch = fmt.match(/\.(#+)/);
-          if (decMatch) return v.toFixed(decMatch[1].length);
-          if (/^#+$/.test(fmt)) return String(Math.round(v));
+          // a DecimalFormat pattern: "#.##" → 1.5 (no trailing zeros), "0.00" → 1.50, "#,###" → 1,234
+          if (/[#0]/.test(fmt)) return decimalFormat(v, fmt);
         }
         return String(v);
       }
       return String(v);
     }
-    case "str.format": {
-      let fmt = String(argAt(0));
-      for (let i = 1; i < node.args.length; i++) fmt = fmt.split(`{${i - 1}}`).join(String(argAt(i)));
-      return fmt;
+    case "str.format": return pineFormat(String(argAt(0)), node.args.slice(1).map((_, i) => argAt(i + 1)));
+    case "str.format_time": {
+      const t = A(0, "time", ctx.bar.time * 1000);
+      return typeof t === "number" && !isNaN(t) ? javaDate(t, String(A(1, "format", "yyyy-MM-dd'T'HH:mm:ssZ")), A(2, "timezone", "UTC")) : "";
     }
+    // the first part of the string that the regex matches ("" for none)
+    case "str.match": {
+      try { const m = String(argAt(0)).match(new RegExp(String(argAt(1)))); return m ? m[0] : ""; } catch { return ""; }
+    }
+    case "weekofyear": return isoWeek(node.args[0] !== undefined ? argAt(0) : ctx.bar.time * 1000);
     case "str.length": return String(argAt(0)).length;
     case "str.tonumber": { const v = parseFloat(String(argAt(0))); return isNaN(v) ? NaN : v; }
     case "year": return new Date(node.args[0] !== undefined ? argAt(0) : ctx.bar.time * 1000).getUTCFullYear();
@@ -2153,9 +2861,9 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
     }
     case "str.replace_all": return String(argAt(0)).split(String(argAt(1))).join(String(argAt(2)));
     case "str.split": return String(argAt(0)).split(String(argAt(1)));
-    case "str.repeat": { const n = Math.max(0, Math.round(argAt(1))); const sep = node.args[2] !== undefined ? String(argAt(2)) : ""; return new Array(n).fill(String(argAt(0))).join(sep); }
+    case "str.repeat": { const n = Math.max(0, Math.round(argAt(1)) || 0); const sep = node.args[2] !== undefined ? String(argAt(2)) : ""; return new Array(n).fill(String(argAt(0))).join(sep); }
     case "input": case "input.int": case "input.float": case "input.bool": case "input.string": case "input.color":
-    case "input.timeframe": case "input.session": case "input.symbol": case "input.source": case "input.text_area": case "input.price": case "input.time": {
+    case "input.timeframe": case "input.session": case "input.symbol": case "input.source": case "input.text_area": case "input.price": case "input.time": case "input.enum": {
       const v = node.namedArgs.defval ? evalNode(node.namedArgs.defval, ctx) : (node.args[0] !== undefined ? argAt(0) : NaN);
       // Captured once (bar 0) for the on-chart legend line, which lists each
       // input's current value the way TradingView's own legend does.
@@ -2170,7 +2878,7 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
     // since nothing here needs to distinguish it from a tuple-return value. ----
     case "array.new_float": case "array.new_int": case "array.new_bool": case "array.new_string":
     case "array.new_line": case "array.new_label": case "array.new_box": case "array.new_color": {
-      const size = node.args[0] !== undefined ? Math.max(0, Math.round(argAt(0))) : 0;
+      const size = node.args[0] !== undefined ? Math.max(0, Math.round(argAt(0))) || 0 : 0;
       const initVal = node.args[1] !== undefined ? argAt(1) : (name === "array.new_bool" ? false : name === "array.new_string" ? "" : NaN);
       return new Array(size).fill(initVal);
     }
@@ -2200,9 +2908,18 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
       return NaN;
     }
 
+    case "array.sort_indices": {
+      const arr = argAt(0);
+      const order = node.args[1] !== undefined ? argAt(1) : "ascending";
+      if (!Array.isArray(arr)) return [];
+      const idx = arr.map((_: any, i: number) => i);
+      idx.sort((a: number, b: number) => { const x = arr[a], y = arr[b]; const d = typeof x === "string" ? String(x).localeCompare(String(y)) : x - y; return order === "descending" ? -d : d; });
+      return idx;
+    }
+
     // ---- more array.* ----
     case "array.new": {
-      const size = Math.max(0, Math.round(A(0, "size", 0)));
+      const size = Math.max(0, Math.round(A(0, "size", 0))) || 0;
       return new Array(size).fill(A(1, "initial_value", NaN));
     }
     case "array.first": { const arr = argAt(0); return Array.isArray(arr) && arr.length ? arr[0] : NaN; }
@@ -2214,7 +2931,66 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
     case "array.lastindexof": { const arr = argAt(0); return Array.isArray(arr) ? arr.lastIndexOf(argAt(1)) : -1; }
     case "array.range": { const arr = argAt(0); return Array.isArray(arr) && arr.length ? Math.max(...arr) - Math.min(...arr) : NaN; }
     case "array.median": { const arr = argAt(0); if (!Array.isArray(arr) || !arr.length) return NaN; const s2 = arr.slice().sort((a: number, b: number) => a - b); const m = s2.length >> 1; return s2.length % 2 ? s2[m] : (s2[m - 1] + s2[m]) / 2; }
-    case "array.stdev": { const arr = argAt(0); if (!Array.isArray(arr) || !arr.length) return NaN; const mean = arr.reduce((a: number, b: number) => a + b, 0) / arr.length; return Math.sqrt(arr.reduce((a: number, b: number) => a + (b - mean) ** 2, 0) / arr.length); }
+    case "array.stdev": { const arr = argAt(0); if (!Array.isArray(arr) || !arr.length) return NaN; const mean = arr.reduce((a: number, b: number) => a + b, 0) / arr.length; return Math.sqrt(arr.reduce((a: number, b: number) => a + (b - mean) ** 2, 0) / (truthy(A(1, "biased", true)) || arr.length < 2 ? arr.length : arr.length - 1)); }
+    case "array.variance": {
+      const arr = argAt(0); if (!Array.isArray(arr) || !arr.length) return NaN;
+      const mean = arr.reduce((a: number, b: number) => a + b, 0) / arr.length;
+      return arr.reduce((a: number, b: number) => a + (b - mean) ** 2, 0) / (truthy(A(1, "biased", true)) || arr.length < 2 ? arr.length : arr.length - 1);
+    }
+    case "array.covariance": {
+      const a = argAt(0), b = argAt(1);
+      if (!Array.isArray(a) || !Array.isArray(b) || !a.length || a.length !== b.length) return NaN;
+      const ma = a.reduce((x: number, y: number) => x + y, 0) / a.length, mb = b.reduce((x: number, y: number) => x + y, 0) / b.length;
+      let s2 = 0; for (let i = 0; i < a.length; i++) s2 += (a[i] - ma) * (b[i] - mb);
+      return s2 / (truthy(A(2, "biased", true)) || a.length < 2 ? a.length : a.length - 1);
+    }
+    case "array.standardize": {
+      const arr = argAt(0); if (!Array.isArray(arr) || !arr.length) return [];
+      const mean = arr.reduce((a: number, b: number) => a + b, 0) / arr.length;
+      const sd = Math.sqrt(arr.reduce((a: number, b: number) => a + (b - mean) ** 2, 0) / arr.length);
+      return arr.map((v: number) => (sd ? (v - mean) / sd : NaN));
+    }
+    case "array.abs": { const arr = argAt(0); return Array.isArray(arr) ? arr.map((v: number) => Math.abs(v)) : []; }
+    case "array.mode": {
+      const arr = argAt(0); if (!Array.isArray(arr) || !arr.length) return NaN;
+      const cnt = new Map<number, number>(); let best = NaN, bc = 0;
+      arr.forEach((v: number) => cnt.set(v, (cnt.get(v) || 0) + 1));
+      cnt.forEach((c, v) => { if (c > bc || (c === bc && v < best)) { best = v; bc = c; } });
+      return best;
+    }
+    case "array.every": { const arr = argAt(0); return Array.isArray(arr) && arr.every((v: any) => truthy(v)); }
+    case "array.some": { const arr = argAt(0); return Array.isArray(arr) && arr.some((v: any) => truthy(v)); }
+    // (the array is sorted ascending) found: its index (the first / last of equal ones); not found:
+    // -1 / the element just left of where it would go / the one just right of it
+    case "array.binary_search": case "array.binary_search_leftmost": case "array.binary_search_rightmost": {
+      const arr = argAt(0), v = argAt(1);
+      if (!Array.isArray(arr)) return -1;
+      let lo = 0, hi = arr.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (arr[mid] < v) lo = mid + 1; else hi = mid; }
+      const found = lo < arr.length && arr[lo] === v;
+      if (name === "array.binary_search") return found ? lo : -1;
+      if (name === "array.binary_search_leftmost") return found ? lo : lo - 1;
+      if (!found) return lo;
+      let r = lo; while (r + 1 < arr.length && arr[r + 1] === v) r++;
+      return r;
+    }
+    case "array.percentile_linear_interpolation": case "array.percentile_nearest_rank": {
+      const arr = argAt(0); if (!Array.isArray(arr) || !arr.length) return NaN;
+      const sorted = arr.filter((v: any) => typeof v === "number" && !isNaN(v)).sort((a: number, b: number) => a - b), pct = A(1, "percentage");
+      if (!sorted.length) return NaN;
+      if (name === "array.percentile_nearest_rank") return sorted[Math.max(0, Math.ceil((pct / 100) * sorted.length) - 1)];
+      const pos = (pct / 100) * (sorted.length - 1), lo = Math.floor(pos), hi = Math.ceil(pos);
+      return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+    }
+    // the share of the other elements that are at or below the one at `index`
+    case "array.percentrank": {
+      const arr = argAt(0), idx = Math.round(A(1, "index"));
+      if (!Array.isArray(arr) || arr.length < 2 || idx < 0 || idx >= arr.length) return NaN;
+      const v = arr[idx]; let cnt = 0;
+      arr.forEach((x: number, i: number) => { if (i !== idx && x <= v) cnt++; });
+      return (cnt / (arr.length - 1)) * 100;
+    }
+    case "array.new_linefill": case "array.new_table": { const n = Math.max(0, Math.round(A(0, "size", 0))); return new Array(n).fill(A(1, "initial_value", NaN)); }
 
     // ---- pivots ----
     case "ta.pivot_point_levels": {
@@ -2269,17 +3045,127 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
     // skip-reassignment semantics mean this only actually runs once (bar 0),
     // so pushing to ctx.tables here can't create duplicates for one script.
     case "table.new": {
-      const position = String(argAt(0));
-      const columns = Math.max(1, Math.round(argAt(1)));
-      const rows = Math.max(1, Math.round(argAt(2)));
-      const bgcolor = node.namedArgs.bgcolor !== undefined ? String(evalNode(node.namedArgs.bgcolor, ctx)) : (node.args[3] !== undefined ? String(argAt(3)) : undefined);
-      const borderColor = node.namedArgs.border_color !== undefined ? String(evalNode(node.namedArgs.border_color, ctx)) : undefined;
+      // (by position or by name: table.new(position = …, columns = 8, rows = 8))
+      const position = String(A(0, "position", "top_right"));
+      const columns = Math.max(1, Math.round(A(1, "columns", 1)) || 1);
+      const rows = Math.max(1, Math.round(A(2, "rows", 1)) || 1);
+      const bg = A(3, "bgcolor", undefined), bc = A(6, "border_color", undefined);
+      const bgcolor = bg !== undefined ? String(bg) : undefined;
+      const borderColor = bc !== undefined ? String(bc) : undefined;
       const table = {
-        __pineTable: true, position, columns, rows, bgcolor, borderColor,
+        __pineTable: true, __site: node.id, position, columns, rows, bgcolor, borderColor,
         cells: Array.from({ length: rows }, () => new Array(columns).fill(null)),
       };
+      // (a table.new on every bar, without var: the new table takes the place of the one this same
+      // call made, at the same position, instead of piling up one per bar)
+      const old = ctx.tables.findIndex((t: any) => t.__site === node.id && t.position === position);
+      if (old >= 0) ctx.tables.splice(old, 1);
       ctx.tables.push(table);
       return table;
+    }
+
+    // table.* called as a function or a method (`tbl.cell(…)`): the same as the statement forms
+    case "table.cell": case "table.clear": execExprStatement(node, ctx); return NaN;
+    case "table.delete": { const t = argAt(0); if (t && t.__pineTable) { const k = ctx.tables.indexOf(t); if (k >= 0) ctx.tables.splice(k, 1); } return NaN; }
+    case "table.cell_set_text": case "table.cell_set_text_color": case "table.cell_set_bgcolor": case "table.cell_set_text_size":
+    case "table.cell_set_text_halign": case "table.cell_set_text_valign": case "table.cell_set_tooltip": {
+      const t = argAt(0), col = Math.round(argAt(1)), row = Math.round(argAt(2)), v = argAt(3);
+      if (t && t.__pineTable && t.cells[row] !== undefined && col >= 0 && col < t.columns) {
+        const cell = t.cells[row][col] || (t.cells[row][col] = { text: "" });
+        if (name === "table.cell_set_text") cell.text = typeof v === "number" && isNaN(v) ? "" : String(v);
+        else if (name === "table.cell_set_text_color") cell.textColor = String(v);
+        else if (name === "table.cell_set_bgcolor") cell.bgcolor = String(v);
+        else if (name === "table.cell_set_text_size") cell.textSize = v;
+        else if (name === "table.cell_set_text_halign") cell.textHalign = String(v);
+        else if (name === "table.cell_set_text_valign") cell.textValign = String(v);
+        else cell.tooltip = String(v);
+      }
+      return NaN;
+    }
+    case "table.set_position": case "table.set_bgcolor": case "table.set_border_color": case "table.set_border_width":
+    case "table.set_frame_color": case "table.set_frame_width": case "table.merge_cells":
+    case "table.cell_set_width": case "table.cell_set_height": {
+      const t = argAt(0), col = Math.round(argAt(1)), row = Math.round(argAt(2)), v = Number(argAt(3)) || undefined;
+      if (t && t.__pineTable && t.cells[row] !== undefined && col >= 0 && col < t.columns) {
+        const cell = t.cells[row][col] || (t.cells[row][col] = { text: "" });
+        if (name === "table.cell_set_width") cell.width = v; else cell.height = v;
+      }
+      return NaN;
+    }
+    case "table.cell_set_text_font_family": case "table.cell_set_text_formatting": {
+      const t = argAt(0);
+      if (t && t.__pineTable) {
+        if (name === "table.set_position") t.position = String(argAt(1));
+        else if (name === "table.set_bgcolor") t.bgcolor = String(argAt(1));
+        else if (name === "table.set_border_color") t.borderColor = String(argAt(1));
+      }
+      return NaN;
+    }
+    // ---- map.* (keys kept in insertion order, as Pine's maps are) ----
+    case "map.new": return { __map: true, m: new Map<any, any>() };
+    case "map.put": { const mp = argAt(0); if (!mp?.__map) return NaN; const k = argAt(1), had = mp.m.has(k), prev = mp.m.get(k); mp.m.set(k, argAt(2)); return had ? prev : NaN; }
+    case "map.get": { const mp = argAt(0); return mp?.__map && mp.m.has(argAt(1)) ? mp.m.get(argAt(1)) : NaN; }
+    case "map.contains": { const mp = argAt(0); return !!(mp?.__map && mp.m.has(argAt(1))); }
+    case "map.remove": { const mp = argAt(0); if (!mp?.__map) return NaN; const k = argAt(1); const v = mp.m.has(k) ? mp.m.get(k) : NaN; mp.m.delete(k); return v; }
+    case "map.keys": { const mp = argAt(0); return mp?.__map ? Array.from(mp.m.keys()) : []; }
+    case "map.values": { const mp = argAt(0); return mp?.__map ? Array.from(mp.m.values()) : []; }
+    case "map.size": { const mp = argAt(0); return mp?.__map ? mp.m.size : NaN; }
+    case "map.clear": { const mp = argAt(0); if (mp?.__map) mp.m.clear(); return NaN; }
+    case "map.copy": { const mp = argAt(0); return mp?.__map ? { __map: true, m: new Map(mp.m) } : NaN; }
+    case "map.put_all": { const a = argAt(0), b = argAt(1); if (a?.__map && b?.__map) b.m.forEach((v: any, k: any) => a.m.set(k, v)); return NaN; }
+
+    // color(x): a cast, the value as it is
+    case "color": return argAt(0);
+    // line(na), box(x), …: a cast, the value itself
+    case "line": case "label": case "box": case "table": case "linefill": case "polyline": return node.args.length ? argAt(0) : NaN;
+    // Volume footprints are built from TradingView's own tick data, which this site doesn't have
+    case "request.footprint":
+      throw new PineError("request.footprint() needs TradingView's volume footprint data, which isn't available on this site", "CE10050");
+    // "1S", "60", "240", "1D", "1W" from a number of seconds, as timeframe.from_seconds does
+    case "timeframe.from_seconds": {
+      const sec = Math.round(argAt(0));
+      if (!(sec > 0)) return "";
+      if (sec % (7 * 86400) === 0 && sec >= 7 * 86400) return `${sec / (7 * 86400)}W`;
+      if (sec % 86400 === 0) return `${sec / 86400}D`;
+      if (sec % 60 === 0) return String(sec / 60);
+      return `${sec}S`;
+    }
+    // Candles a script draws itself aren't drawn yet: the rest of the script still runs
+    case "plotcandle": case "plotbar": {
+      const g = ctx.globalCtx || ctx;
+      const list: Map<number, PineCandlePlot> = (g as any).candles || ((g as any).candles = new Map());
+      const candle = name === "plotcandle";
+      // plotcandle(open, high, low, close, title, color, wickcolor, editable, show_last, bordercolor, display)
+      // plotbar(open, high, low, close, title, color, editable, show_last, display)
+      // (an argument left out is undefined here; an explicit na is a transparent colour)
+      const given = (i: number, key: string) => node.namedArgs[key] !== undefined || node.args[i] !== undefined;
+      const col = given(5, "color") ? A(5, "color") : undefined;
+      const wick = candle && given(6, "wickcolor") ? A(6, "wickcolor") : undefined;
+      const border = candle && given(9, "bordercolor") ? A(9, "bordercolor") : undefined;
+      const display = A(candle ? 10 : 8, "display");
+      let pl = list.get(node.id);
+      if (!pl) {
+        const t = A(4, "title");
+        pl = {
+          title: typeof t === "string" ? t : `${candle ? "Candles" : "Bars"} ${list.size + 1}`, kind: candle ? "candle" : "bar",
+          color: typeof col === "string" ? col : "#2962FF", wickColor: typeof wick === "string" ? wick : undefined,
+          borderColor: typeof border === "string" ? border : undefined, values: [],
+        };
+        if (display === "none") (pl as any).hidden = true;
+        list.set(node.id, pl);
+      }
+      const o = A(0, "open"), h = A(1, "high"), l = A(2, "low"), c = A(3, "close");
+      const num = (v: any) => typeof v === "number" && !isNaN(v);
+      // a bar with any of its four values na isn't drawn (its time stays, as a gap)
+      if (num(o) && num(h) && num(l) && num(c)) {
+        const pt: PineCandlePlot["values"][number] = { time: ctx.bar.time, open: o, high: h, low: l, close: c };
+        const clr = (v: any) => (typeof v === "string" ? v : typeof v === "number" && isNaN(v) ? "rgba(0, 0, 0, 0)" : undefined);
+        if (clr(col)) pt.color = clr(col);
+        if (clr(wick)) pt.wickColor = clr(wick);
+        if (clr(border)) pt.borderColor = clr(border);
+        pl.values.push(pt);
+      } else pl.values.push({ time: ctx.bar.time });
+      return NaN;
     }
 
     case "strategy.closedtrades.profit": { const t = ctx.strategyState.closedTrades[Math.round(argAt(0))]; return t ? t.netPnl : NaN; }
@@ -2298,19 +3184,23 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
         if (def && name.slice(dot + 1) === "new") return newObject(def, node, ctx);
         if (def && name.slice(dot + 1) === "copy") { const o = argAt(0); return o && typeof o === "object" ? { ...o } : NaN; }
       }
-      // obj.method(…) / obj.field.method(…) on a variable
-      if (dot > 0) {
+      // obj.method(…) / obj.field.method(…) on a variable (not a built-in such as matrix.new, which a
+      // parameter named `matrix` mustn't take over)
+      if (dot > 0 && !(node as any).__builtin && !(PINE_FUNCTIONS.has(name) && /^(array|matrix|map|str|math|ta|line|label|box|table|color|chart|request|input|timeframe|polyline|linefill)\./.test(name))) {
         const segs = name.split(".");
         const head = varOf(ctx, segs[0]);
         if (head.found) return evalMethod(walkFields(head.value, segs.slice(1, -1)), segs[segs.length - 1], node, ctx);
+        // a method on a built-in value: label.all.first(), syminfo.tickerid.contains(…)
+        if (segs.length >= 3 && /^(label|line|box|table|polyline|linefill|syminfo|timeframe|chart|barstate|session)$/.test(segs[0]))
+          return evalMethod(resolveIdent(segs.slice(0, -1).join("."), ctx), segs[segs.length - 1], node, ctx);
       }
       const mx = evalMatrix(name, A);
       if (mx.handled) return mx.value;
       const drawn = evalDrawing(name, node, ctx);
       if (drawn.handled) return drawn.value;
-      // linefill / polyline aren't drawn yet: the script still runs
+      // a linefill / polyline function we don't have: skipped, the script still runs
       if (DRAWING_NAMESPACES.some((ns) => name.startsWith(ns))) {
-        warnOnce(ctx, `'${name.split(".")[0]}.*' drawings aren't supported by this editor yet and were skipped.`);
+        warnOnce(ctx, `'${name}()' isn't supported by this editor yet and was skipped.`);
         return NaN;
       }
       // A function we don't have stops the script with a clear error instead of quietly giving na
@@ -2416,12 +3306,6 @@ function execExprStatement(node: Expr, ctx: Ctx) {
   if (node.type !== "call") return;
   const name = node.name;
   const argAt = (i: number) => (node.args[i] !== undefined ? evalNode(node.args[i], ctx) : undefined);
-  const namedColor = (key: string): string | null => {
-    const n = node.namedArgs[key];
-    if (!n) return null;
-    const v = evalNode(n, ctx);
-    return typeof v === "string" ? v : null;
-  };
 
   // An argument by position or Pine parameter name (plot(series, title, color, linewidth, style, …))
   const arg = (i: number, key: string): any => {
@@ -2586,14 +3470,22 @@ function execExprStatement(node: Expr, ctx: Ctx) {
   }
   if (name.startsWith("array.")) { evalNode(node, ctx); return; } // mutators (push/set/sort/...) run for their side effect
   if (name === "table.cell") {
-    const table = argAt(0);
-    const col = Math.round(argAt(1));
-    const row = Math.round(argAt(2));
-    const text = node.args[3] !== undefined ? String(argAt(3)) : "";
-    const textColor = namedColor("text_color") || undefined;
-    const bgcolor = namedColor("bgcolor") || undefined;
+    // table.cell(table_id, column, row, text, width, height, text_color, text_halign, text_valign,
+    //            text_size, bgcolor, tooltip, …), each by position or by name
+    const table = arg(0, "table_id");
+    const col = Math.round(arg(1, "column"));
+    const row = Math.round(arg(2, "row"));
+    const t = arg(3, "text");
+    const str = (v: any) => (typeof v === "string" ? v : undefined);
+    const size = arg(9, "text_size");
     if (table && table.__pineTable && table.cells[row] !== undefined && col >= 0 && col < table.columns) {
-      table.cells[row][col] = { text, textColor, bgcolor };
+      table.cells[row][col] = {
+        text: t === undefined || (typeof t === "number" && isNaN(t)) ? "" : String(t),
+        textColor: str(arg(6, "text_color")), bgcolor: str(arg(10, "bgcolor")),
+        textSize: typeof size === "string" || (typeof size === "number" && !isNaN(size)) ? size : undefined,
+        textHalign: str(arg(7, "text_halign")), textValign: str(arg(8, "text_valign")), tooltip: str(arg(11, "tooltip")),
+        width: Number(arg(4, "width")) || undefined, height: Number(arg(5, "height")) || undefined,
+      };
     }
     return;
   }
@@ -2633,13 +3525,28 @@ function execStmts(stmts: Stmt[], ctx: Ctx) {
         case "while": execWhileStmt(s, ctx, execStmts); break;
         case "tupleAssign": execTupleAssign(s, ctx); break;
         case "funcdef": break; // collected into ctx.functions up front; nothing to run per-bar
+        case "libinit": {
+          const g = ctx.globalCtx || ctx;
+          if (own(g.vars, s.prefix)) break;
+          const obj: Record<string, any> = {};
+          g.vars[s.prefix] = obj;
+          execStmts(s.stmts, { ...g, vars: obj, varHistory: {}, callState: (g.callState[`lib:${s.prefix}`] = g.callState[`lib:${s.prefix}`] || {}) });
+          break;
+        }
         case "assign":
           if (!(s.isVarDecl && ctx.barIndex !== 0 && Object.prototype.hasOwnProperty.call(ctx.vars, s.name))) {
             // An input.*() assignment can be overridden by the settings
             // modal (see PineInputMeta/inputOverrides), substituted here
             // after evaluation so the call's other (non-value) args stay real.
             if (ctx.inputOverrides && s.expr.type === "call" && s.expr.name.startsWith("input") && Object.prototype.hasOwnProperty.call(ctx.inputOverrides, s.name)) {
-              ctx.vars[s.name] = ctx.inputOverrides[s.name];
+              const ov = ctx.inputOverrides[s.name];
+              // input.enum: the settings give the option's title; the script gets that enum value
+              if (s.expr.name === "input.enum" && typeof ov === "string") {
+                const def = evalNode(s.expr, ctx);
+                const all = def && def.__enum ? resolveIdent(def.__enum, ctx) : null;
+                const hit = all && typeof all === "object" ? Object.values(all).find((x: any) => x && x.__enum && (x.title === ov || x.key === ov)) : null;
+                ctx.vars[s.name] = hit ?? def;
+              } else ctx.vars[s.name] = ov;
             } else {
               ctx.vars[s.name] = evalNode(s.expr, ctx);
             }
@@ -2675,12 +3582,197 @@ function collectFunctions(stmts: Stmt[], out: Record<string, FunctionDef>, types
   }
 }
 
-function parseProgram(code: string): { stmts: Stmt[]; meta: PineRunResult["meta"] } {
+// ------------------------------------------------------------ libraries
+// Published Pine libraries this editor carries (TradingView path "User/Name/version" → source), so
+// that `import User/Name/version as alias` works as on TradingView
+let PINE_LIBRARIES: Record<string, string> = {};
+export function registerPineLibraries(libs: Record<string, string>) { PINE_LIBRARIES = { ...PINE_LIBRARIES, ...libs }; }
+
+// Fetches (once) the libraries a script imports, and theirs, from the site's /pine-libs/ folder
+// (User/Name/version.pine, each the published source with its licence notice). One that isn't
+// there is left out; the run then says the library isn't available.
+const libLoads = new Map<string, Promise<void>>();
+export async function loadPineLibraries(code: string, base = "/pine-libs/"): Promise<void> {
+  const keys = Array.from(code.matchAll(/^\s*import\s+([\w-]+\/[\w-]+\/\d+)/gm), (m) => m[1]).filter((k) => PINE_LIBRARIES[k] === undefined);
+  if (!keys.length || typeof fetch === "undefined") return;
+  await Promise.all(keys.map((key) => {
+    let p = libLoads.get(key);
+    if (!p) {
+      p = (async () => {
+        try {
+          const r = await fetch(base + key.split("/").map(encodeURIComponent).join("/") + ".pine");
+          if (!r.ok) { libLoads.delete(key); return; }
+          const src = await r.text();
+          PINE_LIBRARIES = { ...PINE_LIBRARIES, [key]: src };
+          await loadPineLibraries(src, base);
+        } catch { libLoads.delete(key); /* offline: the run reports the missing library; a later run tries again */ }
+      })();
+      libLoads.set(key, p);
+    }
+    return p;
+  }));
+}
+
+const IMPORT_RE = /^\s*import\s+([\w-]+)\/([\w-]+)\/(\d+)(?:\s+as\s+([a-zA-Z_]\w*))?\s*(?:\/\/.*)?$/;
+interface ParsedLib { prefix: string; funcs: Set<string>; types: Set<string>; consts: Set<string>; enums: Set<string>; defs: Stmt[]; init: Stmt[] }
+// node ids run on across a script and the libraries it imports, so call-site state never mixes
+let nodeIdSeq = 0;
+
+// The names a library's own code defines at its top level
+function libNames(stmts: Stmt[]) {
+  const funcs = new Set<string>(), types = new Set<string>(), consts = new Set<string>(), enums = new Set<string>();
+  for (const s of stmts) {
+    if (s.type === "funcdef") funcs.add(s.def.name);
+    else if (s.type === "typedef") types.add(s.def.name);
+    else if (s.type === "assign") {
+      consts.add(s.name);
+      // an enum: its name is a type as well (`Core.Side x = …`)
+      const v = s.expr.type === "value" ? s.expr.value : null;
+      if (v && typeof v === "object" && Object.values(v).some((x: any) => x && x.__enum)) enums.add(s.name);
+    }
+    else if (s.type === "tupleAssign") s.names.forEach((n) => consts.add(n));
+  }
+  return { funcs, types, consts, enums };
+}
+
+// Renames, in place, what a piece of code says about libraries: inside a library its own top-level
+// names become `<prefix>.name`; in any code, `alias.name` of an imported library becomes
+// `<its prefix>.name` (only for names that library has: `ta.sma` stays the built-in when an
+// imported `ta` has no sma). Names a function binds locally keep their meaning.
+function qualifyNames(stmts: Stmt[], own: { prefix: string; funcs: Set<string>; types: Set<string>; consts: Set<string> } | null, imports: Map<string, ParsedLib>) {
+  const viaImport = (name: string): string | null => {
+    const dot = name.indexOf(".");
+    if (dot < 0) return null;
+    const lib = imports.get(name.slice(0, dot));
+    if (!lib) return null;
+    const rest = name.slice(dot + 1), head = rest.split(".")[0];
+    return lib.funcs.has(head) || lib.types.has(head) || lib.consts.has(head) ? `${lib.prefix}.${rest}` : null;
+  };
+  const typeName = (t: string | undefined): string | undefined => {
+    if (!t) return t;
+    // array<T> / T[] / matrix<T> / map<K, V>: the types inside
+    return t.replace(/[a-zA-Z_][\w.]*/g, (w) => viaImport(w) ?? (own && own.types.has(w) ? `${own.prefix}.${w}` : w));
+  };
+  const rename = (name: string, local: Set<string>, isCall: boolean): string => {
+    const imp = viaImport(name);
+    if (imp) return imp;
+    if (!own) return name;
+    const segs = name.split("."), head = segs[0];
+    if (local.has(head)) return name;
+    if (isCall && segs.length === 1 && own.funcs.has(head)) return `${own.prefix}.${head}`;
+    if (own.types.has(head) && (segs.length > 1 || !isCall)) return `${own.prefix}.${name}`;
+    if (own.consts.has(head) && (segs.length > 1 || !isCall)) return `${own.prefix}.${name}`;
+    return name;
+  };
+  const expr = (e: Expr | null | undefined, local: Set<string>): void => {
+    if (!e) return;
+    switch (e.type) {
+      case "ident": e.name = rename(e.name, local, false); return;
+      case "neg": case "not": expr(e.expr, local); return;
+      case "or": case "and": case "cmp": case "arith": expr(e.left, local); expr(e.right, local); return;
+      case "ternary": expr(e.cond, local); expr(e.t, local); expr(e.f, local); return;
+      case "histref": expr(e.base, local); expr(e.offset, local); return;
+      case "call": e.name = rename(e.name, local, true); e.args.forEach((a) => expr(a, local)); Object.values(e.namedArgs).forEach((a) => expr(a, local)); return;
+      case "tuple": e.items.forEach((a) => expr(a, local)); return;
+      case "switch": expr(e.subject, local); e.arms.forEach((a) => { expr(a.cond, local); block(a.body, local); }); return;
+      case "mcall": expr(e.recv, local); e.args.forEach((a) => expr(a, local)); Object.values(e.namedArgs).forEach((a) => expr(a, local)); return;
+      case "field": expr(e.base, local); return;
+    }
+  };
+  // the names a function's body binds itself (parameters, assignments, loop variables)
+  const bound = (list: Stmt[], out: Set<string>) => {
+    for (const s of list) {
+      if (s.type === "assign") out.add(s.name);
+      else if (s.type === "tupleAssign") s.names.forEach((n) => out.add(n));
+      else if (s.type === "for") { out.add(s.varName); bound(s.body, out); }
+      else if (s.type === "forin") { out.add(s.valVar); if (s.idxVar) out.add(s.idxVar); bound(s.body, out); }
+      else if (s.type === "if") { bound(s.body, out); if (s.elseBody) bound(s.elseBody, out); }
+      else if (s.type === "while") bound(s.body, out);
+      if ((s.type === "assign" || s.type === "expr") && s.expr.type === "switch") s.expr.arms.forEach((a) => bound(a.body, out));
+    }
+  };
+  const block = (list: Stmt[], local: Set<string>): void => {
+    for (const s of list) {
+      switch (s.type) {
+        case "if": expr(s.cond, local); block(s.body, local); if (s.elseBody) block(s.elseBody, local); break;
+        case "for": expr(s.from, local); expr(s.to, local); expr(s.step, local); block(s.body, local); break;
+        case "while": expr(s.cond, local); block(s.body, local); break;
+        case "assign": case "tupleAssign": case "expr": expr(s.expr, local); break;
+        case "fieldAssign": expr(s.expr, local); break;
+        case "forin": expr(s.expr, local); block(s.body, local); break;
+        case "typedef":
+          if (own && own.types.has(s.def.name)) s.def.name = `${own.prefix}.${s.def.name}`;
+          s.def.fields.forEach((f) => expr(f.default, local));
+          break;
+        case "funcdef": {
+          const inner = new Set<string>(s.def.params.map((p) => p.name));
+          bound(s.def.body, inner);
+          // a library's own functions are known by their prefixed name; its methods keep their name
+          // (they're found by the receiver's type) and are also callable by the prefixed one
+          if (own && !s.def.isMethod && own.funcs.has(s.def.name)) s.def.name = `${own.prefix}.${s.def.name}`;
+          s.def.params.forEach((p) => { p.type = typeName(p.type); expr(p.default, local); });
+          block(s.def.body, inner);
+          break;
+        }
+      }
+    }
+  };
+  block(stmts, new Set());
+}
+
+function parseProgram(code: string, libs: Record<string, string> = PINE_LIBRARIES, depth = 0, cache: Map<string, ParsedLib> = new Map()): { stmts: Stmt[]; meta: PineRunResult["meta"]; libs: ParsedLib[]; imports?: Map<string, ParsedLib> } {
   const meta: PineRunResult["meta"] = { title: "Untitled script", isStrategy: false, overlay: true, initialCapital: 100000 };
+  if (depth === 0) nodeIdSeq = 0;
   // Windows line endings (code pasted from a Windows editor) read as plain newlines
   const rawLines = code.replace(/\r\n?/g, "\n").split("\n");
-  // The script's own type names, known before any declaration that uses them is parsed
-  udtNames = new Set(rawLines.map(l => (l.match(/^\s*(?:export\s+)?type\s+([a-zA-Z_]\w*)\s*$/) || [])[1]).filter(Boolean) as string[]);
+  // `import User/Name/version [as alias]`: the library, parsed first (blank lines keep the numbering)
+  const imports = new Map<string, ParsedLib>(), order: ParsedLib[] = [];
+  for (let ln = 0; ln < rawLines.length; ln++) {
+    const im = rawLines[ln].match(IMPORT_RE);
+    if (!im) continue;
+    rawLines[ln] = "";
+    const key = `${im[1]}/${im[2]}/${im[3]}`;
+    let lib = cache.get(key);
+    if (!lib) {
+      const src = libs[key];
+      if (src === undefined || depth > 8) {
+        const e = new PineError(`The library '${key}' isn't available in this editor`, "CE10040");
+        e.line = ln + 1;
+        throw e;
+      }
+      const saved = udtNames;
+      let parsed;
+      try { parsed = parseProgram(src, libs, depth + 1, cache); }
+      catch (err) {
+        const at = err instanceof PineError && err.line && !/^In the library/.test(err.message) ? ` (its line ${err.line})` : "";
+        const e = new PineError(`In the library '${key}'${at}: ${err instanceof Error ? err.message : String(err)}`, "CE10041");
+        e.line = ln + 1;
+        throw e;
+      }
+      finally { udtNames = saved; }
+      const names = libNames(parsed.stmts);
+      lib = { prefix: `__lib_${key.replace(/[^\w]/g, "_")}`, ...names, defs: [], init: [] };
+      qualifyNames(parsed.stmts, lib, parsed.imports || new Map());
+      // its functions, methods and types join the program; its top-level constants (and enums) are
+      // set once, before the first bar; the rest of its top level (its own demo plots) doesn't run
+      lib.defs = parsed.stmts.filter((s) => s.type === "funcdef" || s.type === "typedef");
+      lib.defs.forEach((s) => { (s as any).fromLib = true; }); // (a library's own names, never renamed)
+      // (a method is also a function of the library: `size(x)` inside it, `alias.size(x)` outside)
+      const prefix = lib.prefix;
+      lib.defs.push(...lib.defs.filter((s) => s.type === "funcdef" && s.def.isMethod).map((s) => ({ ...s, def: { ...(s as any).def, name: `${prefix}.${(s as any).def.name}`, isMethod: false } } as Stmt)));
+      lib.init = parsed.stmts.filter((s) => s.type === "assign" || s.type === "tupleAssign");
+      parsed.libs.forEach((l) => order.push(l));
+      cache.set(key, lib);
+    }
+    imports.set(im[4] || im[2], lib);
+    order.push(lib);
+  }
+  // The script's own type names (and its libraries' as alias.Type), known before any declaration
+  // that uses them is parsed
+  udtNames = new Set(rawLines.map(l => (l.match(/^\s*(?:export\s+)?(?:type|enum)\s+([a-zA-Z_]\w*)\s*$/) || [])[1]).filter(Boolean) as string[]);
+  imports.forEach((lib, alias) => { lib.types.forEach((t) => udtNames.add(`${alias}.${t}`)); lib.enums.forEach((t) => udtNames.add(`${alias}.${t}`)); });
+  // `export` (a library's public functions, types and constants) changes nothing here
+  for (let ln = 0; ln < rawLines.length; ln++) if (/^\s*export\s+/.test(rawLines[ln])) rawLines[ln] = rawLines[ln].replace(/^(\s*)export\s+/, "$1");
   const merged = mergeContinuationLines(rawLines);
   const lines: Line[] = [];
   for (const m of merged) {
@@ -2694,11 +3786,20 @@ function parseProgram(code: string): { stmts: Stmt[]; meta: PineRunResult["meta"
     lines.push({ indent, text: trimmed, lineNo: m.lineNo });
   }
   const joined = mergeIndentContinuations(lines);
-  let counter = 0;
-  const nextId = () => counter++;
+  const nextId = () => nodeIdSeq++;
   const { stmts } = parseBlock(joined, 0, 0, nextId);
   checkUndeclared(stmts);
-  return { stmts, meta };
+  if (depth > 0) return { stmts, meta, libs: order, imports };
+  // The main script: its alias.name references to the libraries, then the libraries' definitions
+  // and (first, each once) their constants
+  if (imports.size) {
+    qualifyNames(stmts, null, imports);
+    const seen = new Set<string>(), all: ParsedLib[] = [];
+    order.forEach((l) => { if (!seen.has(l.prefix)) { seen.add(l.prefix); all.push(l); } });
+    const inits: Stmt[] = all.filter((l) => l.init.length).map((l) => ({ type: "libinit", prefix: l.prefix, stmts: l.init, line: 1 } as Stmt));
+    return { stmts: [...inits, ...stmts, ...all.flatMap((l) => l.defs)], meta, libs: all };
+  }
+  return { stmts, meta, libs: [] };
 }
 
 // As TradingView's compiler does, a name that's neither declared anywhere in the script nor a
@@ -2797,7 +3898,7 @@ function executeParsed(stmts: Stmt[], meta: PineRunResult["meta"], bars: Bar[], 
     logsSoFar = ctx.logs;
     // indicator(max_lines_count=…) etc.: how many of each drawing the script keeps (TradingView: 50 by default, 500 at most)
     const lim = (v: number | undefined) => Math.max(1, Math.min(500, v ?? 50));
-    ctx.drawings = { seq: 0, label: [], line: [], box: [], max: { label: lim(meta.maxLabels), line: lim(meta.maxLines), box: lim(meta.maxBoxes) } };
+    ctx.drawings = { seq: 0, label: [], line: [], box: [], polyline: [], linefill: [], max: { label: lim(meta.maxLabels), line: lim(meta.maxLines), box: lim(meta.maxBoxes), polyline: lim(meta.maxPolylines), linefill: 500 } };
     for (let i = 0; i < bars.length; i++) {
       ctx.barIndex = i;
       ctx.bar = bars[i];
@@ -2806,8 +3907,10 @@ function executeParsed(stmts: Stmt[], meta: PineRunResult["meta"], bars: Bar[], 
       if (meta.isStrategy && meta.processOrdersOnClose) fillMarketOrdersOnClose(ctx);
     }
     result.plots = ctx.plotOrder.map((id) => ctx.plots[id]);
+    const candles: Map<number, PineCandlePlot> | undefined = (ctx as any).candles;
+    if (candles && candles.size) result.candles = Array.from(candles.values());
     result.hlines = ctx.hlines || [];
-    result.drawings = ctx.drawings ? [...ctx.drawings.box, ...ctx.drawings.line, ...ctx.drawings.label] : [];
+    result.drawings = ctx.drawings ? [...ctx.drawings.linefill, ...ctx.drawings.box, ...ctx.drawings.polyline, ...ctx.drawings.line, ...ctx.drawings.label] : [];
     // fill() ends point at plots / hlines by their position in those lists
     result.fills = (ctx.fills || []).map((f) => {
       const transparent = (c: any) => typeof c !== "string" || B.parseColor(c)?.a === 0;
@@ -2839,14 +3942,17 @@ function executeParsed(stmts: Stmt[], meta: PineRunResult["meta"], bars: Bar[], 
   return result;
 }
 
-export function runPineScript(code: string, bars: Bar[], opts?: { symbol?: string; pineTf?: string; inputOverrides?: Record<string, any> }): PineRunResult {
+// mtfData: other timeframes' bars the caller already fetched (see getPineRequestTimeframes)
+export function runPineScript(code: string, bars: Bar[], opts?: { symbol?: string; pineTf?: string; inputOverrides?: Record<string, any>; mtfData?: Record<string, Bar[]> }): PineRunResult {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
   let meta: PineRunResult["meta"] = { title: "Untitled script", isStrategy: false, overlay: true, initialCapital: 100000 };
   let result: PineRunResult;
   try {
     const parsed = parseProgram(code);
     meta = parsed.meta;
-    result = executeParsed(parsed.stmts, meta, bars, { symbol: opts?.symbol, pineTf: opts?.pineTf, mtfData: {}, inputOverrides: opts?.inputOverrides });
+    const mtfData = opts?.mtfData ? { ...opts.mtfData } : {};
+    if (opts?.mtfData) alignDailyTimeframeBoundaries(mtfData);
+    result = executeParsed(parsed.stmts, meta, bars, { symbol: opts?.symbol, pineTf: opts?.pineTf, mtfData, inputOverrides: opts?.inputOverrides });
   } catch (err: any) {
     result = { plots: [], markers: [], tables: [], strategyReport: null, inputs: [], logs: [], warnings: [], errors: [], meta, execMs: 0 };
     if (err instanceof PineError) result.errors.push({ message: err.message, code: err.code, line: err.line ?? 1 });
@@ -2864,6 +3970,13 @@ export function runPineScript(code: string, bars: Bar[], opts?: { symbol?: strin
 // "static" evaluation of the script's top-level assignments (input.*() calls
 // only depend on their own literal defaults, never on bar data) to resolve
 // those variables to their literal string values.
+// The timeframes a script's request.security / request.security_lower_tf calls ask for (its
+// libraries must be loaded first: loadPineLibraries)
+export function getPineRequestTimeframes(code: string, inputOverrides?: Record<string, any>): string[] {
+  // ("" is the chart's own timeframe: nothing to fetch)
+  try { return Array.from(collectRequestTimeframes(parseProgram(code).stmts, inputOverrides)).filter((tf) => tf !== "" && tf !== "NaN"); } catch { return []; }
+}
+
 function collectRequestTimeframes(stmts: Stmt[], inputOverrides?: Record<string, any>): Set<string> {
   const calls: Extract<Expr, { type: "call" }>[] = [];
   const visitExpr = (e: Expr) => {
@@ -2982,10 +4095,16 @@ function collectInputsMeta(stmts: Stmt[]): PineInputMeta[] {
     const titleNode = expr.namedArgs.title ?? expr.args[1];
     const value = safeEval(expr.namedArgs.defval ?? expr.args[0]);
     const optionsNode = expr.namedArgs.options;
-    const options = optionsNode && optionsNode.type === "tuple" ? optionsNode.items.map((it) => String(safeEval(it))) : undefined;
+    let options = optionsNode && optionsNode.type === "tuple" ? optionsNode.items.map((it) => { const o = safeEval(it); return o && o.__enum ? String(o.title) : String(o); }) : undefined;
+    // input.enum: a dropdown of the enum's titles (or of the options it lists)
+    const isEnum = expr.name === "input.enum" && value && typeof value === "object" && value.__enum;
+    if (isEnum && !options) {
+      const all = staticCtx.vars[value.__enum];
+      options = all && typeof all === "object" ? Object.values(all).filter((x: any) => x && x.__enum).map((x: any) => String(x.title)) : [String(value.title)];
+    }
     metas.push({
       varName: s.name,
-      type: inputTypeFromCallName(expr.name, value),
+      type: isEnum ? "string" : inputTypeFromCallName(expr.name, value),
       title: titleNode ? String(safeEval(titleNode)) : s.name,
       group: expr.namedArgs.group ? String(safeEval(expr.namedArgs.group)) : undefined,
       tooltip: expr.namedArgs.tooltip ? String(safeEval(expr.namedArgs.tooltip)) : undefined,
@@ -2993,7 +4112,7 @@ function collectInputsMeta(stmts: Stmt[]): PineInputMeta[] {
       minval: expr.namedArgs.minval ? Number(safeEval(expr.namedArgs.minval)) : undefined,
       maxval: expr.namedArgs.maxval ? Number(safeEval(expr.namedArgs.maxval)) : undefined,
       step: expr.namedArgs.step ? Number(safeEval(expr.namedArgs.step)) : undefined,
-      value,
+      value: isEnum ? String(value.title) : value,
     });
     staticCtx.vars[s.name] = value;
   }
@@ -3068,7 +4187,12 @@ function alignDailyTimeframeBoundaries(mtfData: Record<string, Bar[]>): void {
       for (const db of dayBars) {
         if (((db.time % DAY) + DAY) % DAY !== 0) continue; // only test bars that actually need correcting
         const winStart = Math.floor(db.time / DAY) * DAY + offsetSec;
-        const inWin = ref.filter((b) => b.time >= winStart && b.time < winStart + DAY);
+        // (the bars are in time order: the window found by binary search, not by scanning them all)
+        let lo = 0, hi = ref.length;
+        while (lo < hi) { const m = (lo + hi) >> 1; if (ref[m].time < winStart) lo = m + 1; else hi = m; }
+        let end = lo;
+        while (end < ref.length && ref[end].time < winStart + DAY) end++;
+        const inWin = ref.slice(lo, end);
         if (inWin.length !== bucketsPerDay) continue; // incomplete window (edge of loaded history) — skip
         const aggO = inWin[0].open, aggC = inWin[inWin.length - 1].close;
         const aggH = Math.max(...inWin.map((b) => b.high)), aggL = Math.min(...inWin.map((b) => b.low));
@@ -3109,10 +4233,13 @@ export async function runPineScriptAsync(
   let meta: PineRunResult["meta"] = { title: "Untitled script", isStrategy: false, overlay: true, initialCapital: 100000 };
   let result: PineRunResult;
   try {
+    await loadPineLibraries(code);
     const parsed = parseProgram(code);
     meta = parsed.meta;
     const neededTfs = collectRequestTimeframes(parsed.stmts, opts.inputOverrides);
     const mtfData: Record<string, Bar[]> = {};
+    neededTfs.delete("");
+    neededTfs.delete("NaN");
     await Promise.all(Array.from(neededTfs).map(async (tf) => {
       try { mtfData[tf] = await opts.fetchTimeframe(tf, opts.symbol); } catch { mtfData[tf] = []; }
     }));
@@ -3148,14 +4275,18 @@ export function compilePineForSharing(code: string): CompiledPine {
   const declared = new Set<string>();
   const fns = new Set<string>();
   const methods = new Set<string>();   // functions declared with `method`, called as `x.name(…)`
+  const types = new Set<string>();     // the script's types: `Type.new(…)` keeps the type's name
   const visit = (list: Stmt[]) => {
     for (const st of list) {
+      // (an imported library's own code is published already: none of its names change)
+      if ((st as any).fromLib || st.type === "libinit") continue;
       if (st.type === "assign") {
         if (st.expr.type === "call" && st.expr.name.startsWith("input")) keep.add(st.name); else declared.add(st.name);
       } else if (st.type === "tupleAssign") st.names.forEach(n => declared.add(n));
       else if (st.type === "for") { declared.add(st.varName); visit(st.body); }
       else if (st.type === "forin") { if (st.idxVar) declared.add(st.idxVar); declared.add(st.valVar); visit(st.body); }
       else if (st.type === "funcdef") { fns.add(st.def.name); if (st.def.isMethod) methods.add(st.def.name); st.def.params.forEach(pr => declared.add(pr.name)); visit(st.def.body); }
+      else if (st.type === "typedef") types.add(st.def.name);
       else if (st.type === "if") { visit(st.body); if (st.elseBody) visit(st.elseBody); }
       else if (st.type === "while") visit(st.body);
     }
@@ -3171,6 +4302,7 @@ export function compilePineForSharing(code: string): CompiledPine {
   const walk = (node: any): any => {
     if (Array.isArray(node)) return node.map(walk);
     if (!node || typeof node !== "object") return node;
+    if (node.fromLib || node.type === "libinit") return JSON.parse(JSON.stringify(node));
     const out: any = {};
     for (const k of Object.keys(node)) out[k] = walk(node[k]);
     switch (node.type) {
@@ -3182,10 +4314,13 @@ export function compilePineForSharing(code: string): CompiledPine {
           // (never on one of Pine's namespaces: `ta.`, `math.`…)
           const parts = node.name.split(".");
           const last = parts[parts.length - 1];
-          if (parts.length === 2 && methods.has(last) && !PINE_NAMESPACES.has(parts[0])) {
-            out.name = `${map.get(parts[0]) ?? parts[0]}.${map.get(last) ?? last}`;
+          // (`ball.new(…)` of a type `ball` stays, even beside a variable named `ball`)
+          if (parts.length === 2 && types.has(parts[0]) && (last === "new" || last === "copy")) { /* the type's own */ }
+          // (`obj.field.method(…)` too: the variable's part and the method change, the fields don't)
+          else if (methods.has(last) && !PINE_NAMESPACES.has(parts[0])) {
+            out.name = [map.get(parts[0]) ?? parts[0], ...parts.slice(1, -1), map.get(last) ?? last].join(".");
             out.namedArgs = renameArgs(out.namedArgs);
-          } else out.name = rn(node.name);
+          } else if (!PINE_NAMESPACES.has(parts[0])) out.name = rn(node.name);
         }
         break;
       case "assign": out.name = rn(node.name); break;

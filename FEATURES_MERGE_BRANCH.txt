@@ -276,6 +276,23 @@ Pine engine
     for...in, request.security of a higher timeframe, runtime.error
   - Indicators in their own pane (hlines, fills, gradients, shapes, per-bar colours)
   - Scripts run in a background worker; unknown functions give a clear error
+  - Runs TradingView's open-source community scripts as written (50 of 52 Editors' picks tested):
+    library imports (import User/Name/version as alias, nested libraries, their methods,
+    types, enums and constants; sources served from /pine-libs/, MPL-licensed only), enums
+    and input.enum (a dropdown in Settings), maps, the whole matrix library (inverse,
+    determinant, eigenvalues…), polylines, linefills, plotcandle / plotbar, label.all /
+    line.all / box.all, more array statistics and binary searches, ta.cog / mode / rci /
+    wad / nvi / pvi / iii / wvad, str.format (Java MessageFormat patterns), str.format_time
+    with time zones, str.match, weekofyear, last_bar_time, chart colours, session.* and
+    syminfo.* details, the strategy's statistics (win / loss trades, averages, run-up…)
+  - Pine syntax as TradingView reads it: triple-quoted strings, scientific numbers, "x = if …"
+    with its else under either line, wrapped conditions, several statements on one line or
+    after a switch case's =>, spaced types (label [], map <string, float>), overloaded
+    methods chosen by their arguments, request.security with "" (the chart's timeframe)
+  - Tables from chart indicators show on the chart (cell sizes, text sizes, alignment,
+    tooltips); request.security / security_lower_tf get real data for chart indicators too
+  - Much faster on heavy scripts (5-10×); a slow script is never re-run before its last run
+    ends (no piling up on a 4-core PC)
 
 Three languages
   - Choose Pine Script, Python or MQL5 beside the editor title
@@ -300,6 +317,9 @@ Editor
   - Several instances each, own pane for oscillators, inputs kept per indicator
   - Indicators dialog: My scripts, Invite-only, Community (Top / Newest / Following) with
     each script's author
+  - Editors' picks: 47 open-source community scripts from TradingView (MPL 2.0), each with its
+    author linking to the original; search by name or author; loaded when first added.
+    Guided tour; voice ("add chess", "add the stop loss clustering")
 
 ======================================================================
 8. STRATEGY TESTER AND STRATEGY OPTIMIZER
