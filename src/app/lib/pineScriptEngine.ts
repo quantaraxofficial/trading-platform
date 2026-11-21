@@ -140,7 +140,7 @@ export interface PineRunResult {
   logs: string[];
   warnings: string[];
   errors: PineScriptError[];
-  meta: { title: string; shortTitle?: string; isStrategy: boolean; overlay: boolean; initialCapital: number; processOrdersOnClose?: boolean; pyramiding?: number; defaultQtyValue?: number; defaultQtyType?: string; precision?: number; maxLabels?: number; maxLines?: number; maxBoxes?: number; maxPolylines?: number };
+  meta: { title: string; shortTitle?: string; isStrategy: boolean; overlay: boolean; initialCapital: number; processOrdersOnClose?: boolean; pyramiding?: number; defaultQtyValue?: number; defaultQtyType?: string; precision?: number; maxLabels?: number; maxLines?: number; maxBoxes?: number; maxPolylines?: number; calcBarsCount?: number };
   execMs: number;
   // Profiler mode: time spent on each script line (inclusive of the lines a block contains) and
   // how many times it ran
@@ -758,6 +758,7 @@ function parseMeta(text: string, meta: PineRunResult["meta"]) {
   meta.maxLines = count(/max_lines_count\s*=\s*(\d+)/);
   meta.maxBoxes = count(/max_boxes_count\s*=\s*(\d+)/);
   meta.maxPolylines = count(/max_polylines_count\s*=\s*(\d+)/);
+  meta.calcBarsCount = count(/calc_bars_count\s*=\s*(\d+)/);
   const capMatch = text.match(/initial_capital\s*=\s*(-?[0-9.]+)/);
   if (capMatch) meta.initialCapital = parseFloat(capMatch[1]);
   meta.processOrdersOnClose = /process_orders_on_close\s*=\s*true/.test(text);
@@ -1331,6 +1332,8 @@ interface Ctx {
   profile?: Map<number, { ms: number; count: number }>;
   vars: Record<string, any>;
   varHistory: Record<string, any[]>;
+  // the names `name[n]` reads anywhere in the program: only their history is kept (undefined: all)
+  histNames?: Set<string>;
   callState: Record<string | number, CallState>;
   plots: Record<number, PinePlotResult>;
   plotOrder: number[];
@@ -1676,8 +1679,7 @@ function execTupleAssign(s: Extract<Stmt, { type: "tupleAssign" }>, ctx: Ctx): v
     if (name === "_") return;
     const v = values[i];
     ctx.vars[name] = v;
-    if (!ctx.varHistory[name]) ctx.varHistory[name] = [];
-    ctx.varHistory[name][ctx.barIndex] = v;
+    if (keepsHistory(ctx, name)) (ctx.varHistory[name] || (ctx.varHistory[name] = []))[ctx.barIndex] = v;
   });
 }
 
@@ -1709,6 +1711,21 @@ function execForIn(s: Extract<Stmt, { type: "forin" }>, ctx: Ctx, exec: (stmts: 
   });
 }
 
+// A variable's value per bar is kept only when the program reads it back with `name[n]`
+const keepsHistory = (ctx: Ctx, name: string) => !ctx.histNames || ctx.histNames.has(name);
+function collectHistNames(stmts: Stmt[]): Set<string> {
+  const out = new Set<string>(), seen = new Set<any>();
+  const walk = (n: any) => {
+    if (!n || typeof n !== "object" || seen.has(n)) return;
+    seen.add(n);
+    if (n.type === "histref" && n.base && n.base.type === "ident") out.add(n.base.name);
+    if (Array.isArray(n)) { for (const x of n) walk(x); return; }
+    for (const k in n) if (k !== "value") walk(n[k]);
+  };
+  walk(stmts);
+  return out;
+}
+
 function execFunctionBody(stmts: Stmt[], ctx: Ctx): any {
   let lastValue: any = NaN;
   for (const s of stmts) {
@@ -1731,8 +1748,7 @@ function execFunctionBody(stmts: Stmt[], ctx: Ctx): any {
           if (!(s.isVarDecl && ctx.barIndex !== 0 && Object.prototype.hasOwnProperty.call(ctx.vars, s.name))) {
             ctx.vars[s.name] = evalNode(s.expr, ctx);
           }
-          if (!ctx.varHistory[s.name]) ctx.varHistory[s.name] = [];
-          ctx.varHistory[s.name][ctx.barIndex] = ctx.vars[s.name];
+          if (keepsHistory(ctx, s.name)) (ctx.varHistory[s.name] || (ctx.varHistory[s.name] = []))[ctx.barIndex] = ctx.vars[s.name];
           lastValue = ctx.vars[s.name];
           break;
         case "expr":
@@ -1756,7 +1772,8 @@ function isSideEffectCall(name: string): boolean {
   return SIDE_EFFECT_CALLS.has(name) || name.startsWith("log.") || name.startsWith("label.") || name.startsWith("line.") || name.startsWith("box.");
 }
 
-function callUserFunction(fn: FunctionDef, node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
+// self: a method's receiver, its first parameter (the call's own arguments are the rest)
+function callUserFunction(fn: FunctionDef, node: { args: Expr[]; namedArgs: Record<string, Expr>; id: number }, ctx: Ctx, self?: { v: any }): any {
   // evalCall already lazily creates ctx.callState[node.id] as {} for every
   // call (builtins use it directly); that object is truthy, so `||` alone
   // would never attach localVars/localVarHistory. Check for them by name.
@@ -1767,15 +1784,16 @@ function callUserFunction(fn: FunctionDef, node: Extract<Expr, { type: "call" }>
   // Pine: ma(rsi, 14) and ma(close, 50) don't share one moving average
   if (!cs.innerState) cs.innerState = {};
   const fnCtx: Ctx = { ...ctx, vars: cs.localVars, varHistory: cs.localVarHistory, callState: cs.innerState, scopeStmts: fn.body };
+  const off = self ? 1 : 0;
   fn.params.forEach((p, idx) => {
     let v: any;
     if (node.namedArgs[p.name] !== undefined) v = evalNode(node.namedArgs[p.name], ctx);
-    else if (node.args[idx] !== undefined) v = evalNode(node.args[idx], ctx);
+    else if (self && idx === 0) v = self.v;
+    else if (node.args[idx - off] !== undefined) v = evalNode(node.args[idx - off], ctx);
     else if (p.default) v = evalNode(p.default, fnCtx);
     else v = NaN;
     fnCtx.vars[p.name] = v;
-    if (!fnCtx.varHistory[p.name]) fnCtx.varHistory[p.name] = [];
-    fnCtx.varHistory[p.name][ctx.barIndex] = v;
+    if (keepsHistory(fnCtx, p.name)) (fnCtx.varHistory[p.name] || (fnCtx.varHistory[p.name] = []))[ctx.barIndex] = v;
   });
   return execFunctionBody(fn.body, fnCtx);
 }
@@ -2293,7 +2311,8 @@ function walkFields(v: any, segs: string[]): any {
 // `obj.method(args)`: the script's own method for that type, else the built-in one for the
 // receiver's kind (array.*, matrix.*, line.*, label.*, box.*, str.*)
 function evalMethod(recv: any, method: string, node: { args: Expr[]; namedArgs: Record<string, Expr>; id: number }, ctx: Ctx): any {
-  const synth: Extract<Expr, { type: "call" }> = { type: "call", name: method, args: [{ type: "value", value: recv }, ...node.args], namedArgs: node.namedArgs, id: node.id };
+  // (the call with its receiver as the first argument, for a built-in reached through it)
+  const synth = (): Extract<Expr, { type: "call" }> => ({ type: "call", name: method, args: [{ type: "value", value: recv }, ...node.args], namedArgs: node.namedArgs, id: node.id });
   const g = ctx.globalCtx || ctx;
   // (an overload has to take this many arguments: `arr.unshift(v)` inside a library's own
   // 3-argument `unshift` method is the built-in one)
@@ -2311,20 +2330,31 @@ function evalMethod(recv: any, method: string, node: { args: Expr[]; namedArgs: 
       case "last": return recv.length ? recv[recv.length - 1] : NaN;
     }
   }
-  const given = 1 + node.args.length + Object.keys(node.namedArgs).length;
-  const candidates = declared ? declared.filter((f) => given <= f.params.length && given >= f.params.filter((p) => !p.default).length) : NO_METHODS;
+  const given = 1 + node.args.length + (NO_NAMED(node) ? 0 : Object.keys(node.namedArgs).length);
   const udt = recv && typeof recv === "object" ? recv.__udt : undefined;
   const ns = Array.isArray(recv) ? "array" : recv && recv.__matrix ? "matrix" : recv && recv.__map ? "map" : recv && recv.__point ? "chart.point" : recv && recv.__pineTable ? "table"
     : recv && recv.kind ? recv.kind : typeof recv === "string" ? "str" : null;
   // The script's own method for this receiver: its type, or the built-in kind it was declared for
-  // (`method dashRow(table t, …)`, `method sum(array<float> a)`, `method f(float[] a)`)
-  const kindOf = (t: string | undefined) => !t ? "" : /\[\]$|^array</.test(t) ? "array" : /^matrix</.test(t) ? "matrix" : /^map</.test(t) ? "map" : t;
-  const user = candidates.find((f) => f.params[0]?.type === udt && udt)
-    || (ns ? candidates.find((f) => kindOf(f.params[0]?.type) === ns || (ns === "str" && f.params[0]?.type === "color")) : undefined)
-    || (udt ? candidates.find((f) => !f.params[0]?.type) : undefined);
-  if (user) return callUserFunction(user, synth, ctx);
-  if (ns) return evalCall({ ...synth, name: `${ns}.${method}`, __builtin: true } as any, ctx);
-  if (candidates.length) return callUserFunction(candidates[0], synth, ctx);
+  // (`method dashRow(table t, …)`, `method sum(array<float> a)`, `method f(float[] a)`); worked out
+  // once per method, receiver kind and argument count
+  let pick: { user?: FunctionDef; any?: FunctionDef } | undefined;
+  if (declared) {
+    const cache: Map<string, { user?: FunctionDef; any?: FunctionDef }> = (g as any).__methodPick || ((g as any).__methodPick = new Map());
+    const key = `${method}|${udt ?? ""}|${ns ?? ""}|${given}`;
+    pick = cache.get(key);
+    if (!pick) {
+      const candidates = declared.filter((f) => given <= f.params.length && given >= f.params.filter((p) => !p.default).length);
+      const kindOf = (t: string | undefined) => !t ? "" : /\[\]$|^array</.test(t) ? "array" : /^matrix</.test(t) ? "matrix" : /^map</.test(t) ? "map" : t;
+      const user = candidates.find((f) => f.params[0]?.type === udt && udt)
+        || (ns ? candidates.find((f) => kindOf(f.params[0]?.type) === ns || (ns === "str" && f.params[0]?.type === "color")) : undefined)
+        || (udt ? candidates.find((f) => !f.params[0]?.type) : undefined);
+      pick = { user, any: candidates[0] };
+      cache.set(key, pick);
+    }
+  }
+  if (pick?.user) return callUserFunction(pick.user, node, ctx, { v: recv });
+  if (ns) return evalCall({ ...synth(), name: `${ns}.${method}`, __builtin: true } as any, ctx);
+  if (pick?.any) return callUserFunction(pick.any, node, ctx, { v: recv });
   // A method on na (a line not drawn yet, an empty array variable): Pine does nothing and gives na
   if (recv === undefined || recv === null || (typeof recv === "number" && isNaN(recv))) return NaN;
   throw new PineError(`Could not find method '${method}'`, "CE10003");
@@ -2614,14 +2644,6 @@ const NO_NAMED = (node: { namedArgs: Record<string, Expr> }) => { for (const _k 
 
 function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
   const name = node.name;
-  const cs = (ctx.callState[node.id] = ctx.callState[node.id] || {});
-  const argAt = (i: number) => (node.args[i] !== undefined ? evalNode(node.args[i], ctx) : undefined);
-  // An argument given by position or by its Pine parameter name, else the default
-  const A = (i: number, key: string, def?: any): any => {
-    if (node.namedArgs[key] !== undefined) return evalNode(node.namedArgs[key], ctx);
-    if (node.args[i] !== undefined) return evalNode(node.args[i], ctx);
-    return def === undefined ? NaN : def;
-  };
 
   // The commonest built-ins (array element access, na / nz, math.max / min / abs), straight to
   // their work: a script's loops call them millions of times
@@ -2651,7 +2673,10 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
   const pn = callNameParts(name);
   // matrix.* and the drawing namespaces have no case in the switch: straight to their handlers
   if (pn.builtin && pn.dot > 0) {
-    if (pn.head === "matrix") { const mx = evalMatrix(name, A); if (mx.handled) return mx.value; }
+    if (pn.head === "matrix") {
+      const mx = evalMatrix(name, (i, key, def) => node.namedArgs[key] !== undefined ? evalNode(node.namedArgs[key], ctx) : node.args[i] !== undefined ? evalNode(node.args[i], ctx) : def === undefined ? NaN : def);
+      if (mx.handled) return mx.value;
+    }
     else if (DRAW_HEADS.has(pn.head)) { const dr = evalDrawing(name, node, ctx); if (dr.handled) return dr.value; }
   }
   if (!pn.builtin) {
@@ -2667,6 +2692,16 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
       }
     }
   }
+
+  // (the call site's own state, and its arguments: made here, past the fast paths, which need neither)
+  const cs = (ctx.callState[node.id] = ctx.callState[node.id] || {});
+  const argAt = (i: number) => (node.args[i] !== undefined ? evalNode(node.args[i], ctx) : undefined);
+  // An argument given by position or by its Pine parameter name, else the default
+  const A = (i: number, key: string, def?: any): any => {
+    if (node.namedArgs[key] !== undefined) return evalNode(node.namedArgs[key], ctx);
+    if (node.args[i] !== undefined) return evalNode(node.args[i], ctx);
+    return def === undefined ? NaN : def;
+  };
 
   switch (name) {
     // ---- ta.*: the indicator library (pineBuiltins.ts), one series state per call site ----
@@ -3209,7 +3244,99 @@ function evalCall(node: Extract<Expr, { type: "call" }>, ctx: Ctx): any {
   }
 }
 
+// ------------------------------------------------------------ compiled expressions
+// Each expression is turned, the first time it runs, into a JavaScript closure that is kept on its
+// node: later bars call it straight away instead of going through evalNode's dispatch again. The
+// closures do exactly what evalNodeSlow does for the same node (they share its helpers), and
+// anything without a dedicated closure simply calls evalNodeSlow.
+type Compiled = (ctx: Ctx) => any;
+const hasOwnProp = Object.prototype.hasOwnProperty;
+
 function evalNode(node: Expr, ctx: Ctx): any {
+  const c: Compiled | undefined = (node as any).__c;
+  if (c !== undefined) return c(ctx);
+  // (a receiver passed on as a made-up argument: just its value)
+  if (node.type === "value") return node.value;
+  return compileExpr(node)(ctx);
+}
+
+function compileExpr(node: Expr): Compiled {
+  const c = buildCompiled(node);
+  Object.defineProperty(node, "__c", { value: c, enumerable: false, configurable: true, writable: true });
+  return c;
+}
+
+const sub = (n: Expr): Compiled => (n as any).__c || compileExpr(n);
+
+function buildCompiled(node: Expr): Compiled {
+  switch (node.type) {
+    case "num": case "str": { const v = node.value; return () => v; }
+    case "value": return () => node.value;
+    case "ident": {
+      const n = node.name;
+      switch (n) {
+        case "close": return (ctx) => ctx.bar.close;
+        case "open": return (ctx) => ctx.bar.open;
+        case "high": return (ctx) => ctx.bar.high;
+        case "low": return (ctx) => ctx.bar.low;
+        case "bar_index": return (ctx) => ctx.barIndex;
+        case "na": return () => NaN;
+        case "true": return () => true;
+        case "false": return () => false;
+      }
+      if (!CORE_IDENTS.has(n) && n.indexOf(".") < 0) {
+        // an ordinary variable: its own scope, then the script's, then the built-ins
+        return (ctx) => {
+          const v = ctx.vars;
+          if (hasOwnProp.call(v, n)) return v[n];
+          const g = ctx.globalCtx;
+          if (g && g !== ctx && hasOwnProp.call(g.vars, n)) return g.vars[n];
+          return resolveIdent(n, ctx);
+        };
+      }
+      return (ctx) => resolveIdent(n, ctx);
+    }
+    case "neg": { const e = sub(node.expr); return (ctx) => -e(ctx); }
+    case "not": { const e = sub(node.expr); return (ctx) => !truthy(e(ctx)); }
+    case "or": { const l = sub(node.left), r = sub(node.right); return (ctx) => truthy(l(ctx)) || truthy(r(ctx)); }
+    case "and": { const l = sub(node.left), r = sub(node.right); return (ctx) => truthy(l(ctx)) && truthy(r(ctx)); }
+    case "cmp": {
+      const l = sub(node.left), r = sub(node.right);
+      switch (node.op) {
+        case "==": return (ctx) => l(ctx) === r(ctx);
+        case "!=": return (ctx) => l(ctx) !== r(ctx);
+        case "<": return (ctx) => { const a = l(ctx), b = r(ctx); return Number(a) < Number(b); };
+        case "<=": return (ctx) => { const a = l(ctx), b = r(ctx); return Number(a) <= Number(b); };
+        case ">": return (ctx) => { const a = l(ctx), b = r(ctx); return Number(a) > Number(b); };
+        case ">=": return (ctx) => { const a = l(ctx), b = r(ctx); return Number(a) >= Number(b); };
+      }
+      return (ctx) => { l(ctx); r(ctx); return false; };
+    }
+    case "arith": {
+      const l = sub(node.left), r = sub(node.right);
+      switch (node.op) {
+        case "+": return (ctx) => {
+          const a = l(ctx), b = r(ctx);
+          if (typeof a === "number" && typeof b === "number") return a + b;
+          return typeof a === "string" || typeof b === "string" ? String(a) + String(b) : Number(a) + Number(b);
+        };
+        case "-": return (ctx) => { const a = l(ctx), b = r(ctx); return Number(a) - Number(b); };
+        case "*": return (ctx) => { const a = l(ctx), b = r(ctx); return Number(a) * Number(b); };
+        case "/": return (ctx) => { const a = l(ctx), b = r(ctx); return Number(a) / Number(b); };
+        case "%": return (ctx) => { const a = l(ctx), b = r(ctx); return Number(a) % Number(b); };
+      }
+      return (ctx) => { l(ctx); r(ctx); return NaN; };
+    }
+    case "ternary": { const c = sub(node.cond), t = sub(node.t), f = sub(node.f); return (ctx) => (truthy(c(ctx)) ? t(ctx) : f(ctx)); }
+    case "call":
+      // plot / plotshape / plotchar / hline used as a value: as evalNodeSlow does
+      if (node.name === "plot" || node.name === "plotshape" || node.name === "plotchar" || node.name === "hline") return (ctx) => evalNodeSlow(node, ctx);
+      return (ctx) => evalCall(node, ctx);
+  }
+  return (ctx) => evalNodeSlow(node, ctx);
+}
+
+function evalNodeSlow(node: Expr, ctx: Ctx): any {
   switch (node.type) {
     case "num": return node.value;
     case "str": return node.value;
@@ -3551,8 +3678,7 @@ function execStmts(stmts: Stmt[], ctx: Ctx) {
               ctx.vars[s.name] = evalNode(s.expr, ctx);
             }
           }
-          if (!ctx.varHistory[s.name]) ctx.varHistory[s.name] = [];
-          ctx.varHistory[s.name][ctx.barIndex] = ctx.vars[s.name];
+          if (keepsHistory(ctx, s.name)) (ctx.varHistory[s.name] || (ctx.varHistory[s.name] = []))[ctx.barIndex] = ctx.vars[s.name];
           break;
         case "expr":
           execExprStatement(s.expr, ctx);
@@ -3859,9 +3985,24 @@ function checkUndeclared(stmts: Stmt[]) {
   visit(stmts);
 }
 
-interface RunOpts { symbol?: string; pineTf?: string; mtfData?: Record<string, Bar[]>; initialCapital?: number; inputOverrides?: Record<string, any>; backtestFrom?: number; backtestTo?: number; profile?: boolean }
+// calcBarsCount: run on the last this many bars only (TradingView's calc_bars_count), unless the
+// settings' "Calculated bars" (inputOverrides.__calc_bars_count) or the script itself says otherwise
+interface RunOpts { symbol?: string; pineTf?: string; mtfData?: Record<string, Bar[]>; initialCapital?: number; inputOverrides?: Record<string, any>; backtestFrom?: number; backtestTo?: number; profile?: boolean; calcBarsCount?: number }
+export const CALC_BARS_INPUT = "__calc_bars_count";
 
-function executeParsed(stmts: Stmt[], meta: PineRunResult["meta"], bars: Bar[], opts: RunOpts): PineRunResult {
+// How many of the last bars a run calculates (0: all of them): the settings' Calculated bars, else
+// the caller's default for the script, else the script's own calc_bars_count
+function calcBarsLimit(meta: PineRunResult["meta"], opts: RunOpts): number {
+  const set = opts.inputOverrides ? Number(opts.inputOverrides[CALC_BARS_INPUT]) : NaN;
+  if (Number.isFinite(set) && set >= 0) return Math.round(set);
+  if (opts.calcBarsCount && opts.calcBarsCount > 0) return opts.calcBarsCount;
+  return meta.calcBarsCount && meta.calcBarsCount > 0 ? meta.calcBarsCount : 0;
+}
+
+function executeParsed(stmts: Stmt[], meta: PineRunResult["meta"], allBars: Bar[], opts: RunOpts): PineRunResult {
+  // (a script limited to its last N bars runs on those only, as on TradingView)
+  const limit = allBars ? calcBarsLimit(meta, opts) : 0;
+  const bars = limit > 0 && allBars.length > limit ? allBars.slice(-limit) : allBars;
   let logsSoFar: string[] | null = null;
   const result: PineRunResult = { plots: [], markers: [], tables: [], strategyReport: null, inputs: [], logs: [], warnings: [], errors: [], meta, execMs: 0 };
   try {
@@ -3895,6 +4036,7 @@ function executeParsed(stmts: Stmt[], meta: PineRunResult["meta"], bars: Bar[], 
     };
     ctx.globalCtx = ctx;
     ctx.scopeStmts = stmts;
+    ctx.histNames = collectHistNames(stmts);
     logsSoFar = ctx.logs;
     // indicator(max_lines_count=…) etc.: how many of each drawing the script keeps (TradingView: 50 by default, 500 at most)
     const lim = (v: number | undefined) => Math.max(1, Math.min(500, v ?? 50));
@@ -3943,7 +4085,7 @@ function executeParsed(stmts: Stmt[], meta: PineRunResult["meta"], bars: Bar[], 
 }
 
 // mtfData: other timeframes' bars the caller already fetched (see getPineRequestTimeframes)
-export function runPineScript(code: string, bars: Bar[], opts?: { symbol?: string; pineTf?: string; inputOverrides?: Record<string, any>; mtfData?: Record<string, Bar[]> }): PineRunResult {
+export function runPineScript(code: string, bars: Bar[], opts?: { symbol?: string; pineTf?: string; inputOverrides?: Record<string, any>; mtfData?: Record<string, Bar[]>; calcBarsCount?: number }): PineRunResult {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
   let meta: PineRunResult["meta"] = { title: "Untitled script", isStrategy: false, overlay: true, initialCapital: 100000 };
   let result: PineRunResult;
@@ -3952,7 +4094,7 @@ export function runPineScript(code: string, bars: Bar[], opts?: { symbol?: strin
     meta = parsed.meta;
     const mtfData = opts?.mtfData ? { ...opts.mtfData } : {};
     if (opts?.mtfData) alignDailyTimeframeBoundaries(mtfData);
-    result = executeParsed(parsed.stmts, meta, bars, { symbol: opts?.symbol, pineTf: opts?.pineTf, mtfData, inputOverrides: opts?.inputOverrides });
+    result = executeParsed(parsed.stmts, meta, bars, { symbol: opts?.symbol, pineTf: opts?.pineTf, mtfData, inputOverrides: opts?.inputOverrides, calcBarsCount: opts?.calcBarsCount });
   } catch (err: any) {
     result = { plots: [], markers: [], tables: [], strategyReport: null, inputs: [], logs: [], warnings: [], errors: [], meta, execMs: 0 };
     if (err instanceof PineError) result.errors.push({ message: err.message, code: err.code, line: err.line ?? 1 });
@@ -4227,7 +4369,7 @@ export type MtfFetcher = (pineTimeframe: string, symbol: string) => Promise<Bar[
 export async function runPineScriptAsync(
   code: string,
   bars: Bar[],
-  opts: { symbol: string; pineTf: string; fetchTimeframe: MtfFetcher; initialCapital?: number; inputOverrides?: Record<string, any>; backtestFrom?: number; backtestTo?: number; profile?: boolean }
+  opts: { symbol: string; pineTf: string; fetchTimeframe: MtfFetcher; initialCapital?: number; inputOverrides?: Record<string, any>; backtestFrom?: number; backtestTo?: number; profile?: boolean; calcBarsCount?: number }
 ): Promise<PineRunResult> {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
   let meta: PineRunResult["meta"] = { title: "Untitled script", isStrategy: false, overlay: true, initialCapital: 100000 };
@@ -4246,7 +4388,7 @@ export async function runPineScriptAsync(
     alignDailyTimeframeBoundaries(mtfData);
     result = executeParsed(parsed.stmts, meta, bars, {
       symbol: opts.symbol, pineTf: opts.pineTf, mtfData, initialCapital: opts.initialCapital, inputOverrides: opts.inputOverrides,
-      backtestFrom: opts.backtestFrom, backtestTo: opts.backtestTo, profile: opts.profile,
+      backtestFrom: opts.backtestFrom, backtestTo: opts.backtestTo, profile: opts.profile, calcBarsCount: opts.calcBarsCount,
     });
   } catch (err: any) {
     result = { plots: [], markers: [], tables: [], strategyReport: null, inputs: [], logs: [], warnings: [], errors: [], meta, execMs: 0 };
@@ -4268,6 +4410,9 @@ const PINE_NAMESPACES = new Set(["ta", "math", "array", "str", "strategy", "requ
   "timeframe", "syminfo", "chart", "ticker", "runtime", "log", "polyline", "linefill", "barstate", "session", "alert", "time", "dayofweek", "currency", "display",
   "extend", "format", "hline", "location", "order", "position", "scale", "shape", "size", "text", "xloc", "yloc", "plot", "font", "adjustment", "backadjustment",
   "dividends", "earnings", "splits", "settlement_as_close", "barmerge"]);
+
+// One of Pine's own functions (`matrix.new` is listed as `matrix.new<type>`)
+const isPineFunctionName = (name: string) => PINE_FUNCTIONS.has(name) || PINE_FUNCTIONS.has(`${name}<type>`);
 
 export function compilePineForSharing(code: string): CompiledPine {
   const { stmts, meta } = parseProgram(code);
@@ -4317,10 +4462,12 @@ export function compilePineForSharing(code: string): CompiledPine {
           // (`ball.new(…)` of a type `ball` stays, even beside a variable named `ball`)
           if (parts.length === 2 && types.has(parts[0]) && (last === "new" || last === "copy")) { /* the type's own */ }
           // (`obj.field.method(…)` too: the variable's part and the method change, the fields don't)
-          else if (methods.has(last) && !PINE_NAMESPACES.has(parts[0])) {
+          // (a namespace's name the script uses for its own variable, `order`, is that variable, except
+          // in a call that names one of Pine's functions, `matrix.new`, which the engine runs as Pine's)
+          else if (methods.has(last) && !isPineFunctionName(node.name) && (map.has(parts[0]) || !PINE_NAMESPACES.has(parts[0]))) {
             out.name = [map.get(parts[0]) ?? parts[0], ...parts.slice(1, -1), map.get(last) ?? last].join(".");
             out.namedArgs = renameArgs(out.namedArgs);
-          } else if (!PINE_NAMESPACES.has(parts[0])) out.name = rn(node.name);
+          } else if (!isPineFunctionName(node.name) && (map.has(parts[0]) || !PINE_NAMESPACES.has(parts[0]))) out.name = rn(node.name);
         }
         break;
       case "assign": out.name = rn(node.name); break;

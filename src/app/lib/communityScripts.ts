@@ -2,7 +2,8 @@
 // under the Mozilla Public License 2.0. Their source is served unchanged (with its licence notice)
 // from /pine-community/<file>; this list names each one's author and where it was published.
 
-export interface CommunityScript { name: string; author: string; file: string; url: string; kind: "indicator" | "strategy" }
+// calcBars: a heavy script runs on the last this many bars by default (Settings → Calculated bars)
+export interface CommunityScript { name: string; author: string; file: string; url: string; kind: "indicator" | "strategy"; calcBars?: number }
 
 export const COMMUNITY_LICENSE = "Mozilla Public License 2.0";
 
@@ -20,6 +21,7 @@ export const COMMUNITY_SCRIPTS: CommunityScript[] = [
   {"name": "Innovation Adaptive Kalman Filter Oscillator", "author": "jdehorty", "file": "781874de08bb4241b8584a6cd295d6ad.pine", "url": "https://www.tradingview.com/script/06GCx5qL/", "kind": "indicator"},
   {"name": "Intrabar Profile [Kioseff Trading]", "author": "KioseffTrading", "file": "f8b6df85e8cc440f84c04efb527f12fe.pine", "url": "https://www.tradingview.com/script/j38vuAvW/", "kind": "indicator"},
   {"name": "Intraday Spark Chart [AstrideUnicorn]", "author": "AstrideUnicorn", "file": "7f41f4924459414e821f38f9938e908e.pine", "url": "https://www.tradingview.com/script/k2bR8xoL/", "kind": "indicator"},
+  {"name": "IQ Trend Beams [TradingIQ]", "author": "Trading-IQ", "file": "d27f40984ff94ffbbc7e3b5b1d04dcad.pine", "url": "https://www.tradingview.com/script/SG7Vk6uH/", "kind": "indicator", "calcBars": 250},
   {"name": "Kalman D7", "author": "et20tradeview", "file": "807bfbf7b139432c86d7eec612ed1cb9.pine", "url": "https://www.tradingview.com/script/c75aF3t1/", "kind": "indicator"},
   {"name": "Kinetic Slippage Index (KSI)", "author": "HPotter", "file": "1f2eeb5c0a4e4b21958387277cf8c6d5.pine", "url": "https://www.tradingview.com/script/CUjAnbtS/", "kind": "indicator"},
   {"name": "MACD with HTF Panels [theUltimator5]", "author": "TheUltimator5", "file": "8f868383ab3d43c98faba7767b72e544.pine", "url": "https://www.tradingview.com/script/pUwmpOyc/", "kind": "indicator"},
@@ -39,6 +41,7 @@ export const COMMUNITY_SCRIPTS: CommunityScript[] = [
   {"name": "RedK Multi-Modal TrailingStop v1.0", "author": "RedKTrader", "file": "be8f3d9e32ca46e1b5d042f8f159d73a.pine", "url": "https://www.tradingview.com/script/ZxCXrnij/", "kind": "indicator"},
   {"name": "RSI Radar Multi Time Frame", "author": "LonesomeTheBlue", "file": "3d0adcd8588247bbadbc07068fc9d1ab.pine", "url": "https://www.tradingview.com/script/8UtWhfo3/", "kind": "indicator"},
   {"name": "Session Edge Profiler | Flux Charts", "author": "fluxchart", "file": "74d7271fe8b94ddf8ea8c8f59315d370.pine", "url": "https://www.tradingview.com/script/T1V41Bl5/", "kind": "indicator"},
+  {"name": "Simple Decision Matrix Classification Algorithm [SS]", "author": "Steversteves", "file": "74ccf200a430478ead7e389c6fcfb6ea.pine", "url": "https://www.tradingview.com/script/WPbrh5SQ/", "kind": "indicator", "calcBars": 300},
   {"name": "Simplified Percentile Clustering", "author": "InvestorUnknown", "file": "53c863aae2cd439a9d1a24612b29c3d3.pine", "url": "https://www.tradingview.com/script/mdGJq4j5/", "kind": "indicator"},
   {"name": "Smooth Theil-Sen", "author": "The_Peaceful_Lizard", "file": "aa781c2985c94e5fa6ac73007f60973a.pine", "url": "https://www.tradingview.com/script/ewWysgGk/", "kind": "indicator"},
   {"name": "Stop Loss Clustering (Breakouts) [Kioseff Trading]", "author": "KioseffTrading", "file": "c6388de20b7b4c068127ad3b7518ddce.pine", "url": "https://www.tradingview.com/script/CJX3k6l2/", "kind": "indicator"},

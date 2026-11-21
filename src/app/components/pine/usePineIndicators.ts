@@ -8,7 +8,7 @@ import type { IChartApi, ISeriesApi, SeriesType } from "lightweight-charts";
 import { PineChartView, type PineLegendPlot } from "./PineChartView";
 import { PINE_INDICATORS } from "../../lib/pineIndicators";
 import { BUILTIN_SCRIPTS } from "./builtinScripts";
-import { getPineInputsMeta, type PineInputMeta, type PineRunResult } from "../../lib/pineScriptEngine";
+import { CALC_BARS_INPUT, getPineInputsMeta, type PineInputMeta, type PineRunResult } from "../../lib/pineScriptEngine";
 import { runPineOffThread } from "../../lib/pineRunner";
 import { VolumeProfileVR, DEFAULT_VP, type VolumeProfileSettings } from "../chartPrimitives/VolumeProfileVR";
 import { builtinScriptKey, scriptDefault } from "../../lib/scriptTemplates";
@@ -126,7 +126,7 @@ export function usePineIndicators(opts: {
     try {
       const code = CATALOG[ind.name] ?? await loadIndicatorCode(ind.name);
       result = code
-        ? await runPineOffThread(code, bars, { symbol: optsRef.current.symbol, pineTf: optsRef.current.pineTf, inputOverrides: ind.inputs || {} })
+        ? await runPineOffThread(code, bars, { symbol: optsRef.current.symbol, pineTf: optsRef.current.pineTf, inputOverrides: ind.inputs || {}, calcBarsCount: communityScriptByName(ind.name)?.calcBars })
         : { plots: [], markers: [], tables: [], strategyReport: null, inputs: [], logs: [], warnings: [], errors: [{ message: "This script couldn't be loaded (no connection?)", code: "CE90003", line: 1 }], meta: { title: ind.name, isStrategy: false, overlay: true, initialCapital: 0 }, execMs: 0 };
     } finally {
       l.busy = false;
@@ -223,7 +223,9 @@ export function usePineIndicators(opts: {
     const ind = optsRef.current.indicators.find((i) => i.id === id);
     if (!ind) return null;
     const inst = instances.find((i) => i.id === id);
-    const inputsMeta = ind.name === VOLUME_PROFILE_VR ? VP_INPUTS : getPineInputsMeta(CATALOG[ind.name] || "");
+    // (and, as on TradingView, how many of the last bars it calculates: 0 for all of them)
+    const calcBars: PineInputMeta = { varName: CALC_BARS_INPUT, type: "int", title: "Calculated bars", value: communityScriptByName(ind.name)?.calcBars ?? 0, minval: 0, step: 100, group: "Calculation", tooltip: "Run on only the last this many bars (0: all of them). Fewer bars make a heavy script faster." };
+    const inputsMeta = ind.name === VOLUME_PROFILE_VR ? VP_INPUTS : [...getPineInputsMeta(CATALOG[ind.name] || ""), calcBars];
     return {
       scriptName: inst?.title || ind.name,
       templateKey: builtinScriptKey(ind.name),

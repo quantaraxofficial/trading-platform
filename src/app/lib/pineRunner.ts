@@ -5,7 +5,7 @@
 import { getPineRequestTimeframes, loadPineLibraries, runPineScript, type Bar, type PineRunResult } from "./pineScriptEngine";
 import { fetchPineTimeframeData } from "./pineDataFetch";
 
-type RunOpts = { symbol?: string; pineTf?: string; inputOverrides?: Record<string, any> };
+type RunOpts = { symbol?: string; pineTf?: string; inputOverrides?: Record<string, any>; calcBarsCount?: number };
 
 // Other timeframes' bars, kept a short while: live re-runs (every new tick) reuse them instead of
 // downloading them again, yet the current bar's finer bars still catch up within seconds

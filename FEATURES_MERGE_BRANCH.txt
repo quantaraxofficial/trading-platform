@@ -291,8 +291,14 @@ Pine engine
     methods chosen by their arguments, request.security with "" (the chart's timeframe)
   - Tables from chart indicators show on the chart (cell sizes, text sizes, alignment,
     tooltips); request.security / security_lower_tf get real data for chart indicators too
-  - Much faster on heavy scripts (5-10×); a slow script is never re-run before its last run
-    ends (no piling up on a 4-core PC)
+  - Much faster on heavy scripts: each expression is compiled once into a JavaScript function, a
+    variable's per-bar history is kept only when the script reads it back (x[1]), method calls
+    pass their receiver directly; a slow script is never re-run before its last run ends (no
+    piling up on a 4-core PC)
+  - Calculated bars (TradingView's calc_bars_count): a script runs on only its last N bars, set by
+    the script itself or in its Settings → Calculated bars (0: all). The two heaviest Editors'
+    picks (IQ Trend Beams, Simple Decision Matrix) default to 250 / 300 bars: about 3 seconds
+    on a 5,000-bar chart instead of about a minute
 
 Three languages
   - Choose Pine Script, Python or MQL5 beside the editor title
@@ -317,7 +323,7 @@ Editor
   - Several instances each, own pane for oscillators, inputs kept per indicator
   - Indicators dialog: My scripts, Invite-only, Community (Top / Newest / Following) with
     each script's author
-  - Editors' picks: 47 open-source community scripts from TradingView (MPL 2.0), each with its
+  - Editors' picks: 49 open-source community scripts from TradingView (MPL 2.0), each with its
     author linking to the original; search by name or author; loaded when first added.
     Guided tour; voice ("add chess", "add the stop loss clustering")
 
